@@ -1,13 +1,77 @@
-# GymRollins app
+# GymRollins
 
-Native SwiftUI iOS app + Supabase backend + remote MCP server so Claude can read training data and propose plans.
-Built for one user first (the owner), offline-first (SwiftData is the source of truth on the device, cloud sync is
-best-effort), with Claude able to read the training data and *propose* plan changes through MCP — it never edits
-the plan directly; the owner applies proposals in the app (or opts in to auto-apply).
+**An open-source, native iPhone and Apple Watch gym tracker that Claude can read and plan with, through MCP.**
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/readme/01-today.png" width="200" alt="Today: the planned workout with weight suggestions"><br><sub>Today's plan</sub></td>
+    <td align="center"><img src="docs/readme/02-workout.png" width="200" alt="Logging sets during a workout with the rest timer"><br><sub>Logging a workout</sub></td>
+    <td align="center"><img src="docs/readme/03-claude-proposal.png" width="200" alt="A plan change proposed by Claude, with each change toggled on or off"><br><sub>Claude proposes, you approve</sub></td>
+    <td align="center"><img src="docs/readme/06-claude-connect.png" width="200" alt="Connecting Claude with a custom connector URL"><br><sub>Connect Claude via MCP</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/readme/04b-recovery-map.png" width="200" alt="Muscle recovery map"><br><sub>Muscle recovery</sub></td>
+    <td align="center"><img src="docs/readme/04c-body-weight.png" width="200" alt="Bodyweight goal and trend chart"><br><sub>Bodyweight goal</sub></td>
+    <td align="center"><img src="docs/readme/05-log.png" width="200" alt="Workout log with weekly streak"><br><sub>History and streaks</sub></td>
+    <td></td>
+  </tr>
+</table>
+
+<sub>Screenshots use the app's built-in demo data. Regenerate them with `scripts/readme-screenshots.sh`.</sub>
+
+## Why I built it
+
+I wanted an AI coach that knows my real training: every set, every weight, every skipped day. For that I needed a
+native iOS workout app with an **MCP server**, so Claude could read my history directly and help plan the next
+weeks. I couldn't find one.
+
+So I built my own: a fast, native SwiftUI app for logging in the gym, with a remote MCP server that lets Claude
+read your training and **propose** plan changes. Claude never edits your plan directly; you review each proposal
+in the app and apply it with one tap.
+
+Now I'm open-sourcing it so we can build it together. If you've also been looking for an AI-ready workout app,
+try it, open an issue, or send a pull request.
+
+## What it does
+
+- **Plan and log workouts.** Routines on a weekly schedule, weight suggestions from a progression engine, plate
+  rounding, rest timer, supersets, and a one-tap "reps left" effort rating.
+- **Claude as your coach, via MCP.** Add GymRollins as a custom connector in Claude (OAuth 2.1 with dynamic client
+  registration, no API keys to copy). Claude reads your history and proposes changes; you approve them in the app.
+- **Apple Watch.** Log sets from the wrist, rest timer with haptics, heart rate during the workout.
+- **Apple Health.** Workouts and weigh-ins go to Health; body weight comes back from it.
+- **Insights.** Muscle recovery map, weekly sets per muscle, streaks, and strength levels compared with
+  OpenPowerlifting data.
+- **Bring your history.** CSV import from Fitbod, Strong, Hevy and FitNotes.
+- **Offline-first.** Everything lives on the device (SwiftData); cloud sync through Supabase is optional.
+
+## Status
+
+Early, and built for one user first (me). It runs today on the simulator or your own iPhone against a local
+Supabase stack. Hosted cloud sync and an App Store release are next; see `docs/release-readiness.md` for what works
+and what's still missing.
+
+## Build it with me
+
+Good places to start:
+
+- More importers (other apps' CSV exports) and better exercise matching.
+- New MCP tools for Claude: what would you want your AI coach to read or propose?
+- Exercise photos and media with clear licenses.
+- Apple Watch and Apple Health features, accessibility, and translations.
+
+Open an issue to discuss an idea first, or pick an existing one. Contributions need a one-time CLA signature; see
+[CONTRIBUTING](.github/CONTRIBUTING.md).
+
+## Developer docs
+
+Native SwiftUI iOS app + Supabase backend + remote MCP server. Offline-first: SwiftData is the source of truth on
+the device and cloud sync is best-effort. Claude reads training data and *proposes* plan changes through MCP; it
+never edits the plan directly. The owner applies proposals in the app (or opts in to auto-apply).
 
 - Spec: `docs/specs/2026-09-26-gymrollins-ios-design.md`
 - Plans: `docs/plans/`
-- Mockups: `docs/design/` (canvas: https://claude.ai/artifact/49XbqyeLuXR35ABhvFpbzK)
+- Mockups: `docs/design/`
 - Release readiness: `docs/release-readiness.md` — what works locally, what needs the cloud
   project, what's deferred, owner decisions needed, install instructions
 - Cloud checklist: `docs/cloud-checklist.md` — settings to change before pointing a build at a
