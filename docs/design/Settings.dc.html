@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <a href="Main.dc.html" aria-label="Back to Today" style="position: absolute; top: 58px; left: 20px; width: 38px; height: 38px; box-sizing: border-box; border-radius: 19px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"></path></svg></a>
+  <h1 style="position: absolute; top: 60px; left: 68px; margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 30px; line-height: 1">Settings</h1>
+  <div style="padding: 100px 16px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 15px">
+
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; padding: 0 4px">ACCOUNT</div>
+    <div style="border-radius: 14px; background: #17171E; padding: 0 14px">
+      <div style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E"><span>Signed in with Apple</span></div>
+      <div style="display: flex; align-items: center; height: 38px"><span>Sync</span><span style="margin-left: auto; font-size: 13px; color: #A9A9B5">Up to date · 2 min ago</span></div>
+    </div>
+
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; padding: 4px 4px 0">TRAINING</div>
+    <div style="border-radius: 14px; background: #17171E; padding: 0 14px">
+      <div style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E"><span>Units</span><span style="margin-left: auto; font-size: 13px; color: #A9A9B5">lb plates</span></div>
+      <div style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E"><span>Default rest</span><span style="margin-left: auto; font-size: 13px; color: #A9A9B5">2:00</span></div>
+      <div style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E"><span>Bar &amp; plates inventory</span><span style="margin-left: auto; color: #8E8E9A">›</span></div>
+      <div style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E">
+        <span>Warm-up sets</span>
+        <span style="margin-left: auto; position: relative; width: 40px; height: 24px; border-radius: 12px; background: rgba(214,58,70,0.6); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.3); flex: none">
+          <span style="position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 10px; background: #FFFFFF"></span>
+        </span>
+      </div>
+      <div style="display: flex; align-items: center; height: 38px"><span>Progression default</span><span style="margin-left: auto; font-size: 13px; color: #A9A9B5">Double</span></div>
+    </div>
+
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; padding: 4px 4px 0">CLAUDE</div>
+    <div style="border-radius: 14px; background: #17171E; padding: 0 14px">
+      <a href="Claude.dc.html" style="display: flex; align-items: center; height: 38px; color: #F2F2F5; text-decoration: none">
+        <span>Claude connection</span>
+        <span style="margin-left: auto; padding: 3px 8px; border-radius: 999px; background: #14342A; color: #4FD1A5; font-size: 11px; font-weight: 700">Connected</span>
+        <span style="margin-left: 8px; color: #8E8E9A">›</span>
+      </a>
+    </div>
+
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; padding: 4px 4px 0">DATA</div>
+    <div style="border-radius: 14px; background: #17171E; padding: 0 14px">
+      <a href="ImportCSV.dc.html" style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E; color: #F2F2F5; text-decoration: none"><span>Import CSV</span><span style="margin-left: auto; color: #8E8E9A">›</span></a>
+      <div style="display: flex; align-items: center; height: 38px"><span>Export all data</span><span style="margin-left: auto; font-size: 13px; color: #A9A9B5">JSON / CSV</span></div>
+    </div>
+
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; padding: 4px 4px 0">PRIVACY</div>
+    <div style="border-radius: 14px; background: #17171E; padding: 0 14px">
+      <div style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E"><span>Privacy policy</span><span style="margin-left: auto; color: #8E8E9A">›</span></div>
+      <div style="display: flex; align-items: center; height: 38px"><span style="color: #FF8A8F">Delete account and data</span></div>
+    </div>
+
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; padding: 4px 4px 0">ABOUT</div>
+    <div style="border-radius: 14px; background: #17171E; padding: 0 14px">
+      <div style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E"><span>Version</span><span style="margin-left: auto; font-size: 13px; color: #A9A9B5">[x.y]</span></div>
+      <div style="display: flex; align-items: center; height: 38px; border-bottom: 1px solid #25252E"><span>Exercise data credits</span><span style="margin-left: auto; color: #8E8E9A">›</span></div>
+      <div style="display: flex; align-items: center; height: 38px"><span>Open-source notices</span><span style="margin-left: auto; color: #8E8E9A">›</span></div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

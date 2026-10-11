@@ -1,0 +1,157 @@
+name: GymRollins
+# `GYM_EMBED_WATCH=YES xcodegen generate` embeds the Apple Watch app in the iPhone app (plan 17, watch-embed.yml).
+# Off by default: Xcode refuses to build a scheme with an embedded watch app unless the watchOS platform is installed
+# (Settings > Components), which the test Mac doesn't have; the watch target itself builds either way.
+include:
+  - path: watch-embed.yml
+    enable: ${GYM_EMBED_WATCH}
+options:
+  bundleIdPrefix: com.rollins
+  deploymentTarget: { iOS: "26.0" }
+  createIntermediateGroups: true
+  developmentLanguage: en
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  GymCore: { path: Packages/GymCore }
+  GymData: { path: Packages/GymData }
+  GymSync: { path: Packages/GymSync }
+  GymHealth: { path: Packages/GymHealth }
+  GymWatchLink: { path: Packages/GymWatchLink }
+targets:
+  GymRollins:
+    type: application
+    platform: iOS
+    # Shared/: the Live Activity attributes, intents and action router, compiled into the app and the extension.
+    # Resources/OwnPhotos is copied as one folder (OwnPhotos/ in the bundle), so photos can be added or removed
+    # without regenerating the project.
+    sources:
+      - path: GymRollins
+        excludes: [Resources/OwnPhotos]
+      - Shared
+      - path: GymRollins/Resources/OwnPhotos
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: GymCore
+      - package: GymData
+      - package: GymSync
+      - package: GymHealth
+      - package: GymWatchLink
+      - target: GymRollinsWidgets
+    entitlements:
+      path: GymRollins/GymRollins.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
+        # Apple Health (plan 15): write workouts/energy/weight, read weight and body fat.
+        com.apple.developer.healthkit: true
+    info:
+      path: GymRollins/Info.plist
+      properties:
+        CFBundleDisplayName: GymRollins
+        UILaunchScreen: {}
+        UIAppFonts: [BarlowCondensed-BoldItalic.ttf, BarlowCondensed-ExtraBoldItalic.ttf]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIUserInterfaceStyle: Dark
+        NSSupportsLiveActivities: true
+        NSHealthShareUsageDescription: >-
+          GymRollins reads your weight and body fat from Apple Health to show them on the Body tab.
+        NSHealthUpdateUsageDescription: >-
+          GymRollins saves your finished workouts with their estimated calories, and the weigh-ins you log, to
+          Apple Health.
+        NSLocalNetworkUsageDescription: >-
+          GymRollins syncs with a development server on your local network.
+        SUPABASE_URL: $(SUPABASE_URL)
+        SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
+        # bundle | storage (Config/Base.xcconfig): where GymRollins' own exercise photos come from.
+        PHOTO_HOSTING: $(PHOTO_HOSTING)
+        # Plain http to the local Supabase stack (127.0.0.1) only; ATS stays on for every other host.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rollins.gymrollins
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
+        TARGETED_DEVICE_FAMILY: "1"
+  # Widget extension: the in-progress workout's Live Activity (lock screen + Dynamic Island). No App Group: its
+  # buttons are LiveActivityIntents, which run in the app's process.
+  GymRollinsWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - GymRollinsWidgets
+      - Shared
+      - path: GymRollins/DesignSystem/Theme.swift
+      - path: GymRollins/Resources/Fonts
+        buildPhase: resources
+    info:
+      path: GymRollinsWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: GymRollins
+        UIAppFonts: [BarlowCondensed-BoldItalic.ttf, BarlowCondensed-ExtraBoldItalic.ttf]
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rollins.gymrollins.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+  # Apple Watch app (plan 17): single-target watch app (WKApplication), companion of the iPhone app. watchOS 10 so
+  # it runs on the owner's Series 5 (watchOS 10.6.1); links only GymWatchLink (Foundation-only).
+  GymRollinsWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources: [GymRollinsWatch]
+    dependencies:
+      - package: GymWatchLink
+    entitlements:
+      path: GymRollinsWatch/GymRollinsWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+    info:
+      path: GymRollinsWatch/Info.plist
+      properties:
+        CFBundleDisplayName: GymRollins
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.rollins.gymrollins
+        # The workout session keeps the app running with the wrist down (rest timer haptic, heart rate).
+        WKBackgroundModes: [workout-processing]
+        NSHealthShareUsageDescription: >-
+          GymRollins reads your heart rate and active energy during a workout to show them and save them with it.
+        NSHealthUpdateUsageDescription: >-
+          GymRollins saves the workouts you do with your Apple Watch, with heart rate and active energy, to Apple
+          Health.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rollins.gymrollins.watchkitapp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: YES
+        SWIFT_VERSION: "6.0"
+  GymRollinsTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [GymRollinsTests]
+    dependencies: [{ target: GymRollins }]
+    settings: { base: { GENERATE_INFOPLIST_FILE: YES } }
+  GymRollinsUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [GymRollinsUITests]
+    dependencies: [{ target: GymRollins }]
+    settings: { base: { GENERATE_INFOPLIST_FILE: YES } }
+schemes:
+  GymRollins:
+    build: { targets: { GymRollins: all } }
+    test:
+      targets: [GymRollinsTests, GymRollinsUITests]
+      gatherCoverageData: true

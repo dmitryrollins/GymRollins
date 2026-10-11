@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rest timer settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <div style="padding: 58px 20px 0; display: flex; flex-direction: column; gap: 12px; color: #5A5A66; font-size: 13px">
+    <div>Barbell Bench Press · logging, dimmed behind the sheet</div>
+    <div style="padding: 10px 12px; border-radius: 14px; background: #17171E; height: 40px"></div>
+    <div style="padding: 10px 12px; border-radius: 14px; background: #17171E; height: 60px"></div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.45)"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 34px 34px 0 0; padding: 10px 20px 40px; display: flex; flex-direction: column; gap: 18px; background: rgba(30,30,40,0.72); backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); border-bottom: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 -10px 30px rgba(0,0,0,0.5)">
+    <div style="width: 40px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.3); align-self: center"></div>
+    <div style="display: flex; align-items: center">
+      <h2 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 28px">Rest Timer</h2>
+      <a href="Logging.dc.html" style="margin-left: auto; height: 36px; padding: 0 16px; border-radius: 18px; display: flex; align-items: center; color: #F2F2F5; font-size: 14px; font-weight: 700; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Done</a>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 4px; height: 40px; padding: 4px; border-radius: 20px; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+      <button type="button" style="border: none; border-radius: 16px; color: #F2F2F5; font: 700 14px Barlow, sans-serif; background: rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18)">Working sets</button>
+      <button type="button" style="border: none; border-radius: 16px; color: #D7D7DE; font: 600 14px Barlow, sans-serif; background: none">Warm-up sets</button>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; position: relative">
+      <div style="position: absolute; top: 50%; left: 20px; right: 20px; transform: translateY(-50%); height: 44px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); z-index: 0"></div>
+      <div style="position: relative; z-index: 1; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 600; font-size: 18px; color: #6E6E7A">1:45</div>
+      <div style="position: relative; z-index: 1; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 34px; color: #F2F2F5; padding: 4px 0">2:00</div>
+      <div style="position: relative; z-index: 1; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 600; font-size: 18px; color: #6E6E7A">2:15</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #17171E">
+      <span style="flex-grow: 1; font-size: 15px; font-weight: 600">Rest timer between sets</span>
+      <span style="width: 46px; height: 27px; border-radius: 14px; flex: none; position: relative; background: rgba(214,58,70,0.78); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.3)">
+        <span style="position: absolute; top: 2px; right: 2px; width: 23px; height: 23px; border-radius: 12px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.3)"></span>
+      </span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #17171E">
+      <span style="flex-grow: 1; font-size: 15px; font-weight: 600">Sound + haptic when rest ends</span>
+      <span style="width: 46px; height: 27px; border-radius: 14px; flex: none; position: relative; background: rgba(214,58,70,0.78); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.3)">
+        <span style="position: absolute; top: 2px; right: 2px; width: 23px; height: 23px; border-radius: 12px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.3)"></span>
+      </span>
+    </div>
+    <div style="font-size: 12px; color: #8E8E9A; line-height: 1.4">Default for this exercise; change all in Settings.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

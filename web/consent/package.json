@@ -1,0 +1,9 @@
+{
+  "name": "gymrollins-consent",
+  "private": true,
+  "type": "module",
+  "description": "OAuth consent page tests: node --test server.test.mjs (no deps); browser e2e.test.mjs needs playwright",
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

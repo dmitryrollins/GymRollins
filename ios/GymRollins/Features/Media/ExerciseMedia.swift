@@ -1,0 +1,162 @@
+import Foundation
+import GymCore
+import os
+
+enum MediaLog {
+    static let log = Logger(subsystem: "com.rollins.gymrollins", category: "media")
+}
+
+/// What an exercise shows instead of its body-part illustration.
+struct ExerciseMedia: Equatable, Sendable {
+    enum Source: String, Sendable {
+        /// GymRollins' own media (AI-generated images/GIFs): bundled in the app or carried on the exercise record.
+        case own
+        /// Public-domain start/end photos from yuhonas/free-exercise-db (the stopgap, see
+        /// docs/licenses/free-exercise-db.md).
+        case freeExerciseDB
+        /// Creative Commons images from wger.de, each with its own credit (`credits`); they only fill gaps
+        /// (docs/import/wger-review.md). Not guaranteed to be start/end positions.
+        case wger
+    }
+
+    /// Still photos in order: start position first, end position second (either may be missing).
+    let photos: [URL]
+    /// A looping animation (GIF/video). Only own media will have one; not rendered yet.
+    let animation: URL?
+    let source: Source
+    /// Per-photo credit the photo's license requires (same order as `photos`); empty for own and public-domain media.
+    var credits: [PhotoCredit] = []
+
+    /// Own media is AI-generated, so it's labelled and can be wrong; stock photos are real photos.
+    var isAIGenerated: Bool { source == .own }
+}
+
+/// Attribution for a licensed photo (CC-BY / CC-BY-SA): title, author, license, links, and whether it was modified.
+struct PhotoCredit: Equatable, Hashable, Sendable {
+    let title: String
+    let author: String
+    let license: String
+    /// Only web links (http/https) are kept.
+    let licenseURL: URL?
+    let sourceURL: URL?
+    /// The app scales/crops the image for display.
+    let modified: Bool
+
+    init(title: String, author: String, license: String, licenseURL: URL?, sourceURL: URL?, modified: Bool) {
+        self.title = title
+        self.author = author
+        self.license = license
+        self.licenseURL = Self.webURL(licenseURL)
+        self.sourceURL = Self.webURL(sourceURL)
+        self.modified = modified
+    }
+
+    /// The short line shown on the photo.
+    var caption: String { "Photo: \(author) \u{00B7} \(license)" }
+
+    static func webURL(_ url: URL?) -> URL? {
+        guard let url, let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              url.host() != nil else { return nil }
+        return url
+    }
+}
+
+/// Resolves the media for an exercise. The views only talk to this protocol, so a new media source (e.g. own
+/// images/GIFs in Supabase Storage) is a new provider placed first in `ChainedMediaProvider`, with no view changes.
+protocol ExerciseMediaProvider: Sendable {
+    /// nil = nothing to show: the view keeps the body-part illustration.
+    func media(for exercise: Exercise) -> ExerciseMedia?
+    /// Every answer in preference order, so a view can fall back when the first one can't load (e.g. hosted photos
+    /// offline -> the bundled copy). Defaults to `media(for:)` alone.
+    func candidates(for exercise: Exercise) -> [ExerciseMedia]
+}
+
+extension ExerciseMediaProvider {
+    func candidates(for exercise: Exercise) -> [ExerciseMedia] { media(for: exercise).map { [$0] } ?? [] }
+}
+
+/// Asks each provider in order and returns the first answer. The app's order is: own media (record URLs -> Supabase
+/// Storage when `PHOTO_HOSTING = storage` -> bundled) -> free-exercise-db photos -> wger photos -> (nil) body-part
+/// illustration.
+struct ChainedMediaProvider: ExerciseMediaProvider {
+    let providers: [any ExerciseMediaProvider]
+
+    init(_ providers: [any ExerciseMediaProvider]) { self.providers = providers }
+
+    func media(for exercise: Exercise) -> ExerciseMedia? {
+        for provider in providers {
+            if let media = provider.media(for: exercise) { return media }
+        }
+        return nil
+    }
+
+    func candidates(for exercise: Exercise) -> [ExerciseMedia] {
+        providers.flatMap { $0.candidates(for: exercise) }
+    }
+}
+
+/// Own media on the exercise record (`Exercise.image` / `Exercise.gif`). Only absolute https URLs count, so the
+/// opengym dataset's bare file names (© Gym visual, never used) can't load even if they ever reappear.
+struct ExerciseRecordMediaProvider: ExerciseMediaProvider {
+    func media(for exercise: Exercise) -> ExerciseMedia? {
+        let photo = Self.secureURL(exercise.image)
+        let animation = Self.secureURL(exercise.gif)
+        guard photo != nil || animation != nil else { return nil }
+        return ExerciseMedia(photos: photo.map { [$0] } ?? [], animation: animation, source: .own)
+    }
+
+    static func secureURL(_ value: String?) -> URL? {
+        guard let value, let url = URL(string: value), url.scheme == "https", url.host() != nil else { return nil }
+        return url
+    }
+}
+
+/// Photos from yuhonas/free-exercise-db, looked up in the bundled mapping (`exercise-photos.json`, generated by
+/// `scripts/map-exercise-photos.mjs`). The mapping carries the CDN base URL pinned to the upstream commit, so the
+/// commit is decided in exactly one place (the script's `FEDB_SHA`).
+struct FreeExerciseDBPhotoProvider: ExerciseMediaProvider {
+    static let resourceName = "exercise-photos"
+
+    enum MappingError: Error { case insecureBaseURL }
+
+    private struct Mapping: Decodable {
+        let baseURL: String
+        let photos: [String: [String]]
+    }
+
+    private let photos: [String: [URL]]
+
+    init(data: Data) throws {
+        let mapping = try JSONDecoder().decode(Mapping.self, from: data)
+        guard let base = URL(string: mapping.baseURL), base.scheme == "https", base.host() != nil,
+              mapping.baseURL.hasSuffix("/") else { throw MappingError.insecureBaseURL }
+        photos = mapping.photos.compactMapValues { paths in
+            let urls = paths.compactMap { Self.url(base: base, path: $0) }
+            return urls.count == paths.count && !urls.isEmpty ? urls : nil
+        }
+    }
+
+    /// The bundled mapping, or nil when the resource is missing or unreadable (the app then shows illustrations).
+    static func bundled(_ bundle: Bundle = .main) -> FreeExerciseDBPhotoProvider? {
+        guard let url = bundle.url(forResource: resourceName, withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        do { return try FreeExerciseDBPhotoProvider(data: data) } catch {
+            MediaLog.log.error("Exercise photo mapping unreadable: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    func media(for exercise: Exercise) -> ExerciseMedia? {
+        photos[exercise.id].map { ExerciseMedia(photos: $0, animation: nil, source: .freeExerciseDB) }
+    }
+
+    /// `<Folder>/<n>.jpg` only; anything that could escape the base URL is dropped.
+    private static func url(base: URL, path: String) -> URL? {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
+              path.hasSuffix(".jpg"), !path.contains("\\"), !path.contains(":") else { return nil }
+        guard let url = URL(string: path, relativeTo: base)?.absoluteURL,
+              url.absoluteString.hasPrefix(base.absoluteString) else { return nil }
+        return url
+    }
+}

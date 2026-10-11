@@ -1,0 +1,17 @@
+included:
+  - ios
+excluded:
+  - ios/Packages/*/.build
+  - ios/build
+line_length:
+  warning: 140
+  error: 160
+identifier_name:
+  min_length: 1
+  excluded: [id, a, b, c, f, i, r, s, v, w, x, kg, lb, ex]
+large_tuple:
+  warning: 5
+  error: 6
+function_body_length:
+  warning: 60
+  error: 100

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Active set logging</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <div style="height: 300px; background: #262631; position: relative">
+    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #8E8E9A">[exercise GIF]</div>
+    <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(11,11,16,0), rgba(11,11,16,0.88))"></div>
+    <div style="position: absolute; top: 54px; left: 16px; height: 32px; padding: 0 12px; border-radius: 16px; display: flex; align-items: center; gap: 6px; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"></circle><path d="M12 13V9M10 3h4"></path></svg>
+      <span style="font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 15px">24:12</span>
+    </div>
+    <a href="ExerciseOptions.dc.html" aria-label="More options" style="position: absolute; top: 54px; right: 64px; width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="5" cy="12" r="1.4"></circle><circle cx="12" cy="12" r="1.4"></circle><circle cx="19" cy="12" r="1.4"></circle></svg></a>
+    <a href="WorkoutOverview.dc.html" aria-label="Close and return to workout overview" style="position: absolute; top: 54px; right: 16px; width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+    <div style="position: absolute; left: 20px; bottom: 100px; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: #C9C9D2">EXERCISE 1 OF 7</div>
+    <h1 style="position: absolute; left: 20px; bottom: 60px; right: 150px; margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 34px; line-height: 1">Barbell Bench Press</h1>
+    <a href="HowTo.dc.html" style="position: absolute; right: 20px; bottom: 22px; height: 36px; padding: 0 16px 0 12px; border-radius: 18px; display: flex; align-items: center; gap: 6px; color: #F2F2F5; font-size: 13px; font-weight: 700; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+      <svg width="12" height="12" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z" fill="currentColor"></path></svg>How-To</a>
+  </div>
+  <div style="padding: 14px 20px 0; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; gap: 10px; overflow-x: auto; margin: 0 -20px 0 0; padding-right: 0">
+      <a href="RestSettings.dc.html" style="flex: none; height: 40px; padding: 0 15px; border-radius: 20px; display: flex; align-items: center; gap: 7px; color: #F2F2F5; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"></circle><path d="M12 13V9M10 3h4"></path></svg>2:00 rest</a>
+      <a href="ExerciseHistory.dc.html" style="flex: none; height: 40px; padding: 0 15px; border-radius: 20px; display: flex; align-items: center; gap: 7px; color: #F2F2F5; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 19V12M11 19V6M17 19V15"></path></svg>History</a>
+      <a href="Plates.dc.html" style="flex: none; height: 40px; padding: 0 15px; border-radius: 20px; display: flex; align-items: center; gap: 7px; color: #F2F2F5; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 8h8M8 12h2M8 16h2M13 12h2M13 16h2"></path></svg>Plate Calculator</a>
+      <a href="Swap.dc.html" style="flex: none; height: 40px; padding: 0 15px; border-radius: 20px; display: flex; align-items: center; gap: 7px; color: #F2F2F5; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 8h13M13 4l4 4-4 4M20 16H7M11 12l-4 4 4 4"></path></svg>Swap</a>
+    </div>
+    <div style="padding: 8px 12px; border-radius: 14px; background: #17171E; color: #BFEFDC; font-size: 12px; line-height: 1.4"><b style="color: #4FD1A5">Double progression:</b> last time 3 × 10 @ 130 lb, top of range. Today 140 lb × 8.</div>
+    <div style="position: relative">
+      <div style="position: absolute; left: 13px; top: 13px; bottom: 13px; width: 2px; background: rgba(255,255,255,0.14)"></div>
+      <div style="position: relative; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: stretch; gap: 12px">
+          <div style="width: 28px; height: 26px; flex: none; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: #F2F2F5; display: flex; align-items: center; justify-content: center; font: 700 12px Barlow, sans-serif; color: #0B0B10; margin-top: 8px">W</div>
+          <div style="position: relative; flex: 1">
+            <span style="position: absolute; top: -8px; left: 10px; background: #0B0B10; padding: 0 4px; font-size: 10px; font-weight: 700; letter-spacing: .03em; color: #F2F2F5">Warm-up Reps</span>
+            <div style="height: 58px; border-radius: 12px; border: 1.5px solid #F2F2F5; background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 30px">10</div>
+          </div>
+          <div style="position: relative; flex: 1">
+            <span style="position: absolute; top: -8px; left: 10px; background: #0B0B10; padding: 0 4px; font-size: 10px; font-weight: 700; letter-spacing: .03em; color: #F2F2F5">Weight (lb)</span>
+            <div style="height: 58px; border-radius: 12px; border: 1.5px solid #F2F2F5; background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 30px">45</div>
+            <div style="margin-top: 4px; font-size: 11px; color: #8E8E9A; text-align: center">Bar + Plates</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <div style="width: 28px; height: 26px; flex: none; position: relative">
+            <div style="position: absolute; inset: 0; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: rgba(255,255,255,0.18)"></div>
+            <div style="position: absolute; inset: 1.5px; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: #121218; display: flex; align-items: center; justify-content: center; font: 700 12px Barlow, sans-serif; color: #8E8E9A">W</div>
+          </div>
+          <div style="flex: 1; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; color: #6E6E7A">5</div>
+          <div style="flex: 1; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; color: #6E6E7A">105</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <div style="width: 28px; height: 26px; flex: none; position: relative">
+            <div style="position: absolute; inset: 0; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: rgba(255,255,255,0.18)"></div>
+            <div style="position: absolute; inset: 1.5px; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: #121218; display: flex; align-items: center; justify-content: center; font: 700 12px Barlow, sans-serif; color: #8E8E9A">1</div>
+          </div>
+          <div style="flex: 1; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; color: #6E6E7A">8</div>
+          <div style="flex: 1; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; color: #6E6E7A">140</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <div style="width: 28px; height: 26px; flex: none; position: relative">
+            <div style="position: absolute; inset: 0; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: rgba(255,255,255,0.18)"></div>
+            <div style="position: absolute; inset: 1.5px; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: #121218; display: flex; align-items: center; justify-content: center; font: 700 12px Barlow, sans-serif; color: #8E8E9A">2</div>
+          </div>
+          <div style="flex: 1; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; color: #6E6E7A">8</div>
+          <div style="flex: 1; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; color: #6E6E7A">140</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <div style="width: 28px; height: 26px; flex: none; position: relative">
+            <div style="position: absolute; inset: 0; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: rgba(255,255,255,0.18)"></div>
+            <div style="position: absolute; inset: 1.5px; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: #121218; display: flex; align-items: center; justify-content: center; font: 700 12px Barlow, sans-serif; color: #8E8E9A">3</div>
+          </div>
+          <div style="flex: 1; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; color: #6E6E7A">8</div>
+          <div style="flex: 1; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: #121218; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; color: #6E6E7A">140</div>
+        </div>
+        <button type="button" style="display: flex; align-items: center; gap: 10px; align-self: flex-start; border: none; background: none; padding: 4px 0">
+          <span style="width: 28px; height: 26px; flex: none; position: relative; display: block">
+            <span style="position: absolute; inset: 0; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: rgba(255,107,114,0.4); display: block"></span>
+            <span style="position: absolute; inset: 1.5px; clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); background: #121218; display: flex; align-items: center; justify-content: center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B72" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+          </span>
+          <span style="color: #FF6B72; font: 600 14px Barlow, sans-serif">Add Set</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 30px; display: flex; gap: 10px">
+    <button type="button" style="flex: 1; height: 60px; border-radius: 30px; color: #F2F2F5; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 21px; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">Log All Sets</button>
+    <button type="button" style="flex: 1.6; height: 60px; border-radius: 30px; color: #FFFFFF; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 700; font-size: 22px; background: rgba(214,58,70,0.78); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 26px rgba(200,50,62,0.35)">Log Set</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

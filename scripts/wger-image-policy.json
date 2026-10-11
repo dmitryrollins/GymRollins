@@ -1,0 +1,10 @@
+{
+  "$comment": "Which wger images may be shown besides the license checks (see docs/import/wger-review.md, 'Image provenance'). wger accepts uploads from anyone and the uploader picks the license; a visual review found commercial images re-uploaded under CC licenses, so only trusted authors and individually reviewed images are used. Re-run node scripts/map-wger.mjs after editing.",
+  "trustedAuthors": {
+    "Everkinetic": "Everkinetic's open exercise line drawings (everkinetic.com), published under CC-BY-SA 3; wger's original illustration set.",
+    "wger.de": "Drawings credited to the wger project itself."
+  },
+  "allowedImages": {
+    "272": "TRX row: an ordinary photo of a person training in a gym, no branding, watermark or render style (reviewed 2026-09-30)."
+  }
+}

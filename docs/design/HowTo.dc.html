@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exercise how-to</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <div style="height: 230px; background: #262631; position: relative; display: flex; align-items: center; justify-content: center">
+    <div style="font-size: 13px; color: #8E8E9A">[exercise GIF]</div>
+    <a href="Logging.dc.html" aria-label="Close" style="position: absolute; top: 54px; left: 16px; width: 44px; height: 44px; box-sizing: border-box; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+  </div>
+  <div style="padding: 16px 20px 0; display: flex; flex-direction: column; gap: 14px; flex-grow: 1; overflow-y: auto">
+    <h1 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 32px; line-height: 1">Barbell Bench Press</h1>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 4px; height: 40px; padding: 4px; border-radius: 20px; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+      <button type="button" style="border: none; border-radius: 16px; color: #F2F2F5; font: 700 13px Barlow, sans-serif; background: rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18)">Instructions</button>
+      <button type="button" style="border: none; border-radius: 16px; color: #D7D7DE; font: 600 13px Barlow, sans-serif; background: none">Muscles</button>
+      <button type="button" style="border: none; border-radius: 16px; color: #D7D7DE; font: 600 13px Barlow, sans-serif; background: none">Equipment</button>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #17171E; border-radius: 16px">
+        <span style="width: 26px; height: 26px; border-radius: 13px; background: #262631; flex: none; display: flex; align-items: center; justify-content: center; font: 700 13px Barlow, sans-serif; color: #F2F2F5">1</span>
+        <span style="font-size: 14px; line-height: 1.5; color: #D7D7DE">Lie back on a flat bench with your eyes under the bar and feet flat on the floor.</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #17171E; border-radius: 16px">
+        <span style="width: 26px; height: 26px; border-radius: 13px; background: #262631; flex: none; display: flex; align-items: center; justify-content: center; font: 700 13px Barlow, sans-serif; color: #F2F2F5">2</span>
+        <span style="font-size: 14px; line-height: 1.5; color: #D7D7DE">Grip the bar slightly wider than shoulder-width and unrack it over your chest.</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #17171E; border-radius: 16px">
+        <span style="width: 26px; height: 26px; border-radius: 13px; background: #262631; flex: none; display: flex; align-items: center; justify-content: center; font: 700 13px Barlow, sans-serif; color: #F2F2F5">3</span>
+        <span style="font-size: 14px; line-height: 1.5; color: #D7D7DE">Lower the bar with control until it lightly touches your mid-chest, keeping elbows near a 45° angle.</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #17171E; border-radius: 16px">
+        <span style="width: 26px; height: 26px; border-radius: 13px; background: #262631; flex: none; display: flex; align-items: center; justify-content: center; font: 700 13px Barlow, sans-serif; color: #F2F2F5">4</span>
+        <span style="font-size: 14px; line-height: 1.5; color: #D7D7DE">Press the bar back up to full arm extension, driving through your feet and squeezing your chest.</span>
+      </div>
+    </div>
+    <div style="font-size: 13px; color: #A9A9B5">Target: chest · Secondary: triceps, front delts</div>
+    <div style="font-size: 11px; color: #6E6E7A; padding-bottom: 16px">[exercise dataset credit]</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

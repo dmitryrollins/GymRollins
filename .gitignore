@@ -1,0 +1,34 @@
+.DS_Store
+.superpowers/
+# Xcode
+ios/*.xcodeproj/
+ios/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+ios/Config/Local.xcconfig
+ios/GymRollins/Info.plist
+ios/GymRollinsWidgets/Info.plist
+ios/GymRollinsWatch/Info.plist
+# Swift Package Manager
+.build/
+.swiftpm/
+# Supabase
+supabase/.branches/
+supabase/.temp/
+.env
+.env.*
+!.env.example
+node_modules/
+# personal data never goes in the app repo
+*.csv
+!**/Fixtures/*.csv
+# photo generation run log (scripts/generate-photos.mjs)
+docs/media/*.jsonl
+
+# Generated exercise photos live outside the app bundle; they are served from Supabase Storage.
+/media/
+.claude/
+
+# Simulator screenshots stay local (not published)
+docs/screenshots/

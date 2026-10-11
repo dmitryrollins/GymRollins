@@ -1,0 +1,19 @@
+// Committed base settings. Put DEVELOPMENT_TEAM etc. in Local.xcconfig (gitignored).
+
+// Supabase (read by GymSync's SupabaseConfig from Info.plist). Defaults point at the LOCAL stack
+// (scripts/supabase-up.sh); the local anon key is the public Supabase CLI demo key. A cloud build overrides both in
+// Local.xcconfig, which is included at the end of this file. Never put a service-role key here.
+SUPABASE_URL = http:/$()/127.0.0.1:55421
+SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+
+// Own exercise photos (docs/media/README.md, "Hosting"): `bundle` = only photos bundled from Resources/OwnPhotos;
+// `storage` = photos in SUPABASE_URL's public `exercise-photos` bucket first (manifest-driven), bundled ones as
+// fallback. Override in Local.xcconfig. Release builds only load Storage photos over https.
+PHOTO_HOSTING = bundle
+
+CODE_SIGN_STYLE = Automatic
+// Signing team: set it in Local.xcconfig (gitignored), e.g.
+// DEVELOPMENT_TEAM = ABCDE12345
+
+// Must stay LAST: every assignment above is a default that Local.xcconfig (gitignored) may override.
+#include? "Local.xcconfig"

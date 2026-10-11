@@ -1,0 +1,163 @@
+{
+  "$comment": "Curated library id -> free-exercise-db id (null = never show a photo). Rules: docs/import/exercise-photo-review.md. Re-run node scripts/map-exercise-photos.mjs after editing.",
+  "0017": {
+    "fedb": null,
+    "why": "Assisted pull-up MACHINE; upstream only has the band-assisted version."
+  },
+  "0019": {
+    "fedb": null,
+    "why": "Kneeling assisted dip machine; upstream has no machine-assisted dip."
+  },
+  "0020": {
+    "fedb": "Balance_Board",
+    "why": "Same movement (upstream files the board under 'other')."
+  },
+  "0025": {
+    "fedb": "Barbell_Bench_Press_-_Medium_Grip",
+    "why": "Medium grip is the default flat barbell bench press."
+  },
+  "0047": {
+    "fedb": "Barbell_Incline_Bench_Press_-_Medium_Grip",
+    "why": "Medium grip is the default incline barbell bench press."
+  },
+  "0155": {
+    "fedb": "Cable_Crossover",
+    "why": "Same name (cable crossover fly); the owner's Push-day Cable Crossover."
+  },
+  "0194": {
+    "fedb": "Cable_Rope_Overhead_Triceps_Extension",
+    "why": "Same movement, rope attachment on both sides."
+  },
+  "0198": {
+    "fedb": "Wide-Grip_Lat_Pulldown",
+    "why": "Ours is the overhand, wider-than-shoulder bar lat pulldown."
+  },
+  "0200": {
+    "fedb": "Triceps_Pushdown_-_Rope_Attachment",
+    "why": "Same movement and attachment."
+  },
+  "0201": {
+    "fedb": "Triceps_Pushdown",
+    "why": "Straight-bar pushdown on both sides."
+  },
+  "0203": {
+    "fedb": "Cable_Rope_Rear-Delt_Rows",
+    "why": "Same name and rope attachment (the owner's face-pull slot)."
+  },
+  "0207": {
+    "fedb": "Reverse_Grip_Triceps_Pushdown",
+    "why": "Same movement, supinated bar grip."
+  },
+  "0215": {
+    "fedb": null,
+    "why": "Seated REAR lateral raise; upstream's seated cable raise is a side raise."
+  },
+  "0251": {
+    "fedb": "Dips_-_Chest_Version",
+    "why": "Parallel-bar dip leaning forward for chest."
+  },
+  "0284": {
+    "fedb": null,
+    "why": "Ours is a bodyweight step calf raise; upstream's donkey calf raise uses a machine."
+  },
+  "0292": {
+    "fedb": "One-Arm_Dumbbell_Row",
+    "why": "Single-arm dumbbell row (upstream shows the bench-supported setup)."
+  },
+  "0293": {
+    "fedb": "Bent_Over_Two-Dumbbell_Row",
+    "why": "Bent-over row with a dumbbell in each hand."
+  },
+  "0314": {
+    "fedb": "Incline_Dumbbell_Press",
+    "why": "Incline dumbbell bench press; the owner's Push-day incline press."
+  },
+  "0333": {
+    "fedb": "Tricep_Dumbbell_Kickback",
+    "why": "Same movement, a dumbbell in each hand."
+  },
+  "0334": {
+    "fedb": "Side_Lateral_Raise",
+    "why": "Standing dumbbell side lateral raise."
+  },
+  "0405": {
+    "fedb": "Seated_Dumbbell_Press",
+    "why": "Seated dumbbell shoulder press on a back-supported bench."
+  },
+  "0489": {
+    "fedb": "Hyperextensions_Back_Extensions",
+    "why": "Back extension on a hyperextension bench."
+  },
+  "0514": {
+    "fedb": "Freehand_Jump_Squat",
+    "why": "Bodyweight jump squat."
+  },
+  "0597": {
+    "fedb": "Thigh_Abductor",
+    "why": "Seated hip abduction machine."
+  },
+  "0598": {
+    "fedb": "Thigh_Adductor",
+    "why": "Seated hip adduction machine."
+  },
+  "0630": {
+    "fedb": "Mountain_Climbers",
+    "why": "Same movement (upstream lists no equipment)."
+  },
+  "0631": {
+    "fedb": "Muscle_Up",
+    "why": "Same movement (upstream files the bar under 'other')."
+  },
+  "0677": {
+    "fedb": "Ring_Dips",
+    "why": "Same movement (upstream files rings under 'other')."
+  },
+  "0688": {
+    "fedb": "Scapular_Pull-Up",
+    "why": "Same movement (upstream lists no equipment)."
+  },
+  "0739": {
+    "fedb": "Leg_Press",
+    "why": "Upstream photos show the 45-degree plate-loaded sled."
+  },
+  "0814": {
+    "fedb": "Bench_Dips",
+    "why": "Ours is the bench/chair-edge dip, not the parallel-bar one."
+  },
+  "0868": {
+    "fedb": "Standing_Biceps_Cable_Curl",
+    "why": "Standing underhand cable curl from a low pulley."
+  },
+  "1452": {
+    "fedb": "Ab_Crunch_Machine",
+    "why": "Seated ab crunch machine; the owner's Fitbod 'Ab Crunch Machine'."
+  },
+  "1459": {
+    "fedb": null,
+    "why": "Dumbbell Romanian deadlift; upstream only has a stiff-legged dumbbell deadlift."
+  },
+  "1760": {
+    "fedb": null,
+    "why": "Dumbbell goblet squat; upstream's goblet squat uses a kettlebell."
+  },
+  "2133": {
+    "fedb": null,
+    "why": "Ours uses dumbbells; upstream's farmer's walk shows strongman implements."
+  },
+  "2188": {
+    "fedb": "Seated_Triceps_Press",
+    "why": "Seated two-hand overhead dumbbell extension."
+  },
+  "2368": {
+    "fedb": null,
+    "why": "Ours is a static split squat; upstream's 'Split Squats' are jumping split squats."
+  },
+  "3193": {
+    "fedb": "Glute_Ham_Raise",
+    "why": "Ours is done on the glute-ham raise machine, like upstream's."
+  },
+  "3666": {
+    "fedb": "Walking_Treadmill",
+    "why": "Treadmill walking (incline is a setting)."
+  }
+}

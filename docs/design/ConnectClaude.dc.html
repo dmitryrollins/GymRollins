@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Connect Claude</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <div style="padding: 58px 20px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <a href="ImportResult.dc.html" aria-label="Back" style="width: 44px; height: 44px; box-sizing: border-box; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+      </a>
+      <div style="margin-left: auto; display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 999px; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.25)"></span>
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.25)"></span>
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: #FF6B72"></span>
+      </div>
+    </div>
+    <div>
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; text-transform: uppercase">Step 3 of 3</div>
+      <h1 style="margin: 4px 0 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 36px; line-height: 1">Connect Claude</h1>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="background: #17171E; border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; gap: 10px; align-items: flex-start">
+          <div style="width: 26px; height: 26px; border-radius: 13px; background: #262631; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none">1</div>
+          <div style="flex-grow: 1; font-size: 15px; font-weight: 600; padding-top: 3px">Copy connector URL</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; padding-left: 36px">
+          <div style="flex-grow: 1; height: 40px; border-radius: 10px; background: #0B0B10; border: 1px solid #25252E; display: flex; align-items: center; padding: 0 12px; font-size: 12px; color: #A9A9B5; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">https://[project].supabase.co/functions/v1/mcp</div>
+          <button type="button" style="height: 40px; padding: 0 14px; border-radius: 20px; display: flex; align-items: center; gap: 6px; font: 700 13px Barlow, sans-serif; color: #F2F2F5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg>
+            Copy
+          </button>
+        </div>
+      </div>
+      <div style="background: #17171E; border-radius: 18px; padding: 14px; display: flex; gap: 10px; align-items: flex-start">
+        <div style="width: 26px; height: 26px; border-radius: 13px; background: #262631; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none">2</div>
+        <div style="font-size: 15px; font-weight: 600; padding-top: 3px">In Claude: Settings → Connectors → Add custom connector</div>
+      </div>
+      <div style="background: #17171E; border-radius: 18px; padding: 14px; display: flex; gap: 10px; align-items: flex-start">
+        <div style="width: 26px; height: 26px; border-radius: 13px; background: #262631; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none">3</div>
+        <div style="font-size: 15px; font-weight: 600; padding-top: 3px">Approve access when asked</div>
+      </div>
+      <div style="background: #17171E; border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; text-transform: uppercase">Consent preview</div>
+        <div style="font-size: 15px; font-weight: 700">Allow Claude to access GymRollins</div>
+        <div style="font-size: 13px; color: #A9A9B5">Read workouts &amp; bodyweight · Propose plan changes</div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 22px; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"></path></svg>
+        <span style="font-size: 14px; font-weight: 600">Waiting for Claude…</span>
+      </div>
+    </div>
+  </div>
+  <div style="position: absolute; left: 20px; right: 20px; bottom: 30px; display: flex; flex-direction: column; gap: 10px">
+    <a href="Main.dc.html" style="height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 17px; font-weight: 700; text-decoration: none; background: rgba(214,58,70,0.78); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 26px rgba(200,50,62,0.35)">Done</a>
+    <a href="Main.dc.html" style="height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; font-size: 15px; font-weight: 600; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Later</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

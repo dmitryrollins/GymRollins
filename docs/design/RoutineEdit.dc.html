@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edit Routine</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <div style="padding: 58px 20px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <a href="Plan.dc.html" aria-label="Back" style="width: 44px; height: 44px; box-sizing: border-box; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+      </a>
+      <h1 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 30px; line-height: 1">Edit Routine</h1>
+      <a href="Plan.dc.html" style="margin-left: auto; height: 40px; padding: 0 18px; border-radius: 20px; display: flex; align-items: center; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none; background: rgba(214,58,70,0.78); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 26px rgba(200,50,62,0.35)">Done</a>
+    </div>
+    <div>
+      <label for="rname" style="display: block; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; text-transform: uppercase; margin-bottom: 6px">Routine name</label>
+      <input id="rname" type="text" value="Push + Arms" style="width: 100%; box-sizing: border-box; height: 46px; border-radius: 12px; background: #17171E; border: 1px solid #25252E; color: #F2F2F5; font: 700 17px Barlow, sans-serif; padding: 0 14px">
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #17171E; border-radius: 18px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E9A" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px">
+          <div style="font-size: 15px; font-weight: 600">Barbell Bench Press</div>
+          <div style="font-size: 13px; color: #A9A9B5">3 × 8 · 140 lb (63.5 kg)</div>
+        </div>
+        <span style="padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #F2F2F5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Double</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #17171E; border-radius: 18px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E9A" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px">
+          <div style="font-size: 15px; font-weight: 600">Incline Dumbbell Press</div>
+          <div style="font-size: 13px; color: #A9A9B5">3 × 8–10 · 45 lb (20.4 kg)</div>
+        </div>
+        <span style="padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #F2F2F5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Double</span>
+      </div>
+      <div style="display: flex; gap: 10px">
+        <div style="width: 20px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 2px">
+          <div style="writing-mode: vertical-rl; transform: rotate(180deg); font-size: 9px; font-weight: 700; letter-spacing: .08em; color: #FF6B72; text-transform: uppercase">Superset</div>
+          <div style="width: 2px; flex-grow: 1; background: rgba(255,107,114,0.4); border-radius: 1px"></div>
+        </div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #17171E; border-radius: 18px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E9A" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+            <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px">
+              <div style="font-size: 15px; font-weight: 600">Incline Dumbbell Fly</div>
+              <div style="font-size: 13px; color: #A9A9B5">3 × 12 · 27.5 lb (12.5 kg)</div>
+            </div>
+            <span style="padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #F2F2F5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Double</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #17171E; border-radius: 18px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E9A" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+            <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px">
+              <div style="font-size: 15px; font-weight: 600">Cable Crossover Fly</div>
+              <div style="font-size: 13px; color: #A9A9B5">3 × 12 · 25 lb (11.3 kg)</div>
+            </div>
+            <span style="padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #F2F2F5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Double</span>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #17171E; border-radius: 18px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E9A" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px">
+          <div style="font-size: 15px; font-weight: 600">Rope Overhead Extension</div>
+          <div style="font-size: 13px; color: #A9A9B5">3 × 8–10 · 40 lb (18.1 kg)</div>
+        </div>
+        <span style="padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #F2F2F5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Double</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #17171E; border-radius: 18px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E9A" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px">
+          <div style="font-size: 15px; font-weight: 600">Hammer Curls</div>
+          <div style="font-size: 13px; color: #A9A9B5">3 × 10 · 22.5 lb (10.2 kg)</div>
+        </div>
+        <span style="padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #F2F2F5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Double</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #17171E; border-radius: 18px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E9A" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px">
+          <div style="font-size: 15px; font-weight: 600">Preacher Curl</div>
+          <div style="font-size: 13px; color: #A9A9B5">3 × 10 · 55 lb (24.9 kg)</div>
+        </div>
+        <span style="padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #F2F2F5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Double</span>
+      </div>
+      <a href="AddExercise.dc.html" style="height: 46px; border-radius: 23px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #F2F2F5; font-size: 15px; font-weight: 700; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+        Add exercise
+      </a>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

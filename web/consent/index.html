@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Connect Claude to GymRollins</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/config.js"></script>
+</head>
+<body>
+  <main class="page">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">GymRollins</span>
+    </div>
+
+    <div id="loading" class="card" role="status">
+      <p class="muted">Loading…</p>
+    </div>
+
+    <form id="sign-in" class="card" hidden novalidate>
+      <h1>Sign in</h1>
+      <p class="muted">Sign in to your GymRollins account to review this connection request.</p>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+      </div>
+      <p id="sign-in-error" class="error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-prominent">Sign in</button>
+      <button type="button" id="apple-sign-in" class="btn" hidden>Sign in with Apple</button>
+    </form>
+
+    <section id="consent" class="card" hidden aria-labelledby="consent-title">
+      <h1 id="consent-title">Connect <span id="client-name">this app</span></h1>
+      <p class="muted">
+        <span id="client-name-2">This app</span> will be able to read your workouts and bodyweight and propose plan
+        changes; nothing changes until you apply it in the app.
+      </p>
+      <p class="warning" role="note">
+        First time connecting this app — only approve if you just added GymRollins in Claude.
+      </p>
+      <dl class="details">
+        <dt>Redirects to</dt>
+        <dd><code id="redirect-uri" class="redirect-uri">—</code></dd>
+        <dt>Signed in as</dt>
+        <dd id="signed-in-email">—</dd>
+      </dl>
+      <p id="consent-error" class="error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" id="deny" class="btn">Deny</button>
+        <button type="button" id="approve" class="btn btn-prominent">Approve</button>
+      </div>
+    </section>
+
+    <div id="fatal-error" class="card" hidden role="alert">
+      <h1>Can't continue</h1>
+      <p id="fatal-error-message" class="muted"></p>
+    </div>
+  </main>
+
+  <script type="module" src="/consent.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# Credits
+- Exercise names and instructions: hasaneyldrm/exercises-dataset (MIT License). Its images and GIFs are not used.
+- Exercise photos: free-exercise-db by yuhonas (github.com/yuhonas/free-exercise-db), public domain (Unlicense). Downloaded when first shown and kept on this iPhone.
+- Body map: react-native-body-highlighter by ELABBASSI Hicham, MIT License (Copyright (c) 2022 ELABBASSI Hicham): the body figure on the recovery map and the exercise muscle badges. License: body-highlighter-LICENSE.txt in the app bundle.
+- Barlow Condensed font: Jeremy Tribby, SIL Open Font License 1.1 (see Fonts/OFL.txt).
+- Data model and naming inspired by openGym (AGPL-3.0); no openGym source code is included.
+- Strength standards derived from OpenPowerlifting data, public domain (openpowerlifting.org, data of 2026-09-26): the raw-competitor percentiles behind strength levels. Only the data is used, reduced to percentile curves.
+- Some exercise photos and the exercise names in other languages: wger.de (wger Workout Manager community, data snapshot of 2026-09-30), each under its own Creative Commons license (CC-BY-SA 3.0, CC-BY-SA 4.0, CC-BY 4.0 or CC0) as credited by its author. The photo's author and license are shown on the exercise's photo (tap it for the links); photos are resized and cropped for display and downloaded from wger.de when first shown. Other names and their authors are listed on the exercise's Instructions tab. Only the data is used; no wger source code is included.
+- Calorie estimates: MET values from the 2024 Adult Compendium of Physical Activities (pacompendium.com), used unaltered. Herrmann SD, Willis EA, Ainsworth BE, et al. 2024 Adult Compendium of Physical Activities: A third update of the energy costs of human activities. Journal of Sport and Health Science, 2024;13(1): 6-12.

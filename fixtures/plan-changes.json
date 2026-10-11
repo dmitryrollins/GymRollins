@@ -1,0 +1,190 @@
+{
+  "today": "2026-09-26",
+  "library": ["bench", "incline-db", "db-shoulder-press", "machine-shoulder-press", "leg-extension", "dips"],
+  "plan": {
+    "routines": [
+      { "id": "push", "name": "Push + Arms", "exerciseIds": ["bench", "incline-db"],
+        "reps": { "bench": 10 }, "repsMin": { "bench": 8 } },
+      { "id": "pull", "name": "Pull + Shoulders + Triceps", "exerciseIds": ["machine-shoulder-press"] },
+      { "id": "legs", "name": "Legs", "exerciseIds": ["leg-extension"] }
+    ]
+  },
+  "cases": [
+    {
+      "name": "valid knee-break proposal",
+      "proposal": {
+        "summary": "Knee break: replace Legs with upper work for 4 weeks",
+        "changes": [
+          { "id": "c1", "type": "week", "weekday": 6, "routineId": "push" },
+          { "id": "c2", "type": "weight", "routineId": "push", "exerciseId": "bench", "weightKg": 63.5 },
+          { "id": "c3", "type": "swap-exercise", "routineId": "pull", "exerciseId": "machine-shoulder-press", "toExerciseId": "db-shoulder-press" },
+          { "id": "c4", "type": "remove-exercise", "routineId": "legs", "exerciseId": "leg-extension" },
+          { "id": "c5", "type": "pause-routine", "routineId": "legs", "paused": true }
+        ]
+      },
+      "violations": []
+    },
+    {
+      "name": "unknown routine and exercise",
+      "proposal": {
+        "summary": "Bad refs",
+        "changes": [
+          { "id": "c1", "type": "sets", "routineId": "nope", "exerciseId": "bench", "sets": 3 },
+          { "id": "c2", "type": "sets", "routineId": "push", "exerciseId": "dips", "sets": 3 }
+        ]
+      },
+      "violations": [ { "changeId": "c1", "field": "routineId" }, { "changeId": "c2", "field": "exerciseId" } ]
+    },
+    {
+      "name": "out of range values",
+      "proposal": {
+        "summary": "Ranges",
+        "changes": [
+          { "id": "c1", "type": "sets", "routineId": "push", "exerciseId": "bench", "sets": 0 },
+          { "id": "c2", "type": "reps", "routineId": "push", "exerciseId": "bench", "reps": 8, "repsMin": 10 },
+          { "id": "c3", "type": "weight", "routineId": "push", "exerciseId": "bench", "weightKg": 900 },
+          { "id": "c4", "type": "week", "weekday": 8 }
+        ]
+      },
+      "violations": [
+        { "changeId": "c1", "field": "sets" }, { "changeId": "c2", "field": "repsMin" },
+        { "changeId": "c3", "field": "weightKg" }, { "changeId": "c4", "field": "weekday" }
+      ]
+    },
+    {
+      "name": "add routine then add exercise to it",
+      "proposal": {
+        "summary": "New upper day",
+        "changes": [
+          { "id": "c1", "type": "add-routine", "routineId": "upper", "name": "Upper weak points" },
+          { "id": "c2", "type": "add-exercise", "routineId": "upper", "exerciseId": "dips", "sets": 3, "reps": 10 }
+        ]
+      },
+      "violations": []
+    },
+    {
+      "name": "proposal-level problems",
+      "proposal": {
+        "summary": "",
+        "changes": [
+          { "id": "c1", "type": "rename-routine", "routineId": "push", "name": "" },
+          { "id": "c1", "type": "swap-exercise", "routineId": "push", "exerciseId": "bench", "toExerciseId": "incline-db" },
+          { "id": "c3", "type": "superset", "routineId": "push", "exerciseId": "bench", "withExerciseId": "bench" }
+        ]
+      },
+      "violations": [
+        { "changeId": null, "field": "summary" }, { "changeId": "c1", "field": "id" },
+        { "changeId": "c1", "field": "name" }, { "changeId": "c1", "field": "toExerciseId" },
+        { "changeId": "c3", "field": "withExerciseId" }
+      ]
+    },
+    {
+      "name": "missing required field",
+      "proposal": {
+        "summary": "Missing",
+        "changes": [
+          { "id": "c1", "type": "exercise-prog", "routineId": "push", "exerciseId": "bench" },
+          { "id": "c2", "type": "add-exercise", "routineId": "push", "exerciseId": "dips", "sets": 3 }
+        ]
+      },
+      "violations": [ { "changeId": "c1", "field": "policy" }, { "changeId": "c2", "field": "reps" } ]
+    },
+    {
+      "name": "repsMin change must respect effective reps set by an earlier change",
+      "proposal": {
+        "summary": "Tighten then break the rep range",
+        "changes": [
+          { "id": "c1", "type": "reps", "routineId": "push", "exerciseId": "bench", "reps": 8, "repsMin": 6 },
+          { "id": "c2", "type": "repsMin", "routineId": "push", "exerciseId": "bench", "repsMin": 20 }
+        ]
+      },
+      "violations": [ { "changeId": "c2", "field": "repsMin" } ]
+    },
+    {
+      "name": "add-exercise optional values out of range",
+      "proposal": {
+        "summary": "Bad optional targets",
+        "changes": [
+          { "id": "c1", "type": "add-exercise", "routineId": "push", "exerciseId": "dips", "sets": 3, "reps": 10, "minutes": 1e300 },
+          { "id": "c2", "type": "add-exercise", "routineId": "push", "exerciseId": "dips", "sets": 3, "reps": 10, "sec": 99999 },
+          { "id": "c3", "type": "add-exercise", "routineId": "push", "exerciseId": "dips", "sets": 3, "reps": 10, "weightKg": 900 },
+          { "id": "c4", "type": "add-exercise", "routineId": "push", "exerciseId": "dips", "sets": 3, "reps": 10, "repsMin": 12 },
+          { "id": "c5", "type": "add-exercise", "routineId": "push", "exerciseId": "dips", "sets": 3, "reps": 10, "position": 99 }
+        ]
+      },
+      "violations": [ { "changeId": "c1", "field": "minutes" }, { "changeId": "c2", "field": "sec" }, { "changeId": "c3", "field": "weightKg" }, { "changeId": "c4", "field": "repsMin" }, { "changeId": "c5", "field": "position" } ]
+    },
+    {
+      "name": "swap-exercise optional values out of range",
+      "proposal": {
+        "summary": "Bad swap targets",
+        "changes": [
+          { "id": "c1", "type": "swap-exercise", "routineId": "pull", "exerciseId": "machine-shoulder-press", "toExerciseId": "db-shoulder-press", "weightKg": 900 },
+          { "id": "c2", "type": "swap-exercise", "routineId": "pull", "exerciseId": "machine-shoulder-press", "toExerciseId": "db-shoulder-press", "minutes": 0 },
+          { "id": "c3", "type": "swap-exercise", "routineId": "pull", "exerciseId": "machine-shoulder-press", "toExerciseId": "db-shoulder-press", "sec": 1 },
+          { "id": "c4", "type": "swap-exercise", "routineId": "pull", "exerciseId": "machine-shoulder-press", "toExerciseId": "db-shoulder-press", "sets": 11, "reps": 0 },
+          { "id": "c5", "type": "swap-exercise", "routineId": "push", "exerciseId": "bench", "toExerciseId": "dips", "repsMin": 12 }
+        ]
+      },
+      "violations": [ { "changeId": "c1", "field": "weightKg" }, { "changeId": "c2", "field": "minutes" }, { "changeId": "c3", "field": "sec" }, { "changeId": "c4", "field": "sets" }, { "changeId": "c4", "field": "reps" }, { "changeId": "c5", "field": "repsMin" } ]
+    },
+    {
+      "name": "swap-exercise with valid targets",
+      "proposal": {
+        "summary": "Swap with targets",
+        "changes": [
+          { "id": "c1", "type": "swap-exercise", "routineId": "pull", "exerciseId": "machine-shoulder-press", "toExerciseId": "db-shoulder-press", "sets": 3, "reps": 12, "repsMin": 8, "weightKg": 20 },
+          { "id": "c2", "type": "add-exercise", "routineId": "legs", "exerciseId": "dips", "sets": 1, "reps": 1, "minutes": 20, "position": 0 }
+        ]
+      },
+      "violations": []
+    },
+    {
+      "name": "today: a one-off routine for a date, existing or added in the same proposal",
+      "proposal": {
+        "summary": "Home session today, KB upper next Saturday",
+        "changes": [
+          { "id": "c1", "type": "today", "routineId": "pull", "date": "2026-09-26" },
+          { "id": "c2", "type": "add-routine", "routineId": "home-kb", "name": "Home \u00b7 KB Upper" },
+          { "id": "c3", "type": "add-exercise", "routineId": "home-kb", "exerciseId": "dips", "sets": 3, "reps": 10 },
+          { "id": "c4", "type": "today", "routineId": "home-kb", "date": "2026-10-03" }
+        ]
+      },
+      "violations": []
+    },
+    {
+      "name": "today: bad routine and date values",
+      "proposal": {
+        "summary": "Bad today changes",
+        "changes": [
+          { "id": "c1", "type": "today", "routineId": "nope", "date": "2026-09-26" },
+          { "id": "c2", "type": "today", "routineId": "push" },
+          { "id": "c3", "type": "today", "routineId": "pull", "date": "2026-02-30" },
+          { "id": "c4", "type": "today", "routineId": "push", "date": "2026-09-20" },
+          { "id": "c5", "type": "today", "routineId": "push", "date": "2026-10-10" },
+          { "id": "c6", "type": "today", "date": "2026-09-27" },
+          { "id": "c7", "type": "today", "routineId": "push", "date": "27/09/2026" }
+        ]
+      },
+      "violations": [
+        { "changeId": "c1", "field": "routineId" }, { "changeId": "c2", "field": "date" },
+        { "changeId": "c3", "field": "date" }, { "changeId": "c4", "field": "date" },
+        { "changeId": "c5", "field": "date" }, { "changeId": "c6", "field": "routineId" },
+        { "changeId": "c7", "field": "date" }
+      ]
+    },
+    {
+      "name": "today: a routine paused earlier in the proposal, and a date set twice",
+      "proposal": {
+        "summary": "Paused and duplicate",
+        "changes": [
+          { "id": "c1", "type": "pause-routine", "routineId": "legs", "paused": true },
+          { "id": "c2", "type": "today", "routineId": "legs", "date": "2026-09-27" },
+          { "id": "c3", "type": "today", "routineId": "push", "date": "2026-09-28" },
+          { "id": "c4", "type": "today", "routineId": "pull", "date": "2026-09-28" }
+        ]
+      },
+      "violations": [ { "changeId": "c2", "field": "routineId" }, { "changeId": "c4", "field": "date" } ]
+    }
+  ]
+}

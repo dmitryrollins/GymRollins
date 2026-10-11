@@ -1,0 +1,78 @@
+{
+  "$comment": "Library id -> {other-language name: why} for wger translations that are wrong or too generic for that exercise. These names would otherwise resolve imported workouts automatically (ImportPlan). Review: docs/import/wger-review.md. Re-run node scripts/map-wger.mjs after editing.",
+  "0027": {
+    "Rematore presa neutra con bilanciere": "Italian for a neutral-grip barbell row; this row uses an overhand grip."
+  },
+  "0028": {
+    "Cargada y envión": "Spanish for clean and jerk, not clean and press.",
+    "Umsetzen und Stoßen": "German for clean and jerk, not clean and press."
+  },
+  "0082": {
+    "Langhantel-Handgelenkcurl mit Untergriff": "German for the underhand (regular) wrist curl, not the reverse one."
+  },
+  "0091": {
+    "Military Press LH": "Military press is usually standing; this exercise is the seated press."
+  },
+  "0126": {
+    "Handgelenkstreckung": "German for wrist extension (the reverse movement).",
+    "Kurzhantel-Unterarmcurl": "German for the dumbbell wrist curl; this is the barbell one."
+  },
+  "0165": {
+    "Biceps concentrado martillo con cable": "Spanish for a concentration hammer curl, a different variant."
+  },
+  "0171": {
+    "Cruce de Poleas para Pecho": "Spanish for the standing cable crossover, not the incline cable fly."
+  },
+  "0201": {
+    "Extensión de tríceps en polea con cuerda": "Rope pushdown; this exercise uses a bar (the rope version is 0200)."
+  },
+  "0251": {
+    "Fundos Para Tríceps": "Portuguese for triceps dips; this is the chest dip."
+  },
+  "0274": {
+    "الطحن": "Arabic for 'grinding', not a crunch.",
+    "仰卧起坐": "Chinese for the sit-up, not the crunch."
+  },
+  "0297": {
+    "Curl biceps avec haltère": "French for any dumbbell biceps curl, too generic for the concentration curl."
+  },
+  "0319": {
+    "Distensione Panca Inclinata Bilanciere": "Italian for the incline barbell bench press, not the dumbbell fly."
+  },
+  "0326": {
+    "Aperturas Inversas": "Spanish for any reverse fly, too generic.",
+    "Alzate posteriori": "Italian for any rear raise, too generic."
+  },
+  "0405": {
+    "Military Press KH": "Military press is usually standing; this exercise is the seated press.",
+    "Press Militar mancuerna": "Military press is usually standing; this exercise is the seated press."
+  },
+  "0472": {
+    "Addominali alla sbarra": "Italian for 'abs on the bar' in general, too generic."
+  },
+  "0493": {
+    "Distensione Panca Inclinata Bilanciere": "Italian for the incline barbell bench press, not the incline push-up."
+  },
+  "0575": {
+    "Curl de bíceps sentado": "Spanish for any seated biceps curl, too generic for the machine curl."
+  },
+  "0652": {
+    "Flexões de braço": "Portuguese for push-ups, not pull-ups.",
+    "اسحب": "Arabic for 'pull', too generic."
+  },
+  "0757": {
+    "Distensione su Panca Piana Imp Stretta": "Italian for the flat close-grip bench press, not the Smith incline press."
+  },
+  "0861": {
+    "Remo gironda agarre cerrado": "Spanish for the close-grip Gironda row, a specific variant."
+  },
+  "1326": {
+    "Trazioni alla sbarra": "Italian for pull-ups on the bar in general, not specifically the underhand chin-up."
+  },
+  "1631": {
+    "Biceps concentrado": "Spanish for any concentration curl, too generic for the cable version."
+  },
+  "1760": {
+    "Sentadilla con disco": "Spanish for a squat holding a plate, not the dumbbell goblet squat."
+  }
+}

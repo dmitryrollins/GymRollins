@@ -1,0 +1,661 @@
+{
+ "_comment": "Shared by GymCore (InsightsFixtureTests.swift) and the MCP server (_shared/insights.test.ts): the same inputs must give the same recovery %, weekly hard sets, streak, fresh list and limited groups on both sides. Groups missing from expected.recovery are 100; from expected.weekly_sets, 0.",
+ "exercises": [
+  {
+   "id": "0025",
+   "n": "barbell bench press",
+   "bp": "chest",
+   "eq": "barbell",
+   "tg": "pectorals",
+   "sm": [
+    "triceps",
+    "shoulders"
+   ]
+  },
+  {
+   "id": "0198",
+   "n": "cable pulldown",
+   "bp": "back",
+   "eq": "cable",
+   "tg": "lats",
+   "sm": [
+    "biceps",
+    "forearms"
+   ]
+  },
+  {
+   "id": "0313",
+   "n": "dumbbell hammer curl",
+   "bp": "upper arms",
+   "eq": "dumbbell",
+   "tg": "biceps",
+   "sm": [
+    "forearms"
+   ]
+  },
+  {
+   "id": "0043",
+   "n": "barbell full squat",
+   "bp": "upper legs",
+   "eq": "barbell",
+   "tg": "glutes",
+   "sm": [
+    "quadriceps",
+    "hamstrings",
+    "calves",
+    "core"
+   ]
+  },
+  {
+   "id": "0662",
+   "n": "push-up",
+   "bp": "chest",
+   "eq": "body weight",
+   "tg": "pectorals",
+   "sm": [
+    "triceps",
+    "shoulders"
+   ]
+  },
+  {
+   "id": "run",
+   "n": "run",
+   "bp": "cardio",
+   "eq": "body weight",
+   "tg": "cardiovascular system",
+   "sm": []
+  },
+  {
+   "id": "custom-sled",
+   "n": "sled push",
+   "bp": "upper legs",
+   "eq": "sled machine",
+   "tg": "upper legs",
+   "custom": true,
+   "mode": "reps"
+  }
+ ],
+ "cases": [
+  {
+   "name": "owner week: stacking windows, secondaries, cardio, warm-ups, limits, broken streak",
+   "now": "2026-09-26T09:00:00Z",
+   "time_zone": "UTC",
+   "goal": 3,
+   "limits": "Knee: no leg loading until ~26 Oct 2026",
+   "workouts": [
+    {
+     "id": "00000000-0000-0000-0000-000000000001",
+     "started_at": "2026-09-21T18:00:00Z",
+     "ended_at": "2026-09-21T19:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": true,
+         "multiplier": 1
+        },
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "00000000-0000-0000-0000-000000000002",
+     "started_at": "2026-09-23T18:00:00Z",
+     "ended_at": "2026-09-23T19:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0198",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1,
+         "rpe": 8
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1,
+         "rpe": 8
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1,
+         "rpe": 8
+        }
+       ]
+      },
+      {
+       "exercise_id": "0313",
+       "position": 1,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 10,
+         "r": 10,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 10,
+         "r": 10,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "00000000-0000-0000-0000-000000000003",
+     "started_at": "2026-09-25T20:00:00Z",
+     "ended_at": "2026-09-25T21:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0662",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 0,
+         "r": 20,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 0,
+         "r": 20,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 2,
+         "w_kg": 0,
+         "r": 20,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      },
+      {
+       "exercise_id": "run",
+       "position": 1,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 0,
+         "r": 0,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1,
+         "sec": 1800
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "00000000-0000-0000-0000-000000000004",
+     "started_at": "2026-09-15T18:00:00Z",
+     "ended_at": "2026-09-15T19:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0043",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 3,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      },
+      {
+       "exercise_id": "custom-sled",
+       "position": 1,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "00000000-0000-0000-0000-000000000005",
+     "started_at": "2026-09-08T18:00:00Z",
+     "ended_at": "2026-09-08T19:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "00000000-0000-0000-0000-000000000006",
+     "started_at": "2026-09-09T18:00:00Z",
+     "ended_at": "2026-09-09T19:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "00000000-0000-0000-0000-000000000007",
+     "started_at": "2026-09-10T18:00:00Z",
+     "ended_at": "2026-09-10T19:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "recovery": {
+     "chest": 64,
+     "triceps": 84,
+     "shoulders": 84
+    },
+    "weekly_sets": {
+     "chest": 6,
+     "triceps": 3,
+     "shoulders": 3,
+     "lats": 3,
+     "biceps": 3.5,
+     "forearms": 2.5
+    },
+    "streak": {
+     "current": 1,
+     "longest": 1,
+     "this_week_days": 3,
+     "this_week_met": true
+    },
+    "fresh": [
+     "abs",
+     "lats",
+     "biceps"
+    ],
+    "limited": [
+     "glutes",
+     "quads",
+     "hamstrings",
+     "calves",
+     "adductors",
+     "abductors"
+    ]
+   }
+  },
+  {
+   "name": "no history",
+   "now": "2026-09-26T09:00:00Z",
+   "time_zone": "UTC",
+   "goal": 4,
+   "limits": "",
+   "workouts": [],
+   "expected": {
+    "recovery": {},
+    "weekly_sets": {},
+    "streak": {
+     "current": 0,
+     "longest": 0,
+     "this_week_days": 0,
+     "this_week_met": false
+    },
+    "fresh": [],
+    "limited": []
+   }
+  },
+  {
+   "name": "Warsaw week boundary, RIR effort, expired heavy session",
+   "now": "2026-09-28T10:00:00Z",
+   "time_zone": "Europe/Warsaw",
+   "goal": 2,
+   "limits": "",
+   "workouts": [
+    {
+     "id": "00000000-0000-0000-0000-000000000011",
+     "started_at": "2026-09-27T21:30:00Z",
+     "ended_at": "2026-09-27T22:30:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1,
+         "rir": 3
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1,
+         "rir": 3
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1,
+         "rir": 3
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "00000000-0000-0000-0000-000000000012",
+     "started_at": "2026-09-26T08:00:00Z",
+     "ended_at": "2026-09-26T09:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 2,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 3,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "00000000-0000-0000-0000-000000000013",
+     "started_at": "2026-09-22T08:00:00Z",
+     "ended_at": "2026-09-22T09:00:00Z",
+     "paused_sec": 0,
+     "routine_id": null,
+     "name": "W",
+     "workout_entries": [
+      {
+       "exercise_id": "0198",
+       "position": 0,
+       "workout_sets": [
+        {
+         "position": 0,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        },
+        {
+         "position": 1,
+         "w_kg": 60,
+         "r": 8,
+         "done": true,
+         "warmup": false,
+         "multiplier": 1
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "recovery": {
+     "chest": 74,
+     "triceps": 88,
+     "shoulders": 88
+    },
+    "weekly_sets": {},
+    "streak": {
+     "current": 1,
+     "longest": 1,
+     "this_week_days": 0,
+     "this_week_met": false
+    },
+    "fresh": [
+     "lats",
+     "biceps",
+     "forearms"
+    ],
+    "limited": []
+   }
+  }
+ ]
+}

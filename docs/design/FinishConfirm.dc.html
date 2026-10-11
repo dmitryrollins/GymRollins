@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Finish workout</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <div style="padding: 58px 20px 0; display: flex; flex-direction: column; gap: 12px; color: #5A5A66; font-size: 13px">
+    <div style="height: 56px; border-radius: 28px; background: #17171E"></div>
+    <div>Push + Arms, dimmed behind the sheet</div>
+    <div style="padding: 10px 12px; border-radius: 18px; background: #17171E; height: 56px"></div>
+    <div style="padding: 10px 12px; border-radius: 18px; background: #17171E; height: 56px"></div>
+    <div style="padding: 10px 12px; border-radius: 18px; background: #17171E; height: 56px"></div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.5)"></div>
+  <div style="position: absolute; left: 28px; right: 28px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 16px; padding: 26px 22px; border-radius: 26px; background: rgba(30,30,40,0.72); backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 20px 44px rgba(0,0,0,0.55)">
+    <div style="display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center">
+      <h2 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 28px; line-height: 1">Finish workout?</h2>
+      <div style="font-size: 14px; color: #D7D7DE; line-height: 1.4">2 sets not done in Incline Dumbbell Press and Preacher Curl.</div>
+      <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px; color: #A9A9B5; font-size: 13px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"></circle><path d="M12 13V9M10 3h4"></path></svg>
+        Workout time 58:40</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <a href="Summary.dc.html" style="height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; text-align: center; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none; background: rgba(214,58,70,0.78); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 26px rgba(200,50,62,0.35)">Finish and discard empty sets</a>
+      <button type="button" style="height: 50px; border-radius: 25px; color: #F2F2F5; font: 600 15px Barlow, sans-serif; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Mark all as done</button>
+      <a href="WorkoutOverview.dc.html" style="height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; font-size: 15px; font-weight: 600; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Keep going</a>
+    </div>
+    <a href="Main.dc.html" style="align-self: center; margin-top: 2px; color: #FF8A8F; font-size: 13px; font-weight: 600; text-decoration: none">Discard workout</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plate calculator</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <div style="padding: 58px 20px 0; display: flex; flex-direction: column; gap: 12px; color: #5A5A66; font-size: 13px">
+    <div>Barbell Bench Press · logging, dimmed behind the sheet</div>
+    <div style="padding: 10px 12px; border-radius: 14px; background: #17171E; height: 20px"></div>
+    <div style="padding: 10px 12px; border-radius: 14px; background: #17171E; height: 60px"></div>
+    <div style="padding: 10px 12px; border-radius: 14px; background: #17171E; height: 60px"></div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.45)"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 34px 34px 0 0; padding: 10px 20px 34px; display: flex; flex-direction: column; gap: 16px; background: rgba(30,30,40,0.72); backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); border-bottom: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 -10px 30px rgba(0,0,0,0.5)">
+    <div style="width: 40px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.3); align-self: center"></div>
+    <div style="display: flex; align-items: center">
+      <h2 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 28px">Plate Calculator</h2>
+      <a href="Logging.dc.html" style="margin-left: auto; height: 36px; padding: 0 16px; border-radius: 18px; display: flex; align-items: center; color: #F2F2F5; font-size: 14px; font-weight: 700; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Done</a>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+      <div style="font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 64px; line-height: 1">140 <span style="font-size: 28px">lb</span></div>
+      <div style="font-size: 14px; color: #A9A9B5">63.5 kg · 45 lb bar</div>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 4px; height: 140px; background: #17171E; border-radius: 18px">
+      <div style="width: 70px; height: 10px; background: #8E8E9A; border-radius: 2px"></div>
+      <div style="width: 14px; height: 30px; background: #6A6A76; border-radius: 2px"></div>
+      <div style="width: 20px; height: 130px; background: #2F6FE4; border-radius: 4px"></div>
+      <div style="width: 10px; height: 56px; background: #3FAE6A; border-radius: 3px"></div>
+      <div style="width: 80px; height: 10px; background: #8E8E9A; border-radius: 2px"></div>
+    </div>
+    <div style="padding: 12px 14px; border-radius: 14px; background: #17171E; display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A">LOAD EACH SIDE</div>
+      <div style="display: flex; gap: 10px; align-items: center"><span style="width: 14px; height: 14px; border-radius: 3px; background: #2F6FE4"></span><span style="font-weight: 600">1 × 45 lb</span></div>
+      <div style="display: flex; gap: 10px; align-items: center"><span style="width: 14px; height: 14px; border-radius: 3px; background: #3FAE6A"></span><span style="font-weight: 600">1 × 2.5 lb</span></div>
+    </div>
+    <button type="button" style="height: 48px; border-radius: 24px; color: #F2F2F5; font: 600 15px Barlow, sans-serif; text-align: left; padding: 0 16px; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">My bar and plates (lb) ›</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

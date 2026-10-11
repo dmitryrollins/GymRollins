@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add exercise</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; overflow: hidden">
+  <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 58px 20px 0; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <a href="WorkoutOverview.dc.html" aria-label="Close" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #F2F2F5; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+      <h1 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 30px; line-height: 1">Add Exercise</h1>
+    </div>
+    <div style="height: 46px; flex: none; padding: 0 16px; border-radius: 23px; display: flex; align-items: center; gap: 10px; color: #A9A9B5; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.5-4.5"></path></svg>
+      <label style="flex-grow: 1; display: flex"><span style="position: absolute; left: -9999px">Search 1,324 exercises</span><input placeholder="Search 1,324 exercises" style="width: 100%; border: none; background: none; color: #F2F2F5; font: 400 14px Barlow, sans-serif"></label>
+    </div>
+    <div style="display: flex; gap: 8px; overflow-x: auto; flex: none">
+      <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: none; font: 700 13px Barlow, sans-serif; color: #F2F2F5; white-space: nowrap; background: rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18)">All</button>
+      <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; font: 600 13px Barlow, sans-serif; color: #F2F2F5; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Chest</button>
+      <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; font: 600 13px Barlow, sans-serif; color: #F2F2F5; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Back</button>
+      <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; font: 600 13px Barlow, sans-serif; color: #F2F2F5; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Shoulders</button>
+      <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; font: 600 13px Barlow, sans-serif; color: #F2F2F5; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Arms</button>
+      <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; font: 600 13px Barlow, sans-serif; color: #F2F2F5; white-space: nowrap; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Legs</button>
+    </div>
+    <div style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 96px">
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; background: #17171E; border-radius: 16px">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 12px; flex: none; background: #FF6B72; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0B0B10" stroke-width="3" stroke-linecap="round"><path d="M5 12l5 5 9-10"></path></svg></span>
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: #262631; flex: none"></div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-size: 15px; font-weight: 600">Dips</div><div style="font-size: 12px; color: #A9A9B5">Bodyweight</div></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; background: #17171E; border-radius: 16px">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 12px; flex: none; background: #FF6B72; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0B0B10" stroke-width="3" stroke-linecap="round"><path d="M5 12l5 5 9-10"></path></svg></span>
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: #262631; flex: none"></div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-size: 15px; font-weight: 600">Close-Grip Bench Press</div><div style="font-size: 12px; color: #A9A9B5">Barbell</div></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; background: #17171E; border-radius: 16px">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 12px; flex: none; border: 1.5px solid #3A3A46"></span>
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: #262631; flex: none"></div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-size: 15px; font-weight: 600">Cable Crossover Fly</div><div style="font-size: 12px; color: #A9A9B5">Cable</div></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; background: #17171E; border-radius: 16px">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 12px; flex: none; border: 1.5px solid #3A3A46"></span>
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: #262631; flex: none"></div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-size: 15px; font-weight: 600">Tricep Pushdown</div><div style="font-size: 12px; color: #A9A9B5">Cable</div></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; background: #17171E; border-radius: 16px">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 12px; flex: none; border: 1.5px solid #3A3A46"></span>
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: #262631; flex: none"></div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-size: 15px; font-weight: 600">Skull Crushers</div><div style="font-size: 12px; color: #A9A9B5">Barbell</div></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; background: #17171E; border-radius: 16px">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 12px; flex: none; border: 1.5px solid #3A3A46"></span>
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: #262631; flex: none"></div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-size: 15px; font-weight: 600">Machine Chest Press</div><div style="font-size: 12px; color: #A9A9B5">Machine</div></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; background: #17171E; border-radius: 16px">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 12px; flex: none; border: 1.5px solid #3A3A46"></span>
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: #262631; flex: none"></div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-size: 15px; font-weight: 600">Overhead Tricep Extension</div><div style="font-size: 12px; color: #A9A9B5">Dumbbell</div></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; background: #17171E; border-radius: 16px">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 12px; flex: none; border: 1.5px solid #3A3A46"></span>
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: #262631; flex: none"></div>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-size: 15px; font-weight: 600">Decline Barbell Press</div><div style="font-size: 12px; color: #A9A9B5">Barbell</div></div>
+      </div>
+    </div>
+  </div>
+  <a href="WorkoutOverview.dc.html" style="position: absolute; left: 20px; right: 20px; bottom: 30px; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 17px; font-weight: 700; text-decoration: none; background: rgba(214,58,70,0.78); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 26px rgba(200,50,62,0.35)">Add 2 exercises</a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

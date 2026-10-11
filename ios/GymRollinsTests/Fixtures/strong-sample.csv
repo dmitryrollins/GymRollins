@@ -1,0 +1,22 @@
+﻿Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout Notes,RPE
+2026-01-05 18:00:00,"Push, heavy",1h 5m,Bench Press (Barbell),W,95,10,0,0,,"Slept well, felt good",
+2026-01-05 18:00:00,"Push, heavy",1h 5m,Bench Press (Barbell),1,135,8,0,0,,"Slept well, felt good",8
+2026-01-05 18:00:00,"Push, heavy",1h 5m,Bench Press (Barbell),2,135,8,0,0,"Paused, 1s","Slept well, felt good",8.5
+2026-01-05 18:00:00,"Push, heavy",1h 5m,Bench Press (Barbell),D,115,10,0,0,,"Slept well, felt good",
+2026-01-05 18:00:00,"Push, heavy",1h 5m,Bench Press (Barbell),Rest Timer,0,0,0,90,,"Slept well, felt good",
+2026-01-05 18:00:00,"Push, heavy",1h 5m,Lateral Raise (Dumbbell),1,20,12,0,0,,"Slept well, felt good",
+2026-01-05 18:00:00,"Push, heavy",1h 5m,Lateral Raise (Dumbbell),F,20,9,0,0,,"Slept well, felt good",
+
+2026-01-07 07:30:00,Legs,45m,Squat (Barbell),W,95,5,0,0,,,
+2026-01-07 07:30:00,Legs,45m,Squat (Barbell),1,185,5,0,0,,,
+2026-01-07 07:30:00,Legs,45m,Squat (Barbell),2,185,5,0,0,,,
+2026-01-07 07:30:00,Legs,45m,Squat (Barbell),3,abc,5,0,0,,,
+2026-01-07 07:30:00,Legs,45m,Romanian Deadlift (Barbell),1,155,8,0,0,,,
+2026-01-07 07:30:00,Legs,45m,Plank,1,0,0,0,60,,,
+2026-01-07 07:30:00,Legs,45m,Running (Treadmill),1,0,0,1600,600,,,
+2026-01-07 07:30:00,Legs,45m,Zorblax Carry (Dumbbell),1,50,20,0,0,,,
+2026-01-09 12:00:00,Pull,50m,Pull Up,1,0,10,0,0,,,
+2026-01-09 12:00:00,Pull,50m,Pull Up,2,0,8,0,0,,,
+2026-01-09 12:00:00,Pull,50m,Lat Pulldown (Cable),1,120,10,0,0,,,
+2026-01-09 12:00:00,Pull,50m,Seated Row (Cable),1,110,12,0,0,,,
+2026-01-09 12:00:00,Pull,50m,Bicep Curl (Dumbbell),1,30,10,0,0,,,

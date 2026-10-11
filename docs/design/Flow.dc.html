@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flow map</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 1800px; height: 1000px; box-sizing: border-box; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; padding: 56px 64px; display: flex; flex-direction: column; gap: 32px">
+  <div style="display: flex; align-items: baseline; gap: 24px">
+    <h1 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 64px; line-height: 1">GymRollins v1 · every step</h1>
+    <div style="font-size: 18px; color: #A9A9B5">Each step names the artboard that covers it. Click a step to open it in Play.</div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; flex-grow: 1">
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 22px; background: #17171E">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #FF6B72">1 · ONBOARDING</div>
+      <a href="Welcome.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">1.1 Welcome · Sign in with Apple</a>
+      <a href="ProfileSetup.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">1.2 Profile: units, body, goal, days, injuries</a>
+      <a href="ImportCSV.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">1.3 Import CSV + column mapping</a>
+      <a href="ImportResult.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">1.4 Import result + match unknown exercises</a>
+      <a href="ConnectClaude.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">1.5 Connect Claude (connector + OAuth)</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 22px; background: #17171E">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #FF6B72">2 · PLAN</div>
+      <a href="Main.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">2.1 Today: next routine + suggested weights</a>
+      <a href="Plan.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">2.2 My Plan: week schedule + routines</a>
+      <a href="RoutineEdit.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">2.3 Edit routine: order, sets, supersets, progression</a>
+      <a href="Proposal.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">2.4 Review Claude's proposal: apply / dismiss / undo</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 22px; background: #17171E">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #FF6B72">3 · WORKOUT</div>
+      <a href="WorkoutOverview.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.1 In progress: workout clock, exercise list, finish</a>
+      <a href="Logging.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.2 Log sets: warm-ups, reps × lb, Log Set</a>
+      <a href="RestSettings.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.3 Rest timer settings</a>
+      <a href="Plates.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.4 Plate calculator</a>
+      <a href="HowTo.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.5 How-to</a>
+      <a href="Swap.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.6 Swap exercise</a>
+      <a href="ExerciseOptions.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.7 Exercise options: notes, warm-up, units, remove</a>
+      <a href="AddExercise.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.8 Add exercise mid-workout</a>
+      <a href="FinishConfirm.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.9 Finish: unfinished sets / discard</a>
+      <a href="Summary.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">3.10 Complete: duration, records, volume, synced</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 22px; background: #17171E">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #FF6B72">4 · REVIEW</div>
+      <a href="Log.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">4.1 Log: week strip (minutes) + past workouts</a>
+      <a href="WorkoutDetail.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">4.2 Workout detail: edit / delete / share</a>
+      <a href="ExerciseHistory.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">4.3 Exercise history + e1RM trend</a>
+      <a href="Body.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">4.4 Body: goal + trends</a>
+      <a href="AddWeighIn.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">4.5 Add weigh-in</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 22px; background: #17171E">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #FF6B72">5 · LIBRARY + SETTINGS</div>
+      <a href="Library.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">5.1 Library: search + filters</a>
+      <a href="CustomExercise.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">5.2 Create custom exercise</a>
+      <a href="Settings.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">5.3 Settings: units, rest, plates, import/export, delete account</a>
+      <a href="Claude.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">5.4 Claude connection + permissions</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 22px; background: #17171E">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #F5B75A">6 · SYSTEM STATES</div>
+      <a href="SyncStates.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">6.1 Offline: log without signal, sync later</a>
+      <a href="SyncStates.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">6.2 Sync conflict</a>
+      <a href="SyncStates.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">6.3 Resume a workout after the app closes</a>
+      <a href="SyncStates.dc.html" style="padding: 10px 12px; border-radius: 12px; background: #22222B; color: #F2F2F5; text-decoration: none; font-size: 15px">6.4 Empty states</a>
+      <div style="margin-top: 12px; font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #8E8E9A">NOT IN v1</div>
+      <div style="font-size: 14px; color: #A9A9B5; line-height: 1.6">Recovery muscle map · Weekly set targets · Streaks · Apple Health · Apple Watch · Live Activity rest timer · In-app AI chat</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1800,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

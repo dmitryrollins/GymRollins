@@ -1,0 +1,218 @@
+/* GymRollins OAuth consent page. Dark theme tokens from docs/design/STYLE.md.
+   Font: system stack instead of the mockups' Google Fonts import, so the page's CSP does not need to allow
+   fonts.googleapis.com/fonts.gstatic.com for a single local/consent screen. */
+
+:root {
+  --bg: #0b0b10;
+  --text: #f2f2f5;
+  --text-secondary: #a9a9b5;
+  --text-tertiary: #8e8e9a;
+  --card-bg: #17171e;
+  --card-radius: 18px;
+  --divider: #25252e;
+  --accent: #ff6b72;
+  --error-text: #ff8a8f;
+  --glass-bg: rgba(40, 40, 52, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.22);
+  --prominent-bg: rgba(214, 58, 70, 0.78);
+  --prominent-border: rgba(255, 170, 175, 0.35);
+  --prominent-highlight: rgba(255, 255, 255, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.page {
+  width: 100%;
+  max-width: 420px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent);
+}
+
+.brand-name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  border: 1px solid var(--divider);
+  padding: 28px;
+}
+
+.card + .card {
+  margin-top: 16px;
+}
+
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.muted {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.field input {
+  width: 100%;
+  background: #0f0f14;
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  padding: 12px 14px;
+}
+
+.field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.details {
+  margin: 0 0 20px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  font-size: 14px;
+}
+
+.details dt {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.details dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 12px 22px;
+  min-height: 44px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.btn:hover {
+  filter: brightness(1.08);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-prominent {
+  background: var(--prominent-bg);
+  border-color: var(--prominent-border);
+  box-shadow: inset 0 1px 0 var(--prominent-highlight), 0 10px 26px rgba(200, 50, 62, 0.35);
+  color: #ffffff;
+}
+
+form.card .btn {
+  width: 100%;
+  margin-top: 4px;
+}
+
+form.card .btn + .btn {
+  margin-top: 10px;
+}
+
+.error {
+  color: var(--error-text);
+  font-size: 13px;
+  margin: -8px 0 16px;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 22px;
+  }
+}
+
+.warning {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--prominent-border);
+  background: rgba(214, 58, 70, 0.12);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.redirect-uri {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}

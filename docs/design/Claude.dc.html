@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Claude connection</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&amp;family=Barlow:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Barlow,system-ui,sans-serif;background:#0B0B10;color:#F2F2F5}
+a{color:#FF6B72}a:hover{color:#FF8A8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; background: #0B0B10; color: #F2F2F5; font-family: Barlow, system-ui, sans-serif; padding: 58px 20px 30px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+  <a href="Settings.dc.html" aria-label="Back to Settings" style="align-self: flex-start; height: 40px; padding: 0 16px; border-radius: 20px; display: flex; align-items: center; color: #F2F2F5; font-size: 15px; font-weight: 600; text-decoration: none; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">‹ Settings</a>
+  <h1 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 40px; line-height: 1">Claude</h1>
+  <div style="padding: 14px; border-radius: 18px; background: #17171E; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; border-radius: 5px; background: #4FD1A5"></span><span style="font-weight: 700">Connected</span><span style="margin-left: auto; font-size: 13px; color: #A9A9B5">last used 26 Sep</span></div>
+    <div style="font-size: 13px; color: #A9A9B5; line-height: 1.4">Add this URL as a custom connector in Claude (iPhone, web, Desktop or Code).</div>
+    <div style="display: flex; gap: 8px; align-items: center">
+      <code style="flex-grow: 1; padding: 10px; border-radius: 10px; background: #0B0B10; font-size: 12px; color: #D7D7DE; overflow: hidden; white-space: nowrap">https://[project].supabase.co/functions/v1/mcp</code>
+      <button type="button" style="height: 40px; padding: 0 14px; border-radius: 20px; color: #F2F2F5; font: 600 13px Barlow, sans-serif; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Copy</button>
+    </div>
+  </div>
+  <div style="padding: 14px; border-radius: 18px; background: #17171E; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center"><span style="font-size: 13px; font-weight: 700; letter-spacing: .08em; color: #FF8A8F">PLAN CHANGE FROM CLAUDE</span><span style="margin-left: auto; font-size: 12px; color: #A9A9B5">26 Sep</span></div>
+    <div style="font-weight: 600">Replace Legs with Push + Arms</div>
+    <div style="font-size: 13px; color: #A9A9B5; line-height: 1.4">Knee break: no leg loading until ~26 Oct. Bench 3 × 8 @ 140 lb.</div>
+    <div style="display: flex; gap: 8px; margin-top: 4px">
+      <a href="Proposal.dc.html" style="flex-grow: 1; height: 48px; border-radius: 24px; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none; background: rgba(214,58,70,0.78); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,170,175,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 10px 26px rgba(200,50,62,0.35)">Review</a>
+      <button type="button" style="flex-grow: 1; height: 48px; border-radius: 24px; color: #F2F2F5; font: 600 15px Barlow, sans-serif; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22)">Dismiss</button>
+    </div>
+  </div>
+  <div style="font-size: 12px; font-weight: 700; letter-spacing: .08em; color: #8E8E9A; margin-top: 4px">WHAT CLAUDE CAN DO</div>
+  <div style="display: flex; flex-direction: column; border-radius: 18px; background: #17171E; padding: 0 14px">
+    <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #25252E"><span>Read workouts and sets</span><span style="color: #4FD1A5; font-weight: 700">On</span></div>
+    <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #25252E"><span>Read bodyweight</span><span style="color: #4FD1A5; font-weight: 700">On</span></div>
+    <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #25252E"><span>Propose plan changes</span><span style="color: #4FD1A5; font-weight: 700">On</span></div>
+    <label style="display: flex; align-items: center; padding: 10px 0; gap: 10px">
+      <span style="flex-grow: 1">Apply changes without asking</span>
+      <span style="position: relative; width: 46px; height: 28px; border-radius: 14px; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22); display: inline-block; flex: none">
+        <span style="position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 12px; background: #F2F2F5"></span>
+      </span>
+      <input type="checkbox" style="position: absolute; left: -9999px">
+    </label>
+  </div>
+  <button type="button" style="margin-top: auto; height: 50px; border-radius: 25px; color: #FF8A8F; font: 700 15px Barlow, sans-serif; background: rgba(40,40,52,0.55); backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%); border: 1px solid rgba(255,138,143,0.3); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 24px rgba(0,0,0,0.45)">Disconnect Claude</button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

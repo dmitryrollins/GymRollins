@@ -1,0 +1,165 @@
+{
+  "source": {
+    "title": "2024 Adult Compendium of Physical Activities",
+    "citation": "Herrmann SD, Willis EA, Ainsworth BE, Barreira TV, Hastert M, Kracht CL, Schuna Jr. JM, Cai Z, Quan M, Tudor-Locke C, Whitt-Glover MC, Jacobs DR. 2024 Adult Compendium of Physical Activities: A third update of the energy costs of human activities. Journal of Sport and Health Science, 2024;13(1): 6-12.",
+    "url": "https://pacompendium.com/adult-compendium/",
+    "retrieved": "2026-09-30",
+    "terms": [
+      "The Adult, Older Adult, and Wheelchair Compendia are free to use for commercial purposes.",
+      "Please do not change MET values or combine activities with different MET levels.",
+      "Please cite the Compendium website or publication(s)."
+    ]
+  },
+  "activities": [
+    {
+      "code": "01200",
+      "met": 6.8,
+      "description": "Bicycling, stationary, general",
+      "heading": "Bicycling"
+    },
+    {
+      "code": "02020",
+      "met": 7.5,
+      "description": "Calisthenics (e.g., pushups, sit ups, pull-ups, jumping jacks, burpees, battling ropes), vigorous effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02022",
+      "met": 3.8,
+      "description": "Calisthenics (e.g., pushups, sit ups, pull-ups, lunges), moderate effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02024",
+      "met": 2.8,
+      "description": "Calisthenics (e.g., curl ups, abdominal crunches, plank), light effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02034",
+      "met": 3.5,
+      "description": "Circuit training, light effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02035",
+      "met": 5.0,
+      "description": "Circuit training, moderate effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02040",
+      "met": 7.5,
+      "description": "Circuit training, including kettlebells, some aerobic movement with minimal rest, general, vigorous intensity",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02048",
+      "met": 5.0,
+      "description": "Elliptical trainer, moderate effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02049",
+      "met": 9.0,
+      "description": "Elliptical trainer, vigorous effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02050",
+      "met": 6.0,
+      "description": "Resistance (weight lifting – free weight, nautilus or universal-type), power lifting or body building, vigorous effort (Taylor Code 210)",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02052",
+      "met": 5.0,
+      "description": "Resistance (weight) training, squats, deadlift, slow or explosive effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02054",
+      "met": 3.5,
+      "description": "Resistance (weight) training, multiple exercises, 8-15 reps at varied resistance",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02055",
+      "met": 5.8,
+      "description": "Resistance Training, circuit, reciprocal supersets, peripheral heart action training",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02060",
+      "met": 5.5,
+      "description": "Health club exercise, general (Taylor Code 160)",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02065",
+      "met": 9.3,
+      "description": "Stair treadmill ergometer, general",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02068",
+      "met": 11.0,
+      "description": "Rope skipping exercise, general",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02070",
+      "met": 7.3,
+      "description": "Rowing, stationary ergometer, general, vigorous effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02071",
+      "met": 5.0,
+      "description": "Rowing, stationary ergometer, general, <100 watts, moderate effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02080",
+      "met": 6.8,
+      "description": "Ski machine, general",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02115",
+      "met": 2.8,
+      "description": "Upper body exercise, arm ergometer, general, light",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02210",
+      "met": 7.0,
+      "description": "High intensity interval exercise, moderate effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "02214",
+      "met": 11.0,
+      "description": "High intensity interval exercise, burpees, mountain climbers, squat jumps, Tabata, vigorous effort",
+      "heading": "Conditioning Exercise"
+    },
+    {
+      "code": "12150",
+      "met": 8.0,
+      "description": "Running (Taylor Code 200)",
+      "heading": "Running"
+    },
+    {
+      "code": "17035",
+      "met": 7.0,
+      "description": "Climbing hills, no load, 6 to 10% grade, moderate-to-brisk pace",
+      "heading": "Walking"
+    },
+    {
+      "code": "17200",
+      "met": 4.8,
+      "description": "Walking, 3.5 to 3.9 mph, level, brisk, firm surface, walking for exercise",
+      "heading": "Walking"
+    }
+  ]
+}

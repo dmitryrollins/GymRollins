@@ -1,0 +1,6 @@
+# Included by project.yml when GYM_EMBED_WATCH=YES: the iPhone app embeds the Apple Watch app (Watch/), so installing
+# GymRollins on the iPhone offers it on the paired watch. Needs the watchOS platform installed in Xcode.
+targets:
+  GymRollins:
+    dependencies:
+      - target: GymRollinsWatch

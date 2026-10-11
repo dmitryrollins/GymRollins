@@ -1,0 +1,607 @@
+{
+ "_comment": "Shared by GymCore (StrengthFixtureTests.swift) and the MCP server (_shared/strength-levels.test.ts): the same inputs on the bundled strength-standards.json must give the same e1RM, level, percentile and next target on both sides. Numbers rounded to 0.01; comparisons allow 0.01.",
+ "cases": [
+  {
+   "name": "owner: 81 kg man, 35, knee note; bench 130 lb x 10, squat paused, sumo deadlift counts",
+   "sex": "male",
+   "birth_year": 1991,
+   "bodyweight_kg": 81,
+   "limits": "Knee: no leg loading until ~26 Oct 2026",
+   "now": "2026-09-29T12:00:00Z",
+   "workouts": [
+    {
+     "started_at": "2026-09-19T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "workout_sets": [
+        {
+         "w_kg": 58.967008,
+         "r": 10,
+         "done": true,
+         "warmup": false
+        },
+        {
+         "w_kg": 58.967008,
+         "r": 10,
+         "done": true,
+         "warmup": false
+        },
+        {
+         "w_kg": 20.411657,
+         "r": 10,
+         "done": true,
+         "warmup": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-09-12T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "workout_sets": [
+        {
+         "w_kg": 58.967008,
+         "r": 6,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-06-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0043",
+       "workout_sets": [
+        {
+         "w_kg": 100,
+         "r": 5,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-05-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0117",
+       "workout_sets": [
+        {
+         "w_kg": 140,
+         "r": 3,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "missing": [],
+    "age": 35,
+    "lifts": {
+     "squat": {
+      "e1rm_kg": 116.67,
+      "exercise_id": "0043",
+      "level": "novice",
+      "percentile": 1.66,
+      "next": "intermediate",
+      "next_target_kg": 124.11,
+      "paused": true
+     },
+     "bench": {
+      "e1rm_kg": 78.62,
+      "exercise_id": "0025",
+      "level": "novice",
+      "percentile": 1.32,
+      "next": "intermediate",
+      "next_target_kg": 85.17,
+      "paused": false
+     },
+     "deadlift": {
+      "e1rm_kg": 154,
+      "exercise_id": "0117",
+      "level": "intermediate",
+      "percentile": 2.91,
+      "next": "advanced",
+      "next_target_kg": 194.64,
+      "paused": true
+     }
+    }
+   }
+  },
+  {
+   "name": "woman, 56 (50-59), 63 kg; an old deadlift outside the 365-day window is ignored",
+   "sex": "female",
+   "birth_year": 1970,
+   "bodyweight_kg": 63,
+   "limits": "",
+   "now": "2026-09-29T12:00:00Z",
+   "workouts": [
+    {
+     "started_at": "2026-09-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "workout_sets": [
+        {
+         "w_kg": 50,
+         "r": 5,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-09-03T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "1435",
+       "workout_sets": [
+        {
+         "w_kg": 80,
+         "r": 3,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2025-09-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0032",
+       "workout_sets": [
+        {
+         "w_kg": 200,
+         "r": 1,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-08-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0032",
+       "workout_sets": [
+        {
+         "w_kg": 100,
+         "r": 1,
+         "done": true,
+         "warmup": false
+        },
+        {
+         "w_kg": 90,
+         "r": 3,
+         "done": false,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "missing": [],
+    "age": 56,
+    "lifts": {
+     "squat": {
+      "e1rm_kg": 88,
+      "exercise_id": "1435",
+      "level": "advanced",
+      "percentile": 47.14,
+      "next": "elite",
+      "next_target_kg": 110.55,
+      "paused": false
+     },
+     "bench": {
+      "e1rm_kg": 58.33,
+      "exercise_id": "0025",
+      "level": "advanced",
+      "percentile": 62.7,
+      "next": "elite",
+      "next_target_kg": 66.88,
+      "paused": false
+     },
+     "deadlift": {
+      "e1rm_kg": 100,
+      "exercise_id": "0032",
+      "level": "advanced",
+      "percentile": 24.91,
+      "next": "elite",
+      "next_target_kg": 138.38,
+      "paused": false
+     }
+    }
+   }
+  },
+  {
+   "name": "no sex set: estimates, no levels",
+   "sex": null,
+   "birth_year": 1991,
+   "bodyweight_kg": 90,
+   "limits": "",
+   "now": "2026-09-29T12:00:00Z",
+   "workouts": [
+    {
+     "started_at": "2026-09-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "workout_sets": [
+        {
+         "w_kg": 100,
+         "r": 1,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "missing": [
+     "profile"
+    ],
+    "age": 35,
+    "lifts": {
+     "squat": {
+      "e1rm_kg": null,
+      "exercise_id": null,
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     },
+     "bench": {
+      "e1rm_kg": 100,
+      "exercise_id": "0025",
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     },
+     "deadlift": {
+      "e1rm_kg": null,
+      "exercise_id": null,
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     }
+    }
+   }
+  },
+  {
+   "name": "no weigh-in and too young for the table",
+   "sex": "male",
+   "birth_year": 2015,
+   "bodyweight_kg": null,
+   "limits": "",
+   "now": "2026-09-29T12:00:00Z",
+   "workouts": [
+    {
+     "started_at": "2026-09-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "workout_sets": [
+        {
+         "w_kg": 40,
+         "r": 5,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "missing": [
+     "profile",
+     "bodyweight"
+    ],
+    "age": 11,
+    "lifts": {
+     "squat": {
+      "e1rm_kg": null,
+      "exercise_id": null,
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     },
+     "bench": {
+      "e1rm_kg": 46.67,
+      "exercise_id": "0025",
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     },
+     "deadlift": {
+      "e1rm_kg": null,
+      "exercise_id": null,
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     }
+    }
+   }
+  },
+  {
+   "name": "elite 100 kg man, 30",
+   "sex": "male",
+   "birth_year": 1996,
+   "bodyweight_kg": 100,
+   "limits": "",
+   "now": "2026-09-29T12:00:00Z",
+   "workouts": [
+    {
+     "started_at": "2026-09-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "workout_sets": [
+        {
+         "w_kg": 200,
+         "r": 1,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-09-02T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0043",
+       "workout_sets": [
+        {
+         "w_kg": 280,
+         "r": 1,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-09-03T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0032",
+       "workout_sets": [
+        {
+         "w_kg": 400,
+         "r": 1,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "missing": [],
+    "age": 30,
+    "lifts": {
+     "squat": {
+      "e1rm_kg": 280,
+      "exercise_id": "0043",
+      "level": "elite",
+      "percentile": 93.42,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     },
+     "bench": {
+      "e1rm_kg": 200,
+      "exercise_id": "0025",
+      "level": "elite",
+      "percentile": 94.91,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     },
+     "deadlift": {
+      "e1rm_kg": 400,
+      "exercise_id": "0032",
+      "level": "elite",
+      "percentile": 100,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     }
+    }
+   }
+  },
+  {
+   "name": "175 kg man uses the heaviest bin; a legs note pauses squat and deadlift",
+   "sex": "male",
+   "birth_year": 1990,
+   "bodyweight_kg": 175,
+   "limits": "legs sore",
+   "now": "2026-09-29T12:00:00Z",
+   "workouts": [
+    {
+     "started_at": "2026-09-01T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "workout_sets": [
+        {
+         "w_kg": 150,
+         "r": 3,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-09-10T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0032",
+       "workout_sets": [
+        {
+         "w_kg": 180,
+         "r": 1,
+         "done": true,
+         "warmup": true
+        },
+        {
+         "w_kg": 150,
+         "r": 5,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "missing": [],
+    "age": 36,
+    "lifts": {
+     "squat": {
+      "e1rm_kg": null,
+      "exercise_id": null,
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": true
+     },
+     "bench": {
+      "e1rm_kg": 165,
+      "exercise_id": "0025",
+      "level": "advanced",
+      "percentile": 33.73,
+      "next": "elite",
+      "next_target_kg": 220.7,
+      "paused": false
+     },
+     "deadlift": {
+      "e1rm_kg": 175,
+      "exercise_id": "0032",
+      "level": "novice",
+      "percentile": 2.76,
+      "next": "intermediate",
+      "next_target_kg": 177.06,
+      "paused": true
+     }
+    }
+   }
+  },
+  {
+   "name": "under-23: 18-year-old woman at 52 kg; 20-rep sets give no estimate",
+   "sex": "female",
+   "birth_year": 2008,
+   "bodyweight_kg": 52,
+   "limits": "",
+   "now": "2026-09-29T12:00:00Z",
+   "workouts": [
+    {
+     "started_at": "2026-09-10T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0032",
+       "workout_sets": [
+        {
+         "w_kg": 100,
+         "r": 5,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "started_at": "2026-09-10T10:00:00Z",
+     "workout_entries": [
+      {
+       "exercise_id": "0025",
+       "workout_sets": [
+        {
+         "w_kg": 35,
+         "r": 20,
+         "done": true,
+         "warmup": false
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "expected": {
+    "missing": [],
+    "age": 18,
+    "lifts": {
+     "squat": {
+      "e1rm_kg": null,
+      "exercise_id": null,
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     },
+     "bench": {
+      "e1rm_kg": null,
+      "exercise_id": null,
+      "level": null,
+      "percentile": null,
+      "next": null,
+      "next_target_kg": null,
+      "paused": false
+     },
+     "deadlift": {
+      "e1rm_kg": 116.67,
+      "exercise_id": "0032",
+      "level": "advanced",
+      "percentile": 62.36,
+      "next": "elite",
+      "next_target_kg": 129.57,
+      "paused": false
+     }
+    }
+   }
+  }
+ ]
+}

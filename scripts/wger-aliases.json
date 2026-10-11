@@ -1,0 +1,331 @@
+{
+  "$comment": "Curated library id -> wger exercise ids (null = never use wger for it). The same exercise under another name only; grip/angle/stance variants that change the picture are not aliased. Rules: docs/import/wger-review.md. Re-run node scripts/map-wger.mjs after editing.",
+  "0027": {
+    "wger": [
+      83
+    ],
+    "why": "Barbell bent-over row."
+  },
+  "0030": {
+    "wger": [
+      76
+    ],
+    "why": "Bench press narrow grip = barbell close-grip bench press (triceps)."
+  },
+  "0031": {
+    "wger": [
+      91
+    ],
+    "why": "Standing barbell biceps curl."
+  },
+  "0074": {
+    "wger": [
+      484
+    ],
+    "why": "Rack deadlift = barbell rack pull."
+  },
+  "0078": {
+    "wger": [
+      1830
+    ],
+    "why": "Barbell step back lunge = barbell rear lunge."
+  },
+  "0082": {
+    "wger": [
+      48
+    ],
+    "why": "Same exercise; wger lists no muscles for it, so it can't auto-match."
+  },
+  "0085": {
+    "wger": [
+      507,
+      1700
+    ],
+    "why": "Both wger entries are the barbell Romanian deadlift (duplicates)."
+  },
+  "0091": {
+    "wger": [
+      566
+    ],
+    "why": "wger's barbell shoulder press is drawn seated on an upright bench."
+  },
+  "0110": {
+    "wger": [
+      1290
+    ],
+    "why": "Reverse grip barbell curls, standing."
+  },
+  "0118": {
+    "wger": [
+      84
+    ],
+    "why": "Bent-over barbell row with a reverse (underhand) grip."
+  },
+  "0155": {
+    "wger": [
+      323
+    ],
+    "why": "Cable cross-over, standing between two high pulleys."
+  },
+  "0165": {
+    "wger": [
+      275
+    ],
+    "why": "Standing cable hammer curl with the rope."
+  },
+  "0171": {
+    "wger": [
+      237
+    ],
+    "why": "wger's cable fly is drawn on an incline bench."
+  },
+  "0192": {
+    "wger": [
+      1378
+    ],
+    "why": "Single-arm cable lateral raise."
+  },
+  "0194": {
+    "wger": [
+      1513
+    ],
+    "why": "Overhead cable triceps extension with the rope, back to the stack."
+  },
+  "0198": {
+    "wger": [
+      355
+    ],
+    "why": "Standard seated lat pulldown on the cable pulldown machine (straight back)."
+  },
+  "0201": {
+    "wger": [
+      805,
+      1185
+    ],
+    "why": "Cable triceps pushdown with a bar (two wger duplicates)."
+  },
+  "0251": {
+    "wger": [
+      194
+    ],
+    "why": "Parallel-bar dips (chest and triceps)."
+  },
+  "0274": {
+    "wger": [
+      167
+    ],
+    "why": "Basic floor crunch on a mat."
+  },
+  "0289": {
+    "wger": [
+      75
+    ],
+    "why": "Flat dumbbell bench press."
+  },
+  "0294": {
+    "wger": [
+      92
+    ],
+    "why": "Standing dumbbell biceps curl."
+  },
+  "0326": {
+    "wger": [
+      828
+    ],
+    "why": "Chest-supported reverse fly on an incline bench with dumbbells."
+  },
+  "0377": {
+    "wger": [
+      1227
+    ],
+    "why": "Bent-over dumbbell rear delt row, elbows out."
+  },
+  "0405": {
+    "wger": [
+      567
+    ],
+    "why": "wger's dumbbell shoulder press is done seated on an upright bench."
+  },
+  "0410": {
+    "wger": [
+      1706
+    ],
+    "why": "Rear foot elevated on a bench, dumbbells in hand (Bulgarian split squat)."
+  },
+  "0437": {
+    "wger": [
+      694
+    ],
+    "why": "Upright row with dumbbells."
+  },
+  "0489": {
+    "wger": [
+      301
+    ],
+    "why": "Hyperextension on the back-extension bench (wger tags it trapezius, so muscles can't agree)."
+  },
+  "0586": {
+    "wger": [
+      365
+    ],
+    "why": "Lying leg curl machine."
+  },
+  "0594": {
+    "wger": [
+      2628,
+      590
+    ],
+    "why": "Seated calf raise machine (two wger entries)."
+  },
+  "0596": {
+    "wger": [
+      135
+    ],
+    "why": "Butterfly = seated pec deck fly machine."
+  },
+  "0599": {
+    "wger": [
+      366,
+      2626
+    ],
+    "why": "Seated leg curl machine (two wger entries)."
+  },
+  "0603": {
+    "wger": [
+      543
+    ],
+    "why": "Seated machine shoulder press."
+  },
+  "0605": {
+    "wger": null,
+    "why": "wger 'Standing Calf Raises' shows a dumbbell calf raise, not the machine."
+  },
+  "0630": {
+    "wger": [
+      996
+    ],
+    "why": "Same exercise; wger lists no muscles for it."
+  },
+  "0635": {
+    "wger": [
+      576
+    ],
+    "why": "Oblique crunch lying on the floor, knees bent."
+  },
+  "0648": {
+    "wger": [
+      683
+    ],
+    "why": "Barbell power clean (wger's muscle tag, chest, is wrong)."
+  },
+  "0685": {
+    "wger": [
+      527
+    ],
+    "why": "Running; wger lists no muscles for it."
+  },
+  "0739": {
+    "wger": [
+      371
+    ],
+    "why": "Leg press machine (sled)."
+  },
+  "0757": {
+    "wger": [
+      539
+    ],
+    "why": "Incline bench press on the multipress = Smith machine incline bench press."
+  },
+  "0808": {
+    "wger": [
+      959
+    ],
+    "why": "Suspension-trainer (TRX) row."
+  },
+  "0813": {
+    "wger": [
+      197
+    ],
+    "why": "Triceps dip with hands on one bench and feet on another."
+  },
+  "0815": {
+    "wger": [
+      1000
+    ],
+    "why": "Triceps dip from the floor, hands behind the body."
+  },
+  "0832": {
+    "wger": [
+      1648
+    ],
+    "why": "Crunch holding a weight on the chest."
+  },
+  "0861": {
+    "wger": [
+      1117,
+      394
+    ],
+    "why": "Seated low-pulley cable row (two wger entries)."
+  },
+  "0868": {
+    "wger": [
+      1531,
+      95
+    ],
+    "why": "Standing cable biceps curl with a bar (two wger entries)."
+  },
+  "1160": {
+    "wger": [
+      132
+    ],
+    "why": "Burpee; wger lists no muscles for it."
+  },
+  "1362": {
+    "wger": [
+      1810
+    ],
+    "why": "Sphinx pose; wger tags abs, ours spine."
+  },
+  "1373": {
+    "wger": [
+      1243
+    ],
+    "why": "Standing calf raise on both legs without weight."
+  },
+  "1428": {
+    "wger": [
+      2543
+    ],
+    "why": "Wrist circles; wger lists no muscles for it."
+  },
+  "1757": {
+    "wger": [
+      1736
+    ],
+    "why": "Single-leg deadlift holding a dumbbell."
+  },
+  "2292": {
+    "wger": [
+      487
+    ],
+    "why": "Bent-over dumbbell rear delt raise (wger lists no muscles, so it can't auto-match)."
+  },
+  "2567": {
+    "wger": [
+      1959
+    ],
+    "why": "Seated piriformis stretch; wger lists no muscles for it."
+  },
+  "3147": {
+    "wger": [
+      2647
+    ],
+    "why": "Pelvic tilt; wger lists no muscles for it."
+  },
+  "3699": {
+    "wger": [
+      1091
+    ],
+    "why": "Shoulder taps from a high plank."
+  }
+}

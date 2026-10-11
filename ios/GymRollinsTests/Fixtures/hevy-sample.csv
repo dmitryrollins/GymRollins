@@ -1,0 +1,16 @@
+title,start_time,end_time,description,exercise_title,superset_id,exercise_notes,set_index,set_type,weight_kg,reps,distance_km,duration_seconds,rpe
+"Upper, A","5 Jan 2026, 18:00","5 Jan 2026, 19:10","Chest focus","Bench Press (Barbell)",,"Pause at bottom",0,"warmup",40,10,,,
+"Upper, A","5 Jan 2026, 18:00","5 Jan 2026, 19:10","Chest focus","Bench Press (Barbell)",,"Pause at bottom",1,"normal",80,8,,,8
+"Upper, A","5 Jan 2026, 18:00","5 Jan 2026, 19:10","Chest focus","Bench Press (Barbell)",,"Pause at bottom",2,"drop_set",60,10,,,
+"Upper, A","5 Jan 2026, 18:00","5 Jan 2026, 19:10","Chest focus","Bicep Curl (Dumbbell)",1,"",0,"normal",14,10,,,
+"Upper, A","5 Jan 2026, 18:00","5 Jan 2026, 19:10","Chest focus","Triceps Pushdown",1,"",0,"failure",30,12,,,9.5
+"Legs","7 Jan 2026, 07:30","7 Jan 2026, 08:25","","Squat (Barbell)",,"",0,"warmup",60,5,,,
+"Legs","7 Jan 2026, 07:30","7 Jan 2026, 08:25","","Squat (Barbell)",,"",1,"normal",100,5,,,
+"Legs","7 Jan 2026, 07:30","7 Jan 2026, 08:25","","Squat (Barbell)",,"",2,"normal",100,x,,,
+"Legs","7 Jan 2026, 07:30","7 Jan 2026, 08:25","","Plank",,"",0,"normal",,,,60,
+"Legs","7 Jan 2026, 07:30","7 Jan 2026, 08:25","","Running",,"",0,"normal",,,2.5,900,
+"Legs","7 Jan 2026, 07:30","7 Jan 2026, 08:25","","Zorblax Carry (Dumbbell)",,"",0,"normal",20,20,,,
+"Pull","9 Jan 2026, 12:00","9 Jan 2026, 12:55","Back day
+felt strong","Pull Up",,"",0,"normal",,10,,,
+"Pull","9 Jan 2026, 12:00","9 Jan 2026, 12:55","Back day
+felt strong","Pull Up",,"",1,"normal",,8,,,
