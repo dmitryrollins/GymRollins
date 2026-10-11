@@ -226,8 +226,7 @@ locally; see `docs/release-readiness.md` ("Needs the cloud project") and `docs/c
 
 ## License
 
-GymRollins is open source under the [GNU AGPLv3](LICENSE), on the same model as
-[Twenty](https://github.com/twentyhq/twenty):
+GymRollins is open source under the [GNU AGPLv3](LICENSE)
 
 - Everything is AGPLv3 except files marked `@license Pro` at the top. Those are under the GymRollins
   Commercial License (end of [LICENSE](LICENSE)) and need a GymRollins Pro subscription for production use.
