@@ -26,7 +26,7 @@ import Testing
     }
 
     /// Equipment exercises for these chips that the current gym can do.
-    private func offered(_ env: AppEnvironment, _ muscles: [BuildMuscle]) throws -> Int {
+    private func offeredIds(_ env: AppEnvironment, _ muscles: [BuildMuscle]) throws -> [String] {
         let matcher = try #require(env.gymMatcher())
         let groups = Set(muscles.flatMap { $0.groups })
         return env.library.exercises.filter { exercise in
@@ -34,7 +34,19 @@ import Testing
                   MuscleTaxonomy.contributions(for: exercise).contains(where: { $0.isPrimary && groups.contains($0.group) }),
                   case let .available(match) = matcher.availability(of: exercise.id) else { return false }
             return !match.listingIds.isEmpty
-        }.count
+        }.map(\.id)
+    }
+
+    private func offered(_ env: AppEnvironment, _ muscles: [BuildMuscle]) throws -> Int {
+        try offeredIds(env, muscles).count
+    }
+
+    /// Marks exactly `slots` exercises "More often", so they rank first every day: only finishing a workout (which
+    /// saves it) can make the builder move on from them.
+    private func favouriteTheFirst(_ slots: Int, _ muscles: [BuildMuscle], _ env: AppEnvironment) throws -> Set<String> {
+        let favourites = Set(try offeredIds(env, muscles).sorted().prefix(slots))
+        for id in favourites { try env.setPreference(.more, for: id) }
+        return favourites
     }
 
     /// Starts the built workout on `date`, does every set and finishes it: a finished workout with hard sets.
@@ -120,7 +132,10 @@ import Testing
         let slots = BuildLength.medium.slots(muscleCount: 1)
         let chestOffered = try offered(rig.env, [.chest])
         #expect(chestOffered >= 2 * slots, "the rich gym offers \(chestOffered) chest exercises for \(slots) slots")
-        expectHalfChanges(try fourDays(rig, [.chest], .medium), "Rich chest")
+        let favourites = try favouriteTheFirst(slots, [.chest], rig.env)
+        let days = try fourDays(rig, [.chest], .medium)
+        #expect(Set(days[0]) == favourites, "day 1 starts with the exercises marked More often: \(days[0])")
+        expectHalfChanges(days, "Rich chest")
     }
 
     /// The owner's real gym (`-seedGym`): kettlebells and a flat bench, building Arms.
@@ -131,7 +146,10 @@ import Testing
         let slots = BuildLength.medium.slots(muscleCount: 1)
         let armsOffered = try offered(rig.env, [.arms])
         #expect(armsOffered >= 2 * slots, "Home offers \(armsOffered) arm exercises for \(slots) slots")
-        expectHalfChanges(try fourDays(rig, [.arms], .medium), "Home arms")
+        let favourites = try favouriteTheFirst(slots, [.arms], rig.env)
+        let days = try fourDays(rig, [.arms], .medium)
+        #expect(Set(days[0]) == favourites, "day 1 starts with the exercises marked More often: \(days[0])")
+        expectHalfChanges(days, "Home arms")
     }
 
     @Test func rebuildAlwaysChangesWhileThereIsMore() throws {
