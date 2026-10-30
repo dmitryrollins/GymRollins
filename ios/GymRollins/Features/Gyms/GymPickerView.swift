@@ -226,6 +226,7 @@ struct GymPickerView: View {
             photos = try gyms.reduce(into: [:]) { result, gym in
                 if let file = try env.gyms.listings(gymId: gym.id).compactMap(\.photoFile).first { result[gym.id] = file }
             }
+            if case .saved(let saved) = nearby?.target, !gyms.contains(where: { $0.id == saved.id }) { nearby = nil }
             errorText = nil
         } catch {
             AppEnvironment.log.error("Read gyms failed: \(error.localizedDescription, privacy: .public)")
@@ -262,7 +263,11 @@ struct GymPickerView: View {
     }
 
     private func choose(_ gym: Gym) {
-        env.setCurrentGym(gym.id)
+        guard env.setCurrentGym(gym.id) else {
+            reload()
+            errorText = GymChoiceError.gymGone.errorDescription
+            return
+        }
         dismiss()
     }
 
@@ -271,7 +276,16 @@ struct GymPickerView: View {
     }
 
     private func trainHere(_ nearby: NearbyGym) {
-        perform("Couldn't switch gyms. Try again.") { try env.trainHere(nearby) }
+        do {
+            try env.trainHere(nearby)
+            dismiss()
+        } catch GymChoiceError.gymGone {
+            reload() // drops the suggestion whose gym is gone
+            errorText = GymChoiceError.gymGone.errorDescription
+        } catch {
+            AppEnvironment.log.error("Train here failed: \(error.localizedDescription, privacy: .public)")
+            errorText = "Couldn't switch gyms. Try again."
+        }
     }
 
     private func chooseNone() {

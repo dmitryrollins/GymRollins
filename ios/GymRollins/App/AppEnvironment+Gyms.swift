@@ -2,6 +2,13 @@ import Foundation
 import GymCore
 import GymData
 
+/// Why choosing a gym did nothing.
+enum GymChoiceError: LocalizedError {
+    case gymGone
+
+    var errorDescription: String? { "That gym was deleted." }
+}
+
 /// The current gym and the rules that run on it (plan 19): matcher, adapter, loads and Build workout. Everything
 /// reads the id from `defaults` (per device) and the gym's rows from `gyms`.
 extension AppEnvironment {
@@ -21,10 +28,22 @@ extension AppEnvironment {
 
     private var storedGymId: UUID? { defaults.string(forKey: Self.currentGymKey).flatMap(UUID.init(uuidString:)) }
 
-    func setCurrentGym(_ id: UUID?) {
-        if let id { defaults.set(id.uuidString, forKey: Self.currentGymKey) }
-        else { defaults.removeObject(forKey: Self.currentGymKey) }
+    /// Makes the gym current. False, with nothing changed, when it has no row (deleted a moment ago).
+    @discardableResult
+    func setCurrentGym(_ id: UUID?) -> Bool {
+        if let id {
+            do {
+                guard try gyms.gym(id) != nil else { return false }
+            } catch {
+                Self.log.error("Read gym failed: \(error.localizedDescription, privacy: .public)")
+                return false
+            }
+            defaults.set(id.uuidString, forKey: Self.currentGymKey)
+        } else {
+            defaults.removeObject(forKey: Self.currentGymKey)
+        }
         gymsChanged()
+        return true
     }
 
     /// Deletes the gym, its listings and their photo files; if it was the current gym, none is current any more.
@@ -86,7 +105,7 @@ extension AppEnvironment {
     /// "Train here": makes a nearby gym current, saving it first when it is a Maps place.
     func trainHere(_ nearby: NearbyGym) throws {
         switch nearby.target {
-        case .saved(let gym): setCurrentGym(gym.id)
+        case .saved(let gym): guard setCurrentGym(gym.id) else { throw GymChoiceError.gymGone }
         case .place(let place): try chooseMapsGym(place)
         }
     }

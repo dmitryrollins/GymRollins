@@ -17,8 +17,12 @@ struct GymChipRow: View {
             if let errorText { Text(errorText).font(.footnote).foregroundStyle(Theme.destructive) }
         }
         .sheet(isPresented: $showPicker) { GymPickerView() }
-        .task { suggestion = await env.suggestNearbyGym() }
+        .task {
+            // The throttle answers nil on a return to Today: that must not remove a card nobody dismissed.
+            if let found = await env.suggestNearbyGym() { suggestion = found }
+        }
         .onChange(of: gym?.id) { _, _ in suggestion = nil }
+        .onChange(of: env.gymRevision) { _, _ in dropSuggestionIfItsGymIsGone() }
     }
 
     private var chip: some View {
@@ -57,6 +61,15 @@ struct GymChipRow: View {
         .accessibilityIdentifier("today.gymSuggestion")
     }
 
+    private func dropSuggestionIfItsGymIsGone() {
+        guard let suggestion, case .saved(let saved) = suggestion.target else { return }
+        do {
+            if try env.gyms.gym(saved.id) == nil { self.suggestion = nil }
+        } catch {
+            AppEnvironment.log.error("Read gym failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func accept(_ nearby: NearbyGym) {
         do {
             try env.trainHere(nearby)
@@ -64,7 +77,8 @@ struct GymChipRow: View {
             errorText = nil
         } catch {
             AppEnvironment.log.error("Train here failed: \(error.localizedDescription, privacy: .public)")
-            errorText = "Couldn't switch gyms. Try again."
+            if case GymChoiceError.gymGone = error { suggestion = nil }
+            errorText = (error as? GymChoiceError)?.errorDescription ?? "Couldn't switch gyms. Try again."
         }
     }
 }

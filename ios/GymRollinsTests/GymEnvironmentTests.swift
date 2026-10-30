@@ -36,6 +36,25 @@ let richGym: [String: ListingLoads] = [
         #expect(rig.defaults.object(forKey: AppEnvironment.currentGymKey) == nil)
     }
 
+    @Test func aDeletedGymCantBecomeCurrent() throws {
+        let rig = try GymTestRig.make()
+        let kept = try rig.gym("Kept")
+        let gone = try rig.gym("Gone")
+        rig.env.setCurrentGym(kept.id)
+        _ = try rig.env.gyms.deleteGym(gone.id)
+
+        #expect(rig.env.setCurrentGym(gone.id) == false)
+        #expect(rig.env.currentGym?.id == kept.id, "the current gym is left alone")
+        #expect(rig.defaults.string(forKey: AppEnvironment.currentGymKey) == kept.id.uuidString)
+
+        #expect(throws: GymChoiceError.self) {
+            try rig.env.trainHere(NearbyGym(target: .saved(gone), distanceMeters: 20))
+        }
+        #expect(rig.env.currentGym?.id == kept.id)
+        #expect(rig.env.setCurrentGym(kept.id))
+        #expect(rig.env.setCurrentGym(nil))
+    }
+
     @Test func deletingTheCurrentGymClearsIt() throws {
         let rig = try GymTestRig.make()
         let gym = try rig.gymWithPhoto()
@@ -115,23 +134,48 @@ let richGym: [String: ListingLoads] = [
     @Test func everyAdaptedExerciseIsBackedByListings() throws {
         let rig = try GymTestRig.make()
         let gyms = [try rig.gym("KB", kettlebellGym), try rig.gym("Rich", richGym), try rig.gym("Empty")]
+        var available = 0, swapped = 0, unavailable = 0
         for gym in gyms {
             rig.env.setCurrentGym(gym.id)
             let matcher = try #require(rig.env.gymMatcher())
             for routine in try rig.env.routines.all() where !routine.exercises.isEmpty {
                 try rig.switchToday(to: routine)
                 let plan = try rig.env.todaysPlan().plan
+                let model = TodayModel.make(plan: plan, profile: rig.env.profile, library: rig.env.library,
+                                            history: { _ in [] }, gym: rig.env.todayGymContext())
                 for item in plan.exercises {
+                    let label = "\(gym.name) \(item.exerciseId)"
+                    let row = try #require(model.rows.first { $0.id == item.id }, Comment(rawValue: label))
+                    if let planned = plan.gymSwaps[item.id] {
+                        swapped += 1
+                        guard case .missing = matcher.availability(of: planned.exerciseId) else {
+                            Issue.record("\(label): swapped although the gym can do \(planned.exerciseId)")
+                            continue
+                        }
+                        guard case let .available(match) = matcher.availability(of: item.exerciseId) else {
+                            Issue.record("\(label): a swap must land on something the gym has")
+                            continue
+                        }
+                        #expect(match.listingIds.allSatisfy { matcher.listing($0) != nil }, Comment(rawValue: label))
+                        if case .swapped = row.gymMark {} else { Issue.record("\(label): the swapped row says so: \(String(describing: row.gymMark))") }
+                        continue
+                    }
                     switch matcher.availability(of: item.exerciseId) {
                     case let .available(match):
-                        #expect(match.listingIds.allSatisfy { matcher.listing($0) != nil }, "\(gym.name) \(item.exerciseId)")
-                    case .unmapped: break
+                        available += 1
+                        #expect(match.listingIds.allSatisfy { matcher.listing($0) != nil }, Comment(rawValue: label))
+                        #expect(row.gymMark == nil, Comment(rawValue: label))
+                    case .unmapped:
+                        #expect(row.gymMark == nil, Comment(rawValue: label))
                     case .missing:
-                        #expect(plan.gymSwaps[item.id] == nil, "a swap must land on something the gym has: \(item.exerciseId)")
+                        unavailable += 1
+                        if case .unavailable = row.gymMark {} else { Issue.record("\(label): an item the gym can't do says so: \(String(describing: row.gymMark))") }
                     }
                 }
             }
         }
+        #expect(available > 0 && swapped > 0 && unavailable > 0,
+                "every case was reached: \(available) available, \(swapped) swapped, \(unavailable) unavailable")
     }
 
     /// Today, plan mode and the watch each call this, so it must stay cheap on the real library.
