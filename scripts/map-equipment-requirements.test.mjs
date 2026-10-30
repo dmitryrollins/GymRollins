@@ -134,10 +134,14 @@ test('bodyweight work names the bench, bars or wheel it needs', () => {
   assert.deepEqual(bodyweightGroups('decline crunch'), [['decline-bench']])
   assert.deepEqual(bodyweightGroups('vertical leg raise (on parallel bars)'), [['dip-station']])
   assert.deepEqual(bodyweightGroups('wheel run'), [['ab-wheel']])
+  assert.deepEqual(bodyweightGroups('decline push-up'), [FLAT_BENCH])
+  assert.deepEqual(bodyweightGroups('monster walk'), [['resistance-bands']])
 })
 
 test('a decline bench is its own kind: adjustable benches rarely go below flat', () => {
   assert.deepEqual(DECLINE_BENCH, ['decline-bench'])
+  assert.deepEqual(groups('barbell decline bench press', 'barbell'),
+    [['barbell'], ['decline-bench'], ['power-rack', 'decline-bench']])
 })
 
 test('step-ups need a bench to step on, whatever carries the load', () => {
@@ -160,4 +164,14 @@ test('rack pulls and pin presses need a rack; special bars have no kind', () => 
   assert.deepEqual(groups('barbell rack pull', 'barbell'), [['barbell'], ['power-rack']])
   assert.deepEqual(groups('barbell pin presses', 'barbell'), [['barbell'], ['power-rack']])
   assert.ok(unmapped('cambered bar lying row', 'barbell'))
+})
+
+test('a cable inverse leg curl is done lying on a bench', () => {
+  assert.deepEqual(groups('cable assisted inverse leg curl', 'cable'), [['cable-station'], FLAT_BENCH])
+})
+
+test('words that only look like equipment need nothing', () => {
+  for (const name of ['push-up', 'crunch', 'chinese plank', 'wheelie', 'rowing motion', 'flagpole hold']) {
+    assert.deepEqual(groups(name, 'body weight'), [], name)
+  }
 })

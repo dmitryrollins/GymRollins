@@ -40,9 +40,12 @@ const DIRECT = {
 const NO_KIND = new Set(['weighted', 'assisted', 'rope', 'roller', 'hammer', 'tire'])
 /** Bodyweight exercises that need something the kinds list doesn't have. */
 const NEEDS_OTHER = new RegExp([
+  // Gear named outright.
   /\brings?\b|towel|rope|\bbox\b|stool|chair|\bstep\b|stair|platform|sled|suspended|\bstraps?\b|\bboard\b/,
-  /\blever\b|\bflag\b|skin the cat|elevator|maltese|swing 360|glute-ham|donkey|self assisted inverse/,
-  /cable machine|\(equipment\)/,
+  // Moves that need a bar, pole or rings even though the name doesn't say so.
+  /\blever\b|\bflag\b|skin the cat|elevator|maltese|swing 360/,
+  // A machine, a partner or a foot anchor, or the name gives no way to tell.
+  /glute-ham|donkey|self assisted inverse|cable machine|\(equipment\)/,
 ].map(re => re.source).join('|'))
 
 /** Leverage and sled machines, first match wins; `null` = deliberately unmapped. */
@@ -82,7 +85,8 @@ export function benchFor(name, { fly }) {
   if (/preacher/.test(name)) return [['preacher-bench']]
   if (/\bincline\b/.test(name)) return [INCLINE_BENCH]
   if (/\bdecline\b/.test(name)) return [DECLINE_BENCH]
-  if (/\bbench\b|\blying\b|step[- ]?up|stepbox/.test(name) || (fly && /\bfly\b|pullover|skull/.test(name))) {
+  if (/\bbench\b|\blying\b|step[- ]?up|stepbox|inverse leg curl/.test(name)
+    || (fly && /\bfly\b|pullover|skull/.test(name))) {
     return [FLAT_BENCH]
   }
   return []
@@ -145,6 +149,7 @@ export function bodyweight(name) {
   if (BALL.test(name)) return { groups: [['stability-ball']] }
   if (/back extension|hyperextension/.test(name)) return { groups: [['back-extension']] }
   if (/\bwheel\b/.test(name)) return { groups: [['ab-wheel']] }
+  if (/monster walk/.test(name)) return { groups: [['resistance-bands']] }
   if (/\bbench\b|\b(incline|decline)\b.*(push|plank)|seated leg raise|body-up/.test(name)) {
     return { groups: [FLAT_BENCH] }
   }

@@ -26,7 +26,7 @@ suite) · 22 moderation and Claude (report, block, admin list, account deletion,
 
 **Verified:** every code block below was compiled and run on a copy of GymCore on 2026-10-30: 48 new tests pass,
 the full suite (429 tests) passes, and GymCore line coverage is 90.96%. The mapping script first mapped 1,191 of 1,324
-exercises; review tightened it to 1,160 (173 need no equipment), see Task 2.
+exercises; review tightened it to 1,160 (172 need no equipment), see Task 2.
 
 **Conventions for every task**
 - Work on branch `feat-gym-rules`, created in Task 1 from `docs/gym-equipment-spec` (which holds the spec and
@@ -248,7 +248,7 @@ git commit -m "feat(core): curated equipment kinds"
 
 > **Changed after review (2026-10-30):** a review found about 50 exercises marked as needing less equipment than
 > they do. The code below is the first version. The committed `scripts/map-equipment-requirements.mjs` and its tests
-> are authoritative, and the expected counts are now `Mapped 1160 / 1324`, `no equipment: 173`, `Unmapped: 164`.
+> are authoritative, and the expected counts are now `Mapped 1160 / 1324`, `no equipment: 172`, `Unmapped: 164`.
 
 **Files:**
 - Create: `scripts/map-equipment-requirements.mjs`
