@@ -41,9 +41,9 @@ struct AddEquipmentPhotoStep: View {
             }
         }
         .fullScreenCover(isPresented: $showCamera) {
-            CameraPicker(onPicture: { data in
+            CameraPicker(onPicture: { image in
                 showCamera = false
-                Task { await process(data) }
+                Task { await process(image) }
             }, onCancel: { showCamera = false })
             .ignoresSafeArea()
         }
@@ -68,9 +68,9 @@ struct AddEquipmentPhotoStep: View {
         showCamera = true
     }
 
-    private func process(_ data: Data) async {
+    private func process(_ image: UIImage) async {
         isProcessing = true
-        let outcome = await GymPhotoCleaning.clean(data)
+        let outcome = await GymPhotoCleaning.clean(image)
         isProcessing = false
         switch outcome {
         case .photo(let photo): model.photoProcessed(photo)

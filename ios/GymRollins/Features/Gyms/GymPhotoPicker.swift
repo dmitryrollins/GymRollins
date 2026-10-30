@@ -104,6 +104,21 @@ enum GymPhotoCleaning {
         let result = await Task.detached(priority: .userInitiated) {
             Result { try GymPhotoProcessor().process(data) }
         }.value
+        return outcome(of: result)
+    }
+
+    /// A camera picture: it is encoded to JPEG here, off the main actor, together with the cleaning.
+    static func clean(_ image: UIImage) async -> Outcome {
+        let result = await Task.detached(priority: .userInitiated) {
+            Result {
+                guard let data = image.jpegData(compressionQuality: 0.95) else { throw GymPhotoError.notAnImage }
+                return try GymPhotoProcessor().process(data)
+            }
+        }.value
+        return outcome(of: result)
+    }
+
+    private static func outcome(of result: Result<ProcessedGymPhoto, Error>) -> Outcome {
         switch result {
         case .success(let photo): return .photo(photo)
         case .failure(let error as GymPhotoError): return .failed(error.userMessage)

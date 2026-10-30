@@ -2,11 +2,12 @@ import SwiftUI
 import UIKit
 
 /// The system camera for one photo. Not available on the simulator: check `isAvailable` first. The picture goes back
-/// as JPEG data, which the caller cleans with `GymPhotoCleaning` like any other photo.
+/// as it is: encoding a full-size photo to JPEG takes a moment, so `GymPhotoCleaning.clean(_:)` does it off the main
+/// thread as part of cleaning it, like any other photo.
 struct CameraPicker: UIViewControllerRepresentable {
     static var isAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
 
-    let onPicture: (Data) -> Void
+    let onPicture: (UIImage) -> Void
     let onCancel: () -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
@@ -26,11 +27,11 @@ struct CameraPicker: UIViewControllerRepresentable {
 
         func imagePickerController(_ picker: UIImagePickerController,
                                    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            guard let data = (info[.originalImage] as? UIImage)?.jpegData(compressionQuality: 0.95) else {
+            guard let image = info[.originalImage] as? UIImage else {
                 parent.onCancel()
                 return
             }
-            parent.onPicture(data)
+            parent.onPicture(image)
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.onCancel() }

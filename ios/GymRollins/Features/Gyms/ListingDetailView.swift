@@ -1,6 +1,7 @@
 import GymCore
 import GymData
 import SwiftUI
+import UIKit
 
 /// One listing: its photo, loads, quantity and note, with Save and a confirmed Delete. A listing with no photo can
 /// get one here.
@@ -16,6 +17,8 @@ struct ListingDetailView: View {
     @State private var errorText: String?
     @State private var confirmingDelete = false
     @State private var photoWidth: CGFloat = 330
+    @State private var showCamera = false
+    @State private var isProcessingCamera = false
 
     init(listing: GymListing, gym: Gym) {
         self.listing = listing
@@ -64,9 +67,27 @@ struct ListingDetailView: View {
         VStack(spacing: 10) {
             GymPhotoView(fileName: photoFile, width: photoWidth, height: photoWidth * 0.7, full: true,
                          cornerRadius: Theme.cardRadius, placeholderSymbol: "dumbbell")
-            if photoFile == nil, kind != nil {
-                GymPhotoPicker(title: "Add a photo", identifier: "listing.addPhoto", onPhoto: attach) { errorText = $0 }
+            if photoFile == nil, kind != nil { addPhotoButtons }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(onPicture: { image in
+                showCamera = false
+                Task { await attach(image) }
+            }, onCancel: { showCamera = false })
+            .ignoresSafeArea()
+        }
+    }
+
+    @ViewBuilder
+    private var addPhotoButtons: some View {
+        if isProcessingCamera {
+            ProgressView("Checking the photo\u{2026}").frame(maxWidth: .infinity, minHeight: Theme.minTapSize)
+                .accessibilityIdentifier("listing.takePhoto.processing")
+        } else {
+            if CameraPicker.isAvailable {
+                SecondaryGlassButton(title: "Take Photo", identifier: "listing.takePhoto") { showCamera = true }
             }
+            GymPhotoPicker(title: "Add a photo", identifier: "listing.addPhoto", onPhoto: attach) { errorText = $0 }
         }
     }
 
@@ -146,6 +167,16 @@ struct ListingDetailView: View {
             AppEnvironment.log.error("Delete listing failed: \(error.localizedDescription, privacy: .public)")
             confirmingDelete = false
             errorText = "Couldn't delete this item. Try again."
+        }
+    }
+
+    private func attach(_ image: UIImage) async {
+        isProcessingCamera = true
+        let outcome = await GymPhotoCleaning.clean(image)
+        isProcessingCamera = false
+        switch outcome {
+        case .photo(let photo): attach(photo)
+        case .failed(let message): errorText = message
         }
     }
 
