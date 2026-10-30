@@ -3,17 +3,10 @@ import GymCore
 
 /// The bundled equipment kinds and the equipment each exercise needs: what the picker offers and the rules run on.
 struct GymEquipmentCatalog: Sendable {
-    /// A section of the kind picker.
-    struct Group: Identifiable, Equatable {
-        let title: String
-        let kinds: [EquipmentKind]
-        var id: String { title }
-    }
-
     let kinds: [EquipmentKind]
     let requirements: ExerciseRequirements
 
-    /// Shown as big tiles first (spec: "big tiles for common kinds").
+    /// Search lists these first.
     static let commonKindIds = [
         "dumbbells", "barbell", "flat-bench", "adjustable-bench", "power-rack", "cable-station",
         "lat-pulldown", "chest-press-machine", "leg-press", "smith-machine", "pull-up-bar", "kettlebells",
@@ -36,8 +29,6 @@ struct GymEquipmentCatalog: Sendable {
 
     func kind(_ id: String) -> EquipmentKind? { kinds.first { $0.id == id } }
 
-    var commonTiles: [EquipmentKind] { Self.commonKindIds.compactMap(kind) }
-
     /// Kinds whose name contains every word typed, ignoring case; common ones first.
     func search(_ query: String) -> [EquipmentKind] {
         let words = query.lowercased().split(separator: " ").map(String.init)
@@ -46,19 +37,6 @@ struct GymEquipmentCatalog: Sendable {
             let name = kind.name.lowercased()
             return words.allSatisfy { name.contains($0) }
         })
-    }
-
-    /// Machines and cables; free weights, benches and racks; cardio and accessories. Common kinds lead each group.
-    var groups: [Group] {
-        let sections: [(String, Set<EquipmentCategory>)] = [
-            ("Machines", [.machine, .cable]),
-            ("Free weights, benches and racks", [.freeWeight, .bench, .rack]),
-            ("Cardio and accessories", [.cardio, .accessory]),
-        ]
-        return sections.compactMap { title, categories in
-            let members = commonFirst(kinds.filter { categories.contains($0.category) })
-            return members.isEmpty ? nil : Group(title: title, kinds: members)
-        }
     }
 
     private func commonFirst(_ list: [EquipmentKind]) -> [EquipmentKind] {

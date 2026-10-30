@@ -3,6 +3,7 @@ import GymCore
 import Testing
 @testable import GymRollins
 
+@MainActor
 @Suite struct GymEquipmentCatalogTests {
     private func catalog() throws -> GymEquipmentCatalog { try GymEquipmentCatalog.load() }
 
@@ -14,10 +15,12 @@ import Testing
         #expect(!GymEquipmentCatalog.unavailable.isUsable)
     }
 
-    @Test func commonTilesAreRealKinds() throws {
+    /// The picker's two leading sections hold real kinds, all of them (the add flow shows `kindSections`).
+    @Test func kindSectionTilesAreRealKinds() throws {
         let catalog = try catalog()
-        #expect(catalog.commonTiles.count == GymEquipmentCatalog.commonKindIds.count)
-        #expect(catalog.commonTiles.map(\.id) == GymEquipmentCatalog.commonKindIds)
+        let sections = AddEquipmentModel.kindSections(catalog)
+        #expect(sections.prefix(2).map(\.kinds.count) == [6, 6])
+        #expect(sections.prefix(2).flatMap(\.kinds).allSatisfy { catalog.kind($0.id) == $0 })
     }
 
     @Test func searchMatchesNameAndIgnoresCase() throws {
@@ -29,14 +32,15 @@ import Testing
         #expect(catalog.search("bench press").map(\.id) == ["bench-press-station"])
     }
 
-    @Test func groupsKeepCommonFirst() throws {
+    @Test func kindSectionsKeepCommonFirstAndEveryKindOnce() throws {
         let catalog = try catalog()
-        let groups = catalog.groups
-        #expect(groups.map(\.title) == ["Machines", "Free weights, benches and racks", "Cardio and accessories"])
-        #expect(groups.flatMap(\.kinds).count == catalog.kinds.count)
-        let free = try #require(groups.first { $0.title.hasPrefix("Free weights") })
-        #expect(free.kinds.prefix(3).map(\.id) == ["dumbbells", "barbell", "flat-bench"])
-        let machines = try #require(groups.first { $0.title == "Machines" })
-        #expect(machines.kinds.first?.id == "cable-station")
+        let sections = AddEquipmentModel.kindSections(catalog)
+        #expect(sections.prefix(2).map(\.title) == ["Machines", "Free weights \u{00B7} benches \u{00B7} racks"])
+        #expect(sections.dropFirst(2).allSatisfy { $0.title.hasPrefix("More \u{00B7} ") })
+        let ids = sections.flatMap(\.kinds).map(\.id)
+        #expect(ids.count == catalog.kinds.count)
+        #expect(Set(ids) == Set(catalog.kinds.map(\.id)), "nothing is lost, nothing is listed twice")
+        #expect(sections[0].kinds.first?.id == "lat-pulldown")
+        #expect(sections[1].kinds.first?.id == "dumbbells")
     }
 }
