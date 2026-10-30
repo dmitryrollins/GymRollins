@@ -5,21 +5,11 @@ import GymData
 /// last, `never` hidden — unless the owner typed a search, which still finds every match (`never` ones last).
 /// Preferences only order and filter suggestions; they never touch the plan or progression.
 enum ExerciseSuggestions {
-    /// Replace/Swap candidates: the same target, then the same body part (the current exercise excluded), each group
-    /// by how often it was logged and then by name, then ranked by preference.
+    /// Replace/Swap candidates in `SwapOrdering`'s order (same target, then same body part, each by how often it
+    /// was logged and then by name), then ranked by preference.
     static func swap(current: Exercise, library: ExerciseLibrary, loggedCounts: [String: Int],
                      preferences: [String: ExercisePreference], query: String) -> [Exercise] {
-        func sorted(_ list: [Exercise]) -> [Exercise] {
-            list.sorted { l, r in
-                let lc = loggedCounts[l.id, default: 0], rc = loggedCounts[r.id, default: 0]
-                return lc != rc ? lc > rc : l.name < r.name
-            }
-        }
-        let sameTarget = library.exercises.filter { $0.id != current.id && $0.target == current.target }
-        let sameBodyPart = library.exercises.filter {
-            $0.id != current.id && $0.target != current.target && $0.bodyPart == current.bodyPart
-        }
-        let candidates = sorted(sameTarget) + sorted(sameBodyPart)
+        let candidates = SwapOrdering.candidates(for: current, in: library.exercises, loggedCounts: loggedCounts)
         let words = query.lowercased().split(separator: " ").map(String.init)
         guard !words.isEmpty else {
             return ExerciseRanking.suggestions(candidates, preferences: preferences, id: \.id)
