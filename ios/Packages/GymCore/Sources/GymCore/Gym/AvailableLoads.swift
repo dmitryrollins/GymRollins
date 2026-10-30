@@ -21,6 +21,7 @@ public struct FittedLoad: Sendable, Equatable {
 public enum AvailableLoads {
     /// Reps added to the target when the suggestion is past the heaviest available weight.
     public static let extraRepsAtHeaviest = 2
+    /// Float noise from kg <-> lb conversion: this close to the heaviest weight isn't past it.
     private static let toleranceKg = 0.01
 
     public static func fit(weightKg: Double, reps: Int, to loads: ListingLoads) -> FittedLoad {
@@ -30,7 +31,7 @@ public enum AvailableLoads {
         case let .stack(maxKg, stepKg):
             guard maxKg > 0 else { return unchanged }
             if weightKg > maxKg + toleranceKg { return heaviest(maxKg, reps: reps) }
-            guard let stepKg, stepKg > 0 else { return unchanged }
+            guard let stepKg, stepKg > 0 else { return FittedLoad(weightKg: min(weightKg, maxKg), reps: reps) }
             let snapped = min(maxKg, max(stepKg, (weightKg / stepKg).rounded() * stepKg))
             return FittedLoad(weightKg: snapped, reps: reps)
         case let .fixed(kg):

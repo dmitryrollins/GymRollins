@@ -30,6 +30,24 @@ import Testing
             == FittedLoad(weightKg: 4.5, reps: 10), "never below one plate of the stack")
     }
 
+    @Test func stackRoundsToTheNearestStepAndStopsAtItsMaximum() {
+        #expect(AvailableLoads.fit(weightKg: 52, reps: 10, to: .stack(maxKg: 113, stepKg: 4.5))
+            == FittedLoad(weightKg: 54, reps: 10))
+        #expect(AvailableLoads.fit(weightKg: 112, reps: 10, to: .stack(maxKg: 112, stepKg: 4.5))
+            == FittedLoad(weightKg: 112, reps: 10))
+    }
+
+    @Test func floatNoiseAtTheTopIsNotPastTheHeaviest() {
+        #expect(AvailableLoads.fit(weightKg: 113.005, reps: 8, to: .stack(maxKg: 113, stepKg: nil))
+            == FittedLoad(weightKg: 113, reps: 8), "never above the maximum, even without a step")
+        #expect(AvailableLoads.fit(weightKg: 113.005, reps: 8, to: .stack(maxKg: 113, stepKg: 4.5))
+            == FittedLoad(weightKg: 112.5, reps: 8))
+        #expect(AvailableLoads.fit(weightKg: 113.02, reps: 8, to: .stack(maxKg: 113, stepKg: 4.5))
+            == FittedLoad(weightKg: 113, reps: 10, atHeaviest: true))
+        #expect(AvailableLoads.fit(weightKg: 24.005, reps: 8, to: bells) == FittedLoad(weightKg: 24, reps: 8))
+        #expect(AvailableLoads.fit(weightKg: 24, reps: 8, to: bells) == FittedLoad(weightKg: 24, reps: 8))
+    }
+
     @Test func stackWithNoPositiveMaximumChangesNothing() {
         #expect(AvailableLoads.fit(weightKg: 30, reps: 5, to: .stack(maxKg: 0, stepKg: 4.5))
             == FittedLoad(weightKg: 30, reps: 5))
