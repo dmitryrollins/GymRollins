@@ -83,16 +83,33 @@ struct GymPhotoPicker: View {
 
     private func process(_ data: Data) async {
         isProcessing = true
+        let outcome = await GymPhotoCleaning.clean(data)
+        isProcessing = false
+        switch outcome {
+        case .photo(let photo): onPhoto(photo)
+        case .failed(let message): onFailure(message)
+        }
+    }
+}
+
+/// Runs `GymPhotoProcessor` off the main actor and maps every failure to words for the user.
+@MainActor
+enum GymPhotoCleaning {
+    enum Outcome: Sendable {
+        case photo(ProcessedGymPhoto)
+        case failed(String)
+    }
+
+    static func clean(_ data: Data) async -> Outcome {
         let result = await Task.detached(priority: .userInitiated) {
             Result { try GymPhotoProcessor().process(data) }
         }.value
-        isProcessing = false
         switch result {
-        case .success(let photo): onPhoto(photo)
-        case .failure(let error as GymPhotoError): onFailure(error.userMessage)
+        case .success(let photo): return .photo(photo)
+        case .failure(let error as GymPhotoError): return .failed(error.userMessage)
         case .failure(let error):
             AppEnvironment.log.error("Process gym photo failed: \(error.localizedDescription, privacy: .public)")
-            onFailure("This photo couldn't be used. Try another one.")
+            return .failed("This photo couldn't be used. Try another one.")
         }
     }
 }

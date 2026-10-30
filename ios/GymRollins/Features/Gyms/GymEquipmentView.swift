@@ -38,18 +38,8 @@ struct GymEquipmentView: View {
                 .padding(.horizontal, Theme.gutter).padding(.bottom, 8)
         }
         .navigationDestination(item: $selected) { ListingDetailView(listing: $0, gym: gym) }
-        .sheet(isPresented: $showAdd) { addEquipmentDestination }
+        .sheet(isPresented: $showAdd) { AddEquipmentFlow(gym: gym) }
         .task(id: env.gymRevision) { await load() }
-    }
-
-    // MARK: Add equipment (Task 8 replaces this)
-
-    /// The add-equipment flow. Task 8 builds it and returns it here instead of the placeholder.
-    @ViewBuilder
-    private var addEquipmentDestination: some View {
-        Text("Add equipment").foregroundStyle(Theme.textSecondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.background)
     }
 
     // MARK: Parts
