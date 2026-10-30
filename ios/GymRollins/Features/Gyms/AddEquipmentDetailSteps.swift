@@ -13,6 +13,9 @@ struct AddEquipmentDuplicateStep: View {
             Text("\(model.gym.name) already lists \(model.kind?.name.lowercased() ?? "this").")
                 .foregroundStyle(Theme.textSecondary)
             ForEach(model.existing) { listing in existingCard(listing) }
+            if let error = model.errorText {
+                Text(error).foregroundStyle(Theme.destructive).accessibilityIdentifier("addEquipment.error")
+            }
             if !model.known.isEmpty { knownModels }
             SecondaryGlassButton(title: "Generic \(model.kind?.name.lowercased() ?? "item")",
                                  identifier: "addEquipment.generic") { model.chooseGeneric() }
@@ -34,6 +37,10 @@ struct AddEquipmentDuplicateStep: View {
                     }
                 }
                 Spacer(minLength: 0)
+            }
+            if model.keepsItsPhoto(listing) {
+                Text("Keeps its photo. Your new one isn't saved.").font(.caption).foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("addEquipment.keepsPhoto.\(listing.id.uuidString)")
             }
             PrimaryGlassButton(title: "Yes, that's it", identifier: "addEquipment.same.\(listing.id.uuidString)") {
                 model.sameAsExisting(listing)
@@ -97,6 +104,11 @@ struct AddEquipmentDetailsStep: View {
             }
             PrimaryGlassButton(title: "Save", identifier: "addEquipment.save") { model.save() }
                 .disabled(!model.canSave)
+            if model.photoSaveFailed {
+                SecondaryGlassButton(title: "Save without the photo", identifier: "add.saveWithoutPhoto") {
+                    model.saveWithoutPhoto()
+                }
+            }
         }
     }
 

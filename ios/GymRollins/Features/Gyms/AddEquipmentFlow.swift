@@ -70,6 +70,11 @@ extension AddEquipmentModel.Ports {
             catalogueItems: { try env.gyms.catalogueItems(kindId: $0) },
             savePhoto: { try env.gymPhotos.save($0) },
             deletePhoto: { env.removeGymPhotos([$0]) },
-            addListing: { try env.gyms.addListing($0) })
+            addListing: { try env.gyms.addListing($0) },
+            attachPhoto: { photo, id in
+                try env.attachPhoto(photo, to: id)
+                guard let listing = try env.gyms.listing(id) else { throw GymDataError.invalidInput("That equipment was removed.") }
+                return listing
+            })
     }
 }

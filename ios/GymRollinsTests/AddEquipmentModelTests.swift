@@ -18,7 +18,12 @@ import Testing
                 catalogueItems: { try repo.catalogueItems(kindId: $0) },
                 savePhoto: { try photos.save($0) },
                 deletePhoto: { try? photos.delete($0) },
-                addListing: { try repo.addListing($0) }))
+                addListing: { try repo.addListing($0) },
+                attachPhoto: { processed, id in
+                    let file = try photos.save(processed)
+                    _ = try repo.setPhoto(id, file: file)
+                    return try #require(try repo.listing(id))
+                }))
     }
 
     @Test func skippingPhotoGoesToKind() throws {
@@ -78,6 +83,7 @@ import Testing
         #expect(flow.step == .duplicate, "Back from details returns to the duplicate step when it was shown")
     }
 
+    /// "Yes, that's it" creates no listing. A listing with no photo gets the one just taken: the user took it for this.
     @Test func yesThatsItCreatesNothing() throws {
         let rig = try GymTestRig.make()
         let gym = try rig.gym("Home", ["lat-pulldown": .stack(maxKg: 90, stepKg: nil)])
@@ -85,9 +91,44 @@ import Testing
         flow.photoProcessed(jpeg)
         flow.chooseKind("lat-pulldown")
         let existing = try #require(flow.existing.first)
+        #expect(existing.photoFile == nil)
+        #expect(!flow.keepsItsPhoto(existing))
+        flow.sameAsExisting(existing)
+        guard case let .confirmed(confirmed)? = flow.outcome else { Issue.record("not confirmed"); return }
+        #expect(confirmed.id == existing.id)
+        #expect(confirmed.photoFile != nil)
+        #expect(try rig.env.gyms.listings(gymId: gym.id).count == 1)
+        #expect(try rig.env.gyms.listing(existing.id)?.photoFile == confirmed.photoFile)
+        #expect(rig.photoCount() == 2, "the photo and its thumbnail")
+    }
+
+    @Test func yesThatsItKeepsTheListingsOwnPhoto() throws {
+        let rig = try GymTestRig.make()
+        let gym = try rig.gym("Home")
+        let file = try rig.photos.save(jpeg)
+        try rig.env.gyms.addListing(NewListing(gymId: gym.id, kindId: "lat-pulldown",
+                                               loads: .stack(maxKg: 90, stepKg: nil), photoFile: file))
+        let flow = model(rig, gym: gym)
+        flow.photoProcessed(jpeg)
+        flow.chooseKind("lat-pulldown")
+        let existing = try #require(flow.existing.first)
+        #expect(flow.keepsItsPhoto(existing), "step 3 says: Keeps its photo. Your new one isn't saved.")
         flow.sameAsExisting(existing)
         #expect(flow.outcome == .confirmed(existing))
-        #expect(try rig.env.gyms.listings(gymId: gym.id).count == 1)
+        #expect(try rig.env.gyms.listing(existing.id)?.photoFile == file)
+        #expect(rig.photoCount() == 2, "no second photo was written")
+    }
+
+    @Test func yesThatsItWithoutAPhotoChangesNothing() throws {
+        let rig = try GymTestRig.make()
+        let gym = try rig.gym("Home", ["lat-pulldown": .stack(maxKg: 90, stepKg: nil)])
+        let flow = model(rig, gym: gym)
+        flow.skipPhoto()
+        flow.chooseKind("lat-pulldown")
+        let existing = try #require(flow.existing.first)
+        #expect(!flow.keepsItsPhoto(existing))
+        flow.sameAsExisting(existing)
+        #expect(flow.outcome == .confirmed(existing))
         #expect(rig.photoCount() == 0)
     }
 
@@ -192,7 +233,8 @@ import Testing
         #expect(options.contains { $0.label == "53 lb (24 kg)" })
         flow.toggleWeight(try #require(options.first { $0.label == "44 lb (20 kg)" }).kg)
         flow.toggleWeight(try #require(options.first { $0.label == "53 lb (24 kg)" }).kg)
-        #expect(flow.loads == .fixed(kg: [20, 24]))
+        #expect(flow.loads == .fixed(kg: [UnitConverter.toKg(44, from: .lb), UnitConverter.toKg(53, from: .lb)]),
+                "an lb user's chips store the pounds they read")
         flow.toggleAllWeights()
         #expect(flow.loads == .fixed(kg: options.map(\.kg)))
 
@@ -273,13 +315,22 @@ import Testing
             gym: gym, catalog: rig.env.gymCatalog, unit: .lb,
             ports: .init(listings: { _ in [] }, catalogueItems: { _ in [] },
                          savePhoto: { _ in throw CocoaError(.fileWriteOutOfSpace) },
-                         deletePhoto: { _ in }, addListing: { try rig.env.gyms.addListing($0) }))
+                         deletePhoto: { _ in }, addListing: { try rig.env.gyms.addListing($0) },
+                         attachPhoto: { _, _ in throw CocoaError(.fileWriteOutOfSpace) }))
         flow.photoProcessed(jpeg)
         flow.chooseKind("flat-bench")
         flow.save()
         #expect(flow.outcome == nil)
-        #expect(flow.errorText == "Couldn't save the photo. Try again or go back and skip it.")
+        #expect(flow.errorText == "Couldn't save the photo. Try again or save without it.")
+        #expect(flow.photoSaveFailed, "the details step offers Save without the photo")
         #expect(try rig.env.gyms.listings(gymId: gym.id).isEmpty)
+
+        flow.saveWithoutPhoto()
+        #expect(!flow.hasPhoto)
+        #expect(!flow.photoSaveFailed)
+        guard case let .created(listing)? = flow.outcome else { Issue.record("not saved without the photo"); return }
+        #expect(listing.photoFile == nil)
+        #expect(try rig.env.gyms.listings(gymId: gym.id).count == 1)
     }
 
     @Test func kindSectionsLeadWithTheCommonKindsInOrder() throws {

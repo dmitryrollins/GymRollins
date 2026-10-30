@@ -24,6 +24,8 @@ final class AddEquipmentModel {
         let savePhoto: (ProcessedGymPhoto) throws -> String
         let deletePhoto: (String) -> Void
         let addListing: (NewListing) throws -> GymListing
+        /// Saves the photo and attaches it to a listing that has none; returns the listing as it is now.
+        let attachPhoto: (ProcessedGymPhoto, UUID) throws -> GymListing
     }
 
     static let noteLimit = GymRepository.maxNotesLength
@@ -42,6 +44,8 @@ final class AddEquipmentModel {
     private(set) var showsBrandFields = false
     private(set) var photoError: String?
     private(set) var errorText: String?
+    /// Saving the photo file failed: the details step then offers to save without it.
+    private(set) var photoSaveFailed = false
     private(set) var outcome: Outcome?
     private var photo: ProcessedGymPhoto?
 
@@ -101,7 +105,23 @@ final class AddEquipmentModel {
         step = existing.isEmpty ? .details : .duplicate
     }
 
-    func sameAsExisting(_ listing: GymListing) { outcome = .confirmed(listing) }
+    /// A photo was taken but the listing has its own: it stays, and the new one isn't saved.
+    func keepsItsPhoto(_ listing: GymListing) -> Bool { photo != nil && listing.photoFile != nil }
+
+    /// "Yes, that's it": no new listing. One with no photo gets the photo just taken; one with a photo keeps it.
+    func sameAsExisting(_ listing: GymListing) {
+        guard let photo, listing.photoFile == nil else {
+            outcome = .confirmed(listing)
+            return
+        }
+        do {
+            outcome = .confirmed(try ports.attachPhoto(photo, listing.id))
+            errorText = nil
+        } catch {
+            AppEnvironment.log.error("Attach gym photo failed: \(error.localizedDescription, privacy: .public)")
+            errorText = "Couldn't save the photo. Try again, or go back and skip it."
+        }
+    }
 
     func chooseCatalogueItem(_ item: CatalogueItem) {
         brand = item.item.brand ?? ""
@@ -162,11 +182,13 @@ final class AddEquipmentModel {
     func save() {
         guard canSave, let kind else { return }
         errorText = nil
+        photoSaveFailed = false
         let file: String?
         do { file = try photo.map(ports.savePhoto) }
         catch {
             AppEnvironment.log.error("Save gym photo failed: \(error.localizedDescription, privacy: .public)")
-            errorText = "Couldn't save the photo. Try again or go back and skip it."
+            errorText = "Couldn't save the photo. Try again or save without it."
+            photoSaveFailed = true
             return
         }
         do {
@@ -178,6 +200,13 @@ final class AddEquipmentModel {
             if let file { ports.deletePhoto(file) }
             errorText = Self.message(for: error)
         }
+    }
+
+    /// The way out of a failed photo save: drops the photo and saves the listing.
+    func saveWithoutPhoto() {
+        photo = nil
+        photoSaveFailed = false
+        save()
     }
 
     private static func message(for error: Error) -> String {
