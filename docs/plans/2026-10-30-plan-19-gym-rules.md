@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the curated equipment data (46 kinds, requirements for 1,160 library exercises) and the pure-Swift
+**Goal:** Add the curated equipment data (46 kinds, requirements for 1,107 library exercises) and the pure-Swift
 rules that use it: which listings an exercise needs at a gym, fitting weights to a gym's loads, adapting today's
 routine to a gym, and building a workout from a gym's equipment.
 
@@ -26,7 +26,7 @@ suite) · 22 moderation and Claude (report, block, admin list, account deletion,
 
 **Verified:** every code block below was compiled and run on a copy of GymCore on 2026-10-30: 48 new tests pass,
 the full suite (429 tests) passes, and GymCore line coverage is 90.96%. The mapping script first mapped 1,191 of 1,324
-exercises; review tightened it to 1,160 (172 need no equipment), see Task 2.
+exercises; review tightened it to 1,107 (118 need no equipment), see Task 2.
 
 **Conventions for every task**
 - Work on branch `feat-gym-rules`, created in Task 1 from `docs/gym-equipment-spec` (which holds the spec and
@@ -72,13 +72,13 @@ exercises; review tightened it to 1,160 (172 need no equipment), see Task 2.
 - Create: `ios/Packages/GymCore/Sources/GymCore/Gym/EquipmentKind.swift`
 - Test: `ios/Packages/GymCore/Tests/GymCoreTests/Gym/EquipmentDataTests.swift`
 
-- [ ] **Step 1: Create the branch**
+- [x] **Step 1: Create the branch**
 
 ```bash
 git switch docs/gym-equipment-spec && git switch -c feat-gym-rules
 ```
 
-- [ ] **Step 2: Write the kinds file**
+- [x] **Step 2: Write the kinds file**
 
 `ios/GymRollins/Resources/equipment-kinds.json`:
 
@@ -136,7 +136,7 @@ git switch docs/gym-equipment-spec && git switch -c feat-gym-rules
 }
 ```
 
-- [ ] **Step 3: Write the failing test**
+- [x] **Step 3: Write the failing test**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/EquipmentDataTests.swift` (Task 3 adds a second test to this suite):
 
@@ -167,12 +167,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 4: Run it and see it fail**
+- [x] **Step 4: Run it and see it fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter EquipmentDataTests`
 Expected: build error `cannot find 'EquipmentKind' in scope`.
 
-- [ ] **Step 5: Implement `EquipmentKind`**
+- [x] **Step 5: Implement `EquipmentKind`**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/EquipmentKind.swift`:
 
@@ -229,12 +229,12 @@ public struct EquipmentKind: Codable, Sendable, Identifiable, Hashable {
 }
 ```
 
-- [ ] **Step 6: Run it and see it pass**
+- [x] **Step 6: Run it and see it pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter EquipmentDataTests`
 Expected: `Test run with 1 test in 1 suite passed`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ios/GymRollins/Resources/equipment-kinds.json ios/Packages/GymCore/Sources/GymCore/Gym/EquipmentKind.swift \
@@ -247,8 +247,9 @@ git commit -m "feat(core): curated equipment kinds"
 ### Task 2: The requirements mapping script
 
 > **Changed after review (2026-10-30):** a review found about 50 exercises marked as needing less equipment than
-> they do. The code below is the first version. The committed `scripts/map-equipment-requirements.mjs` and its tests
-> are authoritative, and the expected counts are now `Mapped 1160 / 1324`, `no equipment: 172`, `Unmapped: 164`.
+> they do, and bodyweight fills that were really stretches or elite skills. The code below is the first version. The
+> committed `scripts/map-equipment-requirements.mjs` and its tests are authoritative, and the expected counts are now
+> `Mapped 1107 / 1324`, `no equipment: 118`, `Unmapped: 217`.
 
 **Files:**
 - Create: `scripts/map-equipment-requirements.mjs`
@@ -266,7 +267,7 @@ names stay unmapped and land in the review file. Rule notes the tests pin down:
   names that need rings, towels, ropes, boxes, steps and the like are unmapped.
 - Stretches, `weighted`, `assisted` (partner), `rope`, `roller`, `hammer` and `tire` are unmapped.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `scripts/map-equipment-requirements.test.mjs`:
 
@@ -380,12 +381,12 @@ test('the real library maps with known kinds, and the review lists machines and 
 })
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `node --test scripts/map-equipment-requirements.test.mjs`
 Expected: FAIL with `Cannot find module '.../scripts/map-equipment-requirements.mjs'`.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 `scripts/map-equipment-requirements.mjs`:
 
@@ -593,19 +594,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 ```
 
-- [ ] **Step 4: Run the tests and see them pass**
+- [x] **Step 4: Run the tests and see them pass**
 
 Run: `node --test scripts/map-equipment-requirements.test.mjs`
 Expected: `# pass 9`, `# fail 0`.
 
-- [ ] **Step 5: Generate the data and the review file**
+- [x] **Step 5: Generate the data and the review file**
 
 Run: `node scripts/map-equipment-requirements.mjs`
 Expected: `Mapped 1191 / 1324 exercises -> .../ios/GymRollins/Resources/equipment-requirements.json`.
 Then open `docs/import/equipment-requirements-review.md` and check that the summary reads
 `Mapped: 1191 (no equipment: 220)` and `Unmapped: 133`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/map-equipment-requirements.mjs scripts/map-equipment-requirements.test.mjs \
@@ -621,7 +622,7 @@ git commit -m "feat(data): map library exercises to equipment requirements"
 - Create: `ios/Packages/GymCore/Sources/GymCore/Gym/ExerciseRequirements.swift`
 - Modify: `ios/Packages/GymCore/Tests/GymCoreTests/Gym/EquipmentDataTests.swift` (add one test)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `EquipmentDataTests`, after `kindsDecodeWithUniqueIds`:
 
@@ -637,12 +638,12 @@ Add to `EquipmentDataTests`, after `kindsDecodeWithUniqueIds`:
     }
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter EquipmentDataTests`
 Expected: build error `cannot find 'ExerciseRequirements' in scope`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/ExerciseRequirements.swift`:
 
@@ -675,12 +676,12 @@ public struct ExerciseRequirements: Sendable, Equatable {
 }
 ```
 
-- [ ] **Step 4: Run it and see it pass**
+- [x] **Step 4: Run it and see it pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter EquipmentDataTests`
 Expected: `Test run with 2 tests in 1 suite passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/Gym/ExerciseRequirements.swift \
@@ -698,7 +699,7 @@ git commit -m "feat(core): decode exercise equipment requirements"
 
 `ListingLoads` encodes to the exact JSON the server will store in `gym_equipment.loads` (spec §4).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/GymInventoryTests.swift`:
 
@@ -735,12 +736,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter GymInventoryTests`
 Expected: build error `cannot find 'ListingLoads' in scope`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/GymInventory.swift`:
 
@@ -823,12 +824,12 @@ public struct GymInventory: Sendable, Hashable {
 }
 ```
 
-- [ ] **Step 4: Run them and see them pass**
+- [x] **Step 4: Run them and see them pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter GymInventoryTests`
 Expected: `Test run with 3 tests in 1 suite passed` (a parameterized test counts once).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/Gym/GymInventory.swift \
@@ -840,11 +841,14 @@ git commit -m "feat(core): gym inventory and listing loads"
 
 ### Task 5: `AvailableLoads`
 
+> **Changed after review (2026-10-30):** the committed code also guards a stack with no positive maximum and never
+> returns a weight above the maximum. The code below is the first version.
+
 **Files:**
 - Create: `ios/Packages/GymCore/Sources/GymCore/Gym/AvailableLoads.swift`
 - Test: `ios/Packages/GymCore/Tests/GymCoreTests/Gym/AvailableLoadsTests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/AvailableLoadsTests.swift`:
 
@@ -890,12 +894,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter AvailableLoadsTests`
 Expected: build error `cannot find 'AvailableLoads' in scope`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/AvailableLoads.swift`:
 
@@ -951,12 +955,12 @@ public enum AvailableLoads {
 }
 ```
 
-- [ ] **Step 4: Run them and see them pass**
+- [x] **Step 4: Run them and see them pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter AvailableLoadsTests`
 Expected: `Test run with 5 tests in 1 suite passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/Gym/AvailableLoads.swift \
@@ -976,7 +980,7 @@ git commit -m "feat(core): fit suggested weights to a listing's loads"
 `GymFixtures` is the shared test library for Tasks 6–11: 20 exercises with hand-written requirements (one
 deliberately unmapped) and two gyms. Home is the owner's real setup: a flat bench and kettlebells of 20 and 24 kg.
 
-- [ ] **Step 1: Write the fixtures**
+- [x] **Step 1: Write the fixtures**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/GymFixtures.swift`:
 
@@ -1092,7 +1096,7 @@ enum GymFixtures {
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/InventoryMatcherTests.swift`:
 
@@ -1152,12 +1156,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 3: Run them and see them fail**
+- [x] **Step 3: Run them and see them fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter InventoryMatcherTests`
 Expected: build error `cannot find 'InventoryMatcher' in scope`.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/InventoryMatcher.swift`:
 
@@ -1239,12 +1243,12 @@ public struct InventoryMatcher: Sendable {
 }
 ```
 
-- [ ] **Step 5: Run them and see them pass**
+- [x] **Step 5: Run them and see them pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter InventoryMatcherTests`
 Expected: `Test run with 6 tests in 1 suite passed`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/Gym/InventoryMatcher.swift \
@@ -1268,7 +1272,7 @@ git commit -m "feat(core): match exercise requirements to a gym's listings"
 increments. Both live in the app target today, so they move into GymCore and the app calls them. Behavior doesn't
 change; the existing `ExerciseSuggestionsTests` guard that.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/SwapOrderingTests.swift`:
 
@@ -1299,12 +1303,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter SwapOrderingTests`
 Expected: build error `cannot find 'SwapOrdering' in scope`.
 
-- [ ] **Step 3: Implement both**
+- [x] **Step 3: Implement both**
 
 `ios/Packages/GymCore/Sources/GymCore/Preferences/SwapOrdering.swift`:
 
@@ -1345,12 +1349,12 @@ public extension Exercise {
 }
 ```
 
-- [ ] **Step 4: Run them and see them pass**
+- [x] **Step 4: Run them and see them pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter SwapOrderingTests`
 Expected: `Test run with 2 tests in 1 suite passed`.
 
-- [ ] **Step 5: Point the app at the shared code**
+- [x] **Step 5: Point the app at the shared code**
 
 In `ios/GymRollins/Features/Library/ExerciseSuggestions.swift`, replace the doc comment and the start of `swap`
 (everything from `/// Replace/Swap candidates:` down to and including `let candidates = sorted(sameTarget) +
@@ -1383,12 +1387,12 @@ with
     static func isBarbellType(_ equipment: String) -> Bool { Exercise.barbellLoadedEquipment.contains(equipment) }
 ```
 
-- [ ] **Step 6: Run the app's suggestion tests**
+- [x] **Step 6: Run the app's suggestion tests**
 
 Run: `scripts/ios-test.sh -only-testing:GymRollinsTests/ExerciseSuggestionsTests`
 Expected: `** TEST SUCCEEDED **`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/Preferences/SwapOrdering.swift \
@@ -1406,7 +1410,7 @@ git commit -m "refactor(core): share swap ordering and barbell loading with GymC
 - Create: `ios/Packages/GymCore/Sources/GymCore/Gym/GymAdapter.swift`
 - Test: `ios/Packages/GymCore/Tests/GymCoreTests/Gym/GymAdapterTests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/GymAdapterTests.swift`:
 
@@ -1486,12 +1490,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter GymAdapterTests`
 Expected: build error `cannot find 'GymAdapter' in scope`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/GymAdapter.swift`:
 
@@ -1585,12 +1589,12 @@ public struct GymAdapter: Sendable {
 }
 ```
 
-- [ ] **Step 4: Run them and see them pass**
+- [x] **Step 4: Run them and see them pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter GymAdapterTests`
 Expected: `Test run with 8 tests in 1 suite passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/Gym/GymAdapter.swift \
@@ -1610,7 +1614,7 @@ git commit -m "feat(core): adapt today's routine to the current gym"
 `StableHash` exists because Swift's `Hasher` is seeded per process: tie-breaks built on it would change between
 runs.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/BuildOptionsTests.swift`:
 
@@ -1646,12 +1650,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter BuildOptionsTests`
 Expected: build error `cannot find 'BuildLength' in scope`.
 
-- [ ] **Step 3: Implement both**
+- [x] **Step 3: Implement both**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/BuildOptions.swift`:
 
@@ -1731,12 +1735,12 @@ enum StableHash {
 }
 ```
 
-- [ ] **Step 4: Run them and see them pass**
+- [x] **Step 4: Run them and see them pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter BuildOptionsTests`
 Expected: `Test run with 4 tests in 1 suite passed` (a parameterized test counts once).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/Gym/BuildOptions.swift \
@@ -1748,6 +1752,10 @@ git commit -m "feat(core): build workout options and a stable hash"
 ---
 
 ### Task 10: `WorkoutBuilder`
+
+> **Changed after review (2026-10-30):** review against the real library found the rules broke at real gyms, see the
+> Outcome section. The code below is the first version; the committed sources and `WorkoutBuilderFallbackTests` and
+> `GymRealDataTests` are authoritative.
 
 **Files:**
 - Create: `ios/Packages/GymCore/Sources/GymCore/Gym/WorkoutBuilder.swift`
@@ -1769,7 +1777,7 @@ How it works (spec §5, "Build workout"):
    listings that already have 2 exercises.
 4. The output lists compound exercises first, then the rest, then fills.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/WorkoutBuilderTests.swift`:
 
@@ -1944,12 +1952,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter WorkoutBuilder`
 Expected: build error `cannot find 'WorkoutBuilder' in scope`.
 
-- [ ] **Step 3: Implement the output types and `build`**
+- [x] **Step 3: Implement the output types and `build`**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/WorkoutBuilder.swift`:
 
@@ -2063,7 +2071,7 @@ public struct WorkoutBuilder: Sendable {
 }
 ```
 
-- [ ] **Step 4: Implement the candidate pools**
+- [x] **Step 4: Implement the candidate pools**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/WorkoutBuilder+Pool.swift`:
 
@@ -2138,7 +2146,7 @@ extension WorkoutBuilder {
 }
 ```
 
-- [ ] **Step 5: Implement the slot picker**
+- [x] **Step 5: Implement the slot picker**
 
 `ios/Packages/GymCore/Sources/GymCore/Gym/SlotPicker.swift`:
 
@@ -2200,12 +2208,12 @@ struct SlotPicker {
 }
 ```
 
-- [ ] **Step 6: Run them and see them pass**
+- [x] **Step 6: Run them and see them pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter WorkoutBuilder`
 Expected: `Test run with 15 tests in 2 suites passed`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/Gym/WorkoutBuilder.swift \
@@ -2227,7 +2235,7 @@ These check the finished rules against the spec's success criteria, so they're e
 If one fails, the bug is in Tasks 6–10: fix it there and don't loosen the test. Criterion 5 is a property test over
 40 seeded random inventories, covering both the builder and the adapter.
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 `ios/Packages/GymCore/Tests/GymCoreTests/Gym/GymRulesAcceptanceTests.swift`:
 
@@ -2346,12 +2354,12 @@ struct SplitMix64: RandomNumberGenerator {
 }
 ```
 
-- [ ] **Step 2: Run them**
+- [x] **Step 2: Run them**
 
 Run: `cd ios/Packages/GymCore && swift test --filter GymRulesAcceptanceTests`
 Expected: `Test run with 3 tests in 1 suite passed` (criterion 5's 40 seeds count as one test).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Tests/GymCoreTests/Gym/GymRulesAcceptanceTests.swift
@@ -2366,23 +2374,23 @@ git commit -m "test(core): gym rules acceptance criteria 1, 3 and 5"
 - Modify: `README.md` (the Test table)
 - Modify: `docs/plans/2026-10-30-plan-19-gym-rules.md` (this file: tick the boxes, add an Outcome section)
 
-- [ ] **Step 1: Run the whole GymCore suite with the coverage gate**
+- [x] **Step 1: Run the whole GymCore suite with the coverage gate**
 
 Run: `scripts/coverage-gymcore.sh`
 Expected: every test passes and the script prints `Line coverage: 9x.xx% (threshold 90%)`, exiting 0. The
 prototype measured 90.96%.
 
-- [ ] **Step 2: Run the mapping tests again and check the data is current**
+- [x] **Step 2: Run the mapping tests again and check the data is current**
 
 Run: `node --test scripts/map-equipment-requirements.test.mjs && node scripts/map-equipment-requirements.mjs && git status --short`
 Expected: `# fail 0`, and no changes listed (the committed JSON and review match a fresh run).
 
-- [ ] **Step 3: Run the app unit tests**
+- [x] **Step 3: Run the app unit tests**
 
 Run: `scripts/ios-test.sh -skip-testing:GymRollinsUITests`
 Expected: `** TEST SUCCEEDED **`.
 
-- [ ] **Step 4: Document the new test command**
+- [x] **Step 4: Document the new test command**
 
 In `README.md`'s Test table, add this row after the `GymCore coverage (≥ 90%)` row:
 
@@ -2390,7 +2398,7 @@ In `README.md`'s Test table, add this row after the `GymCore coverage (≥ 90%)`
 | Equipment requirements mapping (writes `equipment-requirements.json` and its review file) | `node --test scripts/map-equipment-requirements.test.mjs` |
 ```
 
-- [ ] **Step 5: Record the outcome**
+- [x] **Step 5: Record the outcome**
 
 Tick every box in this plan, then append:
 
@@ -2402,7 +2410,7 @@ exercises (<none> need no equipment). Follow-ups for plan 20: wire `GymAdapter` 
 Build workout, and `AvailableLoads` into the suggestion pipeline.
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add README.md docs/plans/2026-10-30-plan-19-gym-rules.md
@@ -2418,8 +2426,36 @@ git commit -m "docs: plan 19 outcome and the mapping test command"
 | §5 "Can I do this exercise here?" (own first, then confirmations; unknown kinds ignored) | 6 |
 | §5 Plan adaptation (kept, swapped, unavailable, unmapped; Swap order; no duplicates) | 7, 8 |
 | §5 Build workout steps 1–9 (candidates, slots, variety, ranking, spread, thin notices, fills, weights, Rebuild) | 5, 9, 10 |
-| §1 criteria 1, 3, 5 | 11 |
+| §1 criteria 1, 3, 5 | 11, and `GymRealDataTests` for criterion 3 at the owner's home gym |
 | §10 milestone 1 | all |
 
 Not in this plan (by design): the seed migration and drift test for the server tables (plan 21), the app's use of
 the rules (plan 20), and criteria 2, 4 and 6 (plans 20–21).
+
+## Outcome
+
+Done on 2026-10-30, branch `feat-gym-rules`. GymCore: 468 tests, line coverage 96.42%. App unit tests: 473 passed, 2
+skipped (existing integration tests), 0 failed. Mapping: 1,107 / 1,324 exercises (118 need no equipment), 217 unmapped.
+
+**Changed by review.** The code blocks above compiled and passed on a copy of GymCore, but small fixtures hid problems
+that only showed up against the real library. The committed code differs from this plan's first version:
+- **Mapping:** 151 exercises changed. They needed more equipment than the first rules said, or were stretches,
+  holds and elite skills that shouldn't be picked.
+- **Fallback order:** fresh equipment, then fresh no-equipment, then a repeat (least recently done first), then what
+  Rebuild is avoiding (oldest shown first). `BuildRequest.avoid` became an ordered list.
+- **Machine cap:** an exercise on a capped listing moves to the gym's next listing that fits.
+- **Ranking:** an exercise ranks by the best listing that could serve its requirement group, so an own listing never
+  lowers it. The tie-break gets a SplitMix64 finalizer.
+- **Recent:** only hard sets up to the request date count.
+- **New:** `BuiltWorkout.skipped` for chips with no slot.
+
+**Follow-ups for plan 20.** Wire `GymAdapter` into Today, `WorkoutBuilder` into Build workout, and `AvailableLoads` into
+the suggestion pipeline. Rebuild must append each result to `avoid`. Show `skipped` ("No room for Core at 30 min"). The
+thin notice needs other words when N is 0. `SessionPlanner.barbellEquipment` still duplicates
+`Exercise.barbellLoadedEquipment`.
+
+**Open for the owner.** A chip with no candidates shortens the workout rather than giving its slots to other chips, and
+an exercise moved off a capped listing keeps its rank. Both follow the spec as written.
+
+**Environment.** `scripts/ios-test.sh` defaults to iOS 26.2, where the test runner failed to connect or hung on this
+Mac. The app tests above ran on the iPhone 17 Pro with iOS 26.4 (`DEST='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4'`).

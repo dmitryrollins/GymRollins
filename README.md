@@ -140,6 +140,7 @@ defaults in `Base.xcconfig` with a signing team and, later, cloud Supabase crede
 | Everything (Docker suites opt-in: `SYNC_E2E=1`, `MCP_E2E=1`, `PHOTO_E2E=1`) | `scripts/test-all.sh` |
 | GymCore unit tests | `cd ios/Packages/GymCore && swift test` |
 | GymCore coverage (≥ 90%) | `scripts/coverage-gymcore.sh` |
+| Equipment requirements mapping (writes `equipment-requirements.json` and its review file) | `node --test scripts/map-equipment-requirements.test.mjs && node scripts/map-equipment-requirements.mjs` |
 | GymData unit tests | `cd ios/Packages/GymData && swift test` |
 | GymSync unit tests (fake transport) | `cd ios/Packages/GymSync && swift test --filter GymSyncTests` |
 | iOS app unit + UI tests | `scripts/ios-test.sh` |
