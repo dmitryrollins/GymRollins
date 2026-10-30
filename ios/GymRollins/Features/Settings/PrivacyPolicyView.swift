@@ -7,6 +7,9 @@ struct PrivacyPolicyView: View {
         "Claude can only read what you allow in the Claude section of Settings, and only proposes plan changes "
             + "you review (or explicitly allow it to apply automatically).",
         "There are no ads and no third-party trackers. Your data is never sold or shared.",
+        "Location is asked for only to suggest the gym you're at. It is sent to Apple Maps for that search and "
+            + "isn't stored by GymRollins.",
+        "Gym photos are cleaned on your iPhone (faces blurred, location data removed) and kept on this iPhone.",
         "Deleting your account removes your data from the server and this iPhone.",
     ]
 

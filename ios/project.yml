@@ -69,7 +69,7 @@ targets:
         NSCameraUsageDescription: >-
           GymRollins uses the camera to photograph gym equipment. Faces are blurred before the photo is saved.
         NSLocationWhenInUseUsageDescription: >-
-          GymRollins uses your location once to suggest the gym you're at. It isn't stored or sent anywhere.
+          GymRollins uses your location to find gyms near you on Apple Maps. GymRollins doesn't store it.
         NSLocalNetworkUsageDescription: >-
           GymRollins syncs with a development server on your local network.
         SUPABASE_URL: $(SUPABASE_URL)
