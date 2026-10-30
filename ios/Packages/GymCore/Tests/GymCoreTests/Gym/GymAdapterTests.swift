@@ -77,4 +77,13 @@ import Testing
         let result = adapter(GymFixtures.home).adapt([planned("c-bb-bench", n: 1)])
         #expect(result.first?.item.exerciseId == "c-pushup")
     }
+
+    @Test func pinnedItemsStayAsPlannedAndBlockDuplicates() {
+        // The push-up would be the swap for the dumbbell press, but it's pinned on another item.
+        let pinned = planned("c-pushup", n: 1), missing = planned("c-bb-bench", n: 3), other = planned("c-db-press", n: 4)
+        let result = adapter(GymFixtures.home).adapt([pinned, missing, other], pinned: [pinned.id, missing.id])
+        #expect(result[0] == .unmapped(pinned))
+        #expect(result[1] == .unmapped(missing), "a pinned item is left alone even when the gym lacks its equipment")
+        #expect(result[2] == .unavailable(other, missing: ["dumbbells"]), "nothing is swapped to a pinned exercise")
+    }
 }

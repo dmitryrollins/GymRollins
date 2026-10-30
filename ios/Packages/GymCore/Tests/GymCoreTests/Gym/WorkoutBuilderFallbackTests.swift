@@ -163,4 +163,17 @@ import Testing
         #expect(ids(build(GymFixtures.iron, [.chest], .short, history: history))
             == ids(build(GymFixtures.iron, [.chest], .short, history: history.reversed())))
     }
+
+    // MARK: Item count
+
+    @Test func itemCountMatchesTheThinNotice() throws {
+        let gym = GymInventory(gymName: "Cables", listings: [station(50, "cable-station"), station(51, "cable-station")])
+        let builder = WorkoutBuilder(matcher: GymFixtures.matcher(gym), exercises: GymFixtures.exercises, history: [])
+        let date = GymFixtures.date(day: day)
+        let built = builder.build(BuildRequest(muscles: [.chest], length: .long, date: date))
+        let notice = try #require(built.thin.first)
+        #expect(builder.itemCount(for: .chest, asOf: date) == notice.itemCount)
+        #expect(builder.itemCount(for: .chest, asOf: date) == 2, "each listing counts once, however many exercises use it")
+        #expect(builder.itemCount(for: .legs, asOf: date) == 0)
+    }
 }

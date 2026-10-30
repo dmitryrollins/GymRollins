@@ -61,4 +61,17 @@ import Testing
         #expect(AvailableLoads.fit(weightKg: 30, reps: 5, to: .fixed(kg: [])) == FittedLoad(weightKg: 30, reps: 5))
         #expect(AvailableLoads.fit(weightKg: 0, reps: 10, to: bells) == FittedLoad(weightKg: 0, reps: 10))
     }
+
+    @Test func suggestionFittedToFixedSet() {
+        let suggestion = Suggestion(weightKg: 30, reps: 8, sec: nil, reason: .success)
+        #expect(suggestion.fitted(to: bells) == Suggestion(weightKg: 24, reps: 10, sec: nil, reason: .success))
+    }
+
+    @Test func suggestionFittedKeepsSecAndReason() {
+        let timed = Suggestion(weightKg: 30, reps: 1, sec: 45, reason: .addTime)
+        #expect(timed.fitted(to: bells) == Suggestion(weightKg: 24, reps: 1, sec: 45, reason: .addTime),
+                "a timed exercise has no rep target to raise")
+        let plates = Suggestion(weightKg: 61.2, reps: 8, sec: nil, reason: .noChange)
+        #expect(plates.fitted(to: .plates) == plates)
+    }
 }

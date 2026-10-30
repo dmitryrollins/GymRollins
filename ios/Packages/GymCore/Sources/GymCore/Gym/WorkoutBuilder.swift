@@ -77,8 +77,7 @@ public struct WorkoutBuilder: Sendable {
         }
         let thin = request.muscles.compactMap { muscle -> ThinInventoryNotice? in
             guard unfilled.contains(muscle), let pool = pools[muscle] else { return nil }
-            let listings = Set(pool.equipment.flatMap { matcher.listingIds(serving: $0.exercise.id) })
-            return ThinInventoryNotice(muscle: muscle, itemCount: listings.count)
+            return ThinInventoryNotice(muscle: muscle, itemCount: itemCount(in: pool))
         }
         for muscle in unfilled {
             guard let pool = pools[muscle] else { continue }
@@ -87,6 +86,16 @@ public struct WorkoutBuilder: Sendable {
         let items = Self.ordered(picker.picked).map { item(from: $0, day: day) }
         return BuiltWorkout(items: items, thin: thin, requestedSlots: total,
                             skipped: Array(request.muscles.dropFirst(total)))
+    }
+
+    /// How many listings at the gym could serve an equipment exercise for this chip (the coverage badge and the thin
+    /// notice).
+    public func itemCount(for muscle: BuildMuscle, asOf date: Date) -> Int {
+        itemCount(in: pool(for: muscle, day: StableHash.day(of: date), asOf: date))
+    }
+
+    private func itemCount(in pool: BuildPool) -> Int {
+        Set(pool.equipment.flatMap { matcher.listingIds(serving: $0.exercise.id) }).count
     }
 
     /// Exercises that train two or more muscle groups first, then the rest, then no-equipment exercises; otherwise the

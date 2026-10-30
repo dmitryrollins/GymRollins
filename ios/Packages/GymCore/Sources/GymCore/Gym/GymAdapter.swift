@@ -9,7 +9,7 @@ public enum AdaptedItem: Sendable, Hashable {
     case swapped(planned: RoutineExercise, replacement: RoutineExercise, match: InventoryMatch, missing: [String])
     /// Not doable here and no similar exercise is.
     case unavailable(RoutineExercise, missing: [String])
-    /// No requirements data: left as planned, unmarked.
+    /// No requirements data, or pinned by the user: left as planned, unmarked.
     case unmapped(RoutineExercise)
 
     /// The exercise the session uses.
@@ -40,11 +40,12 @@ public struct GymAdapter: Sendable {
     }
 
     /// Adapts the items in order. A replacement is never an exercise already in the list or chosen for an earlier
-    /// item.
-    public func adapt(_ items: [RoutineExercise]) -> [AdaptedItem] {
+    /// item. `pinned` items were chosen by hand for today: they stay as planned (`.unmapped`) and still count as used,
+    /// so nothing else is swapped to them.
+    public func adapt(_ items: [RoutineExercise], pinned: Set<UUID> = []) -> [AdaptedItem] {
         let start = (out: [AdaptedItem](), used: Set(items.map(\.exerciseId)))
         return items.reduce(into: start) { state, item in
-            let adapted = adapt(item, excluding: state.used)
+            let adapted = pinned.contains(item.id) ? AdaptedItem.unmapped(item) : adapt(item, excluding: state.used)
             state.used.insert(adapted.item.exerciseId)
             state.out.append(adapted)
         }.out

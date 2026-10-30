@@ -49,3 +49,11 @@ public enum AvailableLoads {
         FittedLoad(weightKg: kg, reps: reps + extraRepsAtHeaviest, atHeaviest: true)
     }
 }
+
+public extension Suggestion {
+    /// The suggestion on a listing's loads. A timed exercise has no rep target to raise.
+    func fitted(to loads: ListingLoads) -> Suggestion {
+        let fitted = AvailableLoads.fit(weightKg: weightKg, reps: reps, to: loads)
+        return Suggestion(weightKg: fitted.weightKg, reps: sec == nil ? fitted.reps : reps, sec: sec, reason: reason)
+    }
+}
