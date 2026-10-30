@@ -63,7 +63,7 @@ test('bodyweight needs a bar, dip station, bench or ball only when named', () =>
   assert.deepEqual(groups('hanging leg raise', 'body weight'), [['pull-up-bar', 'power-rack']])
   assert.deepEqual(groups('chest dip', 'body weight'), [['dip-station', 'assisted-pullup-dip']])
   assert.deepEqual(groups('chest dip (on dip-pull-up cage)', 'body weight'), [['dip-station', 'assisted-pullup-dip']])
-  assert.deepEqual(groups('triceps dip (between benches)', 'body weight'), [FLAT_BENCH])
+  assert.deepEqual(groups('triceps dip (bench leg)', 'body weight'), [FLAT_BENCH])
   assert.deepEqual(groups('triceps dips floor', 'body weight'), [])
   assert.deepEqual(groups('inverted row', 'body weight'), [['power-rack', 'smith-machine']])
   assert.deepEqual(groups('hyperextension', 'body weight'), [['back-extension']])
@@ -99,7 +99,7 @@ test('the real library maps with known kinds, and the review lists machines and 
   const result = buildRequirements(library, kinds.map(k => k.id))
   const mapped = Object.keys(result.requirements).length
   assert.equal(mapped + result.unmapped.length, library.length)
-  assert.ok(mapped >= 1_150, `expected most exercises mapped, got ${mapped}`)
+  assert.ok(mapped >= 1_100, `expected most exercises mapped, got ${mapped}`)
   const text = review(library, result)
   assert.match(text, /## Machines \(check these\)/)
   assert.match(text, /\| lever chest press \| chest-press-machine \|/)
@@ -118,6 +118,7 @@ test('bodyweight work that needs gear with no kind stays unmapped', () => {
     'inverted row with straps', 'glute-ham raise', 'balance board', 'bodyweight standing row',
     'bodyweight squatting row', 'donkey calf raise', 'standing calf raise (on a staircase)',
     'self assisted inverse leg curl', 'inverse leg curl (on pull-up cable machine)', 'run (equipment)',
+    'triceps dip (between benches)',
   ]) {
     assert.ok(unmapped(name, 'body weight'), name)
   }
@@ -175,3 +176,18 @@ test('words that only look like equipment need nothing', () => {
     assert.deepEqual(groups(name, 'body weight'), [], name)
   }
 })
+
+test('mobility moves and advanced skills are never picked', () => {
+  for (const name of [
+    'two toe touch (male)', 'wrist circles', 'butterfly yoga pose', 'seated wide angle pose sequence', 'sphinx',
+    'upward facing dog', 'standing pelvic tilt', 'spine twist', 'hug keens to chest', 'bent knee lying twist (male)',
+    'one arm against wall', 'left hook. boxing', 'full planche push-up', 'straddle planche', 'handstand',
+    'handstand push-up', 'stalder press', 'l-sit on floor', 'v-sit on floor', 'isometric chest squeeze',
+  ]) {
+    assert.match(unmapped(name, 'body weight') ?? '', /mobility or advanced skill/, name)
+  }
+  for (const name of ['push-up', 'russian twist', 'glute bridge march', 'sit-up v. 2', 'front plank with twist']) {
+    assert.deepEqual(groups(name, 'body weight'), [], name)
+  }
+})
+

@@ -45,7 +45,14 @@ const NEEDS_OTHER = new RegExp([
   // Moves that need a bar, pole or rings even though the name doesn't say so.
   /\blever\b|\bflag\b|skin the cat|elevator|maltese|swing 360/,
   // A machine, a partner or a foot anchor, or the name gives no way to tell.
-  /glute-ham|donkey|self assisted inverse|cable machine|\(equipment\)/,
+  /glute-ham|donkey|self assisted inverse|cable machine|between benches|\(equipment\)/,
+].map(re => re.source).join('|'))
+
+/** Bodyweight moves the app shouldn't choose for a workout: mobility work, holds that can't be counted in reps, and
+ *  skills most people can't do. They stay in the library, can be logged, and can still be added by hand. */
+const NOT_FOR_PICKING = new RegExp([
+  /yoga|\bpose\b|toe touch|\bcircles\b|pelvic tilt|sphinx|upward facing dog|spine twist|hug keens|lying twist/,
+  /against wall|boxing|isometric|planche|handstand|stalder|\bl-sit\b|\bv-sit\b/,
 ].map(re => re.source).join('|'))
 
 /** Leverage and sled machines, first match wins; `null` = deliberately unmapped. */
@@ -135,6 +142,7 @@ function machine(name) {
  *  so. Incline and decline push-ups and planks only raise the hands or feet, so any bench will do. */
 export function bodyweight(name) {
   if (NEEDS_OTHER.test(name)) return { unmapped: 'needs equipment that has no kind' }
+  if (NOT_FOR_PICKING.test(name)) return { unmapped: 'mobility or advanced skill' }
   if (/\bdips?\b/.test(name)) {
     if (/floor/.test(name)) return { groups: [] }
     if (/\bbench(es)?\b/.test(name)) return { groups: [FLAT_BENCH] }
