@@ -1,0 +1,159 @@
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap" rel="stylesheet">
+<style>
+  .phones { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; margin-top:14px; }
+  .ph-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .ph-cap { font-size:13px; color:var(--text-secondary); max-width:270px; text-align:center; }
+  .ph { width:270px; height:580px; background:#0B0B10; color:#F2F2F5; border-radius:36px; border:6px solid #2a2a33;
+        position:relative; overflow:hidden; font-family:'Barlow',sans-serif; font-size:12.5px; box-sizing:border-box; padding:38px 13px 0; }
+  .t-mid { font-family:'Barlow Condensed',sans-serif; font-style:italic; font-weight:800; font-size:26px; line-height:1.05; }
+  .sec { color:#A9A9B5; }
+  .cap { font-size:10px; font-weight:700; letter-spacing:.08em; color:#8E8E9A; text-transform:uppercase; margin:12px 0 6px; }
+  .glass { background:rgba(40,40,52,0.55); border:1px solid rgba(255,255,255,0.12);
+           box-shadow:inset 0 1px 0 rgba(255,255,255,0.22),0 8px 24px rgba(0,0,0,0.45); border-radius:999px; }
+  .prom { background:rgba(214,58,70,0.85); border:1px solid rgba(255,170,175,0.35); border-radius:999px; color:#fff; font-weight:700; text-align:center;
+          box-shadow:inset 0 1px 0 rgba(255,255,255,0.35),0 10px 26px rgba(200,50,62,0.35); }
+  .sel { background:rgba(255,255,255,0.16); box-shadow:inset 0 1px 0 rgba(255,255,255,0.18); border:1px solid #FF6B72; }
+  .card { background:#17171E; border-radius:16px; }
+  .rowx { display:flex; gap:9px; align-items:center; padding:8px 10px; border-bottom:1px solid #25252E; }
+  .rowx:last-child { border-bottom:none; }
+  .thumb { width:42px; height:42px; border-radius:10px; background:#262631; flex:none; display:flex; align-items:center; justify-content:center; color:#8E8E9A; font-size:9px; text-align:center; }
+  .nm { font-weight:600; }
+  .sub { font-size:11px; color:#A9A9B5; }
+  .amber { color:#F5B75A; }
+  .badge-a { background:rgba(245,183,90,0.14); color:#F5B75A; border-radius:999px; padding:2px 7px; font-size:10px; font-weight:700; }
+  .badge-g { background:#14342A; color:#4FD1A5; border-radius:999px; padding:2px 7px; font-size:10px; font-weight:700; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:7px; }
+  .kt { background:#17171E; border-radius:12px; padding:8px 4px; text-align:center; font-size:11px; font-weight:600; }
+  .kt .ic { height:34px; border-radius:8px; background:#262631; margin-bottom:5px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .mchip { padding:13px 0; text-align:center; font-weight:700; font-size:14px; }
+  .bot { position:absolute; left:13px; right:13px; }
+  .seg { display:flex; padding:3px; } .seg > div { flex:1; text-align:center; padding:8px 0; border-radius:999px; font-weight:600; font-size:12px; }
+  .step { font-size:10px; font-weight:700; letter-spacing:.08em; color:#FF6B72; }
+  h3.grp { margin-top:28px; }
+</style>
+
+<h2>Screens, part 2: adding equipment, and Build workout</h2>
+<p class="subtitle">Built for minimal typing: big taps, photo first, and one decision per step.</p>
+
+<h3 class="grp">Add equipment (4 steps)</h3>
+<div class="phones">
+
+  <div class="ph-wrap">
+    <div class="ph" style="padding:0; background:#1b1b22;">
+      <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#8E8E9A;">[camera viewfinder]</div>
+      <div class="glass" style="position:absolute; top:42px; left:13px; right:13px; border-radius:14px; padding:9px 11px; font-size:11.5px;">
+        Photograph the equipment, not people. Faces are blurred automatically before saving.
+      </div>
+      <div style="position:absolute; bottom:40px; left:0; right:0; display:flex; align-items:center; justify-content:center; gap:34px;">
+        <div class="glass" style="width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px;">Library</div>
+        <div style="width:74px; height:74px; border-radius:50%; border:4px solid #fff; background:rgba(255,255,255,0.15);"></div>
+        <div class="glass" style="width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px;">Skip</div>
+      </div>
+    </div>
+    <div class="ph-cap"><b>1 · Photo.</b> The camera opens straight away. You can also pick a photo from your library, or skip the photo.</div>
+  </div>
+
+  <div class="ph-wrap">
+    <div class="ph">
+      <div class="step">STEP 2 OF 4</div>
+      <div class="t-mid">What is it?</div>
+      <div class="card" style="margin-top:8px; padding:9px 10px; color:#8E8E9A;">Search kinds…</div>
+      <div class="cap">Machines</div>
+      <div class="grid3">
+        <div class="kt sel"><div class="ic"></div>Lat pulldown</div><div class="kt"><div class="ic"></div>Leg press</div><div class="kt"><div class="ic"></div>Chest press</div>
+        <div class="kt"><div class="ic"></div>Pec deck</div><div class="kt"><div class="ic"></div>Seated row</div><div class="kt"><div class="ic"></div>Leg curl</div>
+      </div>
+      <div class="cap">Free weights · benches · racks</div>
+      <div class="grid3">
+        <div class="kt"><div class="ic"></div>Dumbbells</div><div class="kt"><div class="ic"></div>Kettlebells</div><div class="kt"><div class="ic"></div>Barbell</div>
+        <div class="kt"><div class="ic"></div>Adj. bench</div><div class="kt"><div class="ic"></div>Power rack</div><div class="kt"><div class="ic"></div>Cable station</div>
+      </div>
+      <div class="sub" style="margin-top:10px;">Each kind already knows its exercises and muscles. You never tag muscles.</div>
+    </div>
+    <div class="ph-cap"><b>2 · Kind.</b> Tap a big tile (common kinds first) or search. These are the curated kinds of equipment.</div>
+  </div>
+
+  <div class="ph-wrap">
+    <div class="ph">
+      <div class="step">STEP 3 OF 4</div>
+      <div class="t-mid">Already here?</div>
+      <div class="sec" style="margin-top:4px;">Iron Works Gym already lists 1 lat pulldown.</div>
+      <div class="card" style="margin-top:10px; overflow:hidden;">
+        <div style="height:120px; background:#262631; display:flex; align-items:center; justify-content:center; color:#8E8E9A;">[existing photo]</div>
+        <div style="padding:9px 10px;"><div class="nm">Lat Pulldown · Life Fitness</div><div class="sub">to 300 lb · <span class="badge-g">✓ 7</span> · added Oct 2026</div>
+          <div class="prom" style="padding:10px 0; margin-top:9px;">Yes, that's it (+1 confirm)</div></div>
+      </div>
+      <div class="cap">Or a known model from other gyms</div>
+      <div class="card">
+        <div class="rowx"><div class="thumb">[ref]</div><div><div class="nm">Hammer Strength Pulldown</div><div class="sub">listed at 12 gyms</div></div></div>
+        <div class="rowx"><div class="thumb">[ref]</div><div><div class="nm">Generic lat pulldown</div><div class="sub">no brand</div></div></div>
+      </div>
+      <div class="glass bot" style="bottom:18px; padding:11px 0; text-align:center; font-weight:600;">No, it's a different one</div>
+    </div>
+    <div class="ph-cap"><b>3 · Duplicate check.</b> It shows this gym's items of the same kind first. Next come catalog models from other gyms, which you can reuse with one tap.</div>
+  </div>
+
+  <div class="ph-wrap">
+    <div class="ph">
+      <div class="step">STEP 4 OF 4</div>
+      <div class="t-mid">Weights and sharing</div>
+      <div class="cap">Weight stack goes up to</div>
+      <div class="card" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px;">
+        <div class="glass" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-size:18px;">−</div>
+        <div style="font-size:20px; font-weight:700;">250 lb <span class="sub">(113 kg)</span></div>
+        <div class="glass" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-size:18px;">+</div>
+      </div>
+      <div class="sub" style="margin-top:6px;">For dumbbells and kettlebells: tap the weights that are there (e.g. 44 · 53 lb).</div>
+      <div class="cap">Who sees it</div>
+      <div class="glass seg"><div class="sel" style="border:none;">This phone only</div><div>Share with gym</div></div>
+      <div class="sub" style="margin-top:6px;">Sharing needs sign-in. You can share later from the item.</div>
+      <div class="card" style="margin-top:10px; padding:9px 10px; color:#8E8E9A;">Note (optional)</div>
+      <div class="prom bot" style="bottom:18px; padding:13px 0; font-size:14px;">Save</div>
+    </div>
+    <div class="ph-cap"><b>4 · Details.</b> A stepper for the weight stack, or chips for fixed weights. Visibility defaults to "This phone only".</div>
+  </div>
+</div>
+
+<h3 class="grp">Build workout</h3>
+<div class="phones">
+  <div class="ph-wrap">
+    <div class="ph">
+      <div class="t-mid">Build workout</div>
+      <div class="sec" style="margin-top:3px;">at Home · 3 items</div>
+      <div class="cap">Muscles</div>
+      <div class="grid2">
+        <div class="glass mchip">Chest</div><div class="glass mchip sel">Back</div>
+        <div class="glass mchip">Shoulders</div><div class="glass mchip sel">Arms</div>
+        <div class="glass mchip">Legs</div><div class="glass mchip">Core</div>
+      </div>
+      <div class="cap">Length</div>
+      <div class="glass seg"><div>30 min</div><div class="sel" style="border:none;">45 min</div><div>60 min</div></div>
+      <div class="prom bot" style="bottom:18px; padding:13px 0; font-size:14px;">Build</div>
+    </div>
+    <div class="ph-cap"><b>Setup.</b> Two taps and Build. The length sets the number of exercises (about 3, 4–5 or 6).</div>
+  </div>
+
+  <div class="ph-wrap">
+    <div class="ph">
+      <div class="t-mid">Back + Arms</div>
+      <div class="sec" style="margin-top:3px;">Home · 4 exercises · ~45 min</div>
+      <div class="card" style="margin-top:10px; padding:9px 10px; border:1px solid rgba(245,183,90,0.3);">
+        <div class="amber nm">Only 3 items catalogued at Home so far.</div>
+        <div class="sub">Add a photo to unlock more variety.</div>
+        <div style="margin-top:7px; font-weight:700; color:#FF6B72;">+ Add equipment</div>
+      </div>
+      <div class="card" style="margin-top:8px;">
+        <div class="rowx"><div class="thumb">[KB 24]</div><div><div class="nm">One-Arm Kettlebell Row</div><div class="sub">3×10 · 53 lb (24 kg)</div></div></div>
+        <div class="rowx"><div class="thumb">[bench]</div><div><div class="nm">Kettlebell Pullover</div><div class="sub">3×12 · 44 lb (20 kg) · bench</div></div></div>
+        <div class="rowx"><div class="thumb">[KB 20]</div><div><div class="nm">Kettlebell Hammer Curl</div><div class="sub">3×10 · 44 lb (20 kg)</div></div></div>
+        <div class="rowx"><div class="thumb">[KB 20]</div><div><div class="nm">Kettlebell Skull Crusher <span class="badge-a">REPEAT</span></div><div class="sub">also Tuesday · no other triceps option here</div></div></div>
+      </div>
+      <div class="bot" style="bottom:18px; display:flex; gap:8px;">
+        <div class="glass" style="flex:1; padding:12px 0; text-align:center; font-weight:600;">Rebuild</div>
+        <div class="prom" style="flex:1; padding:12px 0;">Start</div>
+      </div>
+    </div>
+    <div class="ph-cap"><b>Result.</b> Every exercise names the item it uses (with a photo). Weights snap to what's actually there. A thin-inventory banner and any repeat are explained, never hidden.</div>
+  </div>
+</div>
