@@ -21,7 +21,7 @@ const OUT_REVIEW = resolve(ROOT, 'docs/import/equipment-requirements-review.md')
 
 export const FLAT_BENCH = ['flat-bench', 'adjustable-bench']
 export const INCLINE_BENCH = ['adjustable-bench', 'incline-bench']
-export const DECLINE_BENCH = ['adjustable-bench', 'decline-bench']
+export const DECLINE_BENCH = ['decline-bench']
 const BALL = /stability ball|exercise ball|swiss ball/
 
 /** Free weights: the library's `eq` -> the kind that carries the load. */
@@ -31,15 +31,19 @@ const FREE_WEIGHTS = {
 }
 /** Equipment that maps one to one to a kind. */
 const DIRECT = {
-  band: 'resistance-bands', 'resistance band': 'resistance-bands', 'stability ball': 'stability-ball',
-  'bosu ball': 'bosu-ball', 'wheel roller': 'ab-wheel', 'stationary bike': 'stationary-bike',
+  'stability ball': 'stability-ball', 'bosu ball': 'bosu-ball', 'wheel roller': 'ab-wheel',
+  'stationary bike': 'stationary-bike',
   'elliptical machine': 'elliptical', 'stepmill machine': 'stepmill', 'skierg machine': 'skierg',
   'upper body ergometer': 'upper-body-ergometer',
 }
 /** Equipment with no kind, or partner-assisted ("assisted"): always unmapped. */
 const NO_KIND = new Set(['weighted', 'assisted', 'rope', 'roller', 'hammer', 'tire'])
 /** Bodyweight exercises that need something the kinds list doesn't have. */
-const NEEDS_OTHER = /\brings?\b|towel|rope|\bbox\b|stool|chair|\bstep\b|platform|sled/
+const NEEDS_OTHER = new RegExp([
+  /\brings?\b|towel|rope|\bbox\b|stool|chair|\bstep\b|stair|platform|sled|suspended|\bstraps?\b|\bboard\b/,
+  /\blever\b|\bflag\b|skin the cat|elevator|maltese|swing 360|glute-ham|donkey|self assisted inverse/,
+  /cable machine|\(equipment\)/,
+].map(re => re.source).join('|'))
 
 /** Leverage and sled machines, first match wins; `null` = deliberately unmapped. */
 export const MACHINE_RULES = [
@@ -71,13 +75,16 @@ export const MACHINE_RULES = [
 ]
 
 /** The bench an exercise needs, as zero or one requirement group. A ball replaces the bench; only free weights
- *  read "fly", "pullover" and "skull" as lying on a bench (cable flies are standing). */
+ *  read "fly", "pullover" and "skull" as lying on a bench (cable flies are standing). A step-up uses the bench as
+ *  its step, because there is no kind for a box. */
 export function benchFor(name, { fly }) {
   if (BALL.test(name)) return [['stability-ball']]
   if (/preacher/.test(name)) return [['preacher-bench']]
   if (/\bincline\b/.test(name)) return [INCLINE_BENCH]
   if (/\bdecline\b/.test(name)) return [DECLINE_BENCH]
-  if (/\bbench\b|\blying\b/.test(name) || (fly && /\bfly\b|pullover|skull/.test(name))) return [FLAT_BENCH]
+  if (/\bbench\b|\blying\b|step[- ]?up|stepbox/.test(name) || (fly && /\bfly\b|pullover|skull/.test(name))) {
+    return [FLAT_BENCH]
+  }
   return []
 }
 
@@ -89,13 +96,23 @@ function barbellPress(name) {
 }
 
 function freeWeight(name, eq) {
+  if (/cambered/.test(name)) return { unmapped: 'needs equipment that has no kind' }
   const load = [FREE_WEIGHTS[eq]]
   if (load[0] !== 'barbell') return { groups: [load, ...benchFor(name, { fly: true })] }
   if (/bench press|(incline|decline).*press/.test(name)) return { groups: [load, ...barbellPress(name)] }
-  if (/squat|lunge|good morning/.test(name)) {
+  if (/squat|lunge|good morning|rack pull|pin press/.test(name)) {
     return { groups: [load, ['power-rack'], ...benchFor(name, { fly: true })] }
   }
   return { groups: [load, ...benchFor(name, { fly: true })] }
+}
+
+/** Bands carry the load; the name can still need a bar, a wheel, or a bench. Floor work ("lying") needs no bench. */
+function band(name) {
+  const load = ['resistance-bands']
+  if (/pull-?up/.test(name)) return { groups: [load, ['pull-up-bar', 'power-rack']] }
+  if (/wheel/.test(name)) return { groups: [load, ['ab-wheel']] }
+  if (/\bbench\b|step[- ]?up/.test(name)) return { groups: [load, FLAT_BENCH] }
+  return { groups: [load] }
 }
 
 function cable(name) {
@@ -110,7 +127,8 @@ function machine(name) {
   return rule?.[1] ? { groups: [rule[1]] } : { unmapped: 'machine not identified' }
 }
 
-/** Bodyweight exercises need a bar, dip station, bench, ball or back-extension bench only when the name says so. */
+/** Bodyweight exercises need a bar, dip station, bench, wheel, ball or back-extension bench only when the name says
+ *  so. Incline and decline push-ups and planks only raise the hands or feet, so any bench will do. */
 export function bodyweight(name) {
   if (NEEDS_OTHER.test(name)) return { unmapped: 'needs equipment that has no kind' }
   if (/\bdips?\b/.test(name)) {
@@ -118,11 +136,20 @@ export function bodyweight(name) {
     if (/\bbench(es)?\b/.test(name)) return { groups: [FLAT_BENCH] }
     return { groups: [['dip-station', 'assisted-pullup-dip']] }
   }
-  if (/pull-?up|chin-?up|muscle[- ]?up|hanging|\bhang\b/.test(name)) return { groups: [['pull-up-bar', 'power-rack']] }
+  if (/pull[- ]?up|\bchin\b|muscle[- ]?up|hanging|\bhang\b/.test(name)) {
+    return { groups: [['pull-up-bar', 'power-rack']] }
+  }
+  if (/parallel bars/.test(name)) return { groups: [['dip-station']] }
   if (/inverted row/.test(name)) return { groups: [['power-rack', 'smith-machine']] }
+  if (/\brow\b/.test(name)) return { unmapped: 'needs equipment that has no kind' }
   if (BALL.test(name)) return { groups: [['stability-ball']] }
   if (/back extension|hyperextension/.test(name)) return { groups: [['back-extension']] }
-  if (/\bbench\b|incline push|decline push/.test(name)) return { groups: [FLAT_BENCH] }
+  if (/\bwheel\b/.test(name)) return { groups: [['ab-wheel']] }
+  if (/\bbench\b|\b(incline|decline)\b.*(push|plank)|seated leg raise|body-up/.test(name)) {
+    return { groups: [FLAT_BENCH] }
+  }
+  if (/\bincline\b/.test(name)) return { groups: [INCLINE_BENCH] }
+  if (/\bdecline\b/.test(name)) return { groups: [DECLINE_BENCH] }
   return { groups: [] }
 }
 
@@ -135,6 +162,7 @@ export function requirementsFor({ n, eq }) {
   if (eq === 'cable') return cable(name)
   if (eq === 'smith machine') return { groups: [['smith-machine'], ...benchFor(name, { fly: false })] }
   if (eq === 'body weight') return bodyweight(name)
+  if (eq === 'band' || eq === 'resistance band') return band(name)
   if (FREE_WEIGHTS[eq]) return freeWeight(name, eq)
   if (DIRECT[eq]) return { groups: [[DIRECT[eq]]] }
   return { unmapped: `unknown equipment "${eq}"` }

@@ -105,3 +105,59 @@ test('the real library maps with known kinds, and the review lists machines and 
   assert.match(text, /\| lever chest press \| chest-press-machine \|/)
   assert.match(text, /\| stretch \| /)
 })
+
+test('bodyweight work on a bar needs the bar, however the name is spelled', () => {
+  for (const name of ['archer pull up', 'pull up (neutral grip)', 'gorilla chin', 'side-to-side chin']) {
+    assert.deepEqual(groups(name, 'body weight'), [['pull-up-bar', 'power-rack']], name)
+  }
+})
+
+test('bodyweight work that needs gear with no kind stays unmapped', () => {
+  for (const name of [
+    'front lever', 'back lever', 'flag', 'skin the cat', 'elevator', 'full maltese', 'swing 360', 'suspended push-up',
+    'inverted row with straps', 'glute-ham raise', 'balance board', 'bodyweight standing row',
+    'bodyweight squatting row', 'donkey calf raise', 'standing calf raise (on a staircase)',
+    'self assisted inverse leg curl', 'inverse leg curl (on pull-up cable machine)', 'run (equipment)',
+  ]) {
+    assert.ok(unmapped(name, 'body weight'), name)
+  }
+})
+
+test('bodyweight work names the bench, bars or wheel it needs', () => {
+  const bodyweightGroups = name => groups(name, 'body weight')
+  assert.deepEqual(bodyweightGroups('incline close-grip push-up'), [FLAT_BENCH])
+  assert.deepEqual(bodyweightGroups('bodyweight incline side plank'), [FLAT_BENCH])
+  assert.deepEqual(bodyweightGroups('seated leg raise'), [FLAT_BENCH])
+  assert.deepEqual(bodyweightGroups('body-up'), [FLAT_BENCH])
+  assert.deepEqual(bodyweightGroups('inverse leg curl (bench support)'), [FLAT_BENCH])
+  assert.deepEqual(bodyweightGroups('incline twisting sit-up'), [INCLINE_BENCH])
+  assert.deepEqual(bodyweightGroups('decline crunch'), [['decline-bench']])
+  assert.deepEqual(bodyweightGroups('vertical leg raise (on parallel bars)'), [['dip-station']])
+  assert.deepEqual(bodyweightGroups('wheel run'), [['ab-wheel']])
+})
+
+test('a decline bench is its own kind: adjustable benches rarely go below flat', () => {
+  assert.deepEqual(DECLINE_BENCH, ['decline-bench'])
+})
+
+test('step-ups need a bench to step on, whatever carries the load', () => {
+  assert.deepEqual(groups('dumbbell step-up', 'dumbbell'), [['dumbbells'], FLAT_BENCH])
+  assert.deepEqual(groups('dumbbell step up single leg balance with bicep curl', 'dumbbell'), [['dumbbells'], FLAT_BENCH])
+  assert.deepEqual(groups('dumbbell single leg deadlift with stepbox support', 'dumbbell'), [['dumbbells'], FLAT_BENCH])
+  assert.deepEqual(groups('barbell step-up', 'barbell'), [['barbell'], FLAT_BENCH])
+  assert.deepEqual(groups('band step-up', 'band'), [['resistance-bands'], FLAT_BENCH])
+})
+
+test('band exercises also need the bar, wheel or bench they name', () => {
+  assert.deepEqual(groups('band assisted pull-up', 'band'), [['resistance-bands'], ['pull-up-bar', 'power-rack']])
+  assert.deepEqual(groups('band assisted wheel rollerout', 'band'), [['resistance-bands'], ['ab-wheel']])
+  assert.deepEqual(groups('band bench press', 'band'), [['resistance-bands'], FLAT_BENCH])
+  assert.deepEqual(groups('band lying hip raise', 'band'), [['resistance-bands']], 'floor work needs no bench')
+  assert.deepEqual(groups('band close-grip pulldown', 'band'), [['resistance-bands']])
+})
+
+test('rack pulls and pin presses need a rack; special bars have no kind', () => {
+  assert.deepEqual(groups('barbell rack pull', 'barbell'), [['barbell'], ['power-rack']])
+  assert.deepEqual(groups('barbell pin presses', 'barbell'), [['barbell'], ['power-rack']])
+  assert.ok(unmapped('cambered bar lying row', 'barbell'))
+})

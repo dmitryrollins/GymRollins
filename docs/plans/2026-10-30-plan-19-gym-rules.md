@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the curated equipment data (46 kinds, requirements for 1,191 library exercises) and the pure-Swift
+**Goal:** Add the curated equipment data (46 kinds, requirements for 1,160 library exercises) and the pure-Swift
 rules that use it: which listings an exercise needs at a gym, fitting weights to a gym's loads, adapting today's
 routine to a gym, and building a workout from a gym's equipment.
 
@@ -25,8 +25,8 @@ adaptation, Build workout) · 21 shared catalogue (migration, access rules, func
 suite) · 22 moderation and Claude (report, block, admin list, account deletion, MCP tools).
 
 **Verified:** every code block below was compiled and run on a copy of GymCore on 2026-10-30: 48 new tests pass,
-the full suite (429 tests) passes, and GymCore line coverage is 90.96%. The mapping script maps 1,191 of 1,324
-exercises (220 need no equipment).
+the full suite (429 tests) passes, and GymCore line coverage is 90.96%. The mapping script first mapped 1,191 of 1,324
+exercises; review tightened it to 1,160 (173 need no equipment), see Task 2.
 
 **Conventions for every task**
 - Work on branch `feat-gym-rules`, created in Task 1 from `docs/gym-equipment-spec` (which holds the spec and
@@ -245,6 +245,10 @@ git commit -m "feat(core): curated equipment kinds"
 ---
 
 ### Task 2: The requirements mapping script
+
+> **Changed after review (2026-10-30):** a review found about 50 exercises marked as needing less equipment than
+> they do. The code below is the first version. The committed `scripts/map-equipment-requirements.mjs` and its tests
+> are authoritative, and the expected counts are now `Mapped 1160 / 1324`, `no equipment: 173`, `Unmapped: 164`.
 
 **Files:**
 - Create: `scripts/map-equipment-requirements.mjs`
