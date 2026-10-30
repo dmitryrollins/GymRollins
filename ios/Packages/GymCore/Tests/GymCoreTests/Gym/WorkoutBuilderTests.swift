@@ -12,7 +12,7 @@ import Testing
                        loggedCounts: logged, preferences: preferences)
     }
 
-    private func request(_ muscles: [BuildMuscle], _ length: BuildLength, avoid: Set<String> = []) -> BuildRequest {
+    private func request(_ muscles: [BuildMuscle], _ length: BuildLength, avoid: [String] = []) -> BuildRequest {
         BuildRequest(muscles: muscles, length: length, date: GymFixtures.date(day: day), avoid: avoid)
     }
 

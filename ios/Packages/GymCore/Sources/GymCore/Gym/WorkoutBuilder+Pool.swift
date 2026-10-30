@@ -18,8 +18,8 @@ struct BuildPool: Sendable {
 
 extension WorkoutBuilder {
     /// Rep exercises whose primary muscle is in the chip, available at the gym and not marked `never`, ranked:
-    /// `more` first and `less` last, then the kind with the best-confirmed listing (own listings count as one), then
-    /// the more-logged exercise, then a tie-break seeded by the day.
+    /// `more` first and `less` last, then the best-confirmed listing that could serve it (own listings count as one),
+    /// then the more-logged exercise, then a tie-break seeded by the day.
     func pool(for muscle: BuildMuscle, day: Int, asOf date: Date) -> BuildPool {
         let ranked = exercises.compactMap { candidate($0, for: muscle) }.sorted { ranksBefore($0, $1, day: day) }
         return BuildPool(equipment: ranked.filter { !matcher.needsNoEquipment($0.exercise.id) },
@@ -38,16 +38,16 @@ extension WorkoutBuilder {
     private func ranksBefore(_ a: BuildCandidate, _ b: BuildCandidate, day: Int) -> Bool {
         let pa = (preferences[a.exercise.id] ?? .normal).rank, pb = (preferences[b.exercise.id] ?? .normal).rank
         if pa != pb { return pa < pb }
-        let sa = score(a.match), sb = score(b.match)
+        let sa = score(a), sb = score(b)
         if sa != sb { return sa > sb }
         let la = loggedCounts[a.exercise.id, default: 0], lb = loggedCounts[b.exercise.id, default: 0]
         if la != lb { return la > lb }
         return StableHash.tieBreak(day: day, id: a.exercise.id) < StableHash.tieBreak(day: day, id: b.exercise.id)
     }
 
-    private func score(_ match: InventoryMatch) -> Int {
-        let listing = (match.loadListingId ?? match.listingIds.first).flatMap(matcher.listing)
-        return listing.map { matcher.bestScore(ofKind: $0.kindId) } ?? 0
+    private func score(_ candidate: BuildCandidate) -> Int {
+        let listing = (candidate.match.loadListingId ?? candidate.match.listingIds.first).flatMap(matcher.listing)
+        return listing.map { matcher.bestScore(sharingGroupWith: $0, for: candidate.exercise.id) } ?? 0
     }
 
     /// The exercises of the latest `recentWorkoutsPerMuscle` workouts up to `date` that trained the chip (a hard set

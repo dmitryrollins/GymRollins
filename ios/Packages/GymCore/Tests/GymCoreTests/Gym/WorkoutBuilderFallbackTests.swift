@@ -9,7 +9,7 @@ import Testing
                             "c-cable-crossover", "c-cable-press"]
 
     private func build(_ inventory: GymInventory, _ muscles: [BuildMuscle], _ length: BuildLength,
-                       history: [Workout] = [], avoid: Set<String> = [],
+                       history: [Workout] = [], avoid: [String] = [],
                        preferences: [String: ExercisePreference] = [:]) -> BuiltWorkout {
         WorkoutBuilder(matcher: GymFixtures.matcher(inventory), exercises: GymFixtures.exercises, history: history,
                        preferences: preferences)
@@ -47,8 +47,8 @@ import Testing
         let recent = ["c-machine-press", "c-pec-deck", "c-cable-fly", "c-cable-crossover", "c-cable-press"]
         let history = [GymFixtures.workout(day: day - 1, recent)]
         let first = build(GymFixtures.iron, [.chest], .short, history: history)
-        let shown = Set(ids(first))
-        #expect(shown == ["c-bb-bench", "c-db-press", "c-db-incline"])
+        let shown = ids(first)
+        #expect(Set(shown) == ["c-bb-bench", "c-db-press", "c-db-incline"])
         let rebuilt = build(GymFixtures.iron, [.chest], .short, history: history, avoid: shown)
         #expect(Set(ids(rebuilt)).isDisjoint(with: shown), "\(ids(rebuilt))")
         #expect(rebuilt.items.count == 3)
@@ -59,6 +59,16 @@ import Testing
         let built = build(GymFixtures.home, [.back], .short, history: history, avoid: ["b-kb-row"])
         #expect(ids(built) == ["b-kb-row"])
         #expect(built.items.first?.repeatOf == GymFixtures.workout(day: day - 1, []).startedAt)
+    }
+
+    @Test func onceEverythingIsAvoidedTheOldestShownComesBack() {
+        let built = build(GymFixtures.home, [.arms], .short, avoid: ["a-kb-skull", "a-kb-curl"])
+        #expect(built.items.count == 2)
+        let shownFirst = build(GymFixtures.home, [.arms, .back, .chest], .short, avoid: ["a-kb-skull", "a-kb-curl"])
+        #expect(shownFirst.items.first { $0.muscle == .arms }?.exercise.exerciseId == "a-kb-skull")
+        let shownAgain = build(GymFixtures.home, [.arms, .back, .chest], .short,
+                               avoid: ["a-kb-skull", "a-kb-curl", "a-kb-skull"])
+        #expect(shownAgain.items.first { $0.muscle == .arms }?.exercise.exerciseId == "a-kb-curl")
     }
 
     @Test func neverAppliesToNoEquipmentExercises() {
@@ -97,6 +107,18 @@ import Testing
         let ranked = builder.pool(for: .arms, day: day, asOf: GymFixtures.date(day: day)).equipment
         #expect(ranked.first?.exercise.id == "a-db-curl", "\(ranked.map(\.exercise.id))")
         #expect(ranked.first?.match.loadListingId == own.id, "the link still goes to the user's own listing")
+    }
+
+    @Test func anOwnListingOfASiblingKindDoesNotDemoteTheExercise() {
+        let cable = station(50, "cable-station", confirmed: 9)
+        let dumbbells = InventoryListing(id: GymFixtures.id(51), kindId: "dumbbells", confirmCount: 5)
+        let bench = InventoryListing(id: GymFixtures.id(53), kindId: "flat-bench")
+        let own = station(52, "lat-pulldown", isOwn: true)
+        let gym = GymInventory(gymName: "G", listings: [cable, dumbbells, bench, own])
+        let builder = WorkoutBuilder(matcher: GymFixtures.matcher(gym), exercises: GymFixtures.exercises, history: [])
+        let ranked = builder.pool(for: .back, day: day, asOf: GymFixtures.date(day: day)).equipment
+        #expect(ranked.first?.exercise.id == "b-pulldown", "\(ranked.map(\.exercise.id))")
+        #expect(ranked.first?.match.loadListingId == own.id)
     }
 
     // MARK: Chips and slots

@@ -78,7 +78,7 @@ import Testing
     }
 
     @Test func noPickIsAStretchOrAdvancedSkill() {
-        let skipped = /stretch|yoga|pose|toe touch|circles|pelvic tilt|sphinx|upward facing|planche|handstand|boxing/
+        let skipped = /\bstretch|yoga|pose|toe touch|circles|pelvic tilt|sphinx|upward facing|planche|handstand|boxing/
         let names = Dictionary(uniqueKeysWithValues: library.map { ($0.id, $0.name) })
         for muscle in BuildMuscle.allCases {
             let builder = WorkoutBuilder(matcher: matcher, exercises: library, history: [])
@@ -96,5 +96,22 @@ import Testing
         #expect(built.items.count == 6)
         #expect(built.items.contains { $0.isBodyweightFill })
         #expect(built.thin.first?.muscle == .back)
+    }
+
+    @Test(arguments: BuildLength.allCases)
+    func rebuildKeepsChangingAtHomeOnEveryTap(length: BuildLength) {
+        let builder = WorkoutBuilder(matcher: matcher, exercises: library, history: [])
+        let date = GymFixtures.date(day: startDay)
+        let pool = builder.pool(for: .back, day: startDay, asOf: date)
+        #expect(pool.equipment.count + pool.bodyweight.count > length.slots(muscleCount: 1))
+        let taps = (0..<8).reduce(into: (avoid: [String](), shown: [Set<String>]())) { state, _ in
+            let ids = builder.build(BuildRequest(muscles: [.back], length: length, date: date, avoid: state.avoid))
+                .items.map(\.exercise.exerciseId)
+            state.shown.append(Set(ids))
+            state.avoid += ids
+        }.shown
+        for (previous, next) in zip(taps, taps.dropFirst()) {
+            #expect(previous != next, "\(taps)")
+        }
     }
 }

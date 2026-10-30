@@ -11,20 +11,21 @@ struct SlotPicker {
     }
 
     let matcher: InventoryMatcher
-    let avoid: Set<String>
+    /// Avoided exercise id → its latest position in the avoid list: lower was shown longer ago.
+    private let shownAt: [String: Int]
     private(set) var picked: [Pick] = []
     private var chosen: Set<String> = []
     private var machineUse: [UUID: Int] = [:]
 
-    init(matcher: InventoryMatcher, avoid: Set<String>) {
+    init(matcher: InventoryMatcher, avoid: [String]) {
         self.matcher = matcher
-        self.avoid = avoid
+        self.shownAt = Dictionary(avoid.enumerated().map { ($0.element, $0.offset) }, uniquingKeysWith: max)
     }
 
     /// Takes the best fresh equipment exercise for one slot: not done recently and not being rebuilt away from.
     mutating func pickFresh(from pool: BuildPool, muscle: BuildMuscle) -> Bool {
         let fresh = open(pool.equipment).first {
-            pool.recent[$0.exercise.id] == nil && !avoid.contains($0.exercise.id)
+            pool.recent[$0.exercise.id] == nil && shownAt[$0.exercise.id] == nil
         }
         guard let fresh else { return false }
         record(Pick(candidate: fresh, muscle: muscle, repeatOf: nil, isFill: false))
@@ -32,19 +33,19 @@ struct SlotPicker {
     }
 
     /// Takes the best candidate for a slot no fresh equipment exercise fit: a fresh no-equipment exercise, then a
-    /// repeat (least recently done first), then what Rebuild is avoiding, because showing the same exercise again is
-    /// the last resort. Only an exercise done recently is marked as a repeat.
+    /// repeat (least recently done first), then what Rebuild is avoiding, oldest shown first, because showing the same
+    /// exercise again is the last resort. Only an exercise done recently is marked as a repeat.
     mutating func pickFallback(from pool: BuildPool, muscle: BuildMuscle) -> Bool {
         func lastDone(_ candidate: BuildCandidate) -> Date? { pool.recent[candidate.exercise.id] }
-        func isAvoided(_ candidate: BuildCandidate) -> Bool { avoid.contains(candidate.exercise.id) }
+        func shown(_ candidate: BuildCandidate) -> Int? { shownAt[candidate.exercise.id] }
         func leastRecentFirst(_ list: [BuildCandidate]) -> [BuildCandidate] {
             list.sorted { (lastDone($0) ?? .distantPast) < (lastDone($1) ?? .distantPast) }
         }
         let bodyweight = open(pool.bodyweight), all = open(pool.equipment) + bodyweight
         let tiers = [
-            bodyweight.filter { lastDone($0) == nil && !isAvoided($0) },
-            leastRecentFirst(all.filter { lastDone($0) != nil && !isAvoided($0) }),
-            leastRecentFirst(all.filter(isAvoided)),
+            bodyweight.filter { lastDone($0) == nil && shown($0) == nil },
+            leastRecentFirst(all.filter { lastDone($0) != nil && shown($0) == nil }),
+            all.filter { shown($0) != nil }.sorted { (shown($0) ?? 0) < (shown($1) ?? 0) },
         ]
         guard let candidate = tiers.first(where: { !$0.isEmpty })?.first else { return false }
         record(Pick(candidate: candidate, muscle: muscle, repeatOf: lastDone(candidate),

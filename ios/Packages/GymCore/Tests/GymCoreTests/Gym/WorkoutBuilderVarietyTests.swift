@@ -7,7 +7,7 @@ import Testing
     private let day = 20_400
 
     private func build(_ inventory: GymInventory, _ muscles: [BuildMuscle], _ length: BuildLength,
-                       history: [Workout] = [], avoid: Set<String> = []) -> BuiltWorkout {
+                       history: [Workout] = [], avoid: [String] = []) -> BuiltWorkout {
         WorkoutBuilder(matcher: GymFixtures.matcher(inventory), exercises: GymFixtures.exercises, history: history)
             .build(BuildRequest(muscles: muscles, length: length, date: GymFixtures.date(day: day), avoid: avoid))
     }
@@ -61,7 +61,7 @@ import Testing
 
     @Test func rebuildAvoidsTheCurrentResultWithoutMarkingRepeats() {
         let first = build(GymFixtures.iron, [.chest], .short)
-        let avoid = Set(first.items.map(\.exercise.exerciseId))
+        let avoid = first.items.map(\.exercise.exerciseId)
         let second = build(GymFixtures.iron, [.chest], .short, avoid: avoid)
         #expect(Set(second.items.map(\.exercise.exerciseId)).isDisjoint(with: avoid))
         let thin = build(GymFixtures.home, [.arms], .short, avoid: ["a-kb-curl", "a-kb-skull"])

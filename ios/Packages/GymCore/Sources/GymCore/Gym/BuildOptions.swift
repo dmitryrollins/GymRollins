@@ -39,11 +39,12 @@ public struct BuildRequest: Sendable, Hashable {
     public let length: BuildLength
     /// The day being built for. It seeds tie-breaks, so the same day and input give the same workout.
     public let date: Date
-    /// Exercises to avoid when anything else fits: Rebuild passes the current result's exercises. Unlike recent
-    /// exercises, using one of these anyway isn't marked as a repeat.
-    public let avoid: Set<String>
+    /// Exercises to avoid when anything else fits, oldest shown first. Rebuild appends the current result's exercises
+    /// on every tap, so once everything has been shown the oldest come back first. Being on this list doesn't mark an
+    /// exercise as a repeat.
+    public let avoid: [String]
 
-    public init(muscles: [BuildMuscle], length: BuildLength, date: Date, avoid: Set<String> = []) {
+    public init(muscles: [BuildMuscle], length: BuildLength, date: Date, avoid: [String] = []) {
         self.muscles = muscles.reduce(into: []) { unique, muscle in
             if !unique.contains(muscle) { unique.append(muscle) }
         }

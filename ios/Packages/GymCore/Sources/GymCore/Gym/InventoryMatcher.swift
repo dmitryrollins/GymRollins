@@ -63,9 +63,13 @@ public struct InventoryMatcher: Sendable {
         return Set(kindIds.flatMap { byKind[$0] ?? [] }.map(\.id))
     }
 
-    /// The best score among the gym's listings of a kind. Adding your own listing doesn't lower what the others
-    /// have earned, so it can't push its kind down the builder's ranking.
-    func bestScore(ofKind kindId: String) -> Int { byKind[kindId]?.map(\.score).max() ?? 0 }
+    /// The best score among the listings that could serve the same requirement group as `listing` for this exercise.
+    /// Adding your own listing doesn't lower what the others have earned, so it can't push the exercise down the
+    /// builder's ranking.
+    func bestScore(sharingGroupWith listing: InventoryListing, for exerciseId: String) -> Int {
+        let group = requirements.requirement(for: exerciseId)?.first { $0.contains(listing.kindId) } ?? [listing.kindId]
+        return group.flatMap { byKind[$0] ?? [] }.map(\.score).max() ?? listing.score
+    }
 
     public func listing(_ id: UUID) -> InventoryListing? { byId[id] }
 
