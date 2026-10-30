@@ -104,8 +104,8 @@ struct TodayPlan: Codable, Equatable {
 
     /// The routine with today's edits, for "Save to routine"; nil when there is no routine or nothing changed.
     /// Edited sets become the item's working set count, top reps (or seconds) and working weight, stamped `now` so
-    /// the planned weight wins over progression next time. An item swapped for the gym is written as planned. Warm-ups aren't stored (they are generated) and neither
-    /// is today's rest (routines have no rest of their own).
+    /// the planned weight wins over progression next time. An item swapped for the gym is written as planned. Warm-ups
+    /// aren't stored (they are generated) and neither is today's rest (routines have no rest of their own).
     func routineWithEdits(at now: Date) -> Routine? {
         guard canSaveToRoutine, let base else { return nil }
         return base.with(exercises: exercises.map { item in
@@ -146,7 +146,7 @@ struct TodayPlan: Codable, Equatable {
     func replacing(_ itemId: UUID, with item: RoutineExercise) -> TodayPlan {
         changed(exercises.map { $0.id == itemId ? item : $0 }, overrides: setOverrides.filter { $0.key != itemId },
                 unsaved: unsavedSetEdits.subtracting([itemId]),
-                swaps: gymSwaps.filter { $0.key != itemId }, pins: gymPinned.union([itemId]))
+                swaps: gymSwaps.filter { $0.key != itemId }, pins: gymPinned.union([item.id]))
     }
 
     func deleting(_ itemId: UUID) -> TodayPlan {

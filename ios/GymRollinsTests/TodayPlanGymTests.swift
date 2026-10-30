@@ -196,6 +196,14 @@ import Testing
         #expect(replaced.adapted(by: dumbbellGym).exercises[0].exerciseId == "cable", "a pinned item is not swapped")
     }
 
+    /// Today's Replace sheet passes a brand new item with its own id.
+    @Test func replacingWithANewItemPinsTheNewItem() {
+        let item = RoutineExercise(exerciseId: "cable", sets: 3, reps: 12)
+        let replaced = scheduled().adapted(by: dumbbellGym).replacing(benchId, with: item)
+        #expect(replaced.gymPinned == [item.id])
+        #expect(replaced.adapted(by: dumbbellGym).exercises[0].exerciseId == "cable", "a pinned item is not swapped")
+    }
+
     @Test func addingPins() {
         let item = RoutineExercise(exerciseId: "cable", sets: 3, reps: 12)
         let added = scheduled().adapted(by: dumbbellGym).adding([item])
