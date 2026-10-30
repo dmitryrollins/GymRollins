@@ -69,8 +69,9 @@ public struct GymAdapter: Sendable {
         }
     }
 
-    /// The planned item with another exercise: same id, sets, reps, rest-relevant targets and superset; no planned
-    /// weight, so progression starts from the new exercise's own history. The increment follows the new equipment.
+    /// The planned item with another exercise: same id, sets, reps, rep range, seconds, mode, policy and superset;
+    /// no planned weight, so progression starts from the new exercise's own history. The increment follows the new
+    /// equipment.
     /// Across modes the targets come from `RoutineExercise.defaults`.
     static func replacement(for item: RoutineExercise, with exercise: Exercise) -> RoutineExercise {
         let defaults = RoutineExercise.defaults(exerciseId: exercise.id, mode: exercise.mode,

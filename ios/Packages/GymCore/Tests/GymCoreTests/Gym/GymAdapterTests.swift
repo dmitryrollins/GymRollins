@@ -32,6 +32,13 @@ import Testing
         #expect(match.loadListingId == GymFixtures.id(1))
     }
 
+    @Test func twoItemsNeverSwapToTheSameExercise() {
+        // At Home the push-up is the only chest exercise left, so the second item has nothing to swap to.
+        let result = adapter(GymFixtures.home).adapt([planned("c-db-press", n: 1), planned("c-bb-bench", n: 3)])
+        #expect(result.map(\.item.exerciseId) == ["c-pushup", "c-bb-bench"])
+        #expect(result.last == .unavailable(planned("c-bb-bench", n: 3), missing: ["barbell"]))
+    }
+
     @Test func replacementKeepsTheItemAndTargetsButNotThePlannedWeight() {
         guard case let .swapped(_, replacement, _, _) = adapter(GymFixtures.home).adapt([planned("a-db-curl", n: 2)]).first
         else {
