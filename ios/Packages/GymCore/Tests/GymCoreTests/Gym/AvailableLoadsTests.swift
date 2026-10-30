@@ -42,10 +42,26 @@ import Testing
             == FittedLoad(weightKg: 113, reps: 8), "never above the maximum, even without a step")
         #expect(AvailableLoads.fit(weightKg: 113.005, reps: 8, to: .stack(maxKg: 113, stepKg: 4.5))
             == FittedLoad(weightKg: 112.5, reps: 8))
-        #expect(AvailableLoads.fit(weightKg: 113.02, reps: 8, to: .stack(maxKg: 113, stepKg: 4.5))
+        #expect(AvailableLoads.fit(weightKg: 113.3, reps: 8, to: .stack(maxKg: 113, stepKg: 4.5))
             == FittedLoad(weightKg: 113, reps: 10, atHeaviest: true))
         #expect(AvailableLoads.fit(weightKg: 24.005, reps: 8, to: bells) == FittedLoad(weightKg: 24, reps: 8))
         #expect(AvailableLoads.fit(weightKg: 24, reps: 8, to: bells) == FittedLoad(weightKg: 24, reps: 8))
+    }
+
+    @Test func aBellLoggedInPoundsIsNotPastTheHeaviest() {
+        let fiftyThreeLb = UnitConverter.toKg(53, from: .lb) // 24.04 kg: the 24 kg bell
+        #expect(AvailableLoads.fit(weightKg: fiftyThreeLb, reps: 8, to: .fixed(kg: [20, 24]))
+            == FittedLoad(weightKg: 24, reps: 8), "the weight didn't rise, so the reps don't either")
+        #expect(AvailableLoads.fit(weightKg: 25, reps: 8, to: .fixed(kg: [20, 24]))
+            == FittedLoad(weightKg: 24, reps: 10, atHeaviest: true))
+    }
+
+    @Test func aStackLoggedInPoundsIsNotPastTheHeaviest() {
+        let stack = ListingLoads.stack(maxKg: 40, stepKg: nil)
+        let nearTop = UnitConverter.toKg(88.3, from: .lb) // 40.05 kg, a display-unit rounding above the stack
+        #expect(AvailableLoads.fit(weightKg: nearTop, reps: 8, to: stack) == FittedLoad(weightKg: 40, reps: 8))
+        #expect(AvailableLoads.fit(weightKg: 41, reps: 8, to: stack)
+            == FittedLoad(weightKg: 40, reps: 10, atHeaviest: true))
     }
 
     @Test func stackWithNoPositiveMaximumChangesNothing() {

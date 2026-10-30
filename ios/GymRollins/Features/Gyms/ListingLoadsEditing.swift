@@ -12,7 +12,8 @@ struct ListingLoadsEditing: Equatable {
     }
 
     static let maxStackKg = 1000.0
-    private static let tolerance = 0.01
+    /// A chip counts as selected for either spelling of its bell: 53 lb (24.04 kg) or 24 kg.
+    private static let tolerance = 0.1
     private static let kettlebellKg: [Double] = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40]
 
     let kind: EquipmentKind
@@ -75,7 +76,7 @@ struct ListingLoadsEditing: Equatable {
 
     /// The chips: the kind's usual weights plus any the listing already has that are not among them.
     var options: [Option] {
-        let usual = kind.id == "kettlebells" ? Self.kettlebellKg : dumbbellKg
+        let usual = kind.id == "kettlebells" ? kettlebellChipKg : dumbbellKg
         let extra = selectedKg.filter { chosen in !usual.contains { Self.same($0, chosen) } }
         return (usual + extra).sorted().map { Option(kg: $0, label: label(for: $0)) }
     }
@@ -93,6 +94,18 @@ struct ListingLoadsEditing: Equatable {
 
     /// Every chip on, or all off when they already are.
     func togglingAll() -> ListingLoads { allSelected ? .fixed(kg: []) : .fixed(kg: options.map(\.kg)) }
+
+    /// The usual bells. An lb user's chip reads in pounds ("53 lb (24 kg)"), so it stores that label's own weight.
+    private var kettlebellChipKg: [Double] {
+        guard unit == .lb else { return Self.kettlebellKg }
+        return Self.kettlebellKg.map { UnitConverter.toKg(Self.labelledLb($0), from: .lb) }
+    }
+
+    /// The pounds a chip's label shows: whole from 10 lb up, else one decimal.
+    private static func labelledLb(_ kg: Double) -> Double {
+        let lb = UnitConverter.fromKg(kg, to: .lb)
+        return lb >= 10 ? lb.rounded() : (lb * 10).rounded() / 10
+    }
 
     /// 5 to 100 lb by 5, or 2 to 50 kg by 2.
     private var dumbbellKg: [Double] {

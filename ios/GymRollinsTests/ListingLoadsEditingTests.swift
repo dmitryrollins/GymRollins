@@ -53,10 +53,29 @@ import Testing
 
     @Test func kettlebellChipsShowBothUnitsForAnLbUser() {
         let editing = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .none)
-        #expect(editing.options.first { $0.kg == 20 }?.label == "44 lb (20 kg)")
-        #expect(editing.options.first { $0.kg == 24 }?.label == "53 lb (24 kg)")
+        #expect(editing.options.first { $0.label == "44 lb (20 kg)" } != nil)
+        #expect(editing.options.first { $0.label == "53 lb (24 kg)" } != nil)
         let metric = ListingLoadsEditing(kind: kettlebells, unit: .kg, loads: .none)
         #expect(metric.options.first { $0.kg == 20 }?.label == "20 kg")
+    }
+
+    /// The chip reading 53 lb stores 53 lb, so what the gym holds and what history logs for that bell agree.
+    @Test func anLbUsersKettlebellChipStoresTheLabelsOwnWeight() throws {
+        let lb = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .none)
+        let chip = try #require(lb.options.first { $0.label == "53 lb (24 kg)" })
+        #expect(abs(chip.kg - UnitConverter.toKg(53, from: .lb)) < 1e-9)
+        let metric = ListingLoadsEditing(kind: kettlebells, unit: .kg, loads: .none)
+        #expect(try #require(metric.options.first { $0.label == "24 kg" }).kg == 24)
+    }
+
+    @Test func aChipIsSelectedByEitherSpellingOfTheBell() throws {
+        let lb = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .fixed(kg: [24]))
+        let chip = try #require(lb.options.first { $0.label == "53 lb (24 kg)" })
+        #expect(lb.isSelected(chip.kg), "a bell saved as 24 kg still shows as selected")
+        #expect(lb.options.count == ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .none).options.count,
+                "and isn't offered twice")
+        let saved = ListingLoadsEditing(kind: kettlebells, unit: .kg, loads: .fixed(kg: [UnitConverter.toKg(53, from: .lb)]))
+        #expect(saved.isSelected(24))
     }
 
     @Test func dumbbellChipsRunFiveToHundredLbOrTwoToFiftyKg() {

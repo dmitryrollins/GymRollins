@@ -19,9 +19,11 @@ import Testing
     private static let requirements = ExerciseRequirements(groups: [
         "kb-row": [["kettlebells"]], "kb-curl": [["kettlebells"]], "pullover": [["flat-bench"]], "pushup": [],
     ])
-    /// 44 and 53 lb bells, as someone who types pounds stores them.
+    /// The 44 and 53 lb bells as an lb user's chips store them.
+    private static let bellChips = ListingLoadsEditing(kind: kinds[0], unit: .lb, loads: .none).options
+        .filter { ["44 lb (20 kg)", "53 lb (24 kg)"].contains($0.label) }
     private let bells = InventoryListing(id: UUID(), kindId: "kettlebells",
-                                         loads: .fixed(kg: [UnitConverter.toKg(44, from: .lb), UnitConverter.toKg(53, from: .lb)]))
+                                         loads: .fixed(kg: BuildResultModelTests.bellChips.map(\.kg)))
     private let bench = InventoryListing(id: UUID(), kindId: "flat-bench")
     private let library = ExerciseLibrary(exercises: Self.exercises)
     private let calendar: Calendar = {
@@ -67,10 +69,21 @@ import Testing
         #expect(make([item("kb-row")], length: .short).subtitle == "Home \u{00B7} 1 exercise \u{00B7} ~30 min")
     }
 
+    /// The set's 50 lb isn't a bell: the row shows the 53 lb bell it is fitted to.
     @Test func rowShowsSetsRepsAndFittedLoad() throws {
-        let row = try #require(make([item("kb-row", weightKg: UnitConverter.toKg(53, from: .lb))]).rows.first)
+        let row = try #require(make([item("kb-row", weightKg: UnitConverter.toKg(50, from: .lb))]).rows.first)
         #expect(row.subtitle == "3 \u{00D7} 10 \u{00B7} 53 lb (24 kg)", "was \(row.subtitle)")
         #expect(row.name == DisplayName.of("kettlebell row"))
+    }
+
+    /// The chip that stored the bell and the row that shows it say the same thing.
+    @Test func rowAndChipAgreeOnTheBell() throws {
+        #expect(Self.bellChips.count == 2)
+        let chip = try #require(Self.bellChips.first { $0.label == "53 lb (24 kg)" })
+        let row = try #require(make([item("kb-row", weightKg: UnitConverter.toKg(53, from: .lb))]).rows.first)
+        #expect(row.subtitle.hasSuffix(chip.label), "was \(row.subtitle)")
+        #expect(!row.subtitle.contains("+"), "no extra reps: the weight didn't rise")
+        #expect(row.subtitle.hasPrefix("3 \u{00D7} 10"), "was \(row.subtitle)")
     }
 
     /// Past the heaviest bell the workout starts with more reps, and the row says so, like Today's row does.
