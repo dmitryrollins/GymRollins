@@ -83,7 +83,7 @@ import Testing
 
     @Test func noChipsBuildsNothing() {
         #expect(builder(GymFixtures.iron).build(request([], .long))
-            == BuiltWorkout(items: [], thin: [], requestedSlots: 0))
+            == BuiltWorkout(items: [], thin: [], requestedSlots: 0, skipped: []))
     }
 
     private func exercise(_ item: BuiltItem) -> Exercise {

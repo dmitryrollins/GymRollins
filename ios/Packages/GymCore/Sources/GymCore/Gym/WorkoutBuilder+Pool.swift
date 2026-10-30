@@ -18,13 +18,13 @@ struct BuildPool: Sendable {
 
 extension WorkoutBuilder {
     /// Rep exercises whose primary muscle is in the chip, available at the gym and not marked `never`, ranked:
-    /// `more` first and `less` last, then the listing with more confirmations (own listings count as one), then
+    /// `more` first and `less` last, then the kind with the best-confirmed listing (own listings count as one), then
     /// the more-logged exercise, then a tie-break seeded by the day.
-    func pool(for muscle: BuildMuscle, day: Int) -> BuildPool {
+    func pool(for muscle: BuildMuscle, day: Int, asOf date: Date) -> BuildPool {
         let ranked = exercises.compactMap { candidate($0, for: muscle) }.sorted { ranksBefore($0, $1, day: day) }
         return BuildPool(equipment: ranked.filter { !matcher.needsNoEquipment($0.exercise.id) },
                          bodyweight: ranked.filter { matcher.needsNoEquipment($0.exercise.id) },
-                         recent: recent(for: muscle))
+                         recent: recent(for: muscle, asOf: date))
     }
 
     private func candidate(_ exercise: Exercise, for muscle: BuildMuscle) -> BuildCandidate? {
@@ -42,21 +42,25 @@ extension WorkoutBuilder {
         if sa != sb { return sa > sb }
         let la = loggedCounts[a.exercise.id, default: 0], lb = loggedCounts[b.exercise.id, default: 0]
         if la != lb { return la > lb }
-        return StableHash.fnv1a("\(day)|\(a.exercise.id)") < StableHash.fnv1a("\(day)|\(b.exercise.id)")
+        return StableHash.tieBreak(day: day, id: a.exercise.id) < StableHash.tieBreak(day: day, id: b.exercise.id)
     }
 
     private func score(_ match: InventoryMatch) -> Int {
-        (match.loadListingId ?? match.listingIds.first).flatMap { matcher.listing($0)?.score } ?? 0
+        let listing = (match.loadListingId ?? match.listingIds.first).flatMap(matcher.listing)
+        return listing.map { matcher.bestScore(ofKind: $0.kindId) } ?? 0
     }
 
-    /// The exercises of the latest `recentWorkoutsPerMuscle` workouts that trained the chip (any entry whose primary
-    /// muscle is in it), each with the latest day it was done.
-    private func recent(for muscle: BuildMuscle) -> [String: Date] {
+    /// The exercises of the latest `recentWorkoutsPerMuscle` workouts up to `date` that trained the chip (a hard set
+    /// of an exercise whose primary muscle is in it), each with the latest day it was done.
+    private func recent(for muscle: BuildMuscle, asOf date: Date) -> [String: Date] {
+        func wasDone(_ entry: WorkoutEntry) -> Bool { entry.sets.contains(where: HardSets.isHard) }
         let trained = history.filter { workout in
-            workout.entries.contains { entry in byId[entry.exerciseId].map { trains($0, muscle) } ?? false }
+            workout.startedAt <= date && workout.entries.contains { entry in
+                wasDone(entry) && (byId[entry.exerciseId].map { trains($0, muscle) } ?? false)
+            }
         }
         return trained.prefix(Self.recentWorkoutsPerMuscle).reduce(into: [:]) { dates, workout in
-            for entry in workout.entries where dates[entry.exerciseId] == nil {
+            for entry in workout.entries where wasDone(entry) && dates[entry.exerciseId] == nil {
                 dates[entry.exerciseId] = workout.startedAt
             }
         }

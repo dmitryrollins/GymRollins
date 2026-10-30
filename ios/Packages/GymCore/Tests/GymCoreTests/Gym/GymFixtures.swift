@@ -98,11 +98,13 @@ enum GymFixtures {
         InventoryMatcher(requirements: requirements, kinds: kinds, inventory: inventory)
     }
 
-    /// A finished workout on `day` (days since 1970, noon UTC) with these exercises.
+    /// A finished workout on `day` (days since 1970, noon UTC) with one done set of each exercise.
     static func workout(day: Int, _ exerciseIds: [String]) -> Workout {
         let start = Date(timeIntervalSince1970: Double(day) * 86_400 + 43_200)
         return Workout(startedAt: start, endedAt: start.addingTimeInterval(3_600), name: "Day \(day)",
-                       entries: exerciseIds.map { WorkoutEntry(exerciseId: $0) })
+                       entries: exerciseIds.map {
+                           WorkoutEntry(exerciseId: $0, sets: [WorkoutSet(weightKg: 20, reps: 8, done: true)])
+                       })
     }
 
     static func date(day: Int) -> Date { Date(timeIntervalSince1970: Double(day) * 86_400 + 36_000) }

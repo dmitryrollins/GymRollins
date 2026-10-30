@@ -7,7 +7,7 @@ public struct BuiltItem: Sendable, Hashable {
     public let muscle: BuildMuscle
     /// Set when this repeats a recent exercise because nothing else fits: the day it was last done.
     public let repeatOf: Date?
-    /// A no-equipment exercise that fills a slot after the equipment exercises ran out.
+    /// A no-equipment exercise that fills a slot when no fresh equipment exercise fit.
     public let isBodyweightFill: Bool
 }
 
@@ -24,6 +24,8 @@ public struct BuiltWorkout: Sendable, Hashable {
     public let items: [BuiltItem]
     public let thin: [ThinInventoryNotice]
     public let requestedSlots: Int
+    /// Chips with no slot, because there are more chips than the length has slots. The first chips get the slots.
+    public let skipped: [BuildMuscle]
 }
 
 /// Builds a workout for muscle chips from one gym's equipment (spec §5, "Build workout").
@@ -47,42 +49,47 @@ public struct WorkoutBuilder: Sendable {
         self.matcher = matcher
         self.exercises = exercises
         self.byId = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        self.history = history.sorted { $0.startedAt > $1.startedAt }
+        self.history = history.sorted { a, b in
+            a.startedAt != b.startedAt ? a.startedAt > b.startedAt : a.id.uuidString < b.id.uuidString
+        }
         self.loggedCounts = loggedCounts
         self.preferences = preferences
     }
 
-    /// Fills the slots round-robin across the chips with equipment exercises, then fills what's left with
-    /// no-equipment exercises. Thin-inventory notices are for chips that had slots no equipment exercise fit.
+    /// Fills the slots round-robin across the chips with fresh equipment exercises. What's left falls back in
+    /// `SlotPicker.pickFallback`'s order. Thin-inventory notices are for chips that ran out of fresh equipment
+    /// exercises.
     public func build(_ request: BuildRequest) -> BuiltWorkout {
-        guard !request.muscles.isEmpty else { return BuiltWorkout(items: [], thin: [], requestedSlots: 0) }
+        guard !request.muscles.isEmpty else {
+            return BuiltWorkout(items: [], thin: [], requestedSlots: 0, skipped: [])
+        }
         let day = StableHash.day(of: request.date)
         let total = request.length.slots(muscleCount: request.muscles.count)
-        let pools = Dictionary(uniqueKeysWithValues: request.muscles.map { ($0, pool(for: $0, day: day)) })
+        let pools = Dictionary(uniqueKeysWithValues: request.muscles.map {
+            ($0, pool(for: $0, day: day, asOf: request.date))
+        })
         var picker = SlotPicker(matcher: matcher, avoid: request.avoid)
-        var unfilled: [BuildMuscle: Int] = [:]
+        var unfilled: [BuildMuscle] = []
         for slot in 0..<total {
             let muscle = request.muscles[slot % request.muscles.count]
             guard let pool = pools[muscle] else { continue }
-            if !picker.pick(from: pool.equipment, recent: pool.recent, muscle: muscle, fill: false) {
-                unfilled[muscle, default: 0] += 1
-            }
+            if !picker.pickFresh(from: pool, muscle: muscle) { unfilled.append(muscle) }
         }
         let thin = request.muscles.compactMap { muscle -> ThinInventoryNotice? in
-            guard unfilled[muscle, default: 0] > 0, let pool = pools[muscle] else { return nil }
-            return ThinInventoryNotice(muscle: muscle, itemCount: Set(pool.equipment.flatMap(\.match.listingIds)).count)
+            guard unfilled.contains(muscle), let pool = pools[muscle] else { return nil }
+            let listings = Set(pool.equipment.flatMap { matcher.listingIds(serving: $0.exercise.id) })
+            return ThinInventoryNotice(muscle: muscle, itemCount: listings.count)
         }
-        for muscle in request.muscles {
+        for muscle in unfilled {
             guard let pool = pools[muscle] else { continue }
-            for _ in 0..<unfilled[muscle, default: 0] {
-                _ = picker.pick(from: pool.bodyweight, recent: pool.recent, muscle: muscle, fill: true)
-            }
+            _ = picker.pickFallback(from: pool, muscle: muscle)
         }
         let items = Self.ordered(picker.picked).map { item(from: $0, day: day) }
-        return BuiltWorkout(items: items, thin: thin, requestedSlots: total)
+        return BuiltWorkout(items: items, thin: thin, requestedSlots: total,
+                            skipped: Array(request.muscles.dropFirst(total)))
     }
 
-    /// Exercises that train two or more muscle groups first, then the rest, then bodyweight fills; otherwise the
+    /// Exercises that train two or more muscle groups first, then the rest, then no-equipment exercises; otherwise the
     /// order they were picked in (round-robin across the chips).
     static func ordered(_ picks: [SlotPicker.Pick]) -> [SlotPicker.Pick] {
         func rank(_ pick: SlotPicker.Pick) -> Int { pick.isFill ? 2 : (pick.candidate.compound ? 0 : 1) }

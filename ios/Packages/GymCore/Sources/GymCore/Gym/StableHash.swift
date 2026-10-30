@@ -9,6 +9,15 @@ enum StableHash {
         }
     }
 
+    /// The builder's tie-break for an exercise on a day. FNV-1a alone keeps similar ids next to each other, so
+    /// near-duplicate exercises land together and consecutive days look alike; a SplitMix64 finalizer spreads them.
+    static func tieBreak(day: Int, id: String) -> UInt64 {
+        let seed = fnv1a("\(day)|\(id)") &+ 0x9e37_79b9_7f4a_7c15
+        let mixed = (seed ^ (seed >> 30)) &* 0xbf58_476d_1ce4_e5b9
+        let final = (mixed ^ (mixed >> 27)) &* 0x94d0_49bb_1331_11eb
+        return final ^ (final >> 31)
+    }
+
     /// Whole days since 1970 (UTC) for `date`: the builder's seed.
     static func day(of date: Date) -> Int { Int((date.timeIntervalSince1970 / 86_400).rounded(.down)) }
 }

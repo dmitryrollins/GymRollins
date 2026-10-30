@@ -44,18 +44,28 @@ public struct InventoryMatcher: Sendable {
         self.byId = Dictionary(known.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
-    public func availability(of exerciseId: String) -> Availability {
+    /// `excluded` listings are treated as absent; the builder uses it to move past a machine at its cap.
+    public func availability(of exerciseId: String, excluding excluded: Set<UUID> = []) -> Availability {
         guard let groups = requirements.requirement(for: exerciseId) else { return .unmapped }
         var chosen: [InventoryListing] = []
         for group in groups where !chosen.contains(where: { group.contains($0.kindId) }) {
-            guard let best = group.compactMap({ byKind[$0]?.first }).min(by: Self.better) else {
-                return .missing(group)
-            }
+            let options = group.compactMap { kind in byKind[kind]?.first { !excluded.contains($0.id) } }
+            guard let best = options.min(by: Self.better) else { return .missing(group) }
             chosen.append(best)
         }
         let load = chosen.first { kinds[$0.kindId]?.load.bearsLoad == true }
         return .available(InventoryMatch(listingIds: chosen.map(\.id), loadListingId: load?.id))
     }
+
+    /// Every listing at the gym that could serve one of the exercise's requirement groups.
+    func listingIds(serving exerciseId: String) -> Set<UUID> {
+        let kindIds = (requirements.requirement(for: exerciseId) ?? []).joined()
+        return Set(kindIds.flatMap { byKind[$0] ?? [] }.map(\.id))
+    }
+
+    /// The best score among the gym's listings of a kind. Adding your own listing doesn't lower what the others
+    /// have earned, so it can't push its kind down the builder's ranking.
+    func bestScore(ofKind kindId: String) -> Int { byKind[kindId]?.map(\.score).max() ?? 0 }
 
     public func listing(_ id: UUID) -> InventoryListing? { byId[id] }
 

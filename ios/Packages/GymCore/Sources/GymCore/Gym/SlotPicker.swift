@@ -21,29 +21,55 @@ struct SlotPicker {
         self.avoid = avoid
     }
 
-    /// Takes the best open candidate for one slot: a fresh one (not recent, not avoided) first, then an avoided one,
-    /// then a recent one, least recently done first, which is marked as a repeat. Returns false when none is open.
-    mutating func pick(from pool: [BuildCandidate], recent: [String: Date], muscle: BuildMuscle, fill: Bool) -> Bool {
-        let open = pool.filter { !chosen.contains($0.exercise.id) && fitsMachineCap($0.match) }
-        let notRecent = open.filter { recent[$0.exercise.id] == nil }
-        let fresh = notRecent.first { !avoid.contains($0.exercise.id) } ?? notRecent.first
-        let repeated = open.filter { recent[$0.exercise.id] != nil }
-            .min { recent[$0.exercise.id] ?? .distantFuture < recent[$1.exercise.id] ?? .distantFuture }
-        guard let candidate = fresh ?? repeated else { return false }
-        let repeatOf = fresh == nil ? recent[candidate.exercise.id] : nil
-        record(Pick(candidate: candidate, muscle: muscle, repeatOf: repeatOf, isFill: fill))
+    /// Takes the best fresh equipment exercise for one slot: not done recently and not being rebuilt away from.
+    mutating func pickFresh(from pool: BuildPool, muscle: BuildMuscle) -> Bool {
+        let fresh = open(pool.equipment).first {
+            pool.recent[$0.exercise.id] == nil && !avoid.contains($0.exercise.id)
+        }
+        guard let fresh else { return false }
+        record(Pick(candidate: fresh, muscle: muscle, repeatOf: nil, isFill: false))
         return true
+    }
+
+    /// Takes the best candidate for a slot no fresh equipment exercise fit: a fresh no-equipment exercise, then a
+    /// repeat (least recently done first), then what Rebuild is avoiding, because showing the same exercise again is
+    /// the last resort. Only an exercise done recently is marked as a repeat.
+    mutating func pickFallback(from pool: BuildPool, muscle: BuildMuscle) -> Bool {
+        func lastDone(_ candidate: BuildCandidate) -> Date? { pool.recent[candidate.exercise.id] }
+        func isAvoided(_ candidate: BuildCandidate) -> Bool { avoid.contains(candidate.exercise.id) }
+        func leastRecentFirst(_ list: [BuildCandidate]) -> [BuildCandidate] {
+            list.sorted { (lastDone($0) ?? .distantPast) < (lastDone($1) ?? .distantPast) }
+        }
+        let bodyweight = open(pool.bodyweight), all = open(pool.equipment) + bodyweight
+        let tiers = [
+            bodyweight.filter { lastDone($0) == nil && !isAvoided($0) },
+            leastRecentFirst(all.filter { lastDone($0) != nil && !isAvoided($0) }),
+            leastRecentFirst(all.filter(isAvoided)),
+        ]
+        guard let candidate = tiers.first(where: { !$0.isEmpty })?.first else { return false }
+        record(Pick(candidate: candidate, muscle: muscle, repeatOf: lastDone(candidate),
+                    isFill: matcher.needsNoEquipment(candidate.exercise.id)))
+        return true
+    }
+
+    /// The pool without exercises already picked. A candidate on a machine at its cap moves to the gym's next best
+    /// listing for it, and drops out when there is none.
+    private func open(_ pool: [BuildCandidate]) -> [BuildCandidate] {
+        let capped = Set(machineUse.filter { $0.value >= WorkoutBuilder.maxPerMachine }.keys)
+        return pool.compactMap { candidate in
+            guard !chosen.contains(candidate.exercise.id) else { return nil }
+            guard let load = machineListing(candidate.match), capped.contains(load) else { return candidate }
+            guard case let .available(match) = matcher.availability(of: candidate.exercise.id, excluding: capped) else {
+                return nil
+            }
+            return BuildCandidate(exercise: candidate.exercise, match: match, compound: candidate.compound)
+        }
     }
 
     private mutating func record(_ pick: Pick) {
         picked.append(pick)
         chosen.insert(pick.candidate.exercise.id)
         if let id = machineListing(pick.candidate.match) { machineUse[id, default: 0] += 1 }
-    }
-
-    private func fitsMachineCap(_ match: InventoryMatch) -> Bool {
-        guard let id = machineListing(match) else { return true }
-        return machineUse[id, default: 0] < WorkoutBuilder.maxPerMachine
     }
 
     /// The match's load listing when its kind is a machine.
