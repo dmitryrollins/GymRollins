@@ -37,6 +37,8 @@ struct TodayView: View {
     @State private var historyCache: [String: [SessionResult]] = [:]
     /// The current gym's matcher and photos, read once per reload: set edits rebuild the rows and must not read the store.
     @State private var gymContext: TodayGymContext?
+    /// The gym the phone is at, read once per reload (`env.currentGym` reads the store on every call).
+    @State private var currentGym: Gym?
 
     /// Onboarding's "Build me a 4-day upper/lower plan…" prompt: the copyable text offered before "Ask Claude to
     /// build one" pushes the connection screen.
@@ -57,6 +59,7 @@ struct TodayView: View {
                         Spacer(minLength: 8)
                         if env.session == nil && env.hasAnyRoutine { switchButton }
                     }
+                    if env.session == nil { GymChipRow(gym: currentGym) }
                     if !env.profile.limits.isEmpty {
                         Text(env.profile.limits).font(.footnote.weight(.semibold))
                             .padding(.horizontal, 12).padding(.vertical, 7)
@@ -202,6 +205,7 @@ struct TodayView: View {
         editor.isLocked = env.session != nil
         let gym = env.todayGymContext()
         gymContext = gym
+        currentGym = env.currentGym
         editor.configure(store: planStore, defaultRestSec: env.profile.restSec) { item, plan in
             SessionPlanner.entry(for: item, policy: item.policy ?? plan.base?.policy ?? .double, profile: env.profile,
                                  exercise: env.library.exercise(item.exerciseId),

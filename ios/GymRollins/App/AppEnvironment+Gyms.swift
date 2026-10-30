@@ -6,6 +6,7 @@ import GymData
 /// reads the id from `defaults` (per device) and the gym's rows from `gyms`.
 extension AppEnvironment {
     static let currentGymKey = "gymrollins.currentGymId"
+    static let gymLocationCheckedKey = "gymrollins.gymLocationCheckedAt"
 
     /// The gym the phone is at. Nil with none chosen, or when the stored id has no row (deleted, or the store was wiped).
     var currentGym: Gym? {
@@ -40,6 +41,62 @@ extension AppEnvironment {
             do { try gymPhotos.delete(name) }
             catch { Self.log.error("Delete gym photo failed: \(error.localizedDescription, privacy: .public)") }
         }
+    }
+
+    /// Picks a gym from Maps: stored as a local gym (once), then made current.
+    @discardableResult
+    func chooseMapsGym(_ place: GymPlace) throws -> Gym {
+        let gym = try gyms.addMapsGym(placeId: place.placeId, name: place.name, address: place.address,
+                                      latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
+        setCurrentGym(gym.id)
+        return gym
+    }
+
+    /// "Train here": makes a nearby gym current, saving it first when it is a Maps place.
+    func trainHere(_ nearby: NearbyGym) throws {
+        switch nearby.target {
+        case .saved(let gym): setCurrentGym(gym.id)
+        case .place(let place): try chooseMapsGym(place)
+        }
+    }
+
+    /// The gym within 150 m of `here` that isn't the current one. A failed Maps lookup still finds My gyms.
+    func nearbyGym(at here: GymCoordinate) async -> NearbyGym? {
+        let places: [GymPlace]
+        do { places = try await gymPlaces.nearby(here) }
+        catch {
+            Self.log.error("Nearby gym search failed: \(error.localizedDescription, privacy: .public)")
+            places = []
+        }
+        let mine: [Gym]
+        do { mine = try gyms.gyms() }
+        catch {
+            Self.log.error("Read gyms failed: \(error.localizedDescription, privacy: .public)")
+            mine = []
+        }
+        return NearbyGymRule.nearest(to: here, currentGymId: currentGym?.id, myGyms: mine, places: places)
+    }
+
+    /// Today's "You're at X?": at most every 30 minutes, and only when location is already allowed (no prompt).
+    func suggestNearbyGym() async -> NearbyGym? {
+        let last = defaults.object(forKey: Self.gymLocationCheckedKey) as? Date
+        guard gymLocator.isAuthorized, NearbyGymRule.isDue(lastChecked: last, now: now()) else { return nil }
+        defaults.set(now(), forKey: Self.gymLocationCheckedKey)
+        guard let here = await gymLocator.locate(askingPermission: false) else { return nil }
+        return await nearbyGym(at: here)
+    }
+
+    static func makeGymLocator(options: LaunchOptions) -> any GymLocator {
+        if let fake = options.fakeLocation { return FakeGymLocator(coordinate: GymCoordinate(latitude: fake.latitude, longitude: fake.longitude)) }
+        return options.uiTesting ? UnavailableGymLocator() : CoreLocationGymLocator()
+    }
+
+    static func makeGymPlaces(options: LaunchOptions) -> any GymPlaceSearch {
+        if options.fakeGymPlaces {
+            let origin = options.fakeLocation.map { GymCoordinate(latitude: $0.latitude, longitude: $0.longitude) }
+            return FakeGymPlaceSearch(origin: origin ?? GymCoordinate(latitude: 40.0, longitude: -74.0))
+        }
+        return options.uiTesting ? NoGymPlaceSearch() : MapKitGymPlaceSearch()
     }
 
     /// The rules' view of a gym (the current one by default); nil with no gym, or when the catalog didn't load.

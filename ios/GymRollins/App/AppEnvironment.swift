@@ -26,6 +26,9 @@ final class AppEnvironment {
     let gymCatalog: GymEquipmentCatalog
     /// Cleaned gym photos in Application Support (tests give it a folder of their own).
     let gymPhotos: GymPhotoStore
+    /// Where the phone is, and Apple Maps' fitness centers (both fake or empty under `-uiTesting`).
+    let gymLocator: any GymLocator
+    let gymPlaces: any GymPlaceSearch
     /// The owner's "recommend more / less / never" choices (normal ones left out); change them with `setPreference`.
     var exercisePreferences: [String: ExercisePreference] = [:]
     /// Exercise photos (own media -> free-exercise-db -> wger -> illustration) and their on-demand loader.
@@ -68,6 +71,7 @@ final class AppEnvironment {
     /// `makeSync` replaces the launch's sync backend (tests inject a coordinator over a fake transport).
     init(options: LaunchOptions = LaunchOptions(), defaults: UserDefaults = .standard,
          media: ExerciseMediaService? = nil, gymPhotos: GymPhotoStore? = nil,
+         gymLocator: (any GymLocator)? = nil, gymPlaces: (any GymPlaceSearch)? = nil,
          makeSync: (@MainActor (SyncStore, @escaping () -> Date) -> SyncCoordinator)? = nil) throws {
         if options.resetStore, let storeURL = options.diskStoreURL {
             Self.removeStoreFiles(at: storeURL)
@@ -81,7 +85,10 @@ final class AppEnvironment {
         if options.resetStore { try syncStore.resetAll() } // a fresh store must not reuse old pull cursors
         // Today's switched/edited plan (UserDefaults) was made from the previous store's data: an in-memory or reset
         // store starts without it (UI tests share one day via -fixedNow, so a leftover plan leaked between tests).
-        if Self.startsWithFreshStore(options) { Self.clearTodaySwitches(in: defaults) }
+        if Self.startsWithFreshStore(options) {
+            Self.clearTodaySwitches(in: defaults)
+            defaults.removeObject(forKey: Self.gymLocationCheckedKey)
+        }
         if options.seedOwner {
             try OwnerSeed.apply(to: context, now: now())
             if options.seedHistory { try OwnerSeed.applyHistory(to: context, now: now()) }
@@ -118,6 +125,8 @@ final class AppEnvironment {
         self.gyms = GymRepository(context: context, now: now)
         self.gymCatalog = Self.loadGymCatalog()
         self.gymPhotos = gymPhotos ?? Self.makeGymPhotos(options: options)
+        self.gymLocator = gymLocator ?? Self.makeGymLocator(options: options)
+        self.gymPlaces = gymPlaces ?? Self.makeGymPlaces(options: options)
         self.connectorURL = SyncCoordinator.connectorURL(options: options)
         self.media = media ?? ExerciseMediaService.make(options: options)
         let otherNames = ExerciseNamesI18n.bundled()
@@ -267,6 +276,7 @@ final class AppEnvironment {
     /// The local copy was wiped: gyms and their photos go with it, and no gym is current any more.
     func removeGymLocalState() {
         defaults.removeObject(forKey: Self.currentGymKey)
+        defaults.removeObject(forKey: Self.gymLocationCheckedKey)
         do { try gymPhotos.removeAll() }
         catch { Self.log.error("Remove gym photos failed: \(error.localizedDescription, privacy: .public)") }
     }

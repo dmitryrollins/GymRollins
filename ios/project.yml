@@ -66,6 +66,10 @@ targets:
         NSHealthUpdateUsageDescription: >-
           GymRollins saves your finished workouts with their estimated calories, and the weigh-ins you log, to
           Apple Health.
+        NSCameraUsageDescription: >-
+          GymRollins uses the camera to photograph gym equipment. Faces are blurred before the photo is saved.
+        NSLocationWhenInUseUsageDescription: >-
+          GymRollins uses your location once to suggest the gym you're at. It isn't stored or sent anywhere.
         NSLocalNetworkUsageDescription: >-
           GymRollins syncs with a development server on your local network.
         SUPABASE_URL: $(SUPABASE_URL)
