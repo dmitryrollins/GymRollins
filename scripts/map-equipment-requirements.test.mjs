@@ -64,7 +64,7 @@ test('bodyweight needs a bar, dip station, bench or ball only when named', () =>
   assert.deepEqual(groups('chest dip', 'body weight'), [['dip-station', 'assisted-pullup-dip']])
   assert.deepEqual(groups('chest dip (on dip-pull-up cage)', 'body weight'), [['dip-station', 'assisted-pullup-dip']])
   assert.deepEqual(groups('triceps dip (bench leg)', 'body weight'), [FLAT_BENCH])
-  assert.deepEqual(groups('triceps dips floor', 'body weight'), [])
+  assert.deepEqual(groups('triceps dips floor', 'body weight'), [FLAT_BENCH])
   assert.deepEqual(groups('inverted row', 'body weight'), [['power-rack', 'smith-machine']])
   assert.deepEqual(groups('hyperextension', 'body weight'), [['back-extension']])
   assert.deepEqual(groups('incline push-up', 'body weight'), [FLAT_BENCH])
@@ -188,6 +188,30 @@ test('mobility moves and advanced skills are never picked', () => {
   }
   for (const name of ['push-up', 'russian twist', 'glute bridge march', 'sit-up v. 2', 'front plank with twist']) {
     assert.deepEqual(groups(name, 'body weight'), [], name)
+  }
+})
+
+test('no-equipment exercises whose steps use a bench or weights say so', () => {
+  assert.deepEqual(groups('bench dip on floor', 'body weight'), [FLAT_BENCH])
+  assert.deepEqual(groups('triceps dips floor', 'body weight'), [FLAT_BENCH])
+  assert.deepEqual(groups('kick out sit', 'body weight'), [FLAT_BENCH])
+  assert.ok(unmapped('biceps leg concentration curl', 'body weight'))
+  assert.ok(unmapped('three bench dip', 'body weight'))
+})
+
+test('a stretch is the word stretch, not outstretched', () => {
+  assert.deepEqual(groups('single leg bridge with outstretched leg', 'body weight'), [])
+  assert.ok(unmapped('chest stretch with exercise ball', 'stability ball'))
+  assert.ok(unmapped('hamstring stretching', 'body weight'))
+})
+
+test('holds, conditioning drills and moves tagged for the wrong muscle are never picked', () => {
+  for (const name of [
+    'side bridge v. 2', 'power point plank', 'wind sprints', 'quick feet v. 2', 'standing archer', 'inchworm',
+    'single arm push-up', 'single leg squat (pistol) male', 'superman push-up', 'outside leg kick push-up',
+    'push-up inside leg kick', 'pike-to-cobra push-up', 'spider crawl push up', 'potty squat',
+  ]) {
+    assert.match(unmapped(name, 'body weight') ?? '', /mobility or advanced skill/, name)
   }
 })
 

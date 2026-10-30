@@ -45,14 +45,18 @@ const NEEDS_OTHER = new RegExp([
   // Moves that need a bar, pole or rings even though the name doesn't say so.
   /\blever\b|\bflag\b|skin the cat|elevator|maltese|swing 360/,
   // A machine, a partner or a foot anchor, or the name gives no way to tell.
-  /glute-ham|donkey|self assisted inverse|cable machine|between benches|\(equipment\)/,
+  /glute-ham|donkey|self assisted inverse|cable machine|between benches|three bench|biceps leg concentration/,
+  /\(equipment\)/,
 ].map(re => re.source).join('|'))
 
-/** Bodyweight moves the app shouldn't choose for a workout: mobility work, holds that can't be counted in reps, and
- *  skills most people can't do. They stay in the library, can be logged, and can still be added by hand. */
+/** Bodyweight moves the app shouldn't choose for a workout: mobility work, holds that can't be counted in reps,
+ *  conditioning drills, skills most people can't do, and moves the library tags for the wrong muscle. They stay in
+ *  the library, can be logged, and can still be added by hand. */
 const NOT_FOR_PICKING = new RegExp([
   /yoga|\bpose\b|toe touch|\bcircles\b|pelvic tilt|sphinx|upward facing dog|spine twist|hug keens|lying twist/,
-  /against wall|boxing|isometric|planche|handstand|stalder|\bl-sit\b|\bv-sit\b/,
+  /against wall|boxing|isometric|planche|handstand|stalder|\bl-sit\b|\bv-sit\b|side bridge v\. 2|power point plank/,
+  /wind sprints|quick feet|standing archer|inchworm|single arm push|\(pistol\)|superman push|leg kick/,
+  /pike-to-cobra|spider crawl|potty squat/,
 ].map(re => re.source).join('|'))
 
 /** Leverage and sled machines, first match wins; `null` = deliberately unmapped. */
@@ -144,8 +148,7 @@ export function bodyweight(name) {
   if (NEEDS_OTHER.test(name)) return { unmapped: 'needs equipment that has no kind' }
   if (NOT_FOR_PICKING.test(name)) return { unmapped: 'mobility or advanced skill' }
   if (/\bdips?\b/.test(name)) {
-    if (/floor/.test(name)) return { groups: [] }
-    if (/\bbench(es)?\b/.test(name)) return { groups: [FLAT_BENCH] }
+    if (/\bbench(es)?\b|floor/.test(name)) return { groups: [FLAT_BENCH] }
     return { groups: [['dip-station', 'assisted-pullup-dip']] }
   }
   if (/pull[- ]?up|\bchin\b|muscle[- ]?up|hanging|\bhang\b/.test(name)) {
@@ -158,7 +161,7 @@ export function bodyweight(name) {
   if (/back extension|hyperextension/.test(name)) return { groups: [['back-extension']] }
   if (/\bwheel\b/.test(name)) return { groups: [['ab-wheel']] }
   if (/monster walk/.test(name)) return { groups: [['resistance-bands']] }
-  if (/\bbench\b|\b(incline|decline)\b.*(push|plank)|seated leg raise|body-up/.test(name)) {
+  if (/\bbench\b|\b(incline|decline)\b.*(push|plank)|seated leg raise|body-up|kick out sit/.test(name)) {
     return { groups: [FLAT_BENCH] }
   }
   if (/\bincline\b/.test(name)) return { groups: [INCLINE_BENCH] }
@@ -169,7 +172,7 @@ export function bodyweight(name) {
 /** Requirement groups for one library exercise (`{ groups }`), or `{ unmapped: reason }`. */
 export function requirementsFor({ n, eq }) {
   const name = n.toLowerCase()
-  if (/stretch/.test(name)) return { unmapped: 'stretch' }
+  if (/\bstretch/.test(name)) return { unmapped: 'stretch' }
   if (NO_KIND.has(eq)) return { unmapped: `no kind for "${eq}"` }
   if (eq === 'leverage machine' || eq === 'sled machine') return machine(name)
   if (eq === 'cable') return cable(name)
