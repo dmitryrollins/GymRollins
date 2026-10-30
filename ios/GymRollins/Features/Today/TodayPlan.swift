@@ -15,6 +15,8 @@ struct TodayPlan: Codable, Equatable {
         case switched
         /// No routine: exercises picked by hand (possibly none yet).
         case empty
+        /// Built by Build workout for today.
+        case built
     }
 
     /// yyyy-MM-dd the plan belongs to (a stored plan is only reused that day).
@@ -34,9 +36,17 @@ struct TodayPlan: Codable, Equatable {
     /// The items in `setOverrides` edited since the last "Save Changes". Saved ones still start today's workout but
     /// are never written again, so a later save can't undo newer My Plan edits to them.
     let unsavedSetEdits: Set<UUID>
+    /// Items swapped for the current gym: item id → what the plan really has there. `exercises` holds the replacement.
+    /// Never saved to a routine, recomputed on every load.
+    let gymSwaps: [UUID: RoutineExercise]
+    /// Items chosen by hand for today: the gym never swaps them.
+    let gymPinned: Set<UUID>
+    /// A built workout's title ("Back + Arms").
+    let builtName: String?
 
     init(day: String, kind: Kind, base: Routine?, exercises: [RoutineExercise], edited: Bool,
-         setOverrides: [UUID: [WorkoutSet]] = [:], restSec: Int? = nil, unsavedSetEdits: Set<UUID>? = nil) {
+         setOverrides: [UUID: [WorkoutSet]] = [:], restSec: Int? = nil, unsavedSetEdits: Set<UUID>? = nil,
+         gymSwaps: [UUID: RoutineExercise] = [:], gymPinned: Set<UUID> = [], builtName: String? = nil) {
         self.day = day
         self.kind = kind
         self.base = base
@@ -44,14 +54,18 @@ struct TodayPlan: Codable, Equatable {
         self.edited = edited
         self.setOverrides = setOverrides
         self.restSec = restSec
-        self.unsavedSetEdits = unsavedSetEdits ?? (edited ? Set(setOverrides.keys) : [])
+        // A swapped item's sets are never written back, so they are never "unsaved".
+        self.unsavedSetEdits = unsavedSetEdits ?? (edited ? Set(setOverrides.keys).subtracting(gymSwaps.keys) : [])
+        self.gymSwaps = gymSwaps
+        self.gymPinned = gymPinned
+        self.builtName = builtName
     }
 
     enum CodingKeys: String, CodingKey {
-        case day, kind, base, exercises, edited, setOverrides, restSec, unsavedSetEdits
+        case day, kind, base, exercises, edited, setOverrides, restSec, unsavedSetEdits, gymSwaps, gymPinned, builtName
     }
 
-    /// Plans stored before set editing existed have no `setOverrides` / `restSec`.
+    /// Plans stored before set editing or gyms existed lack those keys.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(day: try c.decode(String.self, forKey: .day), kind: try c.decode(Kind.self, forKey: .kind),
@@ -60,20 +74,29 @@ struct TodayPlan: Codable, Equatable {
                   edited: try c.decode(Bool.self, forKey: .edited),
                   setOverrides: try c.decodeIfPresent([UUID: [WorkoutSet]].self, forKey: .setOverrides) ?? [:],
                   restSec: try c.decodeIfPresent(Int.self, forKey: .restSec),
-                  unsavedSetEdits: try c.decodeIfPresent(Set<UUID>.self, forKey: .unsavedSetEdits))
+                  unsavedSetEdits: try c.decodeIfPresent(Set<UUID>.self, forKey: .unsavedSetEdits),
+                  gymSwaps: try c.decodeIfPresent([UUID: RoutineExercise].self, forKey: .gymSwaps) ?? [:],
+                  gymPinned: try c.decodeIfPresent(Set<UUID>.self, forKey: .gymPinned) ?? [],
+                  builtName: try c.decodeIfPresent(String.self, forKey: .builtName))
     }
 
-    var title: String { base?.name ?? "Empty workout" }
+    var title: String { builtName ?? base?.name ?? "Empty workout" }
 
-    /// Anything that must survive a relaunch today (a switched or edited plan, or sets kept after saving).
-    var hasTodayChanges: Bool { kind != .scheduled || edited || !setOverrides.isEmpty || restSec != nil }
+    /// What the plan says, whatever the gym swapped for this session.
+    var plannedExercises: [RoutineExercise] { exercises.map { gymSwaps[$0.id] ?? $0 } }
+
+    /// Anything that must survive a relaunch today (a switched or edited plan, sets kept after saving, or an exercise
+    /// pinned against the gym). Swaps alone don't count: they are re-decided on every load.
+    var hasTodayChanges: Bool {
+        kind != .scheduled || edited || !setOverrides.isEmpty || restSec != nil || !gymPinned.isEmpty
+    }
 
     /// What `startSession` gets: the base routine (same id, name, policy) with today's exercises, an ad-hoc
     /// "Workout" for hand-picked exercises, or nil for a completely empty workout. Edited sets come separately
     /// (`setOverrides`).
     var routineToStart: Routine? {
         if let base { return base.with(exercises: exercises) }
-        return exercises.isEmpty ? nil : Routine(name: "Workout", exercises: exercises)
+        return exercises.isEmpty ? nil : Routine(name: builtName ?? "Workout", exercises: exercises)
     }
 
     /// Whether "Save Changes to <routine>" has something to save.
@@ -81,11 +104,12 @@ struct TodayPlan: Codable, Equatable {
 
     /// The routine with today's edits, for "Save to routine"; nil when there is no routine or nothing changed.
     /// Edited sets become the item's working set count, top reps (or seconds) and working weight, stamped `now` so
-    /// the planned weight wins over progression next time. Warm-ups aren't stored (they are generated) and neither
+    /// the planned weight wins over progression next time. An item swapped for the gym is written as planned. Warm-ups aren't stored (they are generated) and neither
     /// is today's rest (routines have no rest of their own).
     func routineWithEdits(at now: Date) -> Routine? {
         guard canSaveToRoutine, let base else { return nil }
         return base.with(exercises: exercises.map { item in
+            if let planned = gymSwaps[item.id] { return planned }
             guard unsavedSetEdits.contains(item.id), let sets = setOverrides[item.id] else { return item }
             return TodaySetEdits.routineItem(item, from: sets, at: now)
         })
@@ -121,7 +145,8 @@ struct TodayPlan: Codable, Equatable {
 
     func replacing(_ itemId: UUID, with item: RoutineExercise) -> TodayPlan {
         changed(exercises.map { $0.id == itemId ? item : $0 }, overrides: setOverrides.filter { $0.key != itemId },
-                unsaved: unsavedSetEdits.subtracting([itemId]))
+                unsaved: unsavedSetEdits.subtracting([itemId]),
+                swaps: gymSwaps.filter { $0.key != itemId }, pins: gymPinned.union([itemId]))
     }
 
     func deleting(_ itemId: UUID) -> TodayPlan {
@@ -129,10 +154,11 @@ struct TodayPlan: Codable, Equatable {
                 unsaved: unsavedSetEdits.subtracting([itemId]))
     }
 
-    /// Appends exercises not already in the workout.
+    /// Appends exercises not already in the workout (or planned in it: a swapped one comes back when the gym changes).
     func adding(_ items: [RoutineExercise]) -> TodayPlan {
-        let present = Set(exercises.map(\.exerciseId))
-        return changed(exercises + items.filter { !present.contains($0.exerciseId) })
+        let present = Set((exercises + plannedExercises).map(\.exerciseId))
+        let new = items.filter { !present.contains($0.exerciseId) }
+        return changed(exercises + new, pins: gymPinned.union(new.map(\.id)))
     }
 
     /// Today's sets for one exercise, or nil when it follows the suggestion.
@@ -145,7 +171,9 @@ struct TodayPlan: Codable, Equatable {
         guard exercises.contains(where: { $0.id == itemId }), !sets.isEmpty else { return self }
         var overrides = setOverrides
         overrides[itemId] = sets
-        return changed(exercises, overrides: overrides, unsaved: unsavedSetEdits.union([itemId]))
+        // Nothing to save back for a swapped item: the routine has another exercise there.
+        let unsaved = gymSwaps[itemId] == nil ? unsavedSetEdits.union([itemId]) : unsavedSetEdits
+        return changed(exercises, overrides: overrides, unsaved: unsaved)
     }
 
     /// Back to the progression suggestion for one exercise.
@@ -160,35 +188,89 @@ struct TodayPlan: Codable, Equatable {
     }
 
     /// After "Save to routine": the routine now matches, so the plan is no longer edited. Today's sets and rest stay,
-    /// so the workout still starts with exactly what was shown.
+    /// so the workout still starts with exactly what was shown, and swapped items keep showing their replacement.
     func savedToRoutine(at now: Date) -> TodayPlan {
         guard let saved = routineWithEdits(at: now) else { return self }
-        return TodayPlan(day: day, kind: kind, base: saved, exercises: saved.exercises, edited: false,
-                         setOverrides: setOverrides, restSec: restSec, unsavedSetEdits: [])
+        let shown = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // The saved routine's item is exactly what the plan said there, so it is the planned item of the swap.
+        let swaps = Dictionary(saved.exercises.filter { gymSwaps[$0.id] != nil }.map { ($0.id, $0) },
+                               uniquingKeysWith: { first, _ in first })
+        let items = saved.exercises.map { swaps[$0.id] == nil ? $0 : (shown[$0.id] ?? $0) }
+        return TodayPlan(day: day, kind: kind, base: saved, exercises: items, edited: false,
+                         setOverrides: setOverrides, restSec: restSec, unsavedSetEdits: [],
+                         gymSwaps: swaps, gymPinned: gymPinned, builtName: builtName)
     }
 
-    /// Today's exercises are exactly the base routine's (only sets or rest were edited).
-    var exercisesMatchBase: Bool { base?.exercises == exercises }
+    /// Today's exercises are exactly the base routine's (only sets or rest were edited, or the gym swapped some).
+    var exercisesMatchBase: Bool { base?.exercises == plannedExercises }
 
-    /// The same day's plan on the routine's current version, keeping today's sets for exercises still in it.
+    /// The same day's plan on the routine's current version, keeping today's sets for exercises still in it. A swap
+    /// (and the sets typed on its replacement) stays while the item's planned exercise is the same; pins stay with
+    /// their items.
     func rebased(on routine: Routine) -> TodayPlan {
+        let shown = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let swaps = Dictionary(routine.exercises.compactMap { item in
+            gymSwaps[item.id].flatMap { $0.exerciseId == item.exerciseId ? (item.id, item) : nil }
+        }, uniquingKeysWith: { first, _ in first })
+        let items = routine.exercises.map { swaps[$0.id] == nil ? $0 : (shown[$0.id] ?? $0) }
         // Same item *and* same exercise: a swap keeps the item's id but the sets belong to the old exercise.
-        let before = Dictionary(exercises.map { ($0.id, $0.exerciseId) }, uniquingKeysWith: { first, _ in first })
         let kept = setOverrides.filter { id, _ in
-            routine.exercises.contains { $0.id == id && $0.exerciseId == before[id] }
+            items.contains { $0.id == id && $0.exerciseId == shown[id]?.exerciseId }
         }
+        let pins = gymPinned.filter { id in routine.exercises.contains { $0.id == id && $0.exerciseId == shown[id]?.exerciseId } }
         let unsaved = unsavedSetEdits.intersection(kept.keys)
-        return TodayPlan(day: day, kind: kind, base: routine, exercises: routine.exercises, edited: !unsaved.isEmpty,
-                         setOverrides: kept, restSec: restSec, unsavedSetEdits: unsaved)
+        return TodayPlan(day: day, kind: kind, base: routine, exercises: items, edited: !unsaved.isEmpty,
+                         setOverrides: kept, restSec: restSec, unsavedSetEdits: unsaved,
+                         gymSwaps: swaps, gymPinned: pins, builtName: builtName)
+    }
+
+    /// Back to the planned exercise for one swapped item, and the gym leaves it alone from now on. The sets typed on
+    /// the replacement go: they belong to another exercise.
+    func usingPlanned(_ itemId: UUID) -> TodayPlan {
+        guard let planned = gymSwaps[itemId],
+              !exercises.contains(where: { $0.id != itemId && $0.exerciseId == planned.exerciseId }) else { return self }
+        return changed(exercises.map { $0.id == itemId ? planned : $0 }, overrides: setOverrides.filter { $0.key != itemId },
+                       unsaved: unsavedSetEdits.subtracting([itemId]),
+                       swaps: gymSwaps.filter { $0.key != itemId }, pins: gymPinned.union([itemId]))
+    }
+
+    /// A workout built for today from a list of exercises (no routine behind it).
+    static func built(name: String, items: [RoutineExercise], day: String) -> TodayPlan {
+        TodayPlan(day: day, kind: .built, base: nil, exercises: items, edited: !items.isEmpty, builtName: name)
+    }
+
+    /// This plan at the current gym: swaps are re-decided from the planned exercises every time, so this is idempotent
+    /// and moving gyms (or leaving them) can't accumulate anything. Set edits survive only while the item's exercise
+    /// does.
+    func adapted(by adapter: GymAdapter?) -> TodayPlan {
+        let planned = plannedExercises
+        let results = adapter?.adapt(planned, pinned: gymPinned) ?? planned.map { AdaptedItem.unmapped($0) }
+        let swaps = results.reduce(into: [UUID: RoutineExercise]()) { swaps, result in
+            if case let .swapped(plannedItem, _, _, _) = result { swaps[plannedItem.id] = plannedItem }
+        }
+        let new = results.map(\.item)
+        let before = Dictionary(exercises.map { ($0.id, $0.exerciseId) }, uniquingKeysWith: { first, _ in first })
+        let kept = setOverrides.filter { id, _ in new.contains { $0.id == id && $0.exerciseId == before[id] } }
+        let unsaved = unsavedSetEdits.intersection(kept.keys).subtracting(swaps.keys)
+        return TodayPlan(day: day, kind: kind, base: base, exercises: new,
+                         edited: (base.map { $0.exercises != planned } ?? !planned.isEmpty) || !unsaved.isEmpty,
+                         setOverrides: kept, restSec: restSec, unsavedSetEdits: unsaved,
+                         gymSwaps: swaps, gymPinned: gymPinned, builtName: builtName)
     }
 
     private func changed(_ new: [RoutineExercise], overrides: [UUID: [WorkoutSet]]? = nil,
-                         unsaved: Set<UUID>? = nil, rest: Int?? = nil) -> TodayPlan {
+                         unsaved: Set<UUID>? = nil, rest: Int?? = nil,
+                         swaps: [UUID: RoutineExercise]? = nil, pins: Set<UUID>? = nil) -> TodayPlan {
         let overrides = overrides ?? setOverrides
-        let unsaved = (unsaved ?? unsavedSetEdits).intersection(overrides.keys)
-        let exercisesDiffer = base.map { $0.exercises != new } ?? !new.isEmpty
+        let ids = Set(new.map(\.id))
+        let swaps = (swaps ?? gymSwaps).filter { ids.contains($0.key) }
+        let pins = (pins ?? gymPinned).intersection(ids)
+        let unsaved = (unsaved ?? unsavedSetEdits).intersection(overrides.keys).subtracting(swaps.keys)
+        let planned = new.map { swaps[$0.id] ?? $0 }
+        let exercisesDiffer = base.map { $0.exercises != planned } ?? !planned.isEmpty
         return TodayPlan(day: day, kind: kind, base: base, exercises: new, edited: exercisesDiffer || !unsaved.isEmpty,
-                         setOverrides: overrides, restSec: rest ?? restSec, unsavedSetEdits: unsaved)
+                         setOverrides: overrides, restSec: rest ?? restSec, unsavedSetEdits: unsaved,
+                         gymSwaps: swaps, gymPinned: pins, builtName: builtName)
     }
 
     static func dayKey(_ date: Date, calendar: Calendar = .current) -> String {

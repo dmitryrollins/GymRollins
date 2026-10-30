@@ -112,9 +112,17 @@ final class TodayPlanEditor {
     func replace(_ itemId: UUID, with item: RoutineExercise) {
         // One exercise appears once in a plan (Save Changes and Claude's plan edits address exercises by id).
         guard let plan, !isLocked,
+              !plan.plannedExercises.contains(where: { $0.id != itemId && $0.exerciseId == item.exerciseId }),
               !plan.exercises.contains(where: { $0.id != itemId && $0.exerciseId == item.exerciseId }) else { return }
         forget(itemId)
         apply(plan.replacing(itemId, with: item.withId(itemId)))
+    }
+
+    /// "Use <planned> anyway": the planned exercise comes back and the gym leaves it alone.
+    func usePlanned(_ itemId: UUID) {
+        guard let plan, !isLocked else { return }
+        forget(itemId)
+        apply(plan.usingPlanned(itemId))
     }
 
     func delete(_ itemId: UUID) {
