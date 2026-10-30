@@ -19,6 +19,11 @@ protocol FaceDetecting: Sendable {
 struct VisionFaceDetector: FaceDetecting {
     func faces(in image: CGImage) throws -> [CGRect] {
         let request = VNDetectFaceRectanglesRequest()
+        #if targetEnvironment(simulator)
+        // The simulator's GPU can't create Vision's inference context ("Could not create inference context").
+        let cpu = try request.supportedComputeStageDevices[.main]?.first { if case .cpu = $0 { true } else { false } }
+        if let cpu { try request.setComputeDevice(cpu, for: .main) }
+        #endif
         try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
         return (request.results ?? []).map(\.boundingBox)
     }

@@ -178,13 +178,35 @@ private struct DetectorBoom: Error {}
         #expect(throws: GymPhotoError.notAnImage) { try processor().process(Data()) }
     }
 
-    @Test func findsTheFaceInTheFixture() throws {
+    private static func fixturePhoto() throws -> Data {
         let url = try #require(Bundle.main.url(forResource: "own-0453-0", withExtension: "jpg", subdirectory: "OwnPhotos"))
-        let image = try #require(UIImage(contentsOfFile: url.path())?.cgImage)
-        withKnownIssue("Vision may be unavailable on the simulator (inference context)", isIntermittent: true) {
-            let faces = try VisionFaceDetector().faces(in: image)
-            #expect(faces.count >= 1)
-        }
+        return try Data(contentsOf: url)
+    }
+
+    @Test func findsTheFaceInTheFixture() throws {
+        let image = try #require(UIImage(data: try Self.fixturePhoto())?.cgImage)
+        let faces = try VisionFaceDetector().faces(in: image)
+        #expect(faces.count == 1)
+        let face = try #require(faces.first)
+        #expect(abs(face.midX - 0.51) < 0.05 && abs(face.midY - 0.77) < 0.05, "at \(face)")
+    }
+
+    @Test func blursTheRealFaceAndLeavesTheRest() throws {
+        let input = try Self.fixturePhoto()
+        let out = try GymPhotoProcessor().process(input)
+        let untouched = try processor().process(input)
+        let image = try #require(UIImage(data: out.jpeg))
+        // The face, in image coordinates (row 0 is the top), from `findsTheFaceInTheFixture`'s position.
+        let original = try #require(UIImage(data: input)?.cgImage)
+        let face = try #require(try VisionFaceDetector().faces(in: original).first)
+        let inside = CGRect(x: face.minX * image.size.width, y: (1 - face.maxY) * image.size.height,
+                            width: face.width * image.size.width, height: face.height * image.size.height)
+        #expect(Self.contrast(out.jpeg, in: inside) * 3 < Self.contrast(untouched.jpeg, in: inside),
+                "the face has lost most of its detail")
+        let elsewhere = CGRect(x: 0, y: image.size.height * 0.5, width: image.size.width * 0.3, height: image.size.height * 0.3)
+        #expect(abs(Self.contrast(out.jpeg, in: elsewhere) - Self.contrast(untouched.jpeg, in: elsewhere)) < 1)
+        let cleaned = try #require(image.cgImage)
+        #expect(try VisionFaceDetector().faces(in: cleaned).isEmpty, "no face is detectable afterwards")
     }
 }
 
