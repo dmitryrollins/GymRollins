@@ -56,8 +56,10 @@ struct BuildResultModel: Equatable {
                      history: (String) -> [SessionResult], calendar: Calendar = .current) -> BuildResultModel {
         let rows = built.items.map { row($0, gym: gym, profile: profile, library: library, history: history, calendar: calendar) }
         let count = rows.count == 1 ? "1 exercise" : "\(rows.count) exercises"
+        // A chip that got no exercises isn't in the workout's name; if none did, the name still says what was asked.
+        let named = muscles.filter { !built.skipped.contains($0) }
         return BuildResultModel(
-            title: muscles.map(\.title).joined(separator: " + "),
+            title: (named.isEmpty ? muscles : named).map(\.title).joined(separator: " + "),
             subtitle: "\(gymName) \u{00B7} \(count) \u{00B7} ~\(length.rawValue) min",
             rows: rows,
             thinNotices: built.thin.map { thinNotice($0, gymName: gymName) },

@@ -140,8 +140,10 @@ import Testing
     @Test func skippedChipsAreReported() {
         let model = make([item("kb-row")], muscles: [.back, .arms, .core], length: .short, skipped: [.core])
         #expect(model.skippedNotice == "No room for Core at 30 min")
+        #expect(model.title == "Back + Arms", "the name lists only the chips that got exercises")
         let two = make([item("kb-row")], muscles: [.back, .arms, .core, .legs], length: .short, skipped: [.core, .legs])
         #expect(two.skippedNotice == "No room for Core, Legs at 30 min")
+        #expect(two.title == "Back + Arms")
         #expect(make([item("kb-row")]).skippedNotice == nil)
     }
 
