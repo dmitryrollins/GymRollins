@@ -52,7 +52,9 @@ public final class GymRepository {
             predicate: #Predicate { $0.mapsPlaceId == placeId })).first {
             return Self.gym(existing)
         }
-        guard !placeId.isEmpty else { throw GymDataError.invalidInput("Unknown place.") }
+        guard !placeId.isEmpty, (-90...90).contains(latitude), (-180...180).contains(longitude) else {
+            throw GymDataError.invalidInput("Unknown place.")
+        }
         let (name, address) = try Self.validGym(name: name, address: address)
         let record = GymRecord(name: name, address: address, latitude: latitude, longitude: longitude,
                                mapsPlaceId: placeId, now: now())
@@ -104,6 +106,9 @@ public final class GymRepository {
     @discardableResult
     public func addListing(_ new: NewListing) throws -> GymListing {
         guard try gymRecord(new.gymId) != nil else { throw GymDataError.invalidInput("Unknown gym.") }
+        guard !new.kindId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw GymDataError.invalidInput("Pick a kind of equipment.")
+        }
         let brand = Self.clean(new.brand), model = Self.clean(new.model)
         try Self.validate(brand: brand, model: model)
         let notes = Self.clean(new.notes)

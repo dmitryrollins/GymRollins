@@ -44,7 +44,7 @@ import Testing
 
     @Test func unsafeFileNamesAreRefused() throws {
         let (store, _) = makeStore()
-        for bad in ["../x.jpg", "a/b.jpg", "..", "a..b.jpg", ""] {
+        for bad in ["../x.jpg", "a/b.jpg", "..", ".", "a..b.jpg", "", "notes.txt"] {
             #expect(throws: GymPhotoStoreError.invalidFileName) { try store.delete(bad) }
         }
     }

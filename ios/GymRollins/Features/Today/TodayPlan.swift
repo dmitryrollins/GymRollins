@@ -146,8 +146,13 @@ struct TodayPlan: Codable, Equatable {
         return TodayPlan(day: day, kind: .switched, base: routine, exercises: routine.exercises, edited: false)
     }
 
+    /// One exercise appears once in a plan (Save Changes addresses exercises by id), counting what a swapped item will
+    /// return to, so a replacement that would break that is refused.
     func replacing(_ itemId: UUID, with item: RoutineExercise) -> TodayPlan {
-        changed(exercises.map { $0.id == itemId ? item : $0 }, overrides: setOverrides.filter { $0.key != itemId },
+        let others = exercises.filter { $0.id != itemId }
+        guard !(others + others.map { gymSwaps[$0.id] ?? $0 }).contains(where: { $0.exerciseId == item.exerciseId })
+        else { return self }
+        return changed(exercises.map { $0.id == itemId ? item : $0 }, overrides: setOverrides.filter { $0.key != itemId },
                 unsaved: unsavedSetEdits.subtracting([itemId]),
                 swaps: gymSwaps.filter { $0.key != itemId }, pins: gymPinned.union([item.id]))
     }
@@ -212,8 +217,11 @@ struct TodayPlan: Codable, Equatable {
     /// their items.
     func rebased(on routine: Routine) -> TodayPlan {
         let shown = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let swaps = Dictionary(routine.exercises.compactMap { item in
-            gymSwaps[item.id].flatMap { $0.exerciseId == item.exerciseId ? (item.id, item) : nil }
+        let swaps = Dictionary(routine.exercises.compactMap { item -> (UUID, RoutineExercise)? in
+            guard gymSwaps[item.id]?.exerciseId == item.exerciseId, let replacement = shown[item.id],
+                  !routine.exercises.contains(where: { $0.id != item.id && $0.exerciseId == replacement.exerciseId })
+            else { return nil } // My Plan now has the replacement too: back to the planned exercise, re-decided next
+            return (item.id, item)
         }, uniquingKeysWith: { first, _ in first })
         let items = routine.exercises.map { swaps[$0.id] == nil ? $0 : (shown[$0.id] ?? $0) }
         // Same item *and* same exercise: a swap keeps the item's id but the sets belong to the old exercise.

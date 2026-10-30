@@ -204,6 +204,24 @@ import Testing
         #expect(replaced.adapted(by: dumbbellGym).exercises[0].exerciseId == "cable", "a pinned item is not swapped")
     }
 
+    /// Save Changes would write the same exercise twice: the app addresses plan exercises by id.
+    @Test func replacingOntoASwappedItemsPlannedExerciseIsRefused() {
+        let swapped = scheduled().adapted(by: dumbbellGym)
+        let refused = swapped.replacing(freeId, with: RoutineExercise(exerciseId: "bb", sets: 3, reps: 8))
+        #expect(refused == swapped)
+        let shown = swapped.replacing(freeId, with: RoutineExercise(exerciseId: "db", sets: 3, reps: 8))
+        #expect(shown == swapped, "nor onto the exercise it shows")
+    }
+
+    @Test func rebasedDropsASwapWhoseReplacementIsNowInTheRoutine() {
+        let swapped = scheduled().adapted(by: dumbbellGym).editingSets(benchId, typed)
+        let extended = routine.with(exercises: routine.exercises + [RoutineExercise(exerciseId: "db", sets: 3, reps: 8)])
+        let rebased = swapped.rebased(on: extended)
+        #expect(rebased.exercises.map(\.exerciseId) == ["bb", "free", "db"], "never the same exercise twice")
+        #expect(rebased.gymSwaps.isEmpty)
+        #expect(rebased.sets(for: benchId) == nil, "the typed sets belonged to the replacement")
+    }
+
     @Test func addingPins() {
         let item = RoutineExercise(exerciseId: "cable", sets: 3, reps: 12)
         let added = scheduled().adapted(by: dumbbellGym).adding([item])

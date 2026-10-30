@@ -57,6 +57,7 @@ struct GymPhotoStore: Sendable {
     }
 
     private static func isSafe(_ fileName: String) -> Bool {
-        !fileName.isEmpty && !fileName.contains("/") && !fileName.contains("..") && !fileName.contains("\0")
+        // Only names `save` produces: a bare "." would address the photo folder itself.
+        fileName.hasSuffix(".jpg") && !fileName.contains("/") && !fileName.contains("..") && !fileName.contains("\0")
     }
 }

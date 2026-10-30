@@ -168,6 +168,23 @@ private struct DetectorBoom: Error {}
                 "the thumbnail is cut from the blurred image")
     }
 
+    @Test func blursThePaddingAroundAFace() throws {
+        let input = Self.encode(Self.checkerboard(800), quality: 1.0)
+        let face = CGRect(x: 0.2, y: 0.2, width: 0.2, height: 0.2)
+        let out = try processor(faces: [face]).process(input)
+        // The raw face spans x 160...320; padded by 0.35 it starts at x 104. This strip is padding only.
+        #expect(Self.contrast(out.jpeg, in: CGRect(x: 112, y: 500, width: 40, height: 100)) < 20)
+        #expect(Self.contrast(out.jpeg, in: CGRect(x: 40, y: 500, width: 40, height: 100)) > 50, "past the padding")
+    }
+
+    @Test func blursEveryFace() throws {
+        let input = Self.encode(Self.checkerboard(800), quality: 1.0)
+        let faces = [CGRect(x: 0.1, y: 0.1, width: 0.2, height: 0.2), CGRect(x: 0.6, y: 0.6, width: 0.2, height: 0.2)]
+        let out = try processor(faces: faces).process(input)
+        #expect(Self.contrast(out.jpeg, in: CGRect(x: 100, y: 580, width: 100, height: 100)) < 20)
+        #expect(Self.contrast(out.jpeg, in: CGRect(x: 500, y: 180, width: 100, height: 100)) < 20)
+    }
+
     @Test func detectorFailureRejectsThePhoto() {
         let failing = GymPhotoProcessor(detector: StubDetector(result: .failure(DetectorBoom())))
         #expect(throws: GymPhotoError.faceDetectionFailed) { try failing.process(Self.encode(Self.solid(400, 300))) }

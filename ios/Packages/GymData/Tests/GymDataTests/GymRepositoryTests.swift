@@ -41,6 +41,22 @@ import Testing
         #expect(try repo.addPrivateGym(name: String(repeating: "a", count: 120), address: nil).name.count == 120)
     }
 
+    @Test func addMapsGymRefusesImpossibleCoordinates() throws {
+        defer { f.tearDown() }
+        for (latitude, longitude) in [(91.0, 0.0), (-91.0, 0.0), (0.0, 181.0), (0.0, -181.0), (.nan, 0.0), (0.0, .infinity)] {
+            #expect(throws: GymDataError.self) {
+                try repo.addMapsGym(placeId: "P", name: "Gym", address: nil, latitude: latitude, longitude: longitude)
+            }
+        }
+        #expect(try repo.gyms().isEmpty)
+    }
+
+    @Test func addListingRefusesAnEmptyKind() throws {
+        defer { f.tearDown() }
+        let gym = try repo.addPrivateGym(name: "Home", address: nil)
+        #expect(throws: GymDataError.self) { try repo.addListing(NewListing(gymId: gym.id, kindId: " ")) }
+    }
+
     @Test func addMapsGymIsIdempotentPerPlace() throws {
         defer { f.tearDown() }
         let a = try repo.addMapsGym(placeId: "P1", name: "Planet", address: "x", latitude: 1, longitude: 2)
