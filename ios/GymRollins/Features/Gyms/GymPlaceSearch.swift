@@ -53,14 +53,25 @@ struct MapKitGymPlaceSearch: GymPlaceSearch {
                 center: CLLocationCoordinate2D(latitude: near.latitude, longitude: near.longitude),
                 latitudinalMeters: 20_000, longitudinalMeters: 20_000)
         }
-        return Self.places(try await MKLocalSearch(request: request).start().mapItems)
+        return try await Self.run(request)
     }
 
     func nearby(_ coordinate: GymCoordinate) async throws -> [GymPlace] {
         let center = CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude)
         let request = MKLocalPointsOfInterestRequest(center: center, radius: NearbyGymRule.radiusMeters)
         request.pointOfInterestFilter = Self.filter
-        return Self.places(try await MKLocalSearch(request: request).start().mapItems)
+        return try await Self.run(request)
+    }
+
+    /// Maps says "not found" when nothing matched: that is no results, not an outage.
+    private static func run(_ request: MKLocalSearch.Request) async throws -> [GymPlace] {
+        do { return places(try await MKLocalSearch(request: request).start().mapItems) }
+        catch let error as MKError where error.code == .placemarkNotFound { return [] }
+    }
+
+    private static func run(_ request: MKLocalPointsOfInterestRequest) async throws -> [GymPlace] {
+        do { return places(try await MKLocalSearch(request: request).start().mapItems) }
+        catch let error as MKError where error.code == .placemarkNotFound { return [] }
     }
 
     /// Items without an identifier can't be remembered, so they are skipped.

@@ -90,7 +90,10 @@ struct TodayView: View {
             .navigationDestination(isPresented: $showSettings) { SettingsView() }
             .navigationDestination(isPresented: $showClaudeConnection) { ClaudeConnectionView() }
             .navigationDestination(item: $reviewing) { ProposalReviewView(proposalId: $0) }
-            .fullScreenCover(isPresented: $showWorkout, onDismiss: { startEntry = nil }, content: {
+            .fullScreenCover(isPresented: $showWorkout, onDismiss: {
+                startEntry = nil
+                reload() // a finished built workout must not stay on Today with Start
+            }, content: {
                 if let session = env.session { WorkoutFlowView(session: session, initialEntry: startEntry) }
             })
             .navigationDestination(item: $openItem) { itemId in
