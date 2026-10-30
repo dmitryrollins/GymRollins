@@ -149,15 +149,15 @@ final class WorkoutSession: Identifiable {
     func removeSet(entryId: UUID, setId: UUID) { apply(workout.removingSet(entryId: entryId, setId: setId)) }
 
     /// Replaces the entry's exercise and reconciles equipment-dependent set data: every set takes
-    /// the new exercise's volume `multiplier`; undone working sets move to `workingWeightKg` when
-    /// given (the new exercise's own suggestion), otherwise keep their weights.
-    func swap(entryId: UUID, to exerciseId: String, multiplier: Double, workingWeightKg: Double?) {
+    /// the new exercise's volume `multiplier`; undone working sets move to `target` (done sets and warm-ups never do).
+    func swap(entryId: UUID, to exerciseId: String, multiplier: Double, target: SwapTarget) {
         let replaced = workout.replacingExercise(entryId: entryId, exerciseId: exerciseId)
         let sets = replaced.entries.first { $0.id == entryId }?.sets ?? []
         let reconciled = sets.reduce(replaced) { w, set in
             w.updatingSet(entryId: entryId, setId: set.id) { current in
-                let weight = !current.done && !current.warmup ? workingWeightKg ?? current.weightKg : current.weightKg
-                return current.with(multiplier: multiplier).with(weightKg: weight, reps: current.reps)
+                let moved = !current.done && !current.warmup
+                    ? target.resolved(for: current) : ResolvedSet(weightKg: current.weightKg, reps: current.reps)
+                return current.with(multiplier: multiplier).with(weightKg: moved.weightKg, reps: moved.reps)
             }
         }
         apply(reconciled)

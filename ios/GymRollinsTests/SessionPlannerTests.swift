@@ -139,12 +139,15 @@ import Testing
         #expect(off.sets.count == on.sets.filter { !$0.warmup }.count)
     }
 
-    @Test func swapWeightFollowsHistoryOrKeeps() {
+    @Test func swapTargetFollowsHistoryOrKeeps() {
         let curl = library.exercise("0313")
-        #expect(SessionPlanner.swapWeightKg(exercise: curl, profile: Profile(), history: []) == nil)
+        #expect(SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: []) == .keep)
         let history = [SessionResult(date: .now, weightKg: lb(25), reps: [10, 10, 10])]
-        let suggested = SessionPlanner.swapWeightKg(exercise: curl, profile: Profile(), history: history)
-        #expect(suggested.map(inLb) == 27.5)
+        guard case let .suggested(weightKg, _) = SessionPlanner.swapTarget(exercise: curl, profile: Profile(),
+                                                                          history: history) else {
+            Issue.record("history gives a suggestion"); return
+        }
+        #expect(inLb(weightKg) == 27.5)
     }
 
     // MARK: Gym loads
@@ -152,10 +155,22 @@ import Testing
     @Test func swapMidWorkoutFitsTheGym() {
         let curl = library.exercise("0313")
         let history = [SessionResult(date: .now, weightKg: 30, reps: [10, 10, 10])]
-        #expect(SessionPlanner.swapWeightKg(exercise: curl, profile: Profile(), history: history,
-                                            loads: .fixed(kg: [20, 24])) == 24)
-        #expect(SessionPlanner.swapWeightKg(exercise: curl, profile: Profile(), history: [],
-                                            loads: .fixed(kg: [20, 24])) == nil)
+        let target = SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: history,
+                                               loads: .fixed(kg: [20, 24]))
+        guard case let .suggested(weightKg, reps) = target else { Issue.record("history gives a suggestion"); return }
+        let plain = SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: history)
+        guard case let .suggested(_, plainReps) = plain else { Issue.record("history gives a suggestion"); return }
+        #expect(weightKg == 24)
+        #expect(reps == plainReps.map { $0 + 2 }, "past the heaviest bell the +2 reps rule applies")
+    }
+
+    @Test func swapWithoutHistoryFitsEachSetAndKeepsItsReps() {
+        let curl = library.exercise("0313")
+        let target = SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: [],
+                                               loads: .fixed(kg: [20, 24]))
+        #expect(target == .fit(.fixed(kg: [20, 24])))
+        let set = WorkoutSet(weightKg: 60, reps: 8)
+        #expect(target.resolved(for: set) == ResolvedSet(weightKg: 24, reps: 8), "no progression to reward: no extra reps")
     }
 
     @Test func addingMidWorkoutFitsTheGym() {

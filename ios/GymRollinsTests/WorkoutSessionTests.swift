@@ -115,7 +115,7 @@ import Testing
         let bench = s.workout.entries[0].id
         s.addSet(entryId: bench)
         s.addWarmup(entryId: bench, barKg: 20.41)
-        s.swap(entryId: bench, to: "0314", multiplier: 1, workingWeightKg: nil)
+        s.swap(entryId: bench, to: "0314", multiplier: 1, target: .keep)
         s.setNote(entryId: bench, note: "slow eccentric")
         s.addExercises(["0251"], makeEntry: { WorkoutEntry(exerciseId: $0, sets: [WorkoutSet(weightKg: 0, reps: 10)]) })
         s.removeEntry(s.workout.entries[1].id)
@@ -168,13 +168,13 @@ import Testing
         let s = make(spy, now: { Date(timeIntervalSince1970: 1_100) })
         let bench = s.workout.entries[0].id
         s.logNextSet(entryId: bench, weightKg: 20.41, reps: 10) // warm-up done
-        s.swap(entryId: bench, to: "0289", multiplier: 2, workingWeightKg: 22)
+        s.swap(entryId: bench, to: "0289", multiplier: 2, target: .suggested(weightKg: 22, reps: nil))
         let swapped = s.workout.entries[0]
         #expect(swapped.exerciseId == "0289")
         #expect(swapped.sets.allSatisfy { $0.multiplier == 2 })
         #expect(swapped.sets[0].weightKg == 20.41)                       // done set keeps its load
         #expect(swapped.sets[1...].allSatisfy { $0.weightKg == 22 })    // undone working sets follow history
-        s.swap(entryId: bench, to: "0025", multiplier: 1, workingWeightKg: nil)
+        s.swap(entryId: bench, to: "0025", multiplier: 1, target: .keep)
         let back = s.workout.entries[0]
         #expect(back.sets.allSatisfy { $0.multiplier == 1 })
         #expect(back.sets[1...].allSatisfy { $0.weightKg == 22 })       // no history: keep

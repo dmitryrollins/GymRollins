@@ -139,8 +139,8 @@ enum ExerciseScreenModel {
         switch self {
         case .workout(let session, let entryId):
             session.swap(entryId: entryId, to: candidate.id, multiplier: SessionPlanner.multiplier(for: candidate),
-                         workingWeightKg: SessionPlanner.swapWeightKg(exercise: candidate, profile: profile,
-                                                                      history: history, loads: loads))
+                         target: SessionPlanner.swapTarget(exercise: candidate, profile: profile,
+                                                           history: history, loads: loads))
         case .plan(let editor, let itemId):
             editor.replace(itemId, with: RoutineDefaults.item(for: candidate, profile: profile))
         }

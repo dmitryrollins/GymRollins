@@ -96,13 +96,42 @@ enum SessionPlanner {
                      history: history, autoWarmups: autoWarmups, loads: loads)
     }
 
-    /// Working weight for a swapped-in exercise: its own progression suggestion when it has
-    /// history, otherwise nil (keep the weights already on the entry).
-    static func swapWeightKg(exercise: Exercise?, profile: Profile, history: [SessionResult],
-                             loads: ListingLoads? = nil) -> Double? {
-        guard let exercise, !history.isEmpty else { return nil }
-        let item = RoutineDefaults.item(for: exercise, profile: profile)
-        return suggestion(for: item, policy: item.policy ?? .double, profile: profile, exercise: exercise,
-                          history: history, loads: loads).weightKg
+    /// What a swapped-in exercise's undone working sets move to. With history it's the exercise's own progression
+    /// suggestion; without, each set's current weight is fitted to the gym's loads and the reps stay (a never-logged
+    /// exercise has no progression to reward); with neither, the sets are left alone.
+    static func swapTarget(exercise: Exercise?, profile: Profile, history: [SessionResult],
+                           loads: ListingLoads? = nil) -> SwapTarget {
+        if let exercise, !history.isEmpty {
+            let item = RoutineDefaults.item(for: exercise, profile: profile)
+            let next = suggestion(for: item, policy: item.policy ?? .double, profile: profile, exercise: exercise,
+                                  history: history, loads: loads)
+            return .suggested(weightKg: next.weightKg, reps: next.sec == nil ? next.reps : nil)
+        }
+        return loads.map(SwapTarget.fit) ?? .keep
+    }
+}
+
+/// A set's weight and reps after a swap.
+struct ResolvedSet: Equatable {
+    let weightKg: Double
+    let reps: Int
+}
+
+/// How `WorkoutSession.swap` retargets the undone working sets.
+enum SwapTarget: Equatable {
+    case keep
+    /// The new exercise's suggestion; `reps` is nil for a timed exercise, whose sets keep theirs.
+    case suggested(weightKg: Double, reps: Int?)
+    /// No history: each set's own weight fitted to the gym's loads, reps unchanged.
+    case fit(ListingLoads)
+
+    func resolved(for set: WorkoutSet) -> ResolvedSet {
+        switch self {
+        case .keep: ResolvedSet(weightKg: set.weightKg, reps: set.reps)
+        case let .suggested(weightKg, reps): ResolvedSet(weightKg: weightKg, reps: reps ?? set.reps)
+        case let .fit(loads):
+            ResolvedSet(weightKg: AvailableLoads.fit(weightKg: set.weightKg, reps: set.reps, to: loads).weightKg,
+                        reps: set.reps)
+        }
     }
 }
