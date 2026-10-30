@@ -95,6 +95,9 @@ public final class SyncStore {
         try deleteAll(ExercisePreferenceRecord.self)
         try deleteAll(ProfileRecord.self)
         try deleteAll(ProposalRecord.self)
+        try deleteAll(GymListingRecord.self)
+        try deleteAll(EquipmentItemRecord.self)
+        try deleteAll(GymRecord.self)
         try context.save()
         SyncEntity.allCases.forEach { defaults.removeObject(forKey: Self.cursorKey($0)) }
         forgetOwnershipAndFailures()

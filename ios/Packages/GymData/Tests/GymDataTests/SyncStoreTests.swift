@@ -253,4 +253,15 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         #expect(try f.context.fetchCount(FetchDescriptor<WorkoutRecord>()) == 0)
         #expect(try f.context.fetchCount(FetchDescriptor<SetRecord>()) == 0)
     }
+
+    @Test func resetAllRemovesGymRows() throws {
+        defer { f.tearDown() }
+        let gyms = GymRepository(context: f.context, now: { [clock = f.clock] in clock.now })
+        let gym = try gyms.addPrivateGym(name: "Home", address: nil)
+        _ = try gyms.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        try f.store.resetAll()
+        #expect(try f.context.fetchCount(FetchDescriptor<GymRecord>()) == 0)
+        #expect(try f.context.fetchCount(FetchDescriptor<EquipmentItemRecord>()) == 0)
+        #expect(try f.context.fetchCount(FetchDescriptor<GymListingRecord>()) == 0)
+    }
 }

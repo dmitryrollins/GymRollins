@@ -6,6 +6,7 @@ public enum GymStore {
         ProfileRecord.self, RoutineRecord.self, RoutineExerciseRecord.self, WeekdayRecord.self,
         WorkoutRecord.self, WorkoutEntryRecord.self, SetRecord.self, BodyweightRecord.self, CustomExerciseRecord.self,
         ProposalRecord.self, MuscleTargetRecord.self, ExercisePreferenceRecord.self,
+        GymRecord.self, EquipmentItemRecord.self, GymListingRecord.self,
     ]
 
     public static func container(inMemory: Bool, url: URL? = nil) throws -> ModelContainer {
