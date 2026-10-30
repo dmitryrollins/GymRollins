@@ -28,6 +28,7 @@ public enum AvailableLoads {
         guard weightKg > 0 else { return unchanged }
         switch loads {
         case let .stack(maxKg, stepKg):
+            guard maxKg > 0 else { return unchanged }
             if weightKg > maxKg + toleranceKg { return heaviest(maxKg, reps: reps) }
             guard let stepKg, stepKg > 0 else { return unchanged }
             let snapped = min(maxKg, max(stepKg, (weightKg / stepKg).rounded() * stepKg))

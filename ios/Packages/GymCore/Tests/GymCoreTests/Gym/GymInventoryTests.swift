@@ -17,6 +17,14 @@ import Testing
         #expect(again == expected)
     }
 
+    @Test func aMissingStepIsLeftOutOfTheStoredShape() throws {
+        let encoded = try JSONEncoder().encode(ListingLoads.stack(maxKg: 90, stepKg: nil))
+        let json = try #require(String(data: encoded, encoding: .utf8))
+        #expect(json.contains(#""type":"stack""#))
+        #expect(json.contains(#""maxKg":90"#))
+        #expect(!json.contains("stepKg"))
+    }
+
     @Test func unknownLoadsTypeThrows() {
         #expect(throws: DecodingError.self) {
             try JSONDecoder().decode(ListingLoads.self, from: Data(#"{"type":"magic"}"#.utf8))

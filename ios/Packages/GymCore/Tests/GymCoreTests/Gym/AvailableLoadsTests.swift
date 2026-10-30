@@ -30,6 +30,13 @@ import Testing
             == FittedLoad(weightKg: 4.5, reps: 10), "never below one plate of the stack")
     }
 
+    @Test func stackWithNoPositiveMaximumChangesNothing() {
+        #expect(AvailableLoads.fit(weightKg: 30, reps: 5, to: .stack(maxKg: 0, stepKg: 4.5))
+            == FittedLoad(weightKg: 30, reps: 5))
+        #expect(AvailableLoads.fit(weightKg: 30, reps: 5, to: .stack(maxKg: -10, stepKg: nil))
+            == FittedLoad(weightKg: 30, reps: 5))
+    }
+
     @Test func platesNoneEmptySetsAndNoSuggestionChangeNothing() {
         #expect(AvailableLoads.fit(weightKg: 61.2, reps: 5, to: .plates) == FittedLoad(weightKg: 61.2, reps: 5))
         #expect(AvailableLoads.fit(weightKg: 61.2, reps: 5, to: .none) == FittedLoad(weightKg: 61.2, reps: 5))
