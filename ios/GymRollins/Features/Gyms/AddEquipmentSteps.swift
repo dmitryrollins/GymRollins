@@ -127,7 +127,7 @@ struct AddEquipmentKindStep: View {
             ForEach(kinds) { kind in
                 Button { model.chooseKind(kind.id) } label: {
                     Text(kind.name).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
-                        .multilineTextAlignment(.center).padding(8)
+                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).padding(8)
                         .frame(maxWidth: .infinity, minHeight: 56)
                         .background(Theme.card, in: .rect(cornerRadius: 14)).contentShape(.rect)
                 }

@@ -10,8 +10,8 @@ final class DynamicTypeUITests: XCTestCase {
 
     override func setUp() { continueAfterFailure = false }
 
-    private func launch(size: String = contentSize) -> XCUIApplication {
-        XCUIApplication.launchReady(["-seedHistory", "-UIPreferredContentSizeCategoryName", size]) {
+    private func launch(size: String = contentSize, extra: [String] = ["-seedHistory"]) -> XCUIApplication {
+        XCUIApplication.launchReady(extra + ["-UIPreferredContentSizeCategoryName", size]) {
             $0.buttons["today.start"]
         }
     }
@@ -63,5 +63,70 @@ final class DynamicTypeUITests: XCTestCase {
         logSet.tapCenter()
         XCTAssertTrue(app.buttons["logging.rest.skip"].waitForExistence(timeout: 5))
         screenshot("logging-resting-ax-xl")
+    }
+
+    // MARK: Gyms
+
+    private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id] }
+
+    /// The bottom bar stacks Start above Build, and both stay reachable; the gym marks wrap instead of clipping.
+    func testTodayBottomBarAndGymMarksAtAccessibilityXL() {
+        let app = launch(extra: ["-seedGym"])
+        let start = app.buttons["today.start"], build = app.buttons["today.build"]
+        XCTAssertTrue(build.waitForExistence(timeout: 5))
+        XCTAssertTrue(start.isHittable)
+        XCTAssertTrue(build.isHittable)
+        XCTAssertLessThanOrEqual(start.frame.maxY, build.frame.minY + 1, "Start stacks above Build workout")
+        XCTAssertGreaterThanOrEqual(build.frame.height, 44)
+        XCTAssertTrue(element(app, "today.gymNote").exists)
+        screenshot("today-gym-ax-xl")
+    }
+
+    /// The Build sheet remembers its last chips, so leave only `chip` selected.
+    private func selectOnly(_ app: XCUIApplication, _ chip: String) {
+        for name in ["chest", "back", "shoulders", "arms", "legs", "core"] {
+            let button = app.buttons["build.chip.\(name)"]
+            for _ in 0..<4 where !button.isHittable { app.swipeUp() }
+            if button.isSelected != (name == chip) { button.tap() }
+        }
+    }
+
+    func testBuildSheetAndResultAtAccessibilityXL() {
+        let app = launch(extra: ["-seedGym"])
+        app.buttons["today.build"].tapCenter()
+        XCTAssertTrue(app.buttons["build.go"].waitForExistence(timeout: 5))
+        for chip in ["chest", "back", "shoulders", "arms", "legs", "core"] {
+            let button = app.buttons["build.chip.\(chip)"]
+            for _ in 0..<4 where !button.isHittable { app.swipeUp() }
+            XCTAssertTrue(button.isHittable, "chip \(chip) is reachable")
+        }
+        selectOnly(app, "back")
+        screenshot("build-sheet-ax-xl")
+        for _ in 0..<4 where !app.buttons["build.length.60"].isHittable { app.swipeUp() }
+        app.buttons["build.length.60"].tap()
+        app.buttons["build.go"].tapCenter()
+        XCTAssertTrue(element(app, "build.title").waitForExistence(timeout: 10))
+        let start = app.buttons["build.start"], rebuild = app.buttons["build.rebuild"]
+        XCTAssertTrue(start.isHittable)
+        XCTAssertTrue(rebuild.isHittable)
+        XCTAssertFalse(start.frame.intersects(rebuild.frame), "Start and Rebuild don't overlap")
+        XCTAssertGreaterThanOrEqual(rebuild.frame.height, 44)
+        screenshot("build-result-ax-xl")
+    }
+
+    func testPickerEquipmentAndAddFlowAtAccessibilityXL() {
+        let app = launch(extra: ["-seedGym", "-gymPhotoFixture"])
+        app.buttons["today.gymChip"].tap()
+        XCTAssertTrue(app.buttons["gymPicker.close"].waitForExistence(timeout: 5))
+        screenshot("gym-picker-ax-xl")
+        app.buttons["gymPicker.currentEquipment"].tap()
+        XCTAssertTrue(app.buttons["gymEquipment.add"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["gymEquipment.add"].isHittable)
+        screenshot("gym-equipment-ax-xl")
+        app.buttons["gymEquipment.add"].tap()
+        XCTAssertTrue(app.buttons["addEquipment.skip"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["addEquipment.library"].isHittable)
+        XCTAssertTrue(app.buttons["addEquipment.skip"].isHittable)
+        screenshot("add-equipment-ax-xl")
     }
 }

@@ -185,9 +185,9 @@ extension AppEnvironment {
         return TodayGymContext(matcher: matcher, photo: { photos[$0] })
     }
 
-    /// Build workout at the current gym; nil with no gym. Chips with nothing doable here are thin or skipped in the
-    /// result, as `WorkoutBuilder` decides.
-    func buildWorkout(muscles: [BuildMuscle], length: BuildLength, avoid: [String]) -> BuiltWorkout? {
+    /// Build workout at the current gym for `date` (today by default); nil with no gym. Chips with nothing doable here
+    /// are thin or skipped in the result, as `WorkoutBuilder` decides.
+    func buildWorkout(muscles: [BuildMuscle], length: BuildLength, avoid: [String], date: Date? = nil) -> BuiltWorkout? {
         guard let matcher = gymMatcher() else { return nil }
         let history: [Workout]
         do { history = try workouts.recent(limit: 60) }
@@ -197,7 +197,7 @@ extension AppEnvironment {
         }
         let builder = WorkoutBuilder(matcher: matcher, exercises: library.exercises, history: history,
                                      loggedCounts: gymLoggedCounts(), preferences: exercisePreferences)
-        return builder.build(BuildRequest(muscles: muscles, length: length, date: now(), avoid: avoid))
+        return builder.build(BuildRequest(muscles: muscles, length: length, date: date ?? now(), avoid: avoid))
     }
 }
 

@@ -91,7 +91,7 @@ struct GymEquipmentView: View {
                              placeholderSymbol: "dumbbell")
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tile.title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
-                        .multilineTextAlignment(.leading)
+                        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                     if let brand = tile.brandAndModel {
                         Text(brand).font(.caption).foregroundStyle(Theme.textSecondary)
                     }

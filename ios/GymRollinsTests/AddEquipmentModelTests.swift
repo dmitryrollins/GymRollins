@@ -30,6 +30,22 @@ import Testing
         #expect(!flow.hasPhoto)
     }
 
+    /// A library photo can still be processing when the user taps Skip; its late result must not drag them back.
+    @Test func aPhotoThatFinishesAfterSkipIsDiscarded() throws {
+        let rig = try GymTestRig.make()
+        let flow = model(rig, gym: try rig.gym())
+        flow.skipPhoto()
+        flow.chooseKind("lat-pulldown")
+        flow.photoProcessed(jpeg)
+        #expect(flow.step == .details, "the late photo doesn't move the flow")
+        #expect(flow.kind?.id == "lat-pulldown")
+        #expect(!flow.hasPhoto)
+        flow.photoFailed("late failure")
+        #expect(flow.photoError == nil, "a late failure isn't shown either")
+        flow.save()
+        #expect(rig.photoCount() == 0, "nothing is saved for a photo the user skipped")
+    }
+
     @Test func aProcessedPhotoGoesToKindAndWritesNothingYet() throws {
         let rig = try GymTestRig.make()
         let flow = model(rig, gym: try rig.gym())

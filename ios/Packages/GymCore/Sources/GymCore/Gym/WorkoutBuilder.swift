@@ -9,6 +9,15 @@ public struct BuiltItem: Sendable, Hashable {
     public let repeatOf: Date?
     /// A no-equipment exercise that fills a slot when no fresh equipment exercise fit.
     public let isBodyweightFill: Bool
+
+    public init(exercise: RoutineExercise, match: InventoryMatch, muscle: BuildMuscle, repeatOf: Date? = nil,
+                isBodyweightFill: Bool = false) {
+        self.exercise = exercise
+        self.match = match
+        self.muscle = muscle
+        self.repeatOf = repeatOf
+        self.isBodyweightFill = isBodyweightFill
+    }
 }
 
 /// "Only N <muscle> items catalogued at <gym> so far."
@@ -16,6 +25,11 @@ public struct ThinInventoryNotice: Sendable, Hashable {
     public let muscle: BuildMuscle
     /// Active listings at the gym used by at least one equipment candidate for this muscle.
     public let itemCount: Int
+
+    public init(muscle: BuildMuscle, itemCount: Int) {
+        self.muscle = muscle
+        self.itemCount = itemCount
+    }
 }
 
 /// The result of Build workout. It can be shorter than `requestedSlots`: slots that nothing fits are dropped, never
@@ -26,6 +40,13 @@ public struct BuiltWorkout: Sendable, Hashable {
     public let requestedSlots: Int
     /// Chips with no slot, because there are more chips than the length has slots. The first chips get the slots.
     public let skipped: [BuildMuscle]
+
+    public init(items: [BuiltItem], thin: [ThinInventoryNotice], requestedSlots: Int, skipped: [BuildMuscle]) {
+        self.items = items
+        self.thin = thin
+        self.requestedSlots = requestedSlots
+        self.skipped = skipped
+    }
 }
 
 /// Builds a workout for muscle chips from one gym's equipment (spec §5, "Build workout").

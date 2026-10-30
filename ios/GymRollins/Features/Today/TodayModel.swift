@@ -51,27 +51,12 @@ struct TodayModel: Equatable {
         }
         let rows = routine.exercises.map { item -> Row in
             let ex = library.exercise(item.exerciseId)
-            let past = history(item.exerciseId)
-            let itemLoads = loads(item.exerciseId)
-            let suggest = { (loads: ListingLoads?) in
-                SessionPlanner.suggestion(for: item, policy: item.policy ?? routine.policy, profile: profile,
-                                          exercise: ex, history: past, loads: loads)
-            }
-            let suggestion = suggest(itemLoads)
-            // Past the gym's heaviest weight the target is the raised number the workout will start with.
-            let raisedReps = itemLoads != nil && suggestion.reps > suggest(nil).reps
-            let reps = raisedReps ? "\(suggestion.reps)"
-                : item.repsMin.map { $0 < item.reps ? "\($0)\u{2013}\(item.reps)" : "\(item.reps)" } ?? "\(item.reps)"
-            let load = suggestion.weightKg > 0
-                ? " \u{00B7} " + WeightFormatter.format(kg: suggestion.weightKg, unit: profile.unit)
-                : ""
-            let delta = past.first.map { suggestion.weightKg - $0.weightKg } ?? 0
-            let badge = delta > 0.01
-                ? "+\(WeightFormatter.format(kg: delta, unit: profile.unit, includeSecondary: false))"
-                : nil
+            let target = PlannedTarget.make(item: item, policy: item.policy ?? routine.policy, profile: profile,
+                                            exercise: ex, history: history(item.exerciseId),
+                                            loads: loads(item.exerciseId))
             return Row(id: item.id, exerciseId: item.exerciseId, name: DisplayName.of(ex?.name ?? item.exerciseId),
-                       bodyPart: ex?.bodyPart ?? "", subtitle: "\(item.sets) \u{00D7} \(reps)\(load)", badge: badge,
-                       suggestedKg: suggestion.weightKg > 0 ? suggestion.weightKg : nil)
+                       bodyPart: ex?.bodyPart ?? "", subtitle: target.subtitle, badge: target.badge,
+                       suggestedKg: target.suggestedKg)
         }
         let count = rows.count == 1 ? "1 exercise" : "\(rows.count) exercises"
         return TodayModel(routineId: routine.id, title: routine.name, summary: count, rows: rows)

@@ -177,6 +177,78 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Onboarding profile")
     }
 
+    // MARK: Gyms
+
+    private func openPicker(_ app: XCUIApplication) {
+        app.buttons["today.gymChip"].tap()
+        XCTAssertTrue(app.buttons["gymPicker.close"].waitForExistence(timeout: 5))
+    }
+
+    func testTodayWithSwappedRowsAudit() {
+        let app = launch(["-seedGym"])
+        XCTAssertTrue(app.descendants(matching: .any)["today.gymNote"].waitForExistence(timeout: 5))
+        audit(app, "Today (gym marks)")
+    }
+
+    func testGymPickerAudit() {
+        let app = launch(["-seedGym"])
+        openPicker(app)
+        audit(app, "Gym picker")
+    }
+
+    func testGymEquipmentAudit() {
+        let app = launch(["-seedGym"])
+        openPicker(app)
+        app.buttons["gymPicker.currentEquipment"].tap()
+        XCTAssertTrue(app.staticTexts["gymEquipment.coverage.chest"].waitForExistence(timeout: 10))
+        audit(app, "Gym equipment")
+    }
+
+    func testAddEquipmentAudit() {
+        let app = launch(["-seedGym", "-gymPhotoFixture"])
+        openPicker(app)
+        app.buttons["gymPicker.currentEquipment"].tap()
+        app.buttons["gymEquipment.add"].tap()
+        XCTAssertTrue(app.buttons["addEquipment.skip"].waitForExistence(timeout: 5))
+        audit(app, "Add equipment: photo")
+        app.buttons["addEquipment.library"].tap()
+        let search = app.textFields["addEquipment.kindSearch"]
+        XCTAssertTrue(search.waitForExistence(timeout: 30))
+        audit(app, "Add equipment: kind")
+        search.tap()
+        search.typeText("lat")
+        app.buttons["addEquipment.kind.lat-pulldown"].tapCenter()
+        XCTAssertTrue(app.staticTexts["addEquipment.stackValue"].waitForExistence(timeout: 5))
+        audit(app, "Add equipment: details")
+    }
+
+    /// The Build sheet remembers its last chips, so leave only `chip` selected.
+    private func selectOnly(_ app: XCUIApplication, _ chip: String) {
+        for name in ["chest", "back", "shoulders", "arms", "legs", "core"] {
+            let button = app.buttons["build.chip.\(name)"]
+            for _ in 0..<4 where !button.isHittable { app.swipeUp() }
+            if button.isSelected != (name == chip) { button.tap() }
+        }
+    }
+
+    func testBuildSheetAudit() {
+        let app = launch(["-seedGym"])
+        app.buttons["today.build"].tapCenter()
+        XCTAssertTrue(app.buttons["build.go"].waitForExistence(timeout: 5))
+        selectOnly(app, "back")
+        audit(app, "Build workout")
+    }
+
+    func testBuildResultAudit() {
+        let app = launch(["-seedGym"])
+        app.buttons["today.build"].tapCenter()
+        selectOnly(app, "back")
+        app.buttons["build.length.60"].tap()
+        app.buttons["build.go"].tapCenter()
+        XCTAssertTrue(app.descendants(matching: .any)["build.title"].waitForExistence(timeout: 10))
+        audit(app, "Build result")
+    }
+
     // MARK: VoiceOver text
 
     /// Set rows read as one summary ("Warm-up set 1, 10 reps, 45 pounds, done"), and the rest timer exposes the

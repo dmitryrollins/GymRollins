@@ -39,6 +39,7 @@ struct TodayView: View {
     @State private var gymContext: TodayGymContext?
     /// The gym the phone is at, read once per reload (`env.currentGym` reads the store on every call).
     @State private var currentGym: Gym?
+    @State private var buildRequested = false
 
     /// Onboarding's "Build me a 4-day upper/lower plan…" prompt: the copyable text offered before "Ask Claude to
     /// build one" pushes the connection screen.
@@ -72,6 +73,7 @@ struct TodayView: View {
                     if let loadError { Text(loadError).foregroundStyle(Theme.destructive) }
                     if let session = env.session { resumeBanner(session) }
                     if !env.hasAnyRoutine { emptyPlanState }
+                    if let note = model.gymNote { gymNote(note) }
                     ForEach(model.rows) { row in exerciseRow(row) }
                     if env.session == nil {
                         addExerciseRow
@@ -98,6 +100,7 @@ struct TodayView: View {
             .navigationDestination(item: $detailExercise) { ExerciseDetailView(exerciseId: $0) }
             .navigationDestination(item: $historyExercise) { ExerciseHistoryView(exerciseId: $0) }
             .sheet(isPresented: $showSwitch) { switchSheet }
+            .buildWorkoutFlow(requested: $buildRequested, onStart: startBuilt)
             .sheet(isPresented: $showAddExercise) {
                 ExercisePickerView(excluded: plan?.usedExerciseIds ?? []) { ids in
                     guard let plan else { return }
@@ -147,12 +150,48 @@ struct TodayView: View {
                 PrimaryGlassButton(title: "Resume Workout", identifier: "today.resume") {
                     showWorkout = true
                 }
-            } else if !model.rows.isEmpty || (plan?.kind == .empty && env.hasAnyRoutine) {
-                PrimaryGlassButton(title: model.rows.isEmpty ? "Start Empty Workout" : "Start Workout",
-                                   identifier: "today.start") { start(from: nil) }
+            } else {
+                startAndBuild
             }
         }
         .padding(.horizontal, Theme.gutter).padding(.bottom, 8)
+    }
+
+    /// Build workout next to Start; at large text sizes they stack.
+    @ViewBuilder
+    private var startAndBuild: some View {
+        let buildButton = SecondaryGlassButton(title: "Build workout", identifier: "today.build", minHeight: 56) {
+            buildRequested = true
+        }
+        if !model.rows.isEmpty || (plan?.kind == .empty && env.hasAnyRoutine) {
+            let startButton = PrimaryGlassButton(title: model.rows.isEmpty ? "Start Empty Workout" : "Start Workout",
+                                           identifier: "today.start") { start(from: nil) }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { buildButton; startButton }
+                VStack(spacing: 8) { startButton; buildButton }
+            }
+        } else {
+            buildButton
+        }
+    }
+
+    private func gymNote(_ note: String) -> some View {
+        Text(note).font(.footnote.weight(.semibold))
+            .foregroundStyle(Theme.record)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .glassCapsule(tint: Theme.record.opacity(0.25), interactive: false)
+            .accessibilityIdentifier("today.gymNote")
+    }
+
+    /// The Build sheet is gone: today's plan becomes the built workout and it starts like any other. If a workout
+    /// started meanwhile (the watch), that one is shown and nothing is built.
+    private func startBuilt(_ name: String, _ items: [RoutineExercise]) {
+        guard env.session == nil else {
+            showWorkout = true
+            return
+        }
+        apply(TodayPlan.built(name: name, items: items, day: TodayPlan.dayKey(env.now())))
+        start(from: nil)
     }
 
     private var header: some View {
@@ -268,7 +307,8 @@ struct TodayView: View {
                 confirmingNever: $confirmingNever, error: $loadError,
                 onDetails: { detailExercise = row.exerciseId }, onHistory: { historyExercise = row.exerciseId },
                 onReplace: { replacingItem = row.id }, onReset: { editor.resetSets(row.id) },
-                onDelete: { editor.delete(row.id) })
+                onDelete: { editor.delete(row.id) },
+                usePlanned: usePlannedItem(row))
         } label: {
             Image(systemName: "ellipsis")
                 .font(.body.weight(.bold))
@@ -278,6 +318,11 @@ struct TodayView: View {
         }
         .accessibilityLabel("More for \(row.name)")
         .accessibilityIdentifier("today.row.menu.\(row.exerciseId)")
+    }
+
+    private func usePlannedItem(_ row: TodayModel.Row) -> (name: String, action: () -> Void)? {
+        guard case let .swapped(planned, _) = row.gymMark else { return nil }
+        return (planned, { editor.usePlanned(row.id) })
     }
 
     private var addExerciseRow: some View {

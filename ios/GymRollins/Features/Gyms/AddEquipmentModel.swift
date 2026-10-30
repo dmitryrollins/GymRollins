@@ -61,14 +61,19 @@ final class AddEquipmentModel {
 
     // MARK: Step 1
 
+    /// A result that arrives after Skip (a library photo still processing) is dropped: whoever tapped Skip has moved on.
     func photoProcessed(_ processed: ProcessedGymPhoto) {
+        guard step == .photo else { return }
         photo = processed
         photoError = nil
         step = .kind
     }
 
     /// Stays on the photo step, which offers another try or Skip.
-    func photoFailed(_ message: String) { photoError = message }
+    func photoFailed(_ message: String) {
+        guard step == .photo else { return }
+        photoError = message
+    }
 
     func skipPhoto() {
         photo = nil
