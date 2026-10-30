@@ -34,7 +34,8 @@ struct AccountSection: View {
             }
         }
         .disabled(busy)
-        .confirmationDialog("Remove this iPhone's copy of your data? It stays in your account.",
+        .confirmationDialog("Remove this iPhone's copy of your account's data? It stays in your account. "
+                            + "Gyms kept on this phone stay here.",
                             isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign Out and Remove", role: .destructive) { run { try await env.sync.signOutAndRemoveLocalData() } }
                 .accessibilityIdentifier("account.signOut.confirm")
@@ -139,7 +140,8 @@ struct AccountSection: View {
             Button("Cancel") { run { try await env.sync.cancelAccountSwitch() } }
                 .accessibilityIdentifier("account.switch.cancel")
         } footer: {
-            Text("The other account's data stays in that account. Only unsynced changes on this iPhone are lost.")
+            Text("The other account's data stays in that account. Only unsynced changes on this iPhone are lost. "
+                + "Gyms kept on this phone stay here.")
         }
     }
 

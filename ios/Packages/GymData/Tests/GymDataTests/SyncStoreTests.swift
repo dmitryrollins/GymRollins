@@ -264,4 +264,26 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         #expect(try f.context.fetchCount(FetchDescriptor<EquipmentItemRecord>()) == 0)
         #expect(try f.context.fetchCount(FetchDescriptor<GymListingRecord>()) == 0)
     }
+
+    @Test func resetAccountDataKeepsGymRowsButDropsTheRest() throws {
+        defer { f.tearDown() }
+        let gyms = GymRepository(context: f.context, now: { [clock = f.clock] in clock.now })
+        let gym = try gyms.addPrivateGym(name: "Home", address: nil)
+        _ = try gyms.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        try f.routines.upsert(sampleRoutine())
+        try f.workouts.save(Workout(startedAt: f.clock.now, name: "W"))
+        f.store.setCursor(f.clock.now, for: .workouts)
+        f.store.ownerUserId = UUID()
+
+        try f.store.resetAccountData()
+
+        #expect(try f.context.fetchCount(FetchDescriptor<GymRecord>()) == 1)
+        #expect(try f.context.fetchCount(FetchDescriptor<EquipmentItemRecord>()) == 1)
+        #expect(try f.context.fetchCount(FetchDescriptor<GymListingRecord>()) == 1)
+        #expect(try f.context.fetchCount(FetchDescriptor<WorkoutRecord>()) == 0)
+        #expect(try f.context.fetchCount(FetchDescriptor<RoutineRecord>()) == 0)
+        #expect(f.store.cursor(for: .workouts) == nil)
+        #expect(f.store.ownerUserId == nil)
+        #expect(try f.store.hasLocalData() == false, "gyms are device data, not account data")
+    }
 }

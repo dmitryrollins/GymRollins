@@ -44,7 +44,8 @@ struct EmailSignInSection: View {
 /// delete and `SettingsView`'s signed-out "Erase all data").
 struct DeleteAccountSheet: View {
     static let confirmationWord = "DELETE"
-    var message = "Your workouts, plan, weigh-ins and profile will be deleted from your account and this iPhone."
+    var message = "Your workouts, plan, weigh-ins and profile will be deleted from your account and this iPhone. "
+        + "Gyms and equipment photos on this iPhone are erased too."
     var confirmTitle = "Delete Account and Data"
     var navigationTitle = "Delete Account"
     var identifierPrefix = "account.delete"

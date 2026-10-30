@@ -40,8 +40,11 @@ final class SyncCoordinator {
     @ObservationIgnored var onRoundFinished: @MainActor () -> Void = {}
     /// Runs after each pull to auto-apply Claude's pending proposals (when the owner allows it).
     @ObservationIgnored var autoApply: @MainActor () throws -> Int = { 0 }
-    /// Called after sign-out / account deletion wiped the local copy.
+    /// Called after sign-out / account switch / account deletion wiped the account's local copy.
     @ObservationIgnored var onLocalDataReset: @MainActor () -> Void = {}
+    /// Called, before `onLocalDataReset`, when the wipe also erased the gyms (account deletion only). Sign-out and
+    /// the account switch keep "This phone only" gyms.
+    @ObservationIgnored var onGymDataErased: @MainActor () -> Void = {}
 
     static let log = Logger(subsystem: "com.rollins.gymrollins", category: "sync")
 
@@ -190,7 +193,7 @@ final class SyncCoordinator {
     func deleteAccount() async throws {
         try await auth?.deleteAccount()
         accountSwitchPending = false
-        try await wipeLocal()
+        try await wipeLocal(erasingGyms: true)
     }
 
     // MARK: Private
@@ -240,11 +243,13 @@ final class SyncCoordinator {
     }
 
     /// Stops any running round first, so a late response can't write the old account's rows back.
-    private func wipeLocal() async throws {
+    /// Gyms live only on this phone, so they survive unless the whole account (and this iPhone's data) is deleted.
+    private func wipeLocal(erasingGyms: Bool = false) async throws {
         await dropEngine()
-        try store.resetAll()
+        if erasingGyms { try store.resetAll() } else { try store.resetAccountData() }
         pendingChanges = 0
         syncFailures = []
+        if erasingGyms { onGymDataErased() }
         onLocalDataReset()
     }
 

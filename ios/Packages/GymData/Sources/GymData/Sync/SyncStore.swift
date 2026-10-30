@@ -78,9 +78,10 @@ public final class SyncStore {
 
     // MARK: - Reset
 
-    /// Sign-out / account deletion / account switch: deletes every local record and forgets the cursors, the
-    /// owning account and any recorded sync failures.
-    public func resetAll() throws {
+    /// Sign-out / account switch: deletes the account's records and forgets the cursors, the owning account and any
+    /// recorded sync failures. Gyms, their equipment and listings stay: they're "This phone only" data that exists
+    /// nowhere else.
+    public func resetAccountData() throws {
         // Roots first (their relationships cascade), then any orphaned children. Batch deletes are avoided:
         // they fail on the non-optional inverse relationships.
         try deleteAll(WorkoutRecord.self)
@@ -95,12 +96,17 @@ public final class SyncStore {
         try deleteAll(ExercisePreferenceRecord.self)
         try deleteAll(ProfileRecord.self)
         try deleteAll(ProposalRecord.self)
-        try deleteAll(GymListingRecord.self)
-        try deleteAll(EquipmentItemRecord.self)
-        try deleteAll(GymRecord.self)
         try context.save()
         SyncEntity.allCases.forEach { defaults.removeObject(forKey: Self.cursorKey($0)) }
         forgetOwnershipAndFailures()
+    }
+
+    /// Erase all data / account deletion / a fresh store: `resetAccountData()` plus the gym models.
+    public func resetAll() throws {
+        try deleteAll(GymListingRecord.self)
+        try deleteAll(EquipmentItemRecord.self)
+        try deleteAll(GymRecord.self)
+        try resetAccountData()
     }
 
     private func deleteAll<T: PersistentModel>(_ type: T.Type) throws {

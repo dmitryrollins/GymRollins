@@ -65,8 +65,8 @@ struct SettingsView: View {
             if isSignedIn {
                 DeleteAccountSheet(identifierPrefix: "settings.delete") { runDelete { try await env.sync.deleteAccount() } }
             } else {
-                DeleteAccountSheet(message: "Every workout, plan, weigh-in and custom exercise on this iPhone will "
-                                    + "be erased. This can't be undone.", confirmTitle: "Erase All Data",
+                DeleteAccountSheet(message: "Every workout, plan, weigh-in, custom exercise, gym and equipment photo on "
+                                    + "this iPhone will be erased. This can't be undone.", confirmTitle: "Erase All Data",
                                    navigationTitle: "Erase Data", identifierPrefix: "settings.delete") {
                     runDelete { try env.eraseAllLocalData() }
                 }

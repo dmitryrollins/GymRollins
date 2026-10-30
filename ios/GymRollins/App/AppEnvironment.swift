@@ -156,10 +156,10 @@ final class AppEnvironment {
             ExportService.removeExportFiles() // never share a file built from the previous account's data
             self?.health.localDataWasReset()
             if let defaults = self?.defaults { Self.clearTodaySwitches(in: defaults) }
-            self?.removeGymLocalState()
             self?.abandonSession()
             self?.reloadAll()
         }
+        sync.onGymDataErased = { [weak self] in self?.removeGymLocalState() }
         wireHealth()
     }
 
