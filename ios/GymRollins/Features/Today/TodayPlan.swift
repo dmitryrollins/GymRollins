@@ -85,6 +85,9 @@ struct TodayPlan: Codable, Equatable {
     /// What the plan says, whatever the gym swapped for this session.
     var plannedExercises: [RoutineExercise] { exercises.map { gymSwaps[$0.id] ?? $0 } }
 
+    /// Exercises the pickers must not offer: the ones in the list and the planned ones a swap will return to.
+    var usedExerciseIds: Set<String> { Set((exercises + plannedExercises).map(\.exerciseId)) }
+
     /// Anything that must survive a relaunch today (a switched or edited plan, sets kept after saving, or an exercise
     /// pinned against the gym). Swaps alone don't count: they are re-decided on every load.
     var hasTodayChanges: Bool {

@@ -211,7 +211,7 @@ struct LoggingView: View {
 
     private func setsSection(_ sets: [WorkoutSet]) -> some View {
         let unit = env.profile.unit
-        let isBarbell = SessionPlanner.barbellEquipment.contains(exercise?.equipment ?? "")
+        let isBarbell = exercise?.isBarbellLoaded ?? false
         let mode = SetFieldFormat.mode(exercise: exercise, sets: sets)
         let activeId = activeSet(sets)?.id
         let ordinals = SetOrdinal.ordinals(for: sets)

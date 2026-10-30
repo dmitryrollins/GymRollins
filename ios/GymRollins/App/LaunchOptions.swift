@@ -80,6 +80,17 @@ struct LaunchOptions {
     /// no (or an unknown) value follows.
     let importFixtureSource: ImportSource
     #endif
+    /// DEBUG/UI-test only (`-seedGym`): a private "Home" gym with kettlebells (20 and 24 kg) and a flat bench, set as the
+    /// current gym, no photos (`DebugGymSeed`).
+    let seedGym: Bool
+    /// DEBUG/UI-test only (`-gymPhotoFixture`): the gym photo screen's Library button uses a generated image instead of
+    /// presenting the photo picker, which XCUITest can't drive.
+    let gymPhotoFixture: Bool
+    /// DEBUG/UI-test only (`-fakeLocation <lat>,<lng>`): where the phone is, with location permission treated as granted.
+    let fakeLocation: (latitude: Double, longitude: Double)?
+    /// DEBUG/UI-test only (`-fakeGymPlaces`): Maps search returns "Iron Works Gym" and "Test Fitness" (ids
+    /// `fake-iron-works`, `fake-test-fitness`), 50 m and 2 km from the fake location.
+    let fakeGymPlaces: Bool
     /// DEBUG/UI-test only (`-fakeHealth`): Apple Health is an in-memory `FakeHealthStore` seeded with three Withings
     /// weigh-ins, so the Health flows can be tested on the simulator without HealthKit.
     let fakeHealth: Bool
@@ -130,6 +141,10 @@ struct LaunchOptions {
         seedTodayProposal = arguments.contains("-seedTodayProposal")
         seedInsights = arguments.contains("-seedInsights")
         seedStrength = arguments.contains("-seedStrength")
+        seedGym = arguments.contains("-seedGym")
+        gymPhotoFixture = arguments.contains("-gymPhotoFixture")
+        fakeLocation = Self.coordinate(after: "-fakeLocation", in: arguments)
+        fakeGymPlaces = arguments.contains("-fakeGymPlaces")
         seedHistory = arguments.contains("-seedHistory")
         seedBodyweight = arguments.contains("-seedBodyweight")
         seedPlank = arguments.contains("-seedPlank")
@@ -145,6 +160,10 @@ struct LaunchOptions {
         seedTodayProposal = false
         seedInsights = false
         seedStrength = false
+        seedGym = false
+        gymPhotoFixture = false
+        fakeLocation = nil
+        fakeGymPlaces = false
         seedHistory = false
         seedBodyweight = false
         seedPlank = false
@@ -154,6 +173,14 @@ struct LaunchOptions {
     }
 
     #if DEBUG
+    /// "<lat>,<lng>" after `flag`; nil when missing or out of range.
+    private static func coordinate(after flag: String, in arguments: [String]) -> (latitude: Double, longitude: Double)? {
+        guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else { return nil }
+        let parts = arguments[index + 1].split(separator: ",").compactMap { Double($0) }
+        guard parts.count == 2, abs(parts[0]) <= 90, abs(parts[1]) <= 180 else { return nil }
+        return (parts[0], parts[1])
+    }
+
     private static func backend(_ arguments: [String]) -> SyncBackend {
         if arguments.contains("-seedConflict") { return .seededConflict }
         guard arguments.contains("-uiTesting") else { return .configured }

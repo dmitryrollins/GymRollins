@@ -126,10 +126,11 @@ enum ExerciseScreenModel {
         if case .plan(let editor, let itemId) = self { editor.toggleWarmup(itemId, setId: set.id) }
     }
 
-    /// Exercises Swap must not offer besides the current one: the plan's others (a plan holds each exercise once).
+    /// Exercises Swap must not offer besides the current one: the plan's others (a plan holds each exercise once),
+    /// including the planned ones a gym swap will return to.
     var swapExcluded: Set<String> {
-        guard case .plan(let editor, let itemId) = self else { return [] }
-        return Set(editor.plan?.exercises.filter { $0.id != itemId }.map(\.exerciseId) ?? [])
+        guard case .plan(let editor, let itemId) = self, let plan = editor.plan else { return [] }
+        return Set((plan.exercises + plan.plannedExercises).filter { $0.id != itemId }.map(\.exerciseId))
     }
 
     /// Swaps the exercise. The workout's entry takes the new exercise's multiplier and suggested weight (`history` is

@@ -35,6 +35,8 @@ struct TodayView: View {
     /// Recent sessions per exercise, read once per reload: edits on the exercise screen rebuild the rows and must not
     /// query the workout history each time.
     @State private var historyCache: [String: [SessionResult]] = [:]
+    /// The current gym's matcher and photos, read once per reload: set edits rebuild the rows and must not read the store.
+    @State private var gymContext: TodayGymContext?
 
     /// Onboarding's "Build me a 4-day upper/lower plan…" prompt: the copyable text offered before "Ask Claude to
     /// build one" pushes the connection screen.
@@ -94,14 +96,14 @@ struct TodayView: View {
             .navigationDestination(item: $historyExercise) { ExerciseHistoryView(exerciseId: $0) }
             .sheet(isPresented: $showSwitch) { switchSheet }
             .sheet(isPresented: $showAddExercise) {
-                ExercisePickerView(excluded: Set(plan?.exercises.map(\.exerciseId) ?? [])) { ids in
+                ExercisePickerView(excluded: plan?.usedExerciseIds ?? []) { ids in
                     guard let plan else { return }
                     apply(plan.adding(ids.compactMap { env.library.exercise($0) }
                         .map { RoutineDefaults.item(for: $0, profile: env.profile) }))
                 }
             }
             .sheet(isPresented: Binding(get: { replacingItem != nil }, set: { if !$0 { replacingItem = nil } })) {
-                ExercisePickerView(excluded: Set(plan?.exercises.map(\.exerciseId) ?? []), singleSelect: true) { ids in
+                ExercisePickerView(excluded: plan?.usedExerciseIds ?? [], singleSelect: true) { ids in
                     guard let plan, let item = replacingItem, let id = ids.first,
                           let exercise = env.library.exercise(id) else { return }
                     apply(plan.replacing(item, with: RoutineDefaults.item(for: exercise, profile: env.profile)))
@@ -198,11 +200,14 @@ struct TodayView: View {
         historyCache = [:]
         let env = self.env
         editor.isLocked = env.session != nil
+        let gym = env.todayGymContext()
+        gymContext = gym
         editor.configure(store: planStore, defaultRestSec: env.profile.restSec) { item, plan in
             SessionPlanner.entry(for: item, policy: item.policy ?? plan.base?.policy ?? .double, profile: env.profile,
                                  exercise: env.library.exercise(item.exerciseId),
                                  history: (try? env.workouts.history(exerciseId: item.exerciseId, limit: 5)) ?? [],
-                                 autoWarmups: WarmupPreferences.autoWarmupsEnabled(env.defaults)).sets
+                                 autoWarmups: WarmupPreferences.autoWarmupsEnabled(env.defaults),
+                                 loads: gym?.loads(for: item.exerciseId)).sets
         }
         do {
             let today = try env.todaysPlan()
@@ -226,8 +231,9 @@ struct TodayView: View {
             }
         }
         if cache.count != historyCache.count { historyCache = cache }
+        let gym = gymContext
         model = TodayModel.make(plan: plan, profile: env.profile, library: env.library,
-                                history: { cache[$0] ?? [] })
+                                history: { cache[$0] ?? [] }, gym: gym, loads: { gym?.loads(for: $0) })
     }
 
     /// Applies a today-only change and remembers it for the rest of the day.
@@ -350,10 +356,11 @@ struct TodayView: View {
         guard let current = plan else { return }
         if let routine, routine.id == scheduledRoutine?.id {
             planStore.clear()
-            editor.load(TodayPlan.make(scheduled: routine, routines: [], lastDone: [:], day: current.day))
+            editor.load(TodayPlan.make(scheduled: routine, routines: [], lastDone: [:], day: current.day)
+                .adapted(by: env.gymAdapter()))
             refreshModel()
         } else {
-            apply(current.switched(to: routine))
+            apply(current.switched(to: routine).adapted(by: env.gymAdapter()))
         }
     }
 

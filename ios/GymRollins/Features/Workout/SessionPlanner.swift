@@ -4,19 +4,20 @@ import GymData
 
 /// Builds a new in-progress Workout from a routine: suggested weights, warm-ups for barbell lifts, dumbbell multiplier.
 enum SessionPlanner {
-    static let barbellEquipment: Set<String> = ["barbell", "olympic barbell", "ez barbell", "smith machine", "trap bar"]
-
-    /// `setOverrides` (by routine item id) are sets edited on Today: those exercises start with exactly them.
+    /// `setOverrides` (by routine item id) are sets edited on Today: those exercises start with exactly them. `loads`
+    /// gives the current gym's listing loads for an exercise (nil: no gym, or nothing to fit to).
     static func start(routine: Routine, profile: Profile, library: ExerciseLibrary, now: Date,
                       history: (String) -> [SessionResult], autoWarmups: Bool = true,
-                      setOverrides: [UUID: [WorkoutSet]] = [:]) -> Workout {
+                      setOverrides: [UUID: [WorkoutSet]] = [:],
+                      loads: (String) -> ListingLoads? = { _ in nil }) -> Workout {
         let entries = routine.exercises.map { item in
             let exercise = library.exercise(item.exerciseId)
             if let sets = setOverrides[item.id], !sets.isEmpty {
                 return planned(item: item, sets: sets, exercise: exercise)
             }
             return entry(for: item, policy: item.policy ?? routine.policy, profile: profile,
-                         exercise: exercise, history: history(item.exerciseId), autoWarmups: autoWarmups)
+                         exercise: exercise, history: history(item.exerciseId), autoWarmups: autoWarmups,
+                         loads: loads(item.exerciseId))
         }
         return Workout(startedAt: now, routineId: routine.id, name: routine.name, entries: entries)
     }
@@ -35,25 +36,27 @@ enum SessionPlanner {
 
     /// Picks the barbell/dumbbell rounder and increment and returns the suggested weight/reps/time for an
     /// exercise's next session. Shared by `SessionPlanner.entry` (starting a workout) and `TodayModel` (showing
-    /// today's plan) so both agree on the same weight.
+    /// today's plan) so both agree on the same weight. With `loads`, the weight is fitted to what the gym offers.
     static func suggestion(for item: RoutineExercise, policy: ProgressionPolicy, profile: Profile, exercise: Exercise?,
-                           history: [SessionResult]) -> Suggestion {
-        let isBarbell = exercise.map { barbellEquipment.contains($0.equipment) } ?? false
+                           history: [SessionResult], loads: ListingLoads? = nil) -> Suggestion {
+        let isBarbell = exercise?.isBarbellLoaded ?? false
         let rounder = LoadRounding.rounder(for: exercise, profile: profile)
         let engine = ProgressionEngine(rounder: rounder, deloadPct: profile.deloadPct)
         let target = ProgressionTarget(sets: item.sets, reps: item.reps, repsMin: item.repsMin, sec: item.sec,
                                        weightKg: item.weightKg ?? 0,
                                        incKg: item.incKg ?? UnitConverter.toKg(isBarbell ? 5 : 2.5, from: .lb),
                                        weightSetAt: item.weightSetAt)
-        return engine.suggest(policy: policy, mode: item.mode, target: target, history: history)
+        let suggestion = engine.suggest(policy: policy, mode: item.mode, target: target, history: history)
+        return loads.map(suggestion.fitted(to:)) ?? suggestion
     }
 
     static func entry(for item: RoutineExercise, policy: ProgressionPolicy, profile: Profile, exercise: Exercise?,
-                      history: [SessionResult], autoWarmups: Bool = true) -> WorkoutEntry {
-        let isBarbell = exercise.map { barbellEquipment.contains($0.equipment) } ?? false
+                      history: [SessionResult], autoWarmups: Bool = true, loads: ListingLoads? = nil) -> WorkoutEntry {
+        let isBarbell = exercise?.isBarbellLoaded ?? false
         let multiplier = multiplier(for: exercise)
         let rounder = LoadRounding.rounder(for: exercise, profile: profile)
-        let suggestion = suggestion(for: item, policy: policy, profile: profile, exercise: exercise, history: history)
+        let suggestion = suggestion(for: item, policy: policy, profile: profile, exercise: exercise, history: history,
+                                    loads: loads)
         let working = (0..<item.sets).map { _ in
             WorkoutSet(weightKg: suggestion.weightKg, reps: suggestion.reps, sec: suggestion.sec,
                        multiplier: multiplier)
