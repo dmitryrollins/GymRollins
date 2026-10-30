@@ -246,6 +246,19 @@ import Testing
         expectInvalid { _ = try repo.removeListing(without.id) }
     }
 
+    @Test func setPhotoAttachesAndReturnsThePreviousFile() throws {
+        defer { f.tearDown() }
+        let gym = try makeGym()
+        let bare = try add(gym)
+        #expect(try repo.setPhoto(bare.id, file: "a.jpg") == nil)
+        #expect(try repo.listing(bare.id)?.photoFile == "a.jpg")
+        #expect(try repo.setPhoto(bare.id, file: "b.jpg") == "a.jpg")
+        #expect(try repo.listing(bare.id)?.photoFile == "b.jpg")
+        #expect(try repo.listings(gymId: gym.id).first?.photoFile == "b.jpg")
+        expectInvalid { _ = try repo.setPhoto(UUID(), file: "c.jpg") }
+        expectInvalid { _ = try repo.setPhoto(bare.id, file: "  ") }
+    }
+
     @Test func deleteGymRemovesItsListingsAndReturnsTheirPhotos() throws {
         defer { f.tearDown() }
         let gone = try makeGym("Gone"), kept = try makeGym("Kept")

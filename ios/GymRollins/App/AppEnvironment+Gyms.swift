@@ -43,6 +43,37 @@ extension AppEnvironment {
         }
     }
 
+    /// Deletes the listing and its photo files together.
+    func removeListing(_ id: UUID) throws {
+        let photo = try gyms.removeListing(id)
+        removeGymPhotos(photo.map { [$0] } ?? [])
+        gymsChanged()
+    }
+
+    /// Saves the cleaned photo and attaches it to the listing, deleting the one it replaces. If the listing can't take
+    /// it, the file just written goes again, so nothing is left behind.
+    func attachPhoto(_ photo: ProcessedGymPhoto, to listingId: UUID) throws {
+        let file = try gymPhotos.save(photo)
+        do {
+            let previous = try gyms.setPhoto(listingId, file: file)
+            removeGymPhotos(previous.map { [$0] } ?? [])
+        } catch {
+            removeGymPhotos([file])
+            throw error
+        }
+        gymsChanged()
+    }
+
+    /// The equipment screen's coverage numbers for a gym. The rules run a full candidate pass per chip, so this is
+    /// done off the main actor; empty when there's no usable catalog.
+    func gymCoverage(gymId: UUID) async -> [GymEquipmentModel.Coverage] {
+        guard let matcher = gymMatcher(gymId: gymId) else { return [] }
+        let exercises = library.exercises, date = now()
+        return await Task.detached(priority: .userInitiated) {
+            GymEquipmentModel.coverage(matcher: matcher, exercises: exercises, asOf: date)
+        }.value
+    }
+
     /// Picks a gym from Maps: stored as a local gym (once), then made current.
     @discardableResult
     func chooseMapsGym(_ place: GymPlace) throws -> Gym {

@@ -135,6 +135,20 @@ public final class GymRepository {
         return try listing(record)
     }
 
+    /// Points the listing at a new photo file and returns the one it had, so the caller can delete that file.
+    @discardableResult
+    public func setPhoto(_ id: UUID, file: String) throws -> String? {
+        guard let record = try listingRecord(id) else { throw GymDataError.invalidInput("Unknown listing.") }
+        guard !file.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw GymDataError.invalidInput("Missing photo.")
+        }
+        let previous = record.photoFile
+        record.photoFile = file
+        record.updatedAt = now()
+        try context.save()
+        return previous
+    }
+
     /// Deletes the listing and returns its photo file, if it had one, so the caller can delete the file.
     @discardableResult
     public func removeListing(_ id: UUID) throws -> String? {

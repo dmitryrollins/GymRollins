@@ -44,20 +44,12 @@ struct GymPickerView: View {
         .presentationDetents([.large])
         .sheet(isPresented: $showAdd) { AddPrivateGymSheet { _ in reload() } }
         .task { reload() }
+        .onChange(of: env.gymRevision) { reload() }
         .task { await findNearby() }
         .task(id: query) { await search() }
     }
 
-    // MARK: Equipment (Task 7 replaces this)
-
-    /// The current gym's equipment screen. Task 7 builds that screen and returns it here instead of the placeholder.
-    @ViewBuilder
-    private func equipmentDestination(_ gym: Gym) -> some View {
-        Text(gym.name).foregroundStyle(Theme.textSecondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.background)
-            .navigationTitle(gym.name)
-    }
+    private func equipmentDestination(_ gym: Gym) -> some View { GymEquipmentView(gym: gym) }
 
     // MARK: Sections
 
