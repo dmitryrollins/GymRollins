@@ -10,7 +10,7 @@ struct BuildResultView: View {
     let gym: Gym
     let muscles: [BuildMuscle]
     let length: BuildLength
-    let onStart: (_ name: String, _ items: [RoutineExercise]) -> Void
+    let onStart: (BuiltStart) -> Void
     @State private var model: BuildResultModel?
     @State private var showAdd = false
 
@@ -81,7 +81,7 @@ struct BuildResultView: View {
     private func actions(_ model: BuildResultModel) -> some View {
         let rebuild = SecondaryGlassButton(title: "Rebuild", identifier: "build.rebuild", minHeight: 56) { run.rebuild() }
         let start = PrimaryGlassButton(title: "Start", identifier: "build.start") {
-            if let items = run.built?.items.map(\.exercise) { onStart(model.title, items) }
+            if let built = run.built { onStart(BuiltStart(name: model.title, built: built)) }
         }
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) { rebuild; start }

@@ -164,10 +164,12 @@ extension AppEnvironment {
     /// The loads of the listing that decides this exercise's weight at the current gym; nil with no gym or no such listing.
     func gymLoads(_ exerciseId: String) -> ListingLoads? { gymLoadsLookup()(exerciseId) }
 
-    /// `gymLoads` for many exercises over one read of the gym.
-    func gymLoadsLookup() -> (String) -> ListingLoads? {
+    /// `gymLoads` for many exercises over one read of the gym. `preferring` names the listing a built workout fitted an
+    /// exercise to, which wins over the gym's first choice.
+    func gymLoadsLookup(preferring: [String: UUID] = [:]) -> (String) -> ListingLoads? {
         guard let matcher = gymMatcher() else { return { _ in nil } }
-        return { matcher.loads(for: $0) }
+        let context = TodayGymContext(matcher: matcher, photo: { _ in nil }, preferred: preferring)
+        return { context.loads(for: $0) }
     }
 
     /// What Today's rows need from the current gym, read once per reload.

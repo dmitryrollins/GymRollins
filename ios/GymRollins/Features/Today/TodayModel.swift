@@ -8,8 +8,17 @@ struct TodayGymContext {
     /// Listing id → its photo file.
     let photo: (UUID) -> String?
 
+    /// Exercise id → the listing a built workout fitted it to, when that isn't the gym's first choice.
+    var preferred: [String: UUID] = [:]
+
     /// The loads of the listing that decides this exercise's weight; nil when it has none here.
-    func loads(for exerciseId: String) -> ListingLoads? { matcher.loads(for: exerciseId) }
+    func loads(for exerciseId: String) -> ListingLoads? {
+        preferred[exerciseId].flatMap { matcher.listing($0)?.loads } ?? matcher.loads(for: exerciseId)
+    }
+
+    func preferring(_ listings: [String: UUID]) -> TodayGymContext {
+        TodayGymContext(matcher: matcher, photo: photo, preferred: listings)
+    }
 }
 
 /// What a row says about the current gym.

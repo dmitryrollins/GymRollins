@@ -74,7 +74,7 @@ struct BuildResultModel: Equatable {
         let exercise = library.exercise(planned.exerciseId)
         let target = PlannedTarget.make(item: planned, policy: planned.policy ?? .double, profile: profile,
                                         exercise: exercise, history: history(planned.exerciseId),
-                                        loads: gym?.loads(for: planned.exerciseId))
+                                        loads: item.match.loadListingId.flatMap { gym?.matcher.listing($0)?.loads })
         let listingIds = ([item.match.loadListingId].compactMap { $0 } + item.match.listingIds)
         let listingName = listingIds.lazy.compactMap { id in
             gym?.matcher.listing(id).flatMap { gym?.matcher.kind($0.kindId)?.name }
@@ -98,6 +98,21 @@ struct BuildResultModel: Equatable {
         case 0: return "No \(notice.muscle.title) equipment catalogued at \(gymName) yet. \(more)"
         case 1: return "Only 1 \(notice.muscle.title) item catalogued at \(gymName) so far. \(more)"
         default: return "Only \(notice.itemCount) \(notice.muscle.title) items catalogued at \(gymName) so far. \(more)"
+        }
+    }
+}
+
+/// What Start hands to Today: the title, the exercises, and the listing each exercise's weight was fitted to.
+struct BuiltStart: Equatable {
+    let name: String
+    let items: [RoutineExercise]
+    let listings: [String: UUID]
+
+    init(name: String, built: BuiltWorkout) {
+        self.name = name
+        items = built.items.map(\.exercise)
+        listings = built.items.reduce(into: [:]) { result, item in
+            if let id = item.match.loadListingId { result[item.exercise.exerciseId] = id }
         }
     }
 }

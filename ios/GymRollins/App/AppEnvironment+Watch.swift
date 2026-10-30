@@ -46,7 +46,8 @@ extension AppEnvironment {
         do {
             let plan = try todaysPlan().plan
             guard canStart(plan) else { return false }
-            startSession(routine: plan.routineToStart, setOverrides: plan.setOverrides, restSec: plan.restSec)
+            startSession(routine: plan.routineToStart, setOverrides: plan.setOverrides, restSec: plan.restSec,
+                         loadListings: plan.builtListings)
             todayPlanStore.clear()
             return session != nil
         } catch {

@@ -43,10 +43,14 @@ struct TodayPlan: Codable, Equatable {
     let gymPinned: Set<UUID>
     /// A built workout's title ("Back + Arms").
     let builtName: String?
+    /// A built workout's exercises, by exercise id: the listing whose loads the weight was fitted to when it was built
+    /// (an exercise moved off a machine at its cap sits on another one than the gym's first choice).
+    let builtListings: [String: UUID]
 
     init(day: String, kind: Kind, base: Routine?, exercises: [RoutineExercise], edited: Bool,
          setOverrides: [UUID: [WorkoutSet]] = [:], restSec: Int? = nil, unsavedSetEdits: Set<UUID>? = nil,
-         gymSwaps: [UUID: RoutineExercise] = [:], gymPinned: Set<UUID> = [], builtName: String? = nil) {
+         gymSwaps: [UUID: RoutineExercise] = [:], gymPinned: Set<UUID> = [], builtName: String? = nil,
+         builtListings: [String: UUID] = [:]) {
         self.day = day
         self.kind = kind
         self.base = base
@@ -59,10 +63,12 @@ struct TodayPlan: Codable, Equatable {
         self.gymSwaps = gymSwaps
         self.gymPinned = gymPinned
         self.builtName = builtName
+        self.builtListings = builtListings
     }
 
     enum CodingKeys: String, CodingKey {
-        case day, kind, base, exercises, edited, setOverrides, restSec, unsavedSetEdits, gymSwaps, gymPinned, builtName
+        case day, kind, base, exercises, edited, setOverrides, restSec, unsavedSetEdits, gymSwaps, gymPinned, builtName,
+             builtListings
     }
 
     /// Plans stored before set editing or gyms existed lack those keys.
@@ -77,7 +83,8 @@ struct TodayPlan: Codable, Equatable {
                   unsavedSetEdits: try c.decodeIfPresent(Set<UUID>.self, forKey: .unsavedSetEdits),
                   gymSwaps: try c.decodeIfPresent([UUID: RoutineExercise].self, forKey: .gymSwaps) ?? [:],
                   gymPinned: try c.decodeIfPresent(Set<UUID>.self, forKey: .gymPinned) ?? [],
-                  builtName: try c.decodeIfPresent(String.self, forKey: .builtName))
+                  builtName: try c.decodeIfPresent(String.self, forKey: .builtName),
+                  builtListings: try c.decodeIfPresent([String: UUID].self, forKey: .builtListings) ?? [:])
     }
 
     var title: String { builtName ?? base?.name ?? "Empty workout" }
@@ -206,7 +213,7 @@ struct TodayPlan: Codable, Equatable {
         let items = saved.exercises.map { swaps[$0.id] == nil ? $0 : (shown[$0.id] ?? $0) }
         return TodayPlan(day: day, kind: kind, base: saved, exercises: items, edited: false,
                          setOverrides: setOverrides, restSec: restSec, unsavedSetEdits: [],
-                         gymSwaps: swaps, gymPinned: gymPinned, builtName: builtName)
+                         gymSwaps: swaps, gymPinned: gymPinned, builtName: builtName, builtListings: builtListings)
     }
 
     /// Today's exercises are exactly the base routine's (only sets or rest were edited, or the gym swapped some).
@@ -232,7 +239,7 @@ struct TodayPlan: Codable, Equatable {
         let unsaved = unsavedSetEdits.intersection(kept.keys)
         return TodayPlan(day: day, kind: kind, base: routine, exercises: items, edited: !unsaved.isEmpty,
                          setOverrides: kept, restSec: restSec, unsavedSetEdits: unsaved,
-                         gymSwaps: swaps, gymPinned: pins, builtName: builtName)
+                         gymSwaps: swaps, gymPinned: pins, builtName: builtName, builtListings: builtListings)
     }
 
     /// Back to the planned exercise for one swapped item, and the gym leaves it alone from now on. The sets typed on
@@ -246,8 +253,9 @@ struct TodayPlan: Codable, Equatable {
     }
 
     /// A workout built for today from a list of exercises (no routine behind it).
-    static func built(name: String, items: [RoutineExercise], day: String) -> TodayPlan {
-        TodayPlan(day: day, kind: .built, base: nil, exercises: items, edited: !items.isEmpty, builtName: name)
+    static func built(name: String, items: [RoutineExercise], day: String, listings: [String: UUID] = [:]) -> TodayPlan {
+        TodayPlan(day: day, kind: .built, base: nil, exercises: items, edited: !items.isEmpty, builtName: name,
+                  builtListings: listings)
     }
 
     /// This plan at the current gym: swaps are re-decided from the planned exercises every time, so this is idempotent
@@ -266,7 +274,7 @@ struct TodayPlan: Codable, Equatable {
         return TodayPlan(day: day, kind: kind, base: base, exercises: new,
                          edited: (base.map { $0.exercises != planned } ?? !planned.isEmpty) || !unsaved.isEmpty,
                          setOverrides: kept, restSec: restSec, unsavedSetEdits: unsaved,
-                         gymSwaps: swaps, gymPinned: gymPinned, builtName: builtName)
+                         gymSwaps: swaps, gymPinned: gymPinned, builtName: builtName, builtListings: builtListings)
     }
 
     private func changed(_ new: [RoutineExercise], overrides: [UUID: [WorkoutSet]]? = nil,
@@ -281,7 +289,7 @@ struct TodayPlan: Codable, Equatable {
         let exercisesDiffer = base.map { $0.exercises != planned } ?? !planned.isEmpty
         return TodayPlan(day: day, kind: kind, base: base, exercises: new, edited: exercisesDiffer || !unsaved.isEmpty,
                          setOverrides: overrides, restSec: rest ?? restSec, unsavedSetEdits: unsaved,
-                         gymSwaps: swaps, gymPinned: pins, builtName: builtName)
+                         gymSwaps: swaps, gymPinned: pins, builtName: builtName, builtListings: builtListings)
     }
 
     static func dayKey(_ date: Date, calendar: Calendar = .current) -> String {

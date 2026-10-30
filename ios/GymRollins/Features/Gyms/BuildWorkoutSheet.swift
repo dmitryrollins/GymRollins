@@ -8,7 +8,7 @@ struct BuildWorkoutSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     let gym: Gym
-    let onStart: (_ name: String, _ items: [RoutineExercise]) -> Void
+    let onStart: (BuiltStart) -> Void
     @State private var setup = BuildSetup()
     @State private var itemCount = 0
     @State private var pushed: PushedBuild?

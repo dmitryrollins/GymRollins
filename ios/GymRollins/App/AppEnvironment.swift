@@ -318,7 +318,8 @@ final class AppEnvironment {
     /// Starts a workout, or keeps the one already in progress: `saveActive` replaces the stored active
     /// workout, so starting over an existing session would silently delete its logged sets. Callers show
     /// "Resume" when `session` is set; this guard makes that the only outcome.
-    func startSession(routine: Routine?, setOverrides: [UUID: [WorkoutSet]] = [:], restSec: Int? = nil) {
+    func startSession(routine: Routine?, setOverrides: [UUID: [WorkoutSet]] = [:], restSec: Int? = nil,
+                      loadListings: [String: UUID] = [:]) {
         guard session == nil else {
             Self.log.notice("Start session ignored: a workout is already in progress")
             return
@@ -327,7 +328,7 @@ final class AppEnvironment {
             SessionPlanner.start(routine: $0, profile: profile, library: library, now: now(),
                                  history: { [workouts] in (try? workouts.history(exerciseId: $0, limit: 5)) ?? [] },
                                  autoWarmups: WarmupPreferences.autoWarmupsEnabled(defaults), setOverrides: setOverrides,
-                                 loads: gymLoadsLookup())
+                                 loads: gymLoadsLookup(preferring: loadListings))
         } ?? SessionPlanner.empty(now: now())
         let workout = debugStartOffset(planned)
         // Today's rest (if set) goes with this workout, so a relaunch restores it too (`makeSession`).

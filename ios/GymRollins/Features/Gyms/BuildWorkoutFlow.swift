@@ -7,11 +7,11 @@ import SwiftUI
 struct BuildWorkoutFlow: ViewModifier {
     @Environment(AppEnvironment.self) private var env
     @Binding var requested: Bool
-    let onStart: (_ name: String, _ items: [RoutineExercise]) -> Void
+    let onStart: (BuiltStart) -> Void
     @State private var showBuild = false
     @State private var showPicker = false
     @State private var afterPicker = false
-    @State private var pending: (name: String, items: [RoutineExercise])?
+    @State private var pending: BuiltStart?
 
     func body(content: Content) -> some View {
         content
@@ -27,8 +27,8 @@ struct BuildWorkoutFlow: ViewModifier {
             }
             .sheet(isPresented: $showBuild, onDismiss: startPending) {
                 if let gym = env.currentGym {
-                    BuildWorkoutSheet(gym: gym) { name, items in
-                        pending = (name, items)
+                    BuildWorkoutSheet(gym: gym) { started in
+                        pending = started
                         showBuild = false
                     }
                 }
@@ -46,13 +46,13 @@ struct BuildWorkoutFlow: ViewModifier {
     private func startPending() {
         guard let built = pending else { return }
         pending = nil
-        onStart(built.name, built.items)
+        onStart(built)
     }
 }
 
 extension View {
     func buildWorkoutFlow(requested: Binding<Bool>,
-                          onStart: @escaping (_ name: String, _ items: [RoutineExercise]) -> Void) -> some View {
+                          onStart: @escaping (BuiltStart) -> Void) -> some View {
         modifier(BuildWorkoutFlow(requested: requested, onStart: onStart))
     }
 }

@@ -185,12 +185,13 @@ struct TodayView: View {
 
     /// The Build sheet is gone: today's plan becomes the built workout and it starts like any other. If a workout
     /// started meanwhile (the watch), that one is shown and nothing is built.
-    private func startBuilt(_ name: String, _ items: [RoutineExercise]) {
+    private func startBuilt(_ started: BuiltStart) {
         guard env.session == nil else {
             showWorkout = true
             return
         }
-        apply(TodayPlan.built(name: name, items: items, day: TodayPlan.dayKey(env.now())))
+        apply(TodayPlan.built(name: started.name, items: started.items, day: TodayPlan.dayKey(env.now()),
+                              listings: started.listings))
         start(from: nil)
     }
 
@@ -225,7 +226,7 @@ struct TodayView: View {
         }
         let starting = plan
         env.startSession(routine: starting?.routineToStart, setOverrides: starting?.setOverrides ?? [:],
-                         restSec: starting?.restSec)
+                         restSec: starting?.restSec, loadListings: starting?.builtListings ?? [:])
         planStore.clear()
         editor.isLocked = env.session != nil
         if let itemId, let starting, let workout = env.session?.workout {
@@ -250,13 +251,14 @@ struct TodayView: View {
                                  exercise: env.library.exercise(item.exerciseId),
                                  history: (try? env.workouts.history(exerciseId: item.exerciseId, limit: 5)) ?? [],
                                  autoWarmups: WarmupPreferences.autoWarmupsEnabled(env.defaults),
-                                 loads: gym?.loads(for: item.exerciseId)).sets
+                                 loads: gym?.preferring(plan.builtListings).loads(for: item.exerciseId)).sets
         }
         do {
             let today = try env.todaysPlan()
             currentRoutine = today.scheduled
             scheduledRoutine = currentRoutine
             editor.load(today.plan)
+            gymContext = gym?.preferring(today.plan.builtListings)
             refreshModel()
             pendingProposal = env.pendingProposals().first?.id
             loadError = nil
