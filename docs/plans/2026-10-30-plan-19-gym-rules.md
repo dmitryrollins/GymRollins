@@ -26,7 +26,7 @@ suite) · 22 moderation and Claude (report, block, admin list, account deletion,
 
 **Verified:** every code block below was compiled and run on a copy of GymCore on 2026-10-30: 48 new tests pass,
 the full suite (429 tests) passes, and GymCore line coverage is 90.96%. The mapping script maps 1,191 of 1,324
-exercises (218 need no equipment).
+exercises (220 need no equipment).
 
 **Conventions for every task**
 - Work on branch `feat-gym-rules`, created in Task 1 from `docs/gym-equipment-spec` (which holds the spec and
@@ -599,7 +599,7 @@ Expected: `# pass 9`, `# fail 0`.
 Run: `node scripts/map-equipment-requirements.mjs`
 Expected: `Mapped 1191 / 1324 exercises -> .../ios/GymRollins/Resources/equipment-requirements.json`.
 Then open `docs/import/equipment-requirements-review.md` and check that the summary reads
-`Mapped: 1191 (no equipment: 218)` and `Unmapped: 133`.
+`Mapped: 1191 (no equipment: 220)` and `Unmapped: 133`.
 
 - [ ] **Step 6: Commit**
 
