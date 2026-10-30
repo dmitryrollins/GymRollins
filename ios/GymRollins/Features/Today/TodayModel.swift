@@ -52,10 +52,16 @@ struct TodayModel: Equatable {
         let rows = routine.exercises.map { item -> Row in
             let ex = library.exercise(item.exerciseId)
             let past = history(item.exerciseId)
-            let suggestion = SessionPlanner.suggestion(for: item, policy: item.policy ?? routine.policy,
-                                                       profile: profile, exercise: ex, history: past,
-                                                       loads: loads(item.exerciseId))
-            let reps = item.repsMin.map { $0 < item.reps ? "\($0)\u{2013}\(item.reps)" : "\(item.reps)" } ?? "\(item.reps)"
+            let itemLoads = loads(item.exerciseId)
+            let suggest = { (loads: ListingLoads?) in
+                SessionPlanner.suggestion(for: item, policy: item.policy ?? routine.policy, profile: profile,
+                                          exercise: ex, history: past, loads: loads)
+            }
+            let suggestion = suggest(itemLoads)
+            // Past the gym's heaviest weight the target is the raised number the workout will start with.
+            let raisedReps = itemLoads != nil && suggestion.reps > suggest(nil).reps
+            let reps = raisedReps ? "\(suggestion.reps)"
+                : item.repsMin.map { $0 < item.reps ? "\($0)\u{2013}\(item.reps)" : "\(item.reps)" } ?? "\(item.reps)"
             let load = suggestion.weightKg > 0
                 ? " \u{00B7} " + WeightFormatter.format(kg: suggestion.weightKg, unit: profile.unit)
                 : ""
@@ -88,6 +94,7 @@ struct TodayModel: Equatable {
         switch plan.kind {
         case .empty where rows.isEmpty: summary = "Add exercises, or start and add them as you go"
         case .restDaySuggestion where !plan.edited: summary = "Rest day \u{00B7} optional \u{00B7} \(count)"
+        case .built: summary = count
         default: summary = plan.edited ? "\(count) \u{00B7} edited for today" : count
         }
         return TodayModel(routineId: plan.base?.id, title: plan.title, summary: summary, rows: rows,

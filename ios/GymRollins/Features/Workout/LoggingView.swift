@@ -378,7 +378,7 @@ extension LoggingView {
     private func swap(to candidate: Exercise) {
         drafts = [:]
         let history = (try? env.workouts.history(exerciseId: candidate.id, limit: 5)) ?? []
-        model.swap(to: candidate, profile: env.profile, history: history)
+        model.swap(to: candidate, profile: env.profile, history: history, loads: env.gymLoads(candidate.id))
     }
 
     private func resetSets(_ editor: TodayPlanEditor, _ itemId: UUID) {

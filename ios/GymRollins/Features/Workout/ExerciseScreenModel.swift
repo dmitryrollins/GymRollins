@@ -135,12 +135,12 @@ enum ExerciseScreenModel {
 
     /// Swaps the exercise. The workout's entry takes the new exercise's multiplier and suggested weight (`history` is
     /// the candidate's); today's plan takes its routine defaults, keeping the item's place and id.
-    func swap(to candidate: Exercise, profile: Profile, history: [SessionResult]) {
+    func swap(to candidate: Exercise, profile: Profile, history: [SessionResult], loads: ListingLoads? = nil) {
         switch self {
         case .workout(let session, let entryId):
             session.swap(entryId: entryId, to: candidate.id, multiplier: SessionPlanner.multiplier(for: candidate),
                          workingWeightKg: SessionPlanner.swapWeightKg(exercise: candidate, profile: profile,
-                                                                      history: history))
+                                                                      history: history, loads: loads))
         case .plan(let editor, let itemId):
             editor.replace(itemId, with: RoutineDefaults.item(for: candidate, profile: profile))
         }

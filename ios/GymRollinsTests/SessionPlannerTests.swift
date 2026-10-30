@@ -149,6 +149,23 @@ import Testing
 
     // MARK: Gym loads
 
+    @Test func swapMidWorkoutFitsTheGym() {
+        let curl = library.exercise("0313")
+        let history = [SessionResult(date: .now, weightKg: 30, reps: [10, 10, 10])]
+        #expect(SessionPlanner.swapWeightKg(exercise: curl, profile: Profile(), history: history,
+                                            loads: .fixed(kg: [20, 24])) == 24)
+        #expect(SessionPlanner.swapWeightKg(exercise: curl, profile: Profile(), history: [],
+                                            loads: .fixed(kg: [20, 24])) == nil)
+    }
+
+    @Test func addingMidWorkoutFitsTheGym() {
+        let curl = library.exercise("0313")
+        let history = [SessionResult(date: .now, weightKg: 30, reps: [10, 10, 10])]
+        let entry = SessionPlanner.adHocEntry(exerciseId: "0313", exercise: curl, profile: Profile(), history: history,
+                                              autoWarmups: false, loads: .fixed(kg: [20, 24]))
+        #expect(entry.sets.allSatisfy { $0.weightKg == 24 })
+    }
+
     @Test func loadsFitTheSuggestion() {
         let curl = library.exercise("0313")
         let item = RoutineExercise(exerciseId: "0313", sets: 3, reps: 10, repsMin: 8, weightKg: 30, incKg: 2.5)

@@ -89,19 +89,20 @@ enum SessionPlanner {
     /// Entry for an exercise added mid-workout, with the same mode-aware targets (reps, time or
     /// cardio) as adding it to a routine.
     static func adHocEntry(exerciseId: String, exercise: Exercise?, profile: Profile,
-                           history: [SessionResult], autoWarmups: Bool) -> WorkoutEntry {
+                           history: [SessionResult], autoWarmups: Bool, loads: ListingLoads? = nil) -> WorkoutEntry {
         let item = exercise.map { RoutineDefaults.item(for: $0, profile: profile) }
             ?? RoutineExercise(exerciseId: exerciseId, sets: 3, reps: 10, repsMin: 8)
         return entry(for: item, policy: item.policy ?? .double, profile: profile, exercise: exercise,
-                     history: history, autoWarmups: autoWarmups)
+                     history: history, autoWarmups: autoWarmups, loads: loads)
     }
 
     /// Working weight for a swapped-in exercise: its own progression suggestion when it has
     /// history, otherwise nil (keep the weights already on the entry).
-    static func swapWeightKg(exercise: Exercise?, profile: Profile, history: [SessionResult]) -> Double? {
+    static func swapWeightKg(exercise: Exercise?, profile: Profile, history: [SessionResult],
+                             loads: ListingLoads? = nil) -> Double? {
         guard let exercise, !history.isEmpty else { return nil }
         let item = RoutineDefaults.item(for: exercise, profile: profile)
         return suggestion(for: item, policy: item.policy ?? .double, profile: profile, exercise: exercise,
-                          history: history).weightKg
+                          history: history, loads: loads).weightKg
     }
 }

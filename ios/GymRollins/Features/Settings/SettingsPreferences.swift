@@ -52,6 +52,7 @@ extension AppEnvironment {
     func adHocEntry(exerciseId: String) -> WorkoutEntry {
         SessionPlanner.adHocEntry(exerciseId: exerciseId, exercise: library.exercise(exerciseId), profile: profile,
                                   history: (try? workouts.history(exerciseId: exerciseId, limit: 5)) ?? [],
-                                  autoWarmups: WarmupPreferences.autoWarmupsEnabled(defaults))
+                                  autoWarmups: WarmupPreferences.autoWarmupsEnabled(defaults),
+                                  loads: gymLoads(exerciseId))
     }
 }

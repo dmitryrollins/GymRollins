@@ -135,6 +135,22 @@ let richGym: [String: ListingLoads] = [
     }
 
     /// Today, plan mode and the watch each call this, so it must stay cheap on the real library.
+    @Test func addingAnExerciseMidWorkoutUsesTheGymsWeights() throws {
+        let rig = try GymTestRig.make()
+        let gym = try rig.gym("KB", ["kettlebells": .fixed(kg: [20, 24])])
+        rig.env.setCurrentGym(gym.id)
+        let curl = try #require(rig.env.library.exercises.first { $0.equipment == "kettlebell" && $0.mode == .reps })
+        let loads = try #require(rig.env.gymLoads(curl.id))
+        #expect(loads == .fixed(kg: [20, 24]))
+        let workout = Workout(startedAt: rig.env.now().addingTimeInterval(-86_400), name: "Past", entries: [
+            WorkoutEntry(exerciseId: curl.id, sets: (0..<3).map { _ in
+                WorkoutSet(weightKg: 30, reps: 10).completing(at: rig.env.now().addingTimeInterval(-86_400))
+            }),
+        ])
+        try rig.env.workouts.save(workout, records: [])
+        #expect(rig.env.adHocEntry(exerciseId: curl.id).sets.filter { !$0.warmup }.allSatisfy { $0.weightKg == 24 })
+    }
+
     @Test func adaptingTheWholeSplitIsFast() throws {
         let rig = try GymTestRig.make()
         rig.env.setCurrentGym(try rig.gym("KB", kettlebellGym).id)
