@@ -64,6 +64,8 @@ struct AddEquipmentDuplicateStep: View {
         if model.keepsItsPhoto(listing) {
             Text("Keeps its photo. Your new one isn't saved.").font(.caption).foregroundStyle(Theme.textSecondary)
                 .accessibilityIdentifier("addEquipment.keepsPhoto.\(listing.id.uuidString)")
+        } else if model.photoIsNotUsed(for: listing) {
+            photoNotUsedNote(listing)
         }
         PrimaryGlassButton(title: "Yes, that's it", identifier: "addEquipment.same.\(listing.id.uuidString)") {
             model.sameAsExisting(listing)
@@ -78,15 +80,17 @@ struct AddEquipmentDuplicateStep: View {
             Text("You confirmed this").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textSecondary)
                 .accessibilityIdentifier("add.confirmed.\(listing.id.uuidString)")
         } else if model.canConfirm(listing) {
-            if model.hasPhoto {
-                Text("Your photo isn't used here. Choose \u{201C}No, it's a different one\u{201D} to share it.")
-                    .font(.caption).foregroundStyle(Theme.textSecondary)
-                    .accessibilityIdentifier("add.confirm.photoNote.\(listing.id.uuidString)")
-            }
+            if model.hasPhoto { photoNotUsedNote(listing) }
             PrimaryGlassButton(title: "Yes, that's it (+1 confirm)", identifier: "add.confirm.\(listing.id.uuidString)") {
                 model.confirmExisting(listing)
             }
         }
+    }
+
+    private func photoNotUsedNote(_ listing: GymListing) -> some View {
+        Text("Your photo isn't used here. Choose \u{201C}No, it's a different one\u{201D} to share it.")
+            .font(.caption).foregroundStyle(Theme.textSecondary)
+            .accessibilityIdentifier("add.confirm.photoNote.\(listing.id.uuidString)")
     }
 
     private var knownModels: some View {

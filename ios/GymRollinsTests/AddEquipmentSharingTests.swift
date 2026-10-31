@@ -15,6 +15,7 @@ import Testing
     final class Calls {
         var signedIn: UUID?
         var shared: [UUID] = []
+        var forceNew: [Bool] = []
         var synced: [UUID] = []
         var confirmed: [UUID] = []
         var order: [String] = []
@@ -30,7 +31,10 @@ import Testing
             addListing: { calls.order.append("add"); return try repo.addListing($0) },
             attachPhoto: { _, _ in throw CocoaError(.fileWriteOutOfSpace) })
         ports.signedInUser = { calls.signedIn }
-        ports.shareListing = { calls.shared.append($0) }
+        ports.shareListing = { id, forceNew in
+            calls.shared.append(id)
+            calls.forceNew.append(forceNew)
+        }
         ports.syncListing = { calls.synced.append($0) }
         ports.confirmListing = { calls.confirmed.append($0) }
         ports.items = { _ in calls.remoteItems }
@@ -45,12 +49,12 @@ import Testing
     /// Someone else's listing, as a refresh caches it.
     @discardableResult
     private func cachedByOthers(_ rig: GymTestRig, gym: Gym, kind: String, confirms: Int = 3,
-                                confirmedByMe: Bool = false) throws -> GymListing {
+                                confirmedByMe: Bool = false, own: Bool = false) throws -> GymListing {
         let listing = try rig.env.gyms.addListing(NewListing(gymId: gym.id, kindId: kind, loads: .none))
         let id = listing.id
         let row = try #require(try rig.env.container.mainContext.fetch(
             FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first)
-        row.isOwn = false
+        row.isOwn = own
         row.visibilityRaw = GymVisibility.shared.rawValue
         row.uploadStateRaw = UploadState.uploaded.rawValue
         row.confirmCount = confirms
@@ -158,7 +162,88 @@ import Testing
         #expect(calls.synced == [listing.id])
     }
 
+    @Test func sayingItIsADifferentOneSharesWithForceNew() throws {
+        let rig = try GymTestRig.make()
+        let calls = Calls()
+        calls.signedIn = user
+        let gym = try mapsGym(rig)
+        try cachedByOthers(rig, gym: gym, kind: "lat-pulldown")
+        let different = model(rig, gym: gym, calls: calls)
+        different.skipPhoto()
+        different.chooseKind("lat-pulldown")
+        different.different()
+        different.visibility = .shared
+        different.save()
+        #expect(calls.forceNew == [true], "the user already answered the duplicate question")
+
+        let generic = model(rig, gym: gym, calls: calls)
+        generic.skipPhoto()
+        generic.chooseKind("lat-pulldown")
+        generic.chooseGeneric()
+        generic.visibility = .shared
+        generic.save()
+        #expect(calls.forceNew == [true, false], "a generic pick leaves the question to the server")
+    }
+
+    @Test func aShareWithNoDuplicateQuestionIsNotForced() throws {
+        let rig = try GymTestRig.make()
+        let calls = Calls()
+        calls.signedIn = user
+        let flow = model(rig, gym: try mapsGym(rig), calls: calls)
+        toDetails(flow, kind: "flat-bench")
+        flow.visibility = .shared
+        flow.save()
+        #expect(calls.forceNew == [false])
+    }
+
+    @Test func aQueueFailureLeavesTheSavedListingPhoneOnlyAndTheFlowClosed() throws {
+        let rig = try GymTestRig.make()
+        let calls = Calls()
+        calls.signedIn = user
+        let gym = try mapsGym(rig)
+        var ports = AddEquipmentModel.Ports(
+            listings: { _ in [] }, catalogueItems: { _ in [] }, savePhoto: { try rig.photos.save($0) },
+            deletePhoto: { try? rig.photos.delete($0) }, addListing: { try rig.env.gyms.addListing($0) },
+            attachPhoto: { _, _ in throw CocoaError(.fileWriteOutOfSpace) })
+        ports.signedInUser = { calls.signedIn }
+        ports.shareListing = { _, _ in throw CocoaError(.fileWriteOutOfSpace) }
+        let flow = AddEquipmentModel(gym: gym, catalog: rig.env.gymCatalog, unit: .lb, ports: ports)
+        toDetails(flow, kind: "flat-bench")
+        flow.visibility = .shared
+        flow.save()
+        guard case let .created(listing)? = flow.outcome else { Issue.record("not saved"); return }
+        #expect(try rig.env.gyms.listing(listing.id)?.visibility == .device, "the tile's Only me is true")
+        #expect(ShareStatusModel(listing: listing, gym: gym).actions == [.share], "and the detail offers it again")
+    }
+
     // MARK: Step 3
+
+    @Test func yesThatsItOnMyOwnSharedListingDropsThePhotoInsteadOfAttachingIt() throws {
+        let rig = try GymTestRig.make()
+        let calls = Calls()
+        let gym = try mapsGym(rig)
+        let mine = try cachedByOthers(rig, gym: gym, kind: "lat-pulldown", own: true)
+        let flow = model(rig, gym: gym, calls: calls) // its attachPhoto port fails, so attaching would show an error
+        flow.photoProcessed(GymPhotoFixtureValue.photo)
+        flow.chooseKind("lat-pulldown")
+        #expect(flow.photoIsNotUsed(for: mine), "the step says so, as it does for someone else's")
+        flow.sameAsExisting(mine)
+        #expect(flow.outcome == .confirmed(mine))
+        #expect(flow.errorText == nil)
+        #expect(rig.photoCount() == 0)
+    }
+
+    @Test func yesThatsItOnMyOwnPhoneOnlyListingStillTakesThePhoto() throws {
+        let rig = try GymTestRig.make()
+        let gym = try mapsGym(rig)
+        let mine = try rig.env.gyms.addListing(NewListing(gymId: gym.id, kindId: "lat-pulldown", loads: .none))
+        let flow = model(rig, gym: gym, calls: Calls())
+        flow.photoProcessed(GymPhotoFixtureValue.photo)
+        flow.chooseKind("lat-pulldown")
+        #expect(!flow.photoIsNotUsed(for: mine))
+        flow.sameAsExisting(mine)
+        #expect(flow.errorText != nil, "the attach was tried (this rig's attach fails)")
+    }
 
     @Test func othersListingsComeFirstAndOwnShowsAlreadyAdded() throws {
         let rig = try GymTestRig.make()
@@ -210,6 +295,7 @@ import Testing
         let flow = model(rig, gym: gym, calls: calls)
         flow.photoProcessed(GymPhotoFixtureValue.photo)
         flow.chooseKind("lat-pulldown")
+        #expect(flow.photoIsNotUsed(for: theirs))
         flow.confirmExisting(theirs)
         #expect(calls.confirmed == [theirs.id])
         #expect(flow.outcome == .confirmed(theirs))

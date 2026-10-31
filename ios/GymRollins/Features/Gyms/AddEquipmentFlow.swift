@@ -46,6 +46,7 @@ struct AddEquipmentFlow: View {
         .background(Theme.background)
         .signInForSharing(isPresented: Binding(get: { model.signInNeeded },
                                                set: { if !$0 { model.signInCancelled() } }),
+                          purpose: model.signInPurpose,
                           onSignedIn: { model.signInFinished() })
         .onChange(of: model.outcome) { _, outcome in
             guard let outcome else { return }
@@ -80,7 +81,7 @@ extension AddEquipmentModel.Ports {
                 return listing
             },
             signedInUser: { env.sharingUserId },
-            shareListing: { try env.shareListing($0) },
+            shareListing: { try env.shareListing($0, forceNew: $1) },
             syncListing: { try env.syncListing($0) },
             confirmListing: { try env.confirmListing($0) },
             items: { await env.gymSharing.client.items(kindId: $0) },

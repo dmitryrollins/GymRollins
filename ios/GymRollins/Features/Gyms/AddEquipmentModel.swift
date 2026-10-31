@@ -28,8 +28,9 @@ final class AddEquipmentModel {
         let attachPhoto: (ProcessedGymPhoto, UUID) throws -> GymListing
         /// The signed-in account; nil while signed out.
         var signedInUser: () -> UUID? = { nil }
-        /// Queue the share, mark the listing synced, queue the +1 confirm. Each needs a signed-in account.
-        var shareListing: (UUID) throws -> Void = { _ in }
+        /// Queue the share (`forceNew` once the user said it is a different one), mark the listing synced, queue the
+        /// +1 confirm. Each needs a signed-in account.
+        var shareListing: (UUID, Bool) throws -> Void = { _, _ in }
         var syncListing: (UUID) throws -> Void = { _ in }
         var confirmListing: (UUID) throws -> Void = { _ in }
         /// Branded models: this phone's and the server's. It can be slow, so the step doesn't wait for it.
@@ -66,6 +67,8 @@ final class AddEquipmentModel {
     /// The model picked from the server or My gyms, stored before the listing is created.
     private var chosenItem: CatalogueItem?
     private var pending: Pending?
+    /// The user answered "No, it's a different one": the server isn't asked about duplicates again.
+    private var saidDifferent = false
 
     var brand = ""
     var modelName = ""
@@ -122,15 +125,23 @@ final class AddEquipmentModel {
         kind = chosen
         loads = ListingLoadsEditing(kind: chosen, unit: unit, loads: .none).loads
         clearItem()
+        saidDifferent = false
         step = existing.isEmpty ? .details : .duplicate
     }
 
     /// A photo was taken but the listing has its own: it stays, and the new one isn't saved.
     func keepsItsPhoto(_ listing: GymListing) -> Bool { photo != nil && listing.photoFile != nil }
 
-    /// "Yes, that's it": no new listing. One with no photo gets the photo just taken; one with a photo keeps it.
+    /// The photo taken here goes nowhere: someone else's listing keeps its own picture, and mine once it is shared is
+    /// read-only (the server never gets a photo added afterwards, and a sign-out would delete it).
+    func photoIsNotUsed(for listing: GymListing) -> Bool {
+        photo != nil && listing.visibility == .shared && (!listing.isOwn || listing.photoFile == nil)
+    }
+
+    /// "Yes, that's it": no new listing. One of mine with no photo gets the photo just taken, unless it is shared;
+    /// one with a photo keeps it.
     func sameAsExisting(_ listing: GymListing) {
-        guard let photo, listing.photoFile == nil else {
+        guard let photo, listing.photoFile == nil, listing.visibility != .shared else {
             outcome = .confirmed(listing)
             return
         }
@@ -154,6 +165,7 @@ final class AddEquipmentModel {
     }
 
     func chooseCatalogueItem(_ item: CatalogueItem) {
+        saidDifferent = false
         chosenItem = item
         brand = item.item.brand ?? ""
         modelName = item.item.model ?? ""
@@ -163,12 +175,14 @@ final class AddEquipmentModel {
 
     func chooseGeneric() {
         clearItem()
+        saidDifferent = false
         step = .details
     }
 
     /// "No, it's a different one": the next step also asks for an optional brand and model.
     func different() {
         clearItem()
+        saidDifferent = true
         showsBrandFields = true
         step = .details
     }
@@ -266,6 +280,14 @@ extension AddEquipmentModel {
     /// A share, sync or confirmation is waiting for the user to sign in.
     var signInNeeded: Bool { pending != nil }
 
+    /// What the sign-in sheet says it is for.
+    var signInPurpose: SignInPurpose {
+        switch pending {
+        case .confirm: .confirm
+        case .save, nil: visibility == .synced ? .sync : .share
+        }
+    }
+
     /// Signed in: the action the user asked for goes ahead. If nobody is signed in after all, nothing is done.
     func signInFinished() {
         guard let action = pending else { return }
@@ -334,7 +356,7 @@ extension AddEquipmentModel {
         do {
             switch visibility {
             case .device: break
-            case .shared: try ports.shareListing(listing.id)
+            case .shared: try ports.shareListing(listing.id, saidDifferent)
             case .synced: try ports.syncListing(listing.id)
             }
         } catch {
