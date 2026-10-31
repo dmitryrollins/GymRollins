@@ -103,6 +103,7 @@ public final class SyncStore {
 
     /// Erase all data / account deletion / a fresh store: `resetAccountData()` plus the gym models.
     public func resetAll() throws {
+        try deleteAll(ShareOutboxRecord.self)
         try deleteAll(GymListingRecord.self)
         try deleteAll(EquipmentItemRecord.self)
         try deleteAll(GymRecord.self)

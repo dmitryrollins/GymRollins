@@ -44,7 +44,7 @@ public struct RemoteItem: Sendable, Equatable {
     }
 }
 
-public struct RemoteListing: Sendable, Equatable {
+public struct RemoteListing: Sendable, Equatable, Codable {
     public let id: UUID, gymId: UUID, itemId: UUID, kindId: String, brand: String?, model: String?
     public let photoPath: String?, loads: ListingLoads?, quantity: Int, notes: String?
     public let status: String, confirmCount: Int, isMine: Bool, confirmedByMe: Bool
