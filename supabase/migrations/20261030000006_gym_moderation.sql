@@ -162,7 +162,10 @@ grant execute on function public.report_content(text, uuid, text, text), public.
   public.my_gym_photos() to authenticated;
 
 -- Account deletion. The app has already removed the user's photos through Storage. Shared listings and gyms stay without
--- their author because they describe the gym, but the author's own words and any item nobody lists go with them.
+-- their author because they describe the gym, but the author's own words go: a listing's notes and photo, the brand and
+-- model of an item only they used (their listings fall back to the generic item of the kind, which is what the item
+-- would be with the words taken out), and the note on every report they filed. An item others list too stays: it is
+-- the catalogue's by then.
 create or replace function public.delete_my_account() returns void
 language plpgsql security definer set search_path = public, auth as $$
 declare
@@ -170,8 +173,16 @@ declare
 begin
   if me is null or public.is_mcp_client() then raise exception 'not allowed' using errcode = '42501'; end if;
   update public.gym_equipment set photo_path = null, notes = null where added_by = me and visibility = 'public';
+  update public.gym_equipment e
+    set item_id = (select g.id from public.equipment_items g
+                   where g.kind_id = i.kind_id and g.brand is null and g.model is null)
+    from public.equipment_items i
+    where e.item_id = i.id and i.created_by = me and (i.brand is not null or i.model is not null)
+      and e.added_by = me and e.visibility = 'public'
+      and not exists (select 1 from public.gym_equipment o where o.item_id = i.id and o.added_by is distinct from me);
   delete from public.equipment_items i
     where i.created_by = me and not exists (select 1 from public.gym_equipment e where e.item_id = i.id);
+  update public.reports set note = null where reporter_id = me;
   delete from auth.users where id = me;
 end $$;
 revoke all on function public.delete_my_account() from public, anon;
