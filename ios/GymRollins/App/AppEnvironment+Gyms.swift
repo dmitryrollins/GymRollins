@@ -186,9 +186,13 @@ extension AppEnvironment {
     /// `gymLoads` for many exercises over one read of the gym. `preferring` names the listing a built workout fitted an
     /// exercise to, which wins over the gym's first choice.
     func gymLoadsLookup(preferring: [String: UUID] = [:]) -> (String) -> ListingLoads? {
-        guard let matcher = gymMatcher() else { return { _ in nil } }
-        let context = TodayGymContext(matcher: matcher, photo: { _ in nil }, preferred: preferring)
-        return { context.loads(for: $0) }
+        let context = gymLoadsContext(preferring: preferring)
+        return { context?.loads(for: $0) }
+    }
+
+    func gymLoadsContext(preferring: [String: UUID] = [:]) -> TodayGymContext? {
+        guard let matcher = gymMatcher() else { return nil }
+        return TodayGymContext(matcher: matcher, photo: { _ in nil }, preferred: preferring)
     }
 
     /// What Today's rows need from the current gym, read once per reload.
@@ -223,6 +227,13 @@ extension AppEnvironment {
 }
 
 extension InventoryMatcher {
+    /// The listing that decides this exercise's weight; nil when it has none here.
+    func loadListingId(for exerciseId: String) -> UUID? {
+        guard case let .available(match) = availability(of: exerciseId), let id = match.loadListingId,
+              listing(id) != nil else { return nil }
+        return id
+    }
+
     /// The loads of the listing that decides this exercise's weight; nil when it has none here.
     func loads(for exerciseId: String) -> ListingLoads? {
         guard case let .available(match) = availability(of: exerciseId), let id = match.loadListingId else { return nil }

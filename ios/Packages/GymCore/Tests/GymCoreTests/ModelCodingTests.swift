@@ -170,3 +170,18 @@ import Testing
         #expect(throws: DecodingError.self) { try JSONDecoder().decode(Routine.self, from: Data(routine.utf8)) }
     }
 }
+
+@Suite struct WorkoutGymLinkCodingTests {
+    @Test func linksRoundTripAndOlderPayloadsReadBackAsNil() throws {
+        let gym = UUID(), listing = UUID()
+        let entry = WorkoutEntry(exerciseId: "0025", sets: [], gymListingId: listing)
+        let workout = Workout(startedAt: Date(timeIntervalSince1970: 1_790_000_000), name: "Push", entries: [entry],
+                              gymId: gym)
+        let decoded = try JSONDecoder().decode(Workout.self, from: JSONEncoder().encode(workout))
+        #expect(decoded.gymId == gym && decoded.entries[0].gymListingId == listing)
+
+        let old = Data(#"{"id":"\#(UUID())","startedAt":0,"name":"Old","entries":[{"id":"\#(UUID())","exerciseId":"x"}]}"#.utf8)
+        let legacy = try JSONDecoder().decode(Workout.self, from: old)
+        #expect(legacy.gymId == nil && legacy.entries[0].gymListingId == nil)
+    }
+}

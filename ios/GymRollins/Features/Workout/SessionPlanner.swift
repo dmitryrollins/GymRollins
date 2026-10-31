@@ -5,21 +5,26 @@ import GymData
 /// Builds a new in-progress Workout from a routine: suggested weights, warm-ups for barbell lifts, dumbbell multiplier.
 enum SessionPlanner {
     /// `setOverrides` (by routine item id) are sets edited on Today: those exercises start with exactly them. `loads`
-    /// gives the current gym's listing loads for an exercise (nil: no gym, or nothing to fit to).
+    /// gives the current gym's listing loads for an exercise (nil: no gym, or nothing to fit to), and `loadListing` the
+    /// listing those loads come from; both are stored on the workout so history knows where it was done.
     static func start(routine: Routine, profile: Profile, library: ExerciseLibrary, now: Date,
                       history: (String) -> [SessionResult], autoWarmups: Bool = true,
                       setOverrides: [UUID: [WorkoutSet]] = [:],
-                      loads: (String) -> ListingLoads? = { _ in nil }) -> Workout {
+                      loads: (String) -> ListingLoads? = { _ in nil }, gymId: UUID? = nil,
+                      loadListing: (String) -> UUID? = { _ in nil }) -> Workout {
         let entries = routine.exercises.map { item in
             let exercise = library.exercise(item.exerciseId)
+            let built: WorkoutEntry
             if let sets = setOverrides[item.id], !sets.isEmpty {
-                return planned(item: item, sets: sets, exercise: exercise)
+                built = planned(item: item, sets: sets, exercise: exercise)
+            } else {
+                built = entry(for: item, policy: item.policy ?? routine.policy, profile: profile,
+                              exercise: exercise, history: history(item.exerciseId), autoWarmups: autoWarmups,
+                              loads: loads(item.exerciseId))
             }
-            return entry(for: item, policy: item.policy ?? routine.policy, profile: profile,
-                         exercise: exercise, history: history(item.exerciseId), autoWarmups: autoWarmups,
-                         loads: loads(item.exerciseId))
+            return gymId == nil ? built : built.with(gymListingId: loadListing(item.exerciseId))
         }
-        return Workout(startedAt: now, routineId: routine.id, name: routine.name, entries: entries)
+        return Workout(startedAt: now, routineId: routine.id, name: routine.name, entries: entries, gymId: gymId)
     }
 
     /// An entry with sets edited on Today: fresh, not-done copies with the exercise's volume multiplier.

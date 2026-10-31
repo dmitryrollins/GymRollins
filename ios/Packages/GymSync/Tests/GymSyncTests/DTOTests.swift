@@ -149,6 +149,37 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(try wire(WorkoutDTO(row)).toDomain() == row)
     }
 
+    @Test func workoutLinksAreEncodedOnlyWhenPresentAndRoundTrip() throws {
+        let gym = UUID(), listing = UUID()
+        let bare = Workout(startedAt: t0, name: "Push", entries: [WorkoutEntry(exerciseId: "bench")])
+        let plain = String(decoding: try SyncJSON.encoder.encode(WorkoutDTO(
+            SyncRow(value: WorkoutSnapshot(workout: bare, records: [], volumeKg: 0), clientUpdatedAt: t0))), as: UTF8.self)
+        #expect(!plain.contains("gym_id") && !plain.contains("gym_equipment_id"))
+
+        let linked = Workout(startedAt: t0, name: "Push", entries: [WorkoutEntry(exerciseId: "bench", gymListingId: listing)],
+                             gymId: gym)
+        let row = SyncRow(value: WorkoutSnapshot(workout: linked, records: [], volumeKg: 0), clientUpdatedAt: t0)
+        let json = String(decoding: try SyncJSON.encoder.encode(WorkoutDTO(row)), as: UTF8.self)
+        #expect(json.contains(#""gym_id":"\#(gym.uuidString)""#) && json.contains(#""gym_equipment_id":"\#(listing.uuidString)""#))
+        #expect(try wire(WorkoutDTO(row)).toDomain() == row)
+    }
+
+    @Test func decodesTheLinksAServerRowCarriesAndToleratesNulls() throws {
+        let json = """
+        [{"id":"8f7c0a2e-3b1d-4c55-9a51-2f7e0b8c9d10","started_at":"2026-09-26T17:00:00+00:00","paused_sec":0,
+          "name":"Push A","client_updated_at":"2026-09-26T18:05:13+00:00","gym_id":"9a9a9a9a-0000-4000-8000-000000000001",
+          "workout_entries":[
+            {"id":"a1a1a1a1-0000-4000-8000-000000000001","exercise_id":"bench","position":0,
+             "gym_equipment_id":"9b9b9b9b-0000-4000-8000-000000000002","workout_sets":[]},
+            {"id":"b2b2b2b2-0000-4000-8000-000000000002","exercise_id":"row","position":1,
+             "gym_equipment_id":null,"workout_sets":[]}]}]
+        """
+        let w = try #require(try SyncJSON.decoder.decode([WorkoutDTO].self, from: Data(json.utf8)).first).toDomain().value.workout
+        #expect(w.gymId == UUID(uuidString: "9a9a9a9a-0000-4000-8000-000000000001"))
+        #expect(w.entries[0].gymListingId == UUID(uuidString: "9b9b9b9b-0000-4000-8000-000000000002"))
+        #expect(w.entries[1].gymListingId == nil)
+    }
+
     /// A PostgREST response for `workouts?select=*,workout_entries(*,workout_sets(*))` (embeds unordered).
     @Test func decodesCapturedPostgRESTWorkout() throws {
         let json = """

@@ -36,27 +36,40 @@ extension WorkoutSet {
 
 extension WorkoutEntry {
     public func with(sets: [WorkoutSet]) -> WorkoutEntry {
-        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup)
+        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup,
+                     gymListingId: gymListingId)
     }
 
+    /// The listing belonged to the old exercise, so it goes.
     func with(exerciseId: String) -> WorkoutEntry {
         WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup)
     }
 
     func with(note: String?) -> WorkoutEntry {
-        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup)
+        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup,
+                     gymListingId: gymListingId)
+    }
+
+    public func with(gymListingId: UUID?) -> WorkoutEntry {
+        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup,
+                     gymListingId: gymListingId)
     }
 }
 
 extension Workout {
+    public func with(gymId: UUID?) -> Workout {
+        Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSeconds, routineId: routineId,
+                name: name, entries: entries, source: source, note: note, gymId: gymId)
+    }
+
     public func with(entries: [WorkoutEntry]) -> Workout {
         Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSeconds, routineId: routineId,
-                name: name, entries: entries, source: source, note: note)
+                name: name, entries: entries, source: source, note: note, gymId: gymId)
     }
 
     public func with(endedAt: Date?, pausedSeconds: TimeInterval) -> Workout {
         Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSeconds, routineId: routineId,
-                name: name, entries: entries, source: source, note: note)
+                name: name, entries: entries, source: source, note: note, gymId: gymId)
     }
 
     private func mappingEntry(_ entryId: UUID, _ transform: (WorkoutEntry) -> WorkoutEntry) -> Workout {

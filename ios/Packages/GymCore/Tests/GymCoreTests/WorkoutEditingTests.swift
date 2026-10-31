@@ -10,6 +10,29 @@ import Testing
     var curl: WorkoutEntry { WorkoutEntry(exerciseId: "0070", sets: [WorkoutSet(weightKg: 24.9, reps: 10)]) }
     var workout: Workout { Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push", entries: [bench, curl]) }
 
+    @Test func editingKeepsTheGymAndEachEntrysListing() {
+        let gym = UUID(), listing = UUID()
+        let linked = Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push", entries: [
+            WorkoutEntry(exerciseId: "0025", sets: [s1], gymListingId: listing), curl,
+        ], gymId: gym)
+        let entry = linked.entries[0]
+        let edited = linked.updatingSet(entryId: entry.id, setId: s1.id) { $0.completing(at: Date()) }
+            .settingNote(entryId: entry.id, note: "slow")
+            .appendingSet(entryId: entry.id)
+            .finished(at: Date(timeIntervalSince1970: 60), discardingUndone: false)
+        #expect(edited.gymId == gym)
+        #expect(edited.entries[0].gymListingId == listing)
+        #expect(edited.entries[1].gymListingId == nil)
+    }
+
+    @Test func replacingAnExerciseDropsTheListingOfTheOldOne() {
+        let linked = WorkoutEntry(exerciseId: "0025", sets: [s1], gymListingId: UUID())
+        let w = Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push", entries: [linked], gymId: UUID())
+        let swapped = w.replacingExercise(entryId: linked.id, exerciseId: "0070")
+        #expect(swapped.entries[0].exerciseId == "0070" && swapped.entries[0].gymListingId == nil)
+        #expect(swapped.gymId == w.gymId)
+    }
+
     @Test func updatingSetReturnsNewWorkout() {
         let w = workout
         let e = w.entries[0]

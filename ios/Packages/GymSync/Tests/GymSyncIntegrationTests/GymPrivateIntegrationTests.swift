@@ -94,4 +94,41 @@ struct GymPrivateIntegrationTests {
         try await owner.deleteAccount()
         try await stranger.deleteAccount()
     }
+
+    @Test func aWorkoutKeepsItsSyncedGymAndListingAcrossDevicesButNeverALocalOne() async throws {
+        let owner = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let first = try Phone(owner, clock: clock)
+        let workouts = WorkoutRepository(context: first.container.mainContext, now: { clock.now })
+
+        let gym = try first.repo.addPrivateGym(name: "Garage", address: nil)
+        let listing = try first.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station",
+                                                           loads: .stack(maxKg: 90, stepKg: 5)))
+        try first.repo.makeSynced(listing: listing.id)
+        let local = try first.repo.addPrivateGym(name: "Phone only", address: nil)
+        let localListing = try first.repo.addListing(NewListing(gymId: local.id, kindId: "cable-station"))
+        await first.engine.sync()
+
+        func workout(gym: UUID, listing: UUID) -> Workout {
+            Workout(startedAt: clock.now, endedAt: clock.now.addingTimeInterval(600), name: "Pull", entries: [
+                WorkoutEntry(exerciseId: "bench", sets: [WorkoutSet(weightKg: 50, reps: 8, done: true)],
+                             gymListingId: listing)], gymId: gym)
+        }
+        let linked = workout(gym: gym.id, listing: listing.id)
+        let phoneOnly = workout(gym: local.id, listing: localListing.id)
+        try workouts.save(linked)
+        try workouts.save(phoneOnly)
+        await first.engine.sync()
+        #expect(first.engine.status == .idle, "\(first.store.syncFailures().map(\.message))")
+        #expect(try workouts.workout(phoneOnly.id)?.gymId == local.id, "a pull never clears a local link")
+
+        let second = try Phone(try await owner.onAnotherDevice(), clock: clock)
+        await second.engine.sync()
+        let other = WorkoutRepository(context: second.container.mainContext, now: { clock.now })
+        #expect(try other.workout(linked.id)?.gymId == gym.id)
+        #expect(try other.workout(linked.id)?.entries.first?.gymListingId == listing.id)
+        #expect(try other.workout(phoneOnly.id)?.gymId == nil)
+
+        try await owner.deleteAccount()
+    }
 }

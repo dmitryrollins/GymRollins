@@ -20,6 +20,8 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
     public let volKg: Double
     public let records: [PersonalRecord]
     public let entries: [WorkoutEntryDTO]
+    /// The server's id of the gym (never a "This phone only" gym's); sent only when there is one.
+    public let gymId: UUID?
     public let clientUpdatedAt: Date
     public let deletedAt: Date?
     public var updatedAt: Date?
@@ -31,7 +33,7 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
     enum CodingKeys: String, CodingKey {
         case id, name, source, note, records, entries
         case startedAt = "started_at", endedAt = "ended_at", pausedSec = "paused_sec", routineId = "routine_id"
-        case volKg = "vol_kg", workoutEntries = "workout_entries"
+        case volKg = "vol_kg", workoutEntries = "workout_entries", gymId = "gym_id"
         case clientUpdatedAt = "client_updated_at", deletedAt = "deleted_at", updatedAt = "updated_at"
         case baseUpdatedAt = "base_updated_at", force
     }
@@ -49,6 +51,7 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
         volKg = row.value.volumeKg
         records = row.value.records
         entries = w.entries.enumerated().map { WorkoutEntryDTO($1, position: $0) }
+        gymId = w.gymId
         clientUpdatedAt = row.clientUpdatedAt
         deletedAt = row.deletedAt
         updatedAt = row.serverUpdatedAt
@@ -71,6 +74,7 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
         entries = try (c.decodeIfPresent([WorkoutEntryDTO].self, forKey: .entries)
             ?? c.decodeIfPresent([WorkoutEntryDTO].self, forKey: .workoutEntries) ?? [])
             .sorted { $0.position < $1.position }
+        gymId = try c.decodeIfPresent(UUID.self, forKey: .gymId)
         clientUpdatedAt = try c.decode(Date.self, forKey: .clientUpdatedAt)
         deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
@@ -91,6 +95,7 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
         try c.encode(volKg, forKey: .volKg)
         try c.encode(records, forKey: .records)
         try c.encode(entries, forKey: .entries)
+        try c.encodeIfPresent(gymId, forKey: .gymId)
         try c.encode(clientUpdatedAt, forKey: .clientUpdatedAt)
         try c.encode(deletedAt, forKey: .deletedAt)
         try c.encode(baseUpdatedAt, forKey: .baseUpdatedAt)
@@ -100,7 +105,7 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
     public func toDomain() -> SyncRow<WorkoutSnapshot> {
         let workout = Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSec,
                               routineId: routineId, name: name, entries: entries.map(\.domain),
-                              source: WorkoutSource(rawValue: source) ?? .app, note: note)
+                              source: WorkoutSource(rawValue: source) ?? .app, note: note, gymId: gymId)
         return SyncRow(value: WorkoutSnapshot(workout: workout, records: records, volumeKg: volKg),
                        clientUpdatedAt: clientUpdatedAt, deletedAt: deletedAt, serverUpdatedAt: updatedAt)
     }
@@ -113,11 +118,14 @@ public struct WorkoutEntryDTO: Codable, Sendable, Equatable {
     public let position: Int
     public let note: String?
     public let supersetGroup: String?
+    /// The server's id of the listing; sent only when there is one.
+    public let gymEquipmentId: UUID?
     public let sets: [WorkoutSetDTO]
 
     enum CodingKeys: String, CodingKey {
         case id, position, note, sets
         case exerciseId = "exercise_id", supersetGroup = "superset_group", workoutSets = "workout_sets"
+        case gymEquipmentId = "gym_equipment_id"
     }
 
     public init(_ e: WorkoutEntry, position: Int) {
@@ -126,6 +134,7 @@ public struct WorkoutEntryDTO: Codable, Sendable, Equatable {
         self.position = position
         note = e.note
         supersetGroup = e.supersetGroup
+        gymEquipmentId = e.gymListingId
         sets = e.sets.enumerated().map { WorkoutSetDTO($1, position: $0) }
     }
 
@@ -136,6 +145,7 @@ public struct WorkoutEntryDTO: Codable, Sendable, Equatable {
         position = try c.decode(Int.self, forKey: .position)
         note = try c.decodeIfPresent(String.self, forKey: .note)
         supersetGroup = try c.decodeIfPresent(String.self, forKey: .supersetGroup)
+        gymEquipmentId = try c.decodeIfPresent(UUID.self, forKey: .gymEquipmentId)
         sets = try (c.decodeIfPresent([WorkoutSetDTO].self, forKey: .sets)
             ?? c.decodeIfPresent([WorkoutSetDTO].self, forKey: .workoutSets) ?? [])
             .sorted { $0.position < $1.position }
@@ -148,11 +158,13 @@ public struct WorkoutEntryDTO: Codable, Sendable, Equatable {
         try c.encode(position, forKey: .position)
         try c.encode(note, forKey: .note)
         try c.encode(supersetGroup, forKey: .supersetGroup)
+        try c.encodeIfPresent(gymEquipmentId, forKey: .gymEquipmentId)
         try c.encode(sets, forKey: .sets)
     }
 
     public var domain: WorkoutEntry {
-        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets.map(\.domain), note: note, supersetGroup: supersetGroup)
+        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets.map(\.domain), note: note, supersetGroup: supersetGroup,
+                     gymListingId: gymEquipmentId)
     }
 }
 

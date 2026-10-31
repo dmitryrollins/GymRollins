@@ -325,11 +325,13 @@ final class AppEnvironment {
             Self.log.notice("Start session ignored: a workout is already in progress")
             return
         }
+        let gymContext = gymLoadsContext(preferring: loadListings)
         let planned = routine.map {
             SessionPlanner.start(routine: $0, profile: profile, library: library, now: now(),
                                  history: { [workouts] in (try? workouts.history(exerciseId: $0, limit: 5)) ?? [] },
                                  autoWarmups: WarmupPreferences.autoWarmupsEnabled(defaults), setOverrides: setOverrides,
-                                 loads: gymLoadsLookup(preferring: loadListings))
+                                 loads: { gymContext?.loads(for: $0) }, gymId: currentGym?.id,
+                                 loadListing: { gymContext?.loadListingId(for: $0) })
         } ?? SessionPlanner.empty(now: now())
         let workout = debugStartOffset(planned)
         // Today's rest (if set) goes with this workout, so a relaunch restores it too (`makeSession`).

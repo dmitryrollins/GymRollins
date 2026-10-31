@@ -29,6 +29,8 @@ public final class WorkoutRecord {
     /// faulting ~13 entry/set rows per workout, which made `recent(limit: 50)` take ~100 ms with 150 workouts
     /// (docs/testing/performance.md). nil for rows written before it existed: readers fall back to `entries`.
     public var entriesData: Data?
+    /// The local gym row it was done at. A plain id, not a relationship: deleting the gym must not touch the workout.
+    public var gymId: UUID?
 
     public init(id: UUID, startedAt: Date, name: String, sourceRaw: String, isActive: Bool, now: Date) {
         self.id = id
@@ -50,16 +52,19 @@ public final class WorkoutEntryRecord {
     public var position: Int
     public var note: String?
     public var supersetGroup: String?
+    public var gymListingId: UUID?
     @Relationship(deleteRule: .cascade, inverse: \SetRecord.entry)
     public var sets: [SetRecord] = []
     public var workout: WorkoutRecord?
 
-    public init(id: UUID, exerciseId: String, position: Int, note: String?, supersetGroup: String?) {
+    public init(id: UUID, exerciseId: String, position: Int, note: String?, supersetGroup: String?,
+                gymListingId: UUID? = nil) {
         self.id = id
         self.exerciseId = exerciseId
         self.position = position
         self.note = note
         self.supersetGroup = supersetGroup
+        self.gymListingId = gymListingId
     }
 }
 

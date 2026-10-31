@@ -16,6 +16,11 @@ struct TodayGymContext {
         preferred[exerciseId].flatMap { matcher.listing($0)?.loads } ?? matcher.loads(for: exerciseId)
     }
 
+    /// The listing `loads(for:)` reads, so a workout can record the one Today showed.
+    func loadListingId(for exerciseId: String) -> UUID? {
+        preferred[exerciseId].flatMap { matcher.listing($0)?.id } ?? matcher.loadListingId(for: exerciseId)
+    }
+
     func preferring(_ listings: [String: UUID]) -> TodayGymContext {
         TodayGymContext(matcher: matcher, photo: photo, preferred: listings)
     }
