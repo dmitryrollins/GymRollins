@@ -40,6 +40,8 @@ struct GymEquipmentView: View {
         .navigationDestination(item: $selected) { ListingDetailView(listing: $0, gym: gym) }
         .sheet(isPresented: $showAdd) { AddEquipmentFlow(gym: gym) }
         .task(id: env.gymRevision) { await load() }
+        .task { await env.gymCatalogRefresh(gymId: gym.id, force: false) }
+        .refreshable { await env.gymCatalogRefresh(gymId: gym.id, force: true) }
     }
 
     // MARK: Parts
@@ -124,7 +126,7 @@ struct GymEquipmentView: View {
     /// Shows the tiles at once, then the coverage once the rules have counted.
     private func load() async {
         let listings: [GymListing]
-        do { listings = try env.gyms.listings(gymId: gym.id) }
+        do { listings = try env.gyms.listings(gymId: gym.id, includingUnsupported: true) }
         catch {
             AppEnvironment.log.error("Read gym equipment failed: \(error.localizedDescription, privacy: .public)")
             errorText = "Couldn't load this gym's equipment."

@@ -75,6 +75,9 @@ extension AppEnvironment {
         }
     }
 
+    /// Where a picture from the shared catalogue is loaded from.
+    func catalogPhotoURL(_ path: String) -> URL? { gymSharing.transport.publicPhotoURL(path: path) }
+
     // MARK: Who is signed in
 
     /// The account a share or confirmation is queued for. Nil while signed out, and while the phone's data still

@@ -4,14 +4,18 @@ import GymData
 
 /// What the gym equipment screen shows, worked out once per load so the view only draws it (spec §6).
 struct GymEquipmentModel: Equatable {
-    /// The status chip on a tile. `flagged` and `underReview` have no source until plan 22; `flagged` follows the
-    /// listing's status already.
+    /// The status chip on a tile. `underReview` has no source until plan 22; `flagged` follows the listing's status
+    /// already. A share that is waiting, stuck or undecided shows before the confirm count.
     enum ListingBadge: Equatable {
-        case onlyMe, confirmed(Int), flagged, underReview
+        case onlyMe, synced, waiting, failed, needsChoice, confirmed(Int), flagged, underReview
 
         var text: String {
             switch self {
             case .onlyMe: "Only me"
+            case .synced: "Synced"
+            case .waiting: "Waiting to upload"
+            case .failed: "Couldn't upload"
+            case .needsChoice: "Needs a choice"
             case let .confirmed(count): "\u{2713} \(count)"
             case .flagged: "Flagged"
             case .underReview: "Under review"
@@ -20,16 +24,20 @@ struct GymEquipmentModel: Equatable {
 
         var kind: Badge.Kind {
             switch self {
-            case .onlyMe: .neutral
+            case .onlyMe, .synced, .waiting, .needsChoice: .neutral
             case .confirmed: .success
-            case .flagged, .underReview: .record
+            case .failed, .flagged, .underReview: .record
             }
         }
 
         init?(_ listing: GymListing) {
             if listing.status == .flagged { self = .flagged }
+            else if listing.uploadState == .failed { self = .failed }
+            else if listing.uploadState == .queued { self = .waiting }
+            else if listing.uploadState == .waitingForChoice { self = .needsChoice }
             else if listing.confirmCount > 0 { self = .confirmed(listing.confirmCount) }
             else if listing.visibility == .device { self = .onlyMe }
+            else if listing.visibility == .synced { self = .synced }
             else { return nil }
         }
     }
@@ -98,7 +106,8 @@ struct GymEquipmentModel: Equatable {
     }
 
     private static func tile(_ listing: GymListing, catalog: GymEquipmentCatalog, unit: WeightUnit) -> Tile {
-        let kind = catalog.kind(listing.item.kindId)
+        // A row a newer app wrote has kinds or loads this app can't read: it is listed, but not used.
+        let kind = listing.status == .unsupported ? nil : catalog.kind(listing.item.kindId)
         let brandAndModel = [listing.item.brand, listing.item.model].compactMap { $0 }.joined(separator: " ")
         return Tile(listing: listing, kind: kind, title: kind?.name ?? unknownKindTitle,
                     brandAndModel: kind == nil || brandAndModel.isEmpty ? nil : brandAndModel,
