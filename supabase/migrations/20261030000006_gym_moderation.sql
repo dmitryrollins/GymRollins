@@ -63,16 +63,30 @@ begin
   return jsonb_build_object('status', 'reported');
 end $$;
 
+-- Blocking tells a script whether two rows share an author (block one, see the other vanish), so the limit is the
+-- control: 20 new blocks a day. Blocking someone already blocked is a no-op that doesn't count, so a retry always works.
 create or replace function public.block_author(p_target_type text, p_target_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare
   me uuid := public.gym_require_user();
   blocked uuid := (select author from gym_private.public_target(p_target_type, p_target_id));
 begin
-  if blocked is not null and blocked <> me then
-    insert into public.user_blocks (blocker_id, blocked_id) values (me, blocked) on conflict do nothing;
-  end if;
+  if blocked is null or blocked = me then return; end if;
+  perform gym_private.lock_user(me);
+  if exists (select 1 from public.user_blocks where blocker_id = me and blocked_id = blocked) then return; end if;
+  perform public.gym_check_daily(
+    (select count(*) from public.user_blocks where blocker_id = me and created_at > now() - interval '1 day'), 20);
+  insert into public.user_blocks (blocker_id, blocked_id) values (me, blocked) on conflict do nothing;
 end $$;
+
+-- Unblocking is the other half of that probe, and a block row is gone once cleared, so each clearing is logged here to
+-- be counted: 3 a day. Rows go with the account.
+create table gym_private.unblocks (
+  user_id uuid not null references auth.users on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index unblocks_user on gym_private.unblocks (user_id, created_at);
+revoke all on gym_private.unblocks from public, anon, authenticated;
 
 -- Returns how many blocks were cleared.
 create or replace function public.unblock_all() returns int
@@ -81,27 +95,38 @@ declare
   me uuid := public.gym_require_user();
   cleared int;
 begin
+  perform gym_private.lock_user(me);
+  perform public.gym_check_daily(
+    (select count(*) from gym_private.unblocks where user_id = me and created_at > now() - interval '1 day'), 3);
   delete from public.user_blocks where blocker_id = me;
   get diagnostics cleared = row_count;
+  if cleared > 0 then insert into gym_private.unblocks (user_id) values (me); end if;
   return cleared;
 end $$;
 
--- Admins only. Removing a listing returns its photo for the app to delete through Storage (SQL can't). Removing a gym
--- keeps its listings' photos: the policies hide them, and they aren't what was reported.
+-- Admins only. Removing a listing keeps its photo_path and returns it for the app to delete through Storage (SQL
+-- can't). The name stays on the listing until moderation_photo_deleted confirms the object is gone, so a failed delete
+-- leaves something to retry, and the name can't be reused meanwhile (share_listing and guard_gym_photo refuse it).
+-- Removing a gym keeps its listings' photos: the policies hide the listings, and the photos aren't what was reported.
+-- Public URLs ignore policies, so a hidden photo can still be fetched by anyone who already has its URL until it is
+-- deleted.
 create or replace function public.moderate_content(p_target_type text, p_target_id uuid, p_action text) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   next_status text;
+  target record;
   photo text;
 begin
   perform public.gym_require_user();
   if not public.is_app_admin() then raise exception 'not allowed' using errcode = '42501'; end if;
   next_status := case p_action when 'restore' then 'active' when 'remove' then 'removed' end;
   if next_status is null then raise exception 'invalid action' using errcode = '22023'; end if;
-  perform gym_private.public_target(p_target_type, p_target_id);
+  select * into target from gym_private.public_target(p_target_type, p_target_id);
   if p_target_type = 'listing' and p_action = 'remove' then
     select photo_path into photo from public.gym_equipment where id = p_target_id;
-    update public.gym_equipment set photo_path = null where id = p_target_id;
+    if target.status = 'removed' then
+      return jsonb_build_object('status', 'removed', 'photo_path', photo);
+    end if;
   end if;
   begin
     perform gym_private.set_status(p_target_type, p_target_id, next_status);
@@ -114,10 +139,23 @@ begin
   return jsonb_build_object('status', next_status, 'photo_path', photo);
 end $$;
 
--- What an admin decides on: everything flagged, most reported first, even when its reports are gone. Never says who.
+-- The app calls this once Storage has deleted a removed listing's photo.
+create or replace function public.moderation_photo_deleted(p_path text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.gym_require_user();
+  if not public.is_app_admin() then raise exception 'not allowed' using errcode = '42501'; end if;
+  update public.gym_equipment set photo_path = null
+    where photo_path = p_path and status = 'removed' and visibility = 'public';
+end $$;
+
+-- What an admin decides on: every public target with an unresolved report, flagged first and then the most reported,
+-- even when a flagged target's reports are gone; and removed listings whose photo is still named, so a failed delete can
+-- be retried. A single report counts: a photo with a person in it needs no second opinion. Never says who reported.
+-- `notes` are the reports' notes; `listing_notes` and `address` are the target's own words, to judge it by.
 create or replace function public.moderation_queue()
 returns table (target_type text, target_id uuid, title text, photo_path text, report_count bigint, reasons jsonb,
-               notes jsonb)
+               notes jsonb, status text, address text, listing_notes text)
 language plpgsql stable security definer set search_path = public as $$
 begin
   perform public.gym_require_user();
@@ -132,18 +170,28 @@ begin
             group by x.reason) c), '{}'::jsonb),
          coalesce((select jsonb_agg(x.note order by x.created_at) from public.reports x
                    where x.target_type = t.target_type and x.target_id = t.target_id and x.resolved_at is null
-                     and x.note is not null), '[]'::jsonb)
+                     and x.note is not null), '[]'::jsonb),
+         t.status, t.address, t.listing_notes
   from (
-    select 'gym'::text as target_type, g.id as target_id, g.name as title, null::text as photo_path
-      from public.gyms g where g.visibility = 'public' and g.status = 'flagged'
+    select 'gym'::text as target_type, g.id as target_id, g.name as title, null::text as photo_path,
+           g.status, g.address, null::text as listing_notes
+      from public.gyms g
+      where g.visibility = 'public' and g.status <> 'removed'
+        and (g.status = 'flagged' or g.id in (select r.target_id from public.reports r
+                                              where r.target_type = 'gym' and r.resolved_at is null))
     union all
-    select 'listing'::text, e.id, coalesce(nullif(concat_ws(' ', i.brand, i.model), ''), k.name), e.photo_path
+    select 'listing'::text, e.id, coalesce(nullif(concat_ws(' ', i.brand, i.model), ''), k.name), e.photo_path,
+           e.status, null::text, e.notes
       from public.gym_equipment e
       join public.equipment_items i on i.id = e.item_id
       join public.equipment_kinds k on k.id = i.kind_id
-      where e.visibility = 'public' and e.status = 'flagged'
+      where e.visibility = 'public'
+        and ((e.status <> 'removed'
+              and (e.status = 'flagged' or e.id in (select r.target_id from public.reports r
+                                                     where r.target_type = 'listing' and r.resolved_at is null)))
+             or (e.status = 'removed' and e.photo_path is not null))
   ) t
-  order by report_count desc, t.target_id;
+  order by (t.status = 'flagged') desc, report_count desc, t.target_id;
 end $$;
 
 -- The caller's photos in both buckets, by owner and not by listing: an upload that was never linked is still theirs,
@@ -157,12 +205,27 @@ begin
     where o.owner_id = me::text and o.bucket_id in ('gym-photos', 'gym-photos-private');
 end $$;
 
+-- Detaching photos is for an account deletion that failed after Storage removed the objects: the listings would name
+-- photos that no longer exist. The caller's private listings and the public ones they added lose the name, and
+-- updated_at and client_updated_at move so other phones pull the change and take it over their own copy. A public
+-- listing stays listed without a photo, as a deleted account's does.
+create or replace function public.detach_my_gym_photos() returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := public.gym_require_user();
+begin
+  perform gym_private.lock_user(me);
+  update public.gym_equipment set photo_path = null, client_updated_at = greatest(client_updated_at, now())
+    where photo_path is not null
+      and ((visibility = 'private' and owner_id = me) or (visibility = 'public' and added_by = me));
+end $$;
+
 revoke execute on function public.report_content(text, uuid, text, text), public.block_author(text, uuid),
   public.unblock_all(), public.moderate_content(text, uuid, text), public.moderation_queue(),
-  public.my_gym_photos() from public, anon;
+  public.my_gym_photos(), public.moderation_photo_deleted(text), public.detach_my_gym_photos() from public, anon;
 grant execute on function public.report_content(text, uuid, text, text), public.block_author(text, uuid),
   public.unblock_all(), public.moderate_content(text, uuid, text), public.moderation_queue(),
-  public.my_gym_photos() to authenticated;
+  public.my_gym_photos(), public.moderation_photo_deleted(text), public.detach_my_gym_photos() to authenticated;
 
 -- Account deletion. The app has already removed the user's photos through Storage, and this refuses (`photos_remain`)
 -- while any are left, so a client that skipped that step can't leave objects behind that nobody can remove. Shared listings and gyms stay without
@@ -176,6 +239,9 @@ declare
   me uuid := auth.uid();
 begin
   if me is null or public.is_mcp_client() then raise exception 'not allowed' using errcode = '42501'; end if;
+  -- The same lock guard_gym_photo takes, so an upload that races this either lands before the check below and is
+  -- refused as a remaining photo, or waits and finds the account gone.
+  perform gym_private.lock_user(me);
   if exists (select 1 from storage.objects o
              where o.owner_id = me::text and o.bucket_id in ('gym-photos', 'gym-photos-private')) then
     raise exception 'photos_remain';

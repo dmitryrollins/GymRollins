@@ -50,6 +50,8 @@ public enum DomainLimits {
     public static let dailyConfirmations = 100
     public static let dailyPhotoUploads = 60
     public static let dailyReports = 20
+    public static let dailyBlocks = 20
+    public static let dailyUnblocks = 3
     public static let reportNoteMax = 280
 
     /// User-facing reason the routine can't be saved, or nil when it fits.

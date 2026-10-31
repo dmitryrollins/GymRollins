@@ -57,7 +57,8 @@ grant execute on function gym_private.photo_upload_allowed(text) to authenticate
 --
 -- Deleting a photo frees a slot in the daily count. That is accepted: only 60 stay stored per day, which is what
 -- the limit is for. Nothing else writes these buckets: the app uploads and deletes through the Storage API, and
--- moderation removes photos only by deleting (moderate_content returns the name for the app to delete).
+-- moderation removes photos only by deleting (moderate_content returns the name for the app to delete, and
+-- moderation_photo_deleted clears it once the object is gone).
 create function gym_private.guard_gym_photo() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -84,14 +85,16 @@ begin
     raise exception 'photo_owner_missing' using errcode = '42501';
   end if;
   owner := new.owner_id::uuid;
+  -- Under the same lock as the other daily limits, so parallel uploads can't each see a count under the limit. Taken
+  -- before looking for the owner: delete_my_account holds it until the account is gone, so an upload that waited here
+  -- sees the deletion and is refused instead of leaving an object owned by nobody.
+  perform gym_private.lock_user(owner);
   if not exists (select 1 from auth.users where id = owner) then
     raise exception 'photo_owner_missing' using errcode = '42501';
   end if;
   if exists (select 1 from public.gym_equipment where photo_path = new.name) then
     raise exception 'photo_name_in_use' using errcode = '42501';
   end if;
-  -- Under the same lock as the other daily limits, so parallel uploads can't each see a count under the limit.
-  perform gym_private.lock_user(owner);
   if gym_private.photos_today(new.owner_id) >= gym_private.daily_photo_limit() then
     raise exception 'photo_daily_limit' using errcode = '42501';
   end if;
