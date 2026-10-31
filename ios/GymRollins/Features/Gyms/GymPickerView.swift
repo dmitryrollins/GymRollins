@@ -19,6 +19,8 @@ struct GymPickerView: View {
     @State private var pendingDelete: Gym?
     @State private var equipmentGym: Gym?
     @State private var errorText: String?
+    @State private var syncing: Gym?
+    @State private var askingSignIn = false
 
     var body: some View {
         NavigationStack {
@@ -40,6 +42,10 @@ struct GymPickerView: View {
                 }
             }
             .navigationDestination(item: $equipmentGym) { equipmentDestination($0) }
+            .signInForSharing(isPresented: $askingSignIn) {
+                if let gym = syncing { sync(gym) }
+                syncing = nil
+            }
         }
         .presentationDetents([.large])
         .sheet(isPresented: $showAdd) { AddPrivateGymSheet { _ in reload() } }
@@ -154,7 +160,7 @@ struct GymPickerView: View {
                     Text(gym.name).font(.body.weight(.semibold)).foregroundStyle(Theme.textPrimary)
                     HStack(spacing: 6) {
                         Text(itemsText(itemCounts[gym.id] ?? 0)).font(.footnote).foregroundStyle(Theme.textSecondary)
-                        Badge(text: Self.visibilityText(gym.visibility), kind: .neutral)
+                        Badge(text: Self.badgeText(for: gym), kind: .neutral)
                     }
                 }
                 Spacer(minLength: 8)
@@ -166,11 +172,20 @@ struct GymPickerView: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(gym.id == current?.id ? .isSelected : [])
         .accessibilityAction(named: "Delete") { askToDelete(gym) }
+        .accessibilityAction(named: Self.syncTitle) { if Self.canSync(gym) { askToSync(gym) } }
         .accessibilityIdentifier("gymPicker.gym.\(gym.name)")
         .listRowBackground(Theme.card)
         .swipeActions(edge: .trailing) {
             Button("Delete", role: .destructive) { askToDelete(gym) }
+            if Self.canSync(gym) { syncButton(gym).tint(Theme.primaryFill) }
         }
+        .contextMenu {
+            if Self.canSync(gym) { syncButton(gym) }
+        }
+    }
+
+    private func syncButton(_ gym: Gym) -> some View {
+        Button(Self.syncTitle) { askToSync(gym) }.accessibilityIdentifier("picker.sync.\(gym.id.uuidString)")
     }
 
     private var actionsSection: some View {
@@ -198,13 +213,16 @@ struct GymPickerView: View {
 
     // MARK: Text
 
-    static func visibilityText(_ visibility: GymVisibility) -> String {
-        switch visibility {
-        case .device: "THIS PHONE ONLY"
-        case .synced: "SYNCED"
-        case .shared: "SHARED"
-        }
+    /// Where the gym's equipment lives: only here, in the account, or in the shared catalogue.
+    static func badgeText(for gym: Gym) -> String {
+        if gym.visibility == .synced { return "Synced" }
+        return !gym.isPrivate && gym.remoteId != nil ? "Shared" : "Only me"
     }
+
+    static let syncTitle = "Sync to my account"
+
+    /// A private gym that only this phone has. A Maps gym is shared, not synced.
+    static func canSync(_ gym: Gym) -> Bool { gym.isPrivate && gym.visibility == .device }
 
     private func itemsText(_ count: Int) -> String { count == 1 ? "1 item" : "\(count) items" }
 
@@ -295,6 +313,26 @@ struct GymPickerView: View {
 
     private func askToDelete(_ gym: Gym) {
         pendingDelete = gym
+    }
+
+    /// Needs an account: signed out, the sign-in sheet comes first and cancelling it uploads nothing.
+    private func askToSync(_ gym: Gym) {
+        guard env.sharingUserId != nil else {
+            syncing = gym
+            askingSignIn = true
+            return
+        }
+        sync(gym)
+    }
+
+    private func sync(_ gym: Gym) {
+        do {
+            try env.syncGym(gym.id)
+            reload()
+        } catch {
+            AppEnvironment.log.error("Sync gym failed: \(error.localizedDescription, privacy: .public)")
+            errorText = "Couldn't sync this gym. Try again."
+        }
     }
 
     private func deletePending() {
