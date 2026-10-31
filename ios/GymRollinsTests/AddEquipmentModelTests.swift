@@ -83,6 +83,48 @@ import Testing
         #expect(flow.step == .duplicate, "Back from details returns to the duplicate step when it was shown")
     }
 
+    @Test func goingBackClearsTheSaveWithoutPhotoOffer() throws {
+        let rig = try GymTestRig.make()
+        let gym = try rig.gym()
+        let flow = AddEquipmentModel(
+            gym: gym, catalog: rig.env.gymCatalog, unit: .lb,
+            ports: .init(listings: { _ in [] }, catalogueItems: { _ in [] },
+                         savePhoto: { _ in throw CocoaError(.fileWriteOutOfSpace) },
+                         deletePhoto: { _ in }, addListing: { try rig.env.gyms.addListing($0) },
+                         attachPhoto: { _, _ in throw CocoaError(.fileWriteOutOfSpace) }))
+        flow.photoProcessed(jpeg)
+        flow.chooseKind("flat-bench")
+        flow.save()
+        #expect(flow.photoSaveFailed)
+        flow.back()
+        #expect(flow.step == .kind)
+        #expect(!flow.photoSaveFailed, "Save without the photo doesn't linger after going back")
+    }
+
+    /// "Yes, that's it" with a photo that can't be saved: the message is true, and there is a way out.
+    @Test func aFailedAttachOffersToKeepTheListingWithoutThePhoto() throws {
+        let rig = try GymTestRig.make()
+        let gym = try rig.gym("Home", ["lat-pulldown": .stack(maxKg: 90, stepKg: nil)])
+        let flow = AddEquipmentModel(
+            gym: gym, catalog: rig.env.gymCatalog, unit: .lb,
+            ports: .init(listings: { kindId in try rig.env.gyms.listings(gymId: gym.id).filter { $0.item.kindId == kindId } },
+                         catalogueItems: { _ in [] }, savePhoto: { _ in "x" },
+                         deletePhoto: { _ in }, addListing: { try rig.env.gyms.addListing($0) },
+                         attachPhoto: { _, _ in throw CocoaError(.fileWriteOutOfSpace) }))
+        flow.photoProcessed(jpeg)
+        flow.chooseKind("lat-pulldown")
+        let existing = try #require(flow.existing.first)
+        flow.sameAsExisting(existing)
+        #expect(flow.outcome == nil)
+        #expect(flow.errorText == "Couldn't save the photo. Try again, or keep the listing without it.")
+        #expect(flow.canConfirmWithoutPhoto)
+        flow.back()
+        #expect(!flow.canConfirmWithoutPhoto, "going back clears the offer")
+        flow.sameAsExisting(existing)
+        flow.confirmWithoutPhoto()
+        #expect(flow.outcome == .confirmed(existing))
+    }
+
     /// "Yes, that's it" creates no listing. A listing with no photo gets the one just taken: the user took it for this.
     @Test func yesThatsItCreatesNothing() throws {
         let rig = try GymTestRig.make()

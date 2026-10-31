@@ -46,6 +46,8 @@ final class AddEquipmentModel {
     private(set) var errorText: String?
     /// Saving the photo file failed: the details step then offers to save without it.
     private(set) var photoSaveFailed = false
+    /// "Yes, that's it" couldn't save the photo on this listing: the step then offers to keep the listing without it.
+    private var attachFailedFor: GymListing?
     private(set) var outcome: Outcome?
     private var photo: ProcessedGymPhoto?
 
@@ -119,8 +121,18 @@ final class AddEquipmentModel {
             errorText = nil
         } catch {
             AppEnvironment.log.error("Attach gym photo failed: \(error.localizedDescription, privacy: .public)")
-            errorText = "Couldn't save the photo. Try again, or go back and skip it."
+            attachFailedFor = listing
+            errorText = "Couldn't save the photo. Try again, or keep the listing without it."
         }
+    }
+
+    var canConfirmWithoutPhoto: Bool { attachFailedFor != nil }
+
+    /// The way out of a failed attach: the gym's listing is kept as it is and the photo is dropped.
+    func confirmWithoutPhoto() {
+        guard let listing = attachFailedFor else { return }
+        attachFailedFor = nil
+        outcome = .confirmed(listing)
     }
 
     func chooseCatalogueItem(_ item: CatalogueItem) {
@@ -144,6 +156,8 @@ final class AddEquipmentModel {
 
     func back() {
         errorText = nil
+        photoSaveFailed = false
+        attachFailedFor = nil
         switch step {
         case .photo, .kind: break
         case .duplicate: step = .kind
