@@ -153,4 +153,48 @@ import Testing
         await box.run(userId: user)
         #expect(transport.reports.count == 1, "the report itself still goes out")
     }
+
+    // MARK: Sign-out
+
+    @Test func signOutSendsWhatItCanAndCountsTheReportsLeft() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote(), b = remote()
+        try await cache(gym, [a, b])
+        let box = outbox
+        try box.enqueueReport(listingId: a.id, reason: .spam, note: nil, ownerId: user)
+        try box.enqueueBlock(listingId: b.id, ownerId: user)
+        #expect(await box.sendModeration(userId: user) == 0)
+        #expect(transport.reports.count == 1 && transport.blocks.count == 1)
+
+        let c = remote()
+        try await cache(gym, [c])
+        try box.enqueueReport(listingId: c.id, reason: .spam, note: nil, ownerId: user)
+        transport.failingCalls = ["report"]
+        #expect(await box.sendModeration(userId: user) == 1, "offline: one report would be lost")
+    }
+
+    @Test func signOutLeavesSharesAndOtherPeoplesRowsAlone() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        let mine = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        try box.enqueueShare(listingId: mine.id, ownerId: user)
+        try box.enqueueReport(listingId: a.id, reason: .spam, note: nil, ownerId: UUID())
+        #expect(await box.sendModeration(userId: user) == 0, "the other user's report isn't this user's to lose")
+        #expect(!transport.calls.contains("share") && !transport.calls.contains("report"))
+    }
+
+    @Test func signOutStopsWaitingAfterTheLimit() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        try box.enqueueReport(listingId: a.id, reason: .spam, note: nil, ownerId: user)
+        transport.stalledCalls = ["report"]
+        #expect(await box.sendModeration(userId: user, limit: .milliseconds(50)) == 1)
+    }
 }

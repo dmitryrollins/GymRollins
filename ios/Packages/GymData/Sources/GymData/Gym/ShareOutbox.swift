@@ -136,7 +136,10 @@ public final class ShareOutbox {
     /// Runs the signed-in user's rows, oldest first, until a pass finds nothing left to send: a share queued while
     /// the run was going is sent by it too. Stops at the first offline or signed-out answer; other errors settle
     /// their row. A call made while a run is going returns at once, and the run makes sure it was heard.
-    public func run(userId: UUID?) async {
+    public func run(userId: UUID?) async { await run(userId: userId, only: nil) }
+
+    /// `only` limits the run to those kinds (sign-out sends nothing else).
+    func run(userId: UUID?, only kinds: Set<Kind>?) async {
         guard let userId else { return }
         guard !running else {
             runAgainFor = userId
@@ -147,7 +150,7 @@ public final class ShareOutbox {
         var next: UUID? = userId
         while let user = next {
             runAgainFor = nil
-            await drain(userId: user)
+            await drain(userId: user, only: kinds)
             next = runAgainFor
         }
     }
@@ -158,11 +161,11 @@ public final class ShareOutbox {
     /// the next one, so a row that can't go through never keeps the run spinning.
     private static let attemptsPerRun = 2
 
-    private func drain(userId: UUID) async {
+    private func drain(userId: UUID, only kinds: Set<Kind>?) async {
         let token = generation
         var attempts: [UUID: Int] = [:]
         do {
-            while token == generation, let row = try nextRow(for: userId, attempts: attempts) {
+            while token == generation, let row = try nextRow(for: userId, attempts: attempts, only: kinds) {
                 attempts[row.id, default: 0] += 1
                 if try await process(row, token: token) == .stop { return }
             }
@@ -171,10 +174,11 @@ public final class ShareOutbox {
         }
     }
 
-    private func nextRow(for userId: UUID, attempts: [UUID: Int]) throws -> ShareOutboxRecord? {
-        try rows().first {
-            $0.ownerId == userId && attempts[$0.id, default: 0] < Self.attemptsPerRun
-                && !(unblocking && $0.kindRaw == Kind.block.rawValue)
+    private func nextRow(for userId: UUID, attempts: [UUID: Int], only kinds: Set<Kind>?) throws -> ShareOutboxRecord? {
+        try rows().first { row in
+            row.ownerId == userId && attempts[row.id, default: 0] < Self.attemptsPerRun
+                && (kinds.map { $0.contains { $0.rawValue == row.kindRaw } } ?? true)
+                && !(unblocking && row.kindRaw == Kind.block.rawValue)
         }
     }
 

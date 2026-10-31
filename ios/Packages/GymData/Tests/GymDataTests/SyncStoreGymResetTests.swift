@@ -140,4 +140,29 @@ import Testing
         _ = try f.store.resetAccountData()
         #expect(item.reportedPhotoListingId == nil, "the next account has reported nothing")
     }
+
+    @Test func aSignOutDropsQueuedReportsAndBlocksAlongWithTheRowsTheyHid() throws {
+        defer { f.tearDown() }
+        let gym = try repo.addMapsGym(placeId: "P1", name: "Maps", address: nil, latitude: 1, longitude: 2)
+        let item = try repo.itemRecord(kindId: "cable-stack", brand: nil, model: nil)
+        let user = UUID()
+        let cache = RemoteListingCache(context: f.context, now: { [clock = f.clock] in clock.now })
+        let ids = [UUID(), UUID()]
+        for id in ids {
+            let entry = RemoteListing(id: id, gymId: UUID(), itemId: item.id, kindId: "cable-stack", brand: nil,
+                                      model: nil, photoPath: nil, loads: .stack(maxKg: 90, stepKg: 5), quantity: 1,
+                                      notes: nil, status: "active", confirmCount: 1, isMine: false,
+                                      confirmedByMe: false)
+            _ = cache.insert(entry, itemId: item.id, gymId: gym.id)
+        }
+        try f.context.save()
+        let box = ShareOutbox(repository: repo, transport: transport, photoData: { _ in nil },
+                              now: { [clock = f.clock] in clock.now })
+        try box.enqueueReport(listingId: ids[0], reason: .spam, note: nil, ownerId: user)
+        try box.enqueueBlock(listingId: ids[1], ownerId: user)
+        #expect(box.pendingCount == 2)
+        _ = try f.store.resetAccountData()
+        #expect(box.pendingCount == 0)
+        #expect(try f.context.fetchCount(FetchDescriptor<GymListingRecord>()) == 0)
+    }
 }

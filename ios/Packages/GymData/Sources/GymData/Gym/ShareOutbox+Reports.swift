@@ -92,6 +92,22 @@ extension ShareOutbox {
 
     // MARK: - Running
 
+    /// Sign-out: sends the reports and blocks still queued, for at most `limit`, while the session can. Shares stay
+    /// queued (they fall back to "This phone only" rows). Returns how many of the user's reports and blocks are still
+    /// waiting, which the sign-out would lose.
+    public func sendModeration(userId: UUID, limit: Duration = .seconds(5)) async -> Int {
+        let work = Task { await run(userId: userId, only: [.report, .block]) }
+        let timer = Task {
+            try? await Task.sleep(for: limit)
+            work.cancel()
+        }
+        await work.value
+        timer.cancel()
+        let left = (try? rows()) ?? []
+        return left.filter { $0.ownerId == userId && ($0.kindRaw == Kind.report.rawValue || $0.kindRaw == Kind.block.rawValue) }
+            .count
+    }
+
     func sendReport(_ row: ShareOutboxRecord, token: Int) async throws {
         guard let type = row.targetTypeRaw.flatMap(GymTargetType.init), let reason = row.reasonRaw.flatMap(ReportReason.init)
         else { return try drop(row) }

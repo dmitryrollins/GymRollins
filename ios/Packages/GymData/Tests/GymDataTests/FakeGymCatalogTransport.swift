@@ -33,6 +33,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private var _reportScript: [GymCatalogError?] = []
     private var _unblockResult = 0
     private var _ownTargets: Set<UUID> = []
+    private var _stalledCalls: Set<String> = []
     private var _reportAnswers: [UUID: String] = [:]
 
     struct ReportCall: Equatable {
@@ -50,6 +51,8 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     var ownTargets: Set<UUID> { get { lock.withLock { _ownTargets } } set { lock.withLock { _ownTargets = newValue } } }
     /// What the server said to each reported target: `reported` or `own`.
     var reportAnswers: [UUID: String] { lock.withLock { _reportAnswers } }
+    /// Calls that never answer on their own: they wait until the task is cancelled, as a request on a dead connection does.
+    var stalledCalls: Set<String> { get { lock.withLock { _stalledCalls } } set { lock.withLock { _stalledCalls = newValue } } }
     var unblockResult: Int { get { lock.withLock { _unblockResult } } set { lock.withLock { _unblockResult = newValue } } }
     var gym: RemoteGym? { get { lock.withLock { _gym } } set { lock.withLock { _gym = newValue } } }
     var listings: [RemoteListing] { get { lock.withLock { _listings } } set { lock.withLock { _listings = newValue } } }
@@ -154,6 +157,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     func deleteAllPhotos() async throws { try record("deleteAllPhotos") }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         try record("report")
+        if lock.withLock({ _stalledCalls.contains("report") }) { try await Task.sleep(for: .seconds(60)) }
         let scripted: GymCatalogError? = lock.withLock {
             _reports.append(ReportCall(type: targetType, id: targetId, reason: reason, note: note))
             _reportAnswers[targetId] = _ownTargets.contains(targetId) ? "own" : "reported"
