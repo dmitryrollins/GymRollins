@@ -51,6 +51,8 @@ public final class EquipmentItemRecord {
     /// A picture of this item from another gym's listing, loaded by URL. Never uploaded, never a listing's own photo.
     public var catalogPhotoPath: String?
     public var catalogPhotoListingId: UUID?
+    /// The listing whose picture the user reported: its picture stays off this phone. Another listing's is fine.
+    public var reportedPhotoListingId: UUID?
     public var createdAt: Date
 
     public init(id: UUID = UUID(), kindId: String, brand: String?, model: String?, now: Date) {
@@ -101,6 +103,8 @@ public final class GymListingRecord {
     /// The user reported this shared listing or blocked its author. It stays out of every list, and a refresh keeps it
     /// out, until the row itself goes (the server stopped returning it).
     public var hiddenLocally: Bool = false
+    /// `hiddenLocally` comes from a block, which the user can undo. A report can't be undone.
+    public var hiddenByBlock: Bool = false
 
     public init(id: UUID = UUID(), gymId: UUID, itemId: UUID, kindId: String, loadsData: Data, quantity: Int,
                 notes: String?, photoFile: String?, now: Date) {

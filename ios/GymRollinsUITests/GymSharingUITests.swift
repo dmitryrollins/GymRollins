@@ -67,6 +67,7 @@ final class GymSharingUITests: XCTestCase {
         XCTAssertTrue(newer.label.contains("Update the app to use this item"), "a row it can't read says so")
         XCTAssertEqual(app.staticTexts["gymEquipment.subtitle"].label, "12 Main St \u{00B7} 6 items")
         XCTAssertFalse(text(app, "signInForSharing.title").exists, "browsing never meets a login wall")
+        for _ in 0..<4 where !pulldown.isHittable { app.swipeDown() } // the swipes above can take it off screen
         pulldown.tap()
         XCTAssertTrue(app.buttons["listing.confirm"].waitForExistence(timeout: 5), "someone else's can be confirmed")
         XCTAssertFalse(app.buttons["listing.delete"].exists, "someone else's can't be removed")

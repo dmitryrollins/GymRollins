@@ -143,7 +143,6 @@ public final class GymCatalogClient {
         let context = repository.context
         let rows = (try? context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.gymId == gymId }))) ?? []
         let kinds = Set(rows.filter { $0.photoFile == nil }.map(\.kindId))
-        let reported = try QueuedModeration(context: context).reportedPhotos
         for kind in kinds.sorted() {
             guard let items = try? await transport.publicItems(kindId: kind) else { continue }
             guard token == generation else { return }
@@ -151,10 +150,10 @@ public final class GymCatalogClient {
                 let id = remote.id
                 guard let record = try? context.fetch(
                     FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id })).first else { continue }
-                // A picture the user reported keeps off until the report is sent.
-                if let source = remote.photoListingId, reported.contains(source) { continue }
-                record.catalogPhotoPath = remote.photoPath
-                record.catalogPhotoListingId = remote.photoListingId
+                // The user reported this picture, so it isn't shown to them again.
+                let reported = remote.photoListingId != nil && remote.photoListingId == record.reportedPhotoListingId
+                record.catalogPhotoPath = reported ? nil : remote.photoPath
+                record.catalogPhotoListingId = reported ? nil : remote.photoListingId
             }
         }
         try context.save()

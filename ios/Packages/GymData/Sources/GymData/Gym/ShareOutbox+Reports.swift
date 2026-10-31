@@ -28,7 +28,7 @@ extension ShareOutbox {
     }
 
     /// Reports the borrowed catalogue photo a listing shows, which belongs to another listing. The source is the
-    /// target; the listing stays and loses the picture on the phone until the next refresh brings back a valid one.
+    /// target. The listing stays and this picture stays off the phone; a refresh can bring another listing's.
     public func enqueueCataloguePhotoReport(listingId: UUID, reason: ReportReason, note: String?,
                                             ownerId: UUID) throws {
         guard let listing = try repository.listingRecord(listingId),
@@ -40,6 +40,7 @@ extension ShareOutbox {
                   aboutPhoto: true)
         item.catalogPhotoPath = nil
         item.catalogPhotoListingId = nil
+        item.reportedPhotoListingId = source
         try context.save()
     }
 
@@ -50,15 +51,22 @@ extension ShareOutbox {
         guard !listing.isOwn else { throw GymDataError.invalidInput("That is your own listing.") }
         try queue(.block, type: .listing, target: listingId, reason: nil, note: nil, ownerId: ownerId, hides: true)
         listing.hiddenLocally = true
+        listing.hiddenByBlock = true
         try context.save()
     }
 
     /// Clears the user's blocks on the server, then makes every gym refresh at its next open, so what the blocks hid
-    /// comes back. Returns how many blocks there were. Called with the session gone, it leaves the rows alone.
+    /// comes back. A block still queued is cancelled, since sending it would undo this. Returns how many blocks the
+    /// server had. Called with the session gone, it leaves the rows alone.
     public func unblockAll() async throws -> Int {
         let token = generation
         let cleared = try await transport.unblockAll()
         guard token == generation else { return cleared }
+        for row in try rows() where row.kindRaw == Kind.block.rawValue { context.delete(row) }
+        for listing in try context.fetch(FetchDescriptor<GymListingRecord>()) where listing.hiddenByBlock {
+            listing.hiddenLocally = false
+            listing.hiddenByBlock = false
+        }
         for gym in try context.fetch(FetchDescriptor<GymRecord>()) { gym.catalogRefreshedAt = nil }
         try context.save()
         return cleared
@@ -104,7 +112,16 @@ extension ShareOutbox {
     /// The server refused the row for good: it is dropped, what it hid comes back, and the user is told.
     func settleModeration(_ row: ShareOutboxRecord, _ error: Error) throws {
         Self.log.error("Dropped a \(row.kindRaw, privacy: .public) the server refused: \(String(describing: error), privacy: .public)")
-        if row.hidesListing, let listing = try repository.listingRecord(row.targetId) { listing.hiddenLocally = false }
+        if row.hidesListing, let listing = try repository.listingRecord(row.targetId) {
+            listing.hiddenLocally = false
+            listing.hiddenByBlock = false
+        }
+        if row.aboutPhoto {
+            let source = row.targetId
+            let items = try context.fetch(FetchDescriptor<EquipmentItemRecord>(
+                predicate: #Predicate { $0.reportedPhotoListingId == source }))
+            for item in items { item.reportedPhotoListingId = nil }
+        }
         let block = Kind(rawValue: row.kindRaw) == .block
         switch error as? GymCatalogError {
         case .dailyLimit: reportNotice = Self.reportDailyLimit
@@ -144,18 +161,15 @@ extension ShareOutbox {
     }
 }
 
-/// What the queue still has to say about listings and pictures, so a refresh doesn't undo it.
+/// What the queue still has to say about listings, so a refresh doesn't undo it.
 struct QueuedModeration {
     /// Listings hidden while their report or block waits.
     let hiding: Set<UUID>
-    /// Listings whose picture was reported and is still borrowed by others.
-    let reportedPhotos: Set<UUID>
 
     init(context: ModelContext) throws {
         let rows = try context.fetch(FetchDescriptor<ShareOutboxRecord>()).filter {
             $0.kindRaw == ShareOutboxRecord.Kind.report.rawValue || $0.kindRaw == ShareOutboxRecord.Kind.block.rawValue
         }
         hiding = Set(rows.filter(\.hidesListing).map(\.targetId))
-        reportedPhotos = Set(rows.filter(\.aboutPhoto).map(\.targetId))
     }
 }

@@ -33,8 +33,9 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
 6. **Disconnect turns the gyms flag off,** alongside the existing flags.
 7. **Reports and blocks go through the outbox.** The spec's table says so, and no signal is normal in a gym. Hiding is
    immediate on the phone: a reported or blocked listing leaves the cached rows at once. A borrowed catalogue photo (plan
-   21, decision 14) reports its source, `photo_listing_id`, not the listing it's showing on, and the cached item's photo is
-   cleared until the next refresh, so the picture goes at once and the listing under it stays.
+   21, decision 14) reports its source, `photo_listing_id`, not the listing it's showing on. The cached item's photo is
+   cleared and that picture stays off this phone, while the listing under it stays. A refresh can bring another listing's
+   picture. A block can be undone in Settings, which also cancels any block still queued. A report can't be undone.
 8. **Strangers' free text doesn't reach Claude.** `get_gym_equipment` returns kind ids, loads rebuilt from known keys,
    quantity, confirm count and visibility. Brand and model appear only on the user's own listings; notes never do. A
    public gym's name is labelled `name_unverified`.

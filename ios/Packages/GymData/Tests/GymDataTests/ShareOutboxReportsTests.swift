@@ -179,6 +179,59 @@ import Testing
         #expect(transport.calls.filter { $0 == "publicListings" }.count == before + 1)
     }
 
+    @Test func unblockingBringsBackAListingABlockHidBeforeAnyRefresh() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        try box.enqueueBlock(listingId: a.id, ownerId: user)
+        await box.run(userId: user)
+        #expect(try shown(gym).isEmpty)
+        _ = try await box.unblockAll()
+        #expect(try shown(gym) == [a.id], "the user undid the block, so nothing keeps it hidden")
+    }
+
+    @Test func unblockingCancelsABlockStillQueued() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        try box.enqueueBlock(listingId: a.id, ownerId: user)
+        _ = try await box.unblockAll()
+        #expect(try shown(gym) == [a.id])
+        await box.run(userId: user)
+        #expect(transport.blocks.isEmpty, "sending it now would undo the unblock")
+    }
+
+    @Test func unblockingLeavesAReportedListingHidden() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        try box.enqueueReport(listingId: a.id, reason: .spam, note: nil, ownerId: user)
+        await box.run(userId: user)
+        _ = try await box.unblockAll()
+        try await cache(gym, [a])
+        #expect(try shown(gym).isEmpty)
+    }
+
+    @Test func aRefusedBlockShowsTheListingAgainAndUnblockHasNothingLeftToDo() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        transport.failure = .notAllowed
+        try box.enqueueBlock(listingId: a.id, ownerId: user)
+        await box.run(userId: user)
+        transport.failure = nil
+        #expect(try shown(gym) == [a.id])
+        #expect(try #require(try repo.listingRecord(a.id)).hiddenByBlock == false)
+    }
+
     @Test func aDeviceListingCannotBeReported() throws {
         defer { f.tearDown() }
         let gym = try mapsGym()
@@ -271,6 +324,55 @@ import Testing
                                       photoPath: "\(UUID()).jpg", photoListingId: source)]
         try await cache(gym, [remote()])
         #expect(item.catalogPhotoPath == nil, "the photo stays off until the report is sent")
+    }
+
+    @Test func aReportedPhotoStaysOffAfterItsReportIsSent() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let source = UUID()
+        let mine = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        let item = try #require(try f.context.fetch(FetchDescriptor<EquipmentItemRecord>()).first {
+            $0.id == mine.item.id
+        })
+        item.catalogPhotoPath = "\(UUID()).jpg"
+        item.catalogPhotoListingId = source
+        try f.context.save()
+        let box = outbox
+        try box.enqueueCataloguePhotoReport(listingId: mine.id, reason: .personInPhoto, note: nil, ownerId: user)
+        await box.run(userId: user)
+        transport.items = [RemoteItem(id: item.id, kindId: "cable-stack", brand: nil, model: nil, gymCount: 2,
+                                      photoPath: "\(UUID()).jpg", photoListingId: source)]
+        try await cache(gym, [remote()])
+        #expect(item.catalogPhotoPath == nil, "the user who reported a picture isn't shown it again")
+
+        let another = "\(UUID()).jpg"
+        transport.items = [RemoteItem(id: item.id, kindId: "cable-stack", brand: nil, model: nil, gymCount: 2,
+                                      photoPath: another, photoListingId: UUID())]
+        try await cache(gym, [remote()])
+        #expect(item.catalogPhotoPath == another, "another listing's picture of the item is fine")
+    }
+
+    @Test func aRefusedPhotoReportLetsThePictureBack() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let source = UUID()
+        let mine = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        let item = try #require(try f.context.fetch(FetchDescriptor<EquipmentItemRecord>()).first {
+            $0.id == mine.item.id
+        })
+        item.catalogPhotoPath = "\(UUID()).jpg"
+        item.catalogPhotoListingId = source
+        try f.context.save()
+        let box = outbox
+        transport.failure = .notAllowed
+        try box.enqueueCataloguePhotoReport(listingId: mine.id, reason: .personInPhoto, note: nil, ownerId: user)
+        await box.run(userId: user)
+        transport.failure = nil
+        let path = "\(UUID()).jpg"
+        transport.items = [RemoteItem(id: item.id, kindId: "cable-stack", brand: nil, model: nil, gymCount: 2,
+                                      photoPath: path, photoListingId: source)]
+        try await cache(gym, [remote()])
+        #expect(item.catalogPhotoPath == path, "the report didn't go, so nothing stands against the picture")
     }
 
     @Test func aRejectedNoteIsSentAgainWithoutIt() async throws {
