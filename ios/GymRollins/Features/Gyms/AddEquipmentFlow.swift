@@ -44,6 +44,9 @@ struct AddEquipmentFlow: View {
             .padding(.bottom, 24)
         }
         .background(Theme.background)
+        .signInForSharing(isPresented: Binding(get: { model.signInNeeded },
+                                               set: { if !$0 { model.signInCancelled() } }),
+                          onSignedIn: { model.signInFinished() })
         .onChange(of: model.outcome) { _, outcome in
             guard let outcome else { return }
             if case .created = outcome { env.gymsChanged() }
@@ -75,6 +78,21 @@ extension AddEquipmentModel.Ports {
                 try env.attachPhoto(photo, to: id)
                 guard let listing = try env.gyms.listing(id) else { throw GymDataError.invalidInput("That equipment was removed.") }
                 return listing
-            })
+            },
+            signedInUser: { env.sharingUserId },
+            shareListing: { try env.shareListing($0) },
+            syncListing: { try env.syncListing($0) },
+            confirmListing: { try env.confirmListing($0) },
+            items: { await env.gymSharing.client.items(kindId: $0) },
+            upsertItem: { try env.gymSharing.client.upsertItem(RemoteItem($0)) })
+    }
+}
+
+private extension RemoteItem {
+    /// A model the user picked, as the server would send it, so it is stored under the server's id.
+    init(_ item: CatalogueItem) {
+        self.init(id: item.item.id, kindId: item.item.kindId, brand: item.item.brand, model: item.item.model,
+                  gymCount: item.gymCount, photoPath: item.item.catalogPhotoPath,
+                  photoListingId: item.item.catalogPhotoListingId)
     }
 }

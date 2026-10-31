@@ -28,6 +28,7 @@ struct AddEquipmentDuplicateStep: View {
                 model.different()
             }
         }
+        .task { await model.loadCatalogueItems() }
     }
 
     private func existingCard(_ listing: GymListing) -> some View {
@@ -37,21 +38,55 @@ struct AddEquipmentDuplicateStep: View {
                     .clipShape(.rect(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.title(listing)).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
+                    if !listing.isOwn, listing.confirmCount > 0 {
+                        Badge(text: "\u{2713} \(listing.confirmCount)", kind: .success)
+                    }
                     if let loads = ListingLoadsText.text(listing.loads, unit: env.profile.unit) {
                         Text(loads).font(.caption).foregroundStyle(Theme.textSecondary)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            if model.keepsItsPhoto(listing) {
-                Text("Keeps its photo. Your new one isn't saved.").font(.caption).foregroundStyle(Theme.textSecondary)
-                    .accessibilityIdentifier("addEquipment.keepsPhoto.\(listing.id.uuidString)")
-            }
-            PrimaryGlassButton(title: "Yes, that's it", identifier: "addEquipment.same.\(listing.id.uuidString)") {
-                model.sameAsExisting(listing)
+            if model.isAlreadyAdded(listing) {
+                ownActions(listing)
+            } else {
+                othersActions(listing)
             }
         }
         .padding(12).background(Theme.card, in: .rect(cornerRadius: 14))
+    }
+
+    /// Mine: nothing to confirm. "Yes, that's it" just ends the flow, and gives a listing with no photo the new one.
+    @ViewBuilder
+    private func ownActions(_ listing: GymListing) -> some View {
+        Text("Already added").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+            .accessibilityIdentifier("add.alreadyAdded.\(listing.id.uuidString)")
+        if model.keepsItsPhoto(listing) {
+            Text("Keeps its photo. Your new one isn't saved.").font(.caption).foregroundStyle(Theme.textSecondary)
+                .accessibilityIdentifier("addEquipment.keepsPhoto.\(listing.id.uuidString)")
+        }
+        PrimaryGlassButton(title: "Yes, that's it", identifier: "addEquipment.same.\(listing.id.uuidString)") {
+            model.sameAsExisting(listing)
+        }
+    }
+
+    /// Someone else's: one tap confirms it for the gym. Their listing keeps its own picture, so a photo taken here
+    /// isn't used.
+    @ViewBuilder
+    private func othersActions(_ listing: GymListing) -> some View {
+        if model.hasConfirmed(listing) {
+            Text("You confirmed this").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+                .accessibilityIdentifier("add.confirmed.\(listing.id.uuidString)")
+        } else if model.canConfirm(listing) {
+            if model.hasPhoto {
+                Text("Your photo isn't used here. Choose \u{201C}No, it's a different one\u{201D} to share it.")
+                    .font(.caption).foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("add.confirm.photoNote.\(listing.id.uuidString)")
+            }
+            PrimaryGlassButton(title: "Yes, that's it (+1 confirm)", identifier: "add.confirm.\(listing.id.uuidString)") {
+                model.confirmExisting(listing)
+            }
+        }
     }
 
     private var knownModels: some View {
@@ -62,7 +97,7 @@ struct AddEquipmentDuplicateStep: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text([known.item.brand, known.item.model].compactMap { $0 }.joined(separator: " "))
                             .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
-                        Text("listed at \(known.gymCount) \(known.gymCount == 1 ? "gym" : "gyms")")
+                        Text("\(known.gymCount) \(known.gymCount == 1 ? "gym" : "gyms")")
                             .font(.caption).foregroundStyle(Theme.textSecondary)
                     }
                     .frame(maxWidth: .infinity, minHeight: Theme.minTapSize, alignment: .leading)
@@ -98,7 +133,7 @@ struct AddEquipmentDetailsStep: View {
                 ListingLoadsEditor(loads: $model.loads, kind: kind, unit: env.profile.unit, idPrefix: "addEquipment")
             }
             identity
-            visibility
+            GymVisibilityPicker(options: model.visibilityOptions, selection: $model.visibility)
             VStack(alignment: .leading, spacing: 6) {
                 SectionLabel(text: "Note (optional)")
                 TextField("Note", text: note, axis: .vertical).lineLimit(1...4)
@@ -130,14 +165,6 @@ struct AddEquipmentDetailsStep: View {
         } else if !model.brand.isEmpty || !model.modelName.isEmpty {
             Text([model.brand, model.modelName].filter { !$0.isEmpty }.joined(separator: " "))
                 .foregroundStyle(Theme.textSecondary).accessibilityIdentifier("addEquipment.item")
-        }
-    }
-
-    private var visibility: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "Who sees it")
-            Text("This phone only").foregroundStyle(Theme.textPrimary)
-                .accessibilityIdentifier("addEquipment.visibility")
         }
     }
 }
