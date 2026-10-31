@@ -447,7 +447,7 @@ reset role;
 insert into public.gym_equipment (id, gym_id, item_id, visibility, owner_id, photo_path, loads, added_by) values
   ('bbbbbbbb-0000-4000-8000-0000000000a4', 'dddddddd-0000-0000-0000-000000000001',
    (select id from public.equipment_items where kind_id = 'leg-press' and brand is null and model is null),
-   'private', 'aaaaaaaa-0000-0000-0000-000000000002', 'cccccccc-0000-4000-8000-000000000004.jpg', '{"type":"none"}',
+   'private', 'aaaaaaaa-0000-0000-0000-000000000002', 'cccccccc-0000-4000-8000-0000000000a5.jpg', '{"type":"none"}',
    'aaaaaaaa-0000-0000-0000-000000000002');
 select pg_temp.as_user(2);
 select is((select photo_path from public.public_equipment_items

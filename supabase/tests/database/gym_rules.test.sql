@@ -2,11 +2,12 @@
 -- what a hidden gym reveals, invisible text, and a workout keeping its gym link across phones.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(8);
+select plan(30);
 
 insert into auth.users (id, email, aud, role) values
   ('fafafafa-0000-0000-0000-000000000001', 'rule-a@test.local', 'authenticated', 'authenticated'),
-  ('fafafafa-0000-0000-0000-000000000002', 'rule-b@test.local', 'authenticated', 'authenticated');
+  ('fafafafa-0000-0000-0000-000000000002', 'rule-b@test.local', 'authenticated', 'authenticated'),
+  ('fafafafa-0000-0000-0000-000000000003', 'rule-c@test.local', 'authenticated', 'authenticated');
 
 create function pg_temp.as_user(n int) returns void language plpgsql as $$
 begin
@@ -73,6 +74,86 @@ select is((select i.brand from public.gym_equipment e join public.equipment_item
            where e.id = 'fafafafa-0000-4000-8000-0000000000c3'), 'SharedBrand', 'an item others list too stays');
 select ok(exists (select 1 from public.reports where target_id = 'fafafafa-0000-4000-8000-0000000000c3' and reporter_id is null
                   and note is null and reason = 'spam'), 'a report stays, with the reporter''s note gone');
+
+-- One photo backs one listing --------------------------------------------------------------------------------------------
+reset role;
+insert into storage.objects (bucket_id, name, owner_id, metadata) values
+  ('gym-photos', 'fafafafa-0000-4000-8000-0000000000d1.jpg', 'fafafafa-0000-0000-0000-000000000003', '{"mimetype":"image/jpeg"}');
+select pg_temp.as_user(3);
+select is(public.share_listing(gen_random_uuid(), 'fafafafa-0000-4000-8000-0000000000a1', 'dumbbells', null, null,
+    '{"type":"none"}', 1, null, 'fafafafa-0000-4000-8000-0000000000d1.jpg', true) ->> 'status', 'created', 'a photo backs a listing');
+select throws_ok($$ select public.share_listing(gen_random_uuid(), 'fafafafa-0000-4000-8000-0000000000a1', 'barbell', null, null,
+    '{"type":"none"}', 1, null, 'fafafafa-0000-4000-8000-0000000000d1.jpg', true) $$, 'P0001'::char(5), 'photo_in_use',
+  'but not a second one');
+reset role;
+select throws_ok($$ insert into public.gym_equipment (gym_id, item_id, visibility, photo_path)
+  values ('fafafafa-0000-4000-8000-0000000000a1', (select id from public.equipment_items where kind_id = 'flat-bench' and brand is null),
+          'public', 'fafafafa-0000-4000-8000-0000000000d1.jpg') $$, '23505'::char(5), null,
+  'and the table refuses it too, whatever writes');
+
+-- A hidden gym reads like a missing one -----------------------------------------------------------------------------------
+select pg_temp.as_user(3);
+insert into public.gyms (id, visibility, name) values ('fafafafa-0000-4000-8000-0000000000e0', 'private', 'Hidden gym');
+select pg_temp.as_user(2);
+select throws_ok($$ insert into public.gym_equipment (gym_id, item_id, visibility)
+  values (gen_random_uuid(), (select id from public.equipment_items where kind_id = 'flat-bench' and brand is null), 'public') $$,
+  '23503'::char(5), 'unknown gym', 'a public listing on a random id says unknown gym');
+select throws_ok($$ insert into public.gym_equipment (gym_id, item_id, visibility)
+  values ('fafafafa-0000-4000-8000-0000000000e0', (select id from public.equipment_items where kind_id = 'flat-bench' and brand is null), 'public') $$,
+  '23503'::char(5), 'unknown gym', 'and so does one on someone else''s private gym');
+
+-- A flagged gym is its creator's to see, but not Claude's ------------------------------------------------------------------
+reset role;
+insert into public.gyms (id, visibility, name, maps_place_id, status, created_by)
+  values ('fafafafa-0000-4000-8000-0000000000f0', 'public', 'Flagged gym', 'rules-flagged', 'flagged', 'fafafafa-0000-0000-0000-000000000003');
+select pg_temp.as_user(3);
+select is((select count(*) from public.gyms where id = 'fafafafa-0000-4000-8000-0000000000f0')::int, 1, 'its creator sees a flagged gym');
+select pg_temp.as_mcp(3);
+select is((select count(*) from public.gyms where id = 'fafafafa-0000-4000-8000-0000000000f0')::int, 0, 'Claude on that account does not');
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- Text no one can see ---------------------------------------------------------------------------------------------------
+select is(gym_private.clean_text('Iron ' || chr(917569) || 'Gym'), false, 'tag characters (U+E0000 block) are refused');
+select is(gym_private.clean_text('Iron' || chr(1564) || 'Gym'), false, 'U+061C is refused');
+select is(gym_private.clean_text('Iron' || chr(6158) || 'Gym'), false, 'U+180E is refused');
+select is(gym_private.clean_text('Iron' || chr(65529) || 'Gym'), false, 'U+FFF9 is refused');
+select is(gym_private.clean_text('Iron' || chr(8205) || 'Gym'), false, 'a joiner between ASCII letters is refused');
+select is(gym_private.clean_text(chr(8205) || 'Iron'), false, 'or at the start');
+select is(gym_private.clean_text(chr(128104) || chr(8205) || chr(128105)), true, 'a joiner in an emoji sequence passes');
+select is(gym_private.clean_text('Iron Gym 💪 ' || chr(2325) || chr(8205) || chr(2359)), true, 'and in a script that needs it');
+select throws_ok(format($$ insert into public.reports (target_type, target_id, reason, note)
+  values ('gym', gen_random_uuid(), 'other', %L) $$, 'see ' || chr(917569)), '23514'::char(5), null, 'a report note is cleaned too');
+select lives_ok($$ insert into public.reports (target_type, target_id, reason, note)
+  values ('gym', gen_random_uuid(), 'other', E'two\nlines') $$, 'but may have lines');
+
+-- A workout keeps its gym when a phone cannot resolve it ----------------------------------------------------------------
+select pg_temp.as_user(3);
+select public.upsert_workout(jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000000a01', 'started_at', now(), 'name', 'W',
+  'client_updated_at', '2026-10-31T10:00:00Z', 'gym_id', 'fafafafa-0000-4000-8000-0000000000a1',
+  'entries', jsonb_build_array(jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000000a11', 'exercise_id', '0025',
+    'position', 0, 'gym_equipment_id', 'fafafafa-0000-4000-8000-0000000000c3'))));
+select public.upsert_workout(jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000000a01', 'started_at', now(), 'name', 'W2',
+  'client_updated_at', '2026-10-31T11:00:00Z', 'force', true,
+  'entries', jsonb_build_array(jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000000a11', 'exercise_id', '0025', 'position', 0))));
+select is((select gym_id from public.workouts where id = 'fafafafa-0000-4000-8000-000000000a01'),
+  'fafafafa-0000-4000-8000-0000000000a1'::uuid, 'a push with no gym keeps the stored link');
+select is((select gym_equipment_id from public.workout_entries where id = 'fafafafa-0000-4000-8000-000000000a11'),
+  'fafafafa-0000-4000-8000-0000000000c3'::uuid, 'and an entry with no listing keeps its own');
+reset role;
+update public.gyms set status = 'removed' where id = 'fafafafa-0000-4000-8000-0000000000a1';
+select pg_temp.as_user(3);
+select public.upsert_workout(jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000000a01', 'started_at', now(), 'name', 'W3',
+  'client_updated_at', '2026-10-31T12:00:00Z', 'force', true,
+  'entries', jsonb_build_array(jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000000a11', 'exercise_id', '0025', 'position', 0))));
+select is((select gym_id from public.workouts where id = 'fafafafa-0000-4000-8000-000000000a01'), null::uuid,
+  'a link to a gym the caller lost is not kept');
+select is((select gym_equipment_id from public.workout_entries where id = 'fafafafa-0000-4000-8000-000000000a11'), null::uuid,
+  'nor an entry''s link to a listing they lost');
+select public.upsert_workout(jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000000a02', 'started_at', now(), 'name', 'W',
+  'client_updated_at', '2026-10-31T12:00:00Z', 'gym_id', 'fafafafa-0000-4000-8000-0000000000a1'));
+select is((select gym_id from public.workouts where id = 'fafafafa-0000-4000-8000-000000000a02'), null::uuid,
+  'and a link sent for a gym the caller cannot read is still dropped');
 
 select * from finish();
 rollback;

@@ -37,11 +37,17 @@ create schema gym_private;
 revoke all on schema gym_private from public;
 grant usage on schema gym_private to anon, authenticated;
 
--- No control characters, invisible characters or text-direction overrides. Line breaks only where text has lines.
+-- No control characters, invisible characters or text-direction overrides. Line breaks only where text has lines. Gym
+-- names reach Claude, so anything the eye can't see but a model can read is refused: the tag characters (U+E0000
+-- block, which spell ASCII invisibly), the Arabic and Mongolian format characters, the interlinear annotation marks.
+-- U+200D (zero width joiner) is also an emoji and script character (a rainbow flag, a family, Indic conjuncts), so it
+-- stays, but only next to non-ASCII text: between ASCII letters it can only hide something. U+200C stays refused;
+-- Persian gym names that need it can be written without.
 create function gym_private.clean_text(t text, lines boolean default false) returns boolean
 language sql immutable set search_path = pg_catalog as $$
   select t !~ (case when lines then '[\u0001-\u0009\u000B\u000C\u000E-\u001F]' else '[\u0001-\u001F]' end)
-     and t !~ '[\u007F-\u009F\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u206F\uFEFF]'
+     and t !~ '[\u007F-\u009F\u061C\u180E\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u206F\uFEFF\uFFF9-\uFFFB\U000E0000-\U000E007F]'
+     and t !~ '(^|[\u0001-\u007F])\u200D|\u200D([\u0001-\u007F]|$)'
 $$;
 revoke execute on function gym_private.clean_text(text, boolean) from public;
 grant execute on function gym_private.clean_text(text, boolean) to authenticated;
@@ -65,7 +71,7 @@ create table public.reports (
   reporter_id uuid references auth.users on delete set null,
   reason text not null check (reason in ('wrong-info','not-here-anymore','duplicate','inappropriate-photo',
                                          'person-in-photo','spam','other')),
-  note text check (note is null or char_length(note) <= 280),
+  note text check (note is null or (char_length(note) <= 280 and gym_private.clean_text(note, true))),
   resolved_at timestamptz,
   created_at timestamptz not null default now(),
   unique (target_type, target_id, reporter_id)
@@ -174,7 +180,7 @@ create policy gyms_read_anon on public.gyms for select to anon
 create policy gyms_read on public.gyms for select to authenticated
   using (
     (visibility = 'public' and (status = 'active' or public.is_app_admin()
-                                or (status = 'flagged' and created_by = auth.uid())))
+                                or (status = 'flagged' and created_by = auth.uid() and not public.is_mcp_client())))
     or (visibility = 'private' and owner_id = auth.uid() and (not public.is_mcp_client() or public.mcp_flag('gyms')))
   );
 create policy gyms_write_private on public.gyms for all to authenticated
@@ -273,13 +279,18 @@ create table public.gym_equipment (
   constraint gym_equipment_private_text check (visibility = 'private' or (private_brand is null and private_model is null))
 );
 create index gym_equipment_gym on public.gym_equipment (gym_id, status);
+-- One photo backs one listing, so a name can't be shared by two and the first listing's picture can't be kept alive
+-- (or lost) through the second.
+create unique index gym_equipment_photo on public.gym_equipment (photo_path) where photo_path is not null;
 create index gym_equipment_item on public.gym_equipment (item_id);
 create index gym_equipment_owner_updated on public.gym_equipment (owner_id, updated_at, id) where owner_id is not null;
 create index gym_equipment_added_by on public.gym_equipment (added_by, created_at) where added_by is not null;
 
--- Owner and author from the session; a public listing must be on a public gym; a private one on the caller's own gym,
--- with a generic item and the caller's own photo. Security definer because it must see the gym even when the caller
--- can't, to refuse someone else's private gym. That refusal reads the same as "no such gym", so ids can't be probed.
+-- Owner and author from the session; a listing can't go on someone else's private gym; a public listing must be on a
+-- public gym; a private one on the caller's own gym, with a generic item and the caller's own photo. Security definer
+-- because it must see the gym even when the caller can't, to refuse someone else's private gym. That refusal reads the
+-- same as "no such gym", whichever kind of listing was sent, so ids can't be probed. (share_listing's 'not allowed' on
+-- a private listing's id isn't a probe: listing ids are random and the caller already needs to know one.)
 create or replace function public.gym_equipment_check() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
@@ -287,7 +298,7 @@ declare
   gym public.gyms;
 begin
   select * into gym from public.gyms where id = new.gym_id;
-  if gym.id is null or (new.visibility = 'private' and me is not null and gym.visibility = 'private' and gym.owner_id <> me) then
+  if gym.id is null or (me is not null and gym.visibility = 'private' and gym.owner_id <> me) then
     raise exception 'unknown gym' using errcode = '23503';
   end if;
   if new.visibility = 'public' and gym.visibility <> 'public' then

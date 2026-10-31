@@ -101,6 +101,7 @@ declare
   existing public.gym_equipment;
   duplicates jsonb;
   item uuid;
+  violated text;
 begin
   select * into existing from public.gym_equipment where id = p_listing_id;
   if found then
@@ -118,9 +119,6 @@ begin
     if not exists (select 1 from storage.objects
                    where bucket_id = 'gym-photos' and name = p_photo_path and owner_id = me::text) then
       raise exception 'photo_missing' using errcode = 'P0001';
-    end if;
-    if exists (select 1 from public.gym_equipment where photo_path = p_photo_path) then
-      raise exception 'photo_in_use' using errcode = 'P0001';
     end if;
   end if;
   if not gym_private.valid_loads(p_loads) then
@@ -145,6 +143,10 @@ begin
   perform public.gym_check_daily(
     (select count(*) from public.gym_equipment
      where visibility = 'public' and added_by = me and created_at > now() - interval '1 day'), 30);
+  -- Only the caller can own the photo, so under their lock this answer is exact. The unique index is the backstop.
+  if p_photo_path is not null and exists (select 1 from public.gym_equipment where photo_path = p_photo_path) then
+    raise exception 'photo_in_use' using errcode = 'P0001';
+  end if;
   -- A few accounts adding 30 a day would otherwise fill one gym, and every viewer downloads each photo. The gym's own
   -- lock makes the count exact across users; the order (user, then gym) is the same everywhere. A retry of a listing
   -- already there returned at the top, so it still succeeds at the cap.
@@ -155,9 +157,15 @@ begin
   end if;
 
   item := public.ensure_equipment_item(p_kind_id, p_brand, p_model);
-  insert into public.gym_equipment (id, gym_id, item_id, visibility, photo_path, loads, quantity, notes, added_by)
-  values (p_listing_id, p_gym_id, item, 'public', p_photo_path, p_loads, coalesce(p_quantity, 1),
-          nullif(btrim(p_notes), ''), me);
+  begin
+    insert into public.gym_equipment (id, gym_id, item_id, visibility, photo_path, loads, quantity, notes, added_by)
+    values (p_listing_id, p_gym_id, item, 'public', p_photo_path, p_loads, coalesce(p_quantity, 1),
+            nullif(btrim(p_notes), ''), me);
+  exception when unique_violation then
+    get stacked diagnostics violated = constraint_name;
+    if violated = 'gym_equipment_photo' then raise exception 'photo_in_use' using errcode = 'P0001'; end if;
+    raise;
+  end;
   return jsonb_build_object('status', 'created', 'listing_id', p_listing_id);
 end $$;
 
