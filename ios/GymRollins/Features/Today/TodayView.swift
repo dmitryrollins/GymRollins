@@ -92,7 +92,8 @@ struct TodayView: View {
             .navigationDestination(item: $reviewing) { ProposalReviewView(proposalId: $0) }
             .fullScreenCover(isPresented: $showWorkout, onDismiss: {
                 startEntry = nil
-                reload() // a finished built workout must not stay on Today with Start
+                // A finished built workout must not stay on Today with Start; one still running keeps its rows.
+                if env.session == nil { reload() }
             }, content: {
                 if let session = env.session { WorkoutFlowView(session: session, initialEntry: startEntry) }
             })
@@ -439,7 +440,7 @@ struct TodayView: View {
                     loadError = "Couldn't undo. Your plan wasn't changed."
                 }
             }
-            .buttonStyle(.glassProminent).tint(Theme.primaryFill)
+            .buttonStyle(.glassProminent).tint(Theme.primaryButtonFill)
             .accessibilityIdentifier("proposal.undo")
             Button { env.clearLastApplied() } label: { Image(systemName: "xmark") }
                 .buttonStyle(.glass)

@@ -64,14 +64,17 @@ struct MapKitGymPlaceSearch: GymPlaceSearch {
     }
 
     /// Maps says "not found" when nothing matched: that is no results, not an outage.
-    private static func run(_ request: MKLocalSearch.Request) async throws -> [GymPlace] {
-        do { return places(try await MKLocalSearch(request: request).start().mapItems) }
+    static func orEmpty(_ search: () async throws -> [GymPlace]) async throws -> [GymPlace] {
+        do { return try await search() }
         catch let error as MKError where error.code == .placemarkNotFound { return [] }
     }
 
+    private static func run(_ request: MKLocalSearch.Request) async throws -> [GymPlace] {
+        try await orEmpty { places(try await MKLocalSearch(request: request).start().mapItems) }
+    }
+
     private static func run(_ request: MKLocalPointsOfInterestRequest) async throws -> [GymPlace] {
-        do { return places(try await MKLocalSearch(request: request).start().mapItems) }
-        catch let error as MKError where error.code == .placemarkNotFound { return [] }
+        try await orEmpty { places(try await MKLocalSearch(request: request).start().mapItems) }
     }
 
     /// Items without an identifier can't be remembered, so they are skipped.
