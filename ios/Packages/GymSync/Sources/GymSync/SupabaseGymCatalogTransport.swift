@@ -109,6 +109,29 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
         return count
     }
 
+    public func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
+        let params: [String: AnyJSON] = [
+            "p_target_type": .string(targetType.rawValue), "p_target_id": .string(Self.text(targetId)),
+            "p_reason": .string(reason.rawValue), "p_note": Self.json(note),
+        ]
+        _ = try await call { try await client.rpc("report_content", params: params).execute().data }
+    }
+
+    public func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws {
+        let params: [String: AnyJSON] = [
+            "p_target_type": .string(targetType.rawValue), "p_target_id": .string(Self.text(targetId)),
+        ]
+        _ = try await call { try await client.rpc("block_author", params: params).execute().data }
+    }
+
+    public func unblockAll() async throws -> Int {
+        let data = try await call { try await client.rpc("unblock_all").execute().data }
+        guard let cleared = try? JSONDecoder().decode(Int.self, from: data) else {
+            throw GymCatalogError.rejected("unreadable unblock count")
+        }
+        return cleared
+    }
+
     public func uploadSharedPhoto(_ data: Data, name: String) async throws -> String {
         guard client.auth.currentSession != nil else { throw GymCatalogError.signedOut }
         let stored = name.lowercased()

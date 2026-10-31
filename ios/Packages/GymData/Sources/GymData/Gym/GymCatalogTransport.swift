@@ -14,7 +14,22 @@ public protocol GymCatalogTransport: Sendable {
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String
     /// Removes a photo the caller uploaded to `gym-photos`. Only the owner may; a name that is already gone is fine.
     func deleteSharedPhoto(path: String) async throws
+    /// Reports a public gym or listing. The server also answers `own` (the reporter wrote it) and `already`; both
+    /// count as sent. A target that is gone raises `GymCatalogError.unknownTarget`.
+    func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws
+    /// Hides everything the author of that gym or listing wrote. The phone never learns who the author is.
+    func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws
+    /// Clears every block of the signed-in user and returns how many there were.
+    func unblockAll() async throws -> Int
     func publicPhotoURL(path: String) -> URL?
+}
+
+/// What a report or a block names. Items aren't a target: everything visible about one comes through a listing.
+public enum GymTargetType: String, Sendable, Codable { case gym, listing }
+
+public enum ReportReason: String, Sendable, Codable, CaseIterable {
+    case wrongInfo = "wrong-info", notHereAnymore = "not-here-anymore", duplicate
+    case inappropriatePhoto = "inappropriate-photo", personInPhoto = "person-in-photo", spam, other
 }
 
 /// A gym's public listings as one read found them. A read that couldn't see everything says so: the cache must not
@@ -121,4 +136,8 @@ public enum GymCatalogError: Error, Equatable {
     case photoRefused
     /// `share_listing` found the photo already used by another listing.
     case photoInUse
+    /// `reports.note` failed its text check (control or invisible characters).
+    case noteRefused
+    /// The gym or listing is gone, or was removed: there is nothing left to report or block.
+    case unknownTarget
 }

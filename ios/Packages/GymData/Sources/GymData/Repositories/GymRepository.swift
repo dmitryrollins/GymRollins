@@ -111,12 +111,12 @@ public final class GymRepository {
 
     /// The gym's usable listings. A screen passes `includingUnsupported` to show what the rules never see: the rows a
     /// newer app wrote, and my own listings a moderator flagged (so their badge can show). Nothing else changes for
-    /// the rules, which read `inventory(gymId:)` and the default list.
+    /// the rules, which read `inventory(gymId:)` and the default list. A listing the user reported is in neither.
     public func listings(gymId: UUID, includingUnsupported: Bool = false) throws -> [GymListing] {
         let rows = try context.fetch(FetchDescriptor<GymListingRecord>(
             predicate: #Predicate { $0.gymId == gymId }, sortBy: [SortDescriptor(\.createdAt)]))
         return try rows.filter {
-            guard $0.deletedAt == nil else { return false }
+            guard $0.deletedAt == nil, !$0.hiddenLocally else { return false }
             if $0.statusRaw == ListingStatus.active.rawValue { return true }
             guard includingUnsupported else { return false }
             return $0.statusRaw == ListingStatus.unsupported.rawValue
@@ -124,7 +124,10 @@ public final class GymRepository {
         }.map(listing)
     }
 
-    public func listing(_ id: UUID) throws -> GymListing? { try listingRecord(id).map(listing) }
+    /// A listing the user reported or blocked is gone as far as screens are concerned.
+    public func listing(_ id: UUID) throws -> GymListing? {
+        try listingRecord(id).flatMap { $0.hiddenLocally ? nil : $0 }.map(listing)
+    }
 
     @discardableResult
     public func addListing(_ new: NewListing) throws -> GymListing {
@@ -224,7 +227,7 @@ public final class GymRepository {
 
     private func activeRecords() throws -> [GymListingRecord] {
         try context.fetch(FetchDescriptor<GymListingRecord>())
-            .filter { $0.deletedAt == nil && $0.statusRaw == ListingStatus.active.rawValue }
+            .filter { $0.deletedAt == nil && !$0.hiddenLocally && $0.statusRaw == ListingStatus.active.rawValue }
     }
 
     /// An edit to a row: stamps it, and a synced row also waits to be pushed.

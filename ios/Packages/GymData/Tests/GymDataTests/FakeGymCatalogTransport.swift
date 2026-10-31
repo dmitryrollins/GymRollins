@@ -27,8 +27,24 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private var _confirmCounts: [UUID: Int] = [:]
     private var _confirmers: Set<UUID> = []
     private var _deleted: [String] = []
+    private var _reports: [ReportCall] = []
+    private var _blocks: [BlockCall] = []
+    private var _unblocks = 0
+    private var _reportScript: [GymCatalogError?] = []
+    private var _unblockResult = 0
+
+    struct ReportCall: Equatable {
+        let type: GymTargetType, id: UUID, reason: ReportReason, note: String?
+    }
+    struct BlockCall: Equatable { let type: GymTargetType, id: UUID }
 
     var calls: [String] { lock.withLock { _calls } }
+    var reports: [ReportCall] { lock.withLock { _reports } }
+    var blocks: [BlockCall] { lock.withLock { _blocks } }
+    var unblocks: Int { lock.withLock { _unblocks } }
+    /// Answers for the next `report` calls, used up in order: an error refuses it, nil lets it through.
+    var reportScript: [GymCatalogError?] { get { lock.withLock { _reportScript } } set { lock.withLock { _reportScript = newValue } } }
+    var unblockResult: Int { get { lock.withLock { _unblockResult } } set { lock.withLock { _unblockResult = newValue } } }
     var gym: RemoteGym? { get { lock.withLock { _gym } } set { lock.withLock { _gym = newValue } } }
     var listings: [RemoteListing] { get { lock.withLock { _listings } } set { lock.withLock { _listings = newValue } } }
     /// Rows the server "sent" that no version could read, and a read that hit its cap.
@@ -128,6 +144,25 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     func deleteSharedPhoto(path: String) async throws {
         try record("deleteSharedPhoto")
         lock.withLock { _deleted.append(path) }
+    }
+    func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
+        try record("report")
+        let scripted: GymCatalogError? = lock.withLock {
+            _reports.append(ReportCall(type: targetType, id: targetId, reason: reason, note: note))
+            return _reportScript.isEmpty ? nil : _reportScript.removeFirst()
+        }
+        if let scripted { throw scripted }
+    }
+    func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws {
+        try record("blockAuthor")
+        lock.withLock { _blocks.append(BlockCall(type: targetType, id: targetId)) }
+    }
+    func unblockAll() async throws -> Int {
+        try record("unblockAll")
+        return lock.withLock {
+            _unblocks += 1
+            return _unblockResult
+        }
     }
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://example.test/gym-photos/\(path)") }
 }

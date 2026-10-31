@@ -66,6 +66,9 @@ struct FakeGymCatalogTransport: GymCatalogTransport {
     func confirm(listingId: UUID) async throws -> Int { 4 }
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { name }
     func deleteSharedPhoto(path: String) async throws {}
+    func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {}
+    func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws {}
+    func unblockAll() async throws -> Int { 0 }
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://photos.uitest.invalid/gym-photos/\(path)") }
 }
 

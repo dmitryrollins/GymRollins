@@ -10,8 +10,8 @@ struct ShareStatusModel: Equatable {
     let text: String
     let reason: String?
     let actions: [Action]
-    /// Someone else's listing, and my own once it is on the server, are not removed from here (plan 22 adds the report
-    /// path). A share still waiting, stuck or undecided can be taken back.
+    /// Someone else's listing, and my own once it is on the server, are not removed from here (someone else's can be
+    /// reported instead). A share still waiting, stuck or undecided can be taken back.
     let canRemove: Bool
     /// What the confirmation before Delete says will happen.
     let deleteMessage: String
@@ -36,6 +36,8 @@ struct ShareStatusModel: Equatable {
             switch listing.visibility {
             case .synced:
                 (text, actions) = ("Synced to your account", [])
+            case .shared where listing.isOwn && listing.status == .flagged:
+                (text, actions) = ("Under review", [])
             case .shared where !listing.isOwn && listing.confirmedByMe:
                 (text, actions) = ("You confirmed this", [])
             case .shared where !listing.isOwn:

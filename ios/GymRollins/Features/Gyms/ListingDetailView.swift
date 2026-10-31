@@ -23,6 +23,11 @@ struct ListingDetailView: View {
     @State private var photoWidth: CGFloat = 330
     @State private var showCamera = false
     @State private var isProcessingCamera = false
+    @State private var showReport = false
+    @State private var reportSubject = ReportContentModel.Subject.listing
+    @State private var didReport = false
+    @State private var confirmingBlock = false
+    @State private var borrowedShown = false
 
     init(listing: GymListing, gym: Gym) {
         self.listing = listing
@@ -41,12 +46,16 @@ struct ListingDetailView: View {
         kind.map { ListingLoadsEditing(kind: $0, unit: env.profile.unit, loads: loads) }
     }
     private var canSave: Bool { editing?.isValid ?? false }
+    /// Someone else's listing on the server: it can be reported, and its author hidden.
+    private var canReport: Bool { current.visibility == .shared && current.uploadState == .uploaded && !current.isOwn }
+    private var canReportPhoto: Bool { photoFile == nil && borrowedShown }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 photo
                 headerText
+                if confirmingBlock { BlockAuthorCard(onCancel: { confirmingBlock = false }, onConfirm: blockAuthor) }
                 if kind == nil {
                     Text("This item came from a newer version of the app. Update the app to use it.")
                         .foregroundStyle(Theme.textSecondary).accessibilityIdentifier("listing.unknown")
@@ -69,7 +78,29 @@ struct ListingDetailView: View {
         .background(Theme.background)
         .navigationBarTitleDisplayMode(.inline)
         .signInForSharing(gate: signIn)
+        .toolbar { if canReport || canReportPhoto { ToolbarItem(placement: .primaryAction) { moderationMenu } } }
+        .sheet(isPresented: $showReport, onDismiss: { if didReport && reportSubject == .listing { dismiss() } }) {
+            ReportContentSheet(subject: reportSubject, send: sendReport)
+        }
         .task(id: env.gymRevision) { reload() }
+    }
+
+    private var moderationMenu: some View {
+        Menu {
+            if canReport {
+                Button("Report", systemImage: "flag") { startReport(.listing) }.accessibilityIdentifier("listing.report")
+                Button("Hide everything from this user", systemImage: "hand.raised") { confirmingBlock = true }
+                    .accessibilityIdentifier("listing.block")
+            }
+            if canReportPhoto {
+                Button("Report this photo", systemImage: "photo.badge.exclamationmark") { startReport(.photo) }
+                    .accessibilityIdentifier("listing.reportCatalogPhoto")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel("More")
+        .accessibilityIdentifier("listing.menu")
     }
 
     // MARK: Parts
@@ -78,7 +109,8 @@ struct ListingDetailView: View {
         VStack(spacing: 10) {
             ListingPhotoView(photoFile: photoFile, kindId: listing.item.kindId,
                              catalogPhotoPath: current.item.catalogPhotoPath, width: photoWidth,
-                             height: photoWidth * 0.7, full: true, cornerRadius: Theme.cardRadius, showsNote: true)
+                             height: photoWidth * 0.7, full: true, cornerRadius: Theme.cardRadius, showsNote: true,
+                             onCatalogShown: { borrowedShown = $0 })
             if photoFile == nil, kind != nil, status.canEdit { addPhotoButtons }
         }
         .fullScreenCover(isPresented: $showCamera) {
@@ -223,7 +255,8 @@ struct ListingDetailView: View {
     private func reload() {
         do {
             guard let fresh = try env.gyms.listing(listing.id) else {
-                dismiss()
+                // A reported listing is gone from the lists at once; its sheet says thanks before this screen closes.
+                if !showReport { dismiss() }
                 return
             }
             current = fresh
@@ -231,6 +264,32 @@ struct ListingDetailView: View {
             duplicates = fresh.uploadState == .waitingForChoice ? try env.gymSharing.outbox.duplicates(listingId: fresh.id) : []
         } catch {
             AppEnvironment.log.error("Reload listing failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    // MARK: Reporting
+
+    private func startReport(_ subject: ReportContentModel.Subject) {
+        reportSubject = subject
+        didReport = false
+        showReport = true
+    }
+
+    private func sendReport(_ reason: ReportReason, _ note: String?) throws {
+        if reportSubject == .photo {
+            try env.reportCataloguePhoto(onListing: listing.id, reason: reason, note: note)
+        } else {
+            try env.reportListing(listing.id, reason: reason, note: note)
+        }
+        didReport = true
+    }
+
+    private func blockAuthor() {
+        gated(.report) {
+            attempt {
+                try env.blockAuthor(ofListing: listing.id)
+                dismiss()
+            }
         }
     }
 

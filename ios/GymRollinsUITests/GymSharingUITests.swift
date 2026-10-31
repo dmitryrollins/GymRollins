@@ -231,4 +231,101 @@ final class GymSharingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["gymEquipment.add"].waitForExistence(timeout: 5), "back on the equipment screen")
         XCTAssertTrue(tile.waitForNonExistence(timeout: 5), "the failed share is gone")
     }
+
+    /// Opens the report sheet from a shared listing's menu.
+    private func openReportSheet(_ app: XCUIApplication) {
+        let menu = app.buttons["listing.menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5), "someone else's listing has a menu")
+        menu.tap()
+        let report = app.buttons["listing.report"]
+        XCTAssertTrue(report.waitForExistence(timeout: 5))
+        report.tap()
+        XCTAssertTrue(app.buttons["report.send"].waitForExistence(timeout: 5), "the report sheet opens")
+    }
+
+    func testReportAsksForSignInFirstAndCancellingReportsNothing() {
+        let app = launch()
+        openEquipment(app)
+        openTile(app, "lat-pulldown")
+        openReportSheet(app)
+        app.buttons["report.send"].tap()
+        XCTAssertEqual(text(app, "report.error").label, "Pick what's wrong first.", "a reason comes first")
+        app.buttons["report.reason.spam"].tap()
+        app.buttons["report.send"].tap()
+        cancelSignIn(app, title: "Sign in to report", intro: "Report this so it can be checked. ")
+        XCTAssertFalse(text(app, "report.thanks").exists, "nothing was sent")
+        app.buttons["report.cancel"].tap()
+        XCTAssertTrue(text(app, "listing.shareStatus").waitForExistence(timeout: 5), "the listing is still there")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForExistence(timeout: 5))
+    }
+
+    func testReportingHidesTheListing() {
+        let app = launch(["-fakeSignedIn"])
+        openEquipment(app)
+        openTile(app, "lat-pulldown")
+        openReportSheet(app)
+        app.buttons["report.reason.wrong-info"].tap()
+        app.buttons["report.send"].tap()
+        XCTAssertEqual(text(app, "report.thanks").label, "Thanks. We'll take a look.")
+        app.buttons["report.done"].tap()
+        XCTAssertTrue(app.buttons["gymEquipment.add"].waitForExistence(timeout: 5), "back on the equipment screen")
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForNonExistence(timeout: 5),
+                      "the reported listing is gone")
+        XCTAssertTrue(app.buttons["gymEquipment.listing.cable-station"].exists, "the others stay")
+        // The server still returns it; a refresh must not bring it back.
+        app.swipeDown()
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForNonExistence(timeout: 5))
+    }
+
+    func testBlockingAnAuthorAsksFirstAndHidesTheListing() {
+        let app = launch(["-fakeSignedIn"])
+        openEquipment(app)
+        openTile(app, "lat-pulldown")
+        app.buttons["listing.menu"].tap()
+        app.buttons["listing.block"].tap()
+        XCTAssertTrue(text(app, "listing.block.message").waitForExistence(timeout: 5))
+        app.buttons["listing.block.cancel"].tap()
+        XCTAssertTrue(text(app, "listing.block.message").waitForNonExistence(timeout: 5))
+        app.buttons["listing.menu"].tap()
+        app.buttons["listing.block"].tap()
+        app.buttons["listing.block.confirm"].tap()
+        XCTAssertTrue(app.buttons["gymEquipment.add"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForNonExistence(timeout: 5))
+    }
+
+    func testAGymCanBeReportedFromItsEquipmentScreen() {
+        let app = launch(["-fakeSignedIn"])
+        openEquipment(app)
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForExistence(timeout: 15))
+        app.buttons["gymEquipment.menu"].tap()
+        app.buttons["gym.report"].tap()
+        XCTAssertTrue(app.buttons["report.send"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["report.reason.inappropriate-photo"].exists, "a gym has no photo to report")
+        app.buttons["report.reason.not-here-anymore"].tap()
+        app.buttons["report.send"].tap()
+        XCTAssertTrue(text(app, "report.thanks").waitForExistence(timeout: 5))
+        app.buttons["report.done"].tap()
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForExistence(timeout: 5),
+                      "reporting a gym hides nothing")
+    }
+
+    func testReportingABorrowedPhotoRemovesItAndKeepsTheListing() {
+        let app = launch(["-fakeSignedIn", "-gymPhotoFixture"])
+        openEquipment(app)
+        openTile(app, "flat-bench")
+        XCTAssertTrue(text(app, "listing.catalogPhoto").waitForExistence(timeout: 10), "it borrows a photo")
+        app.buttons["listing.menu"].tap()
+        app.buttons["listing.reportCatalogPhoto"].tap()
+        XCTAssertTrue(app.buttons["report.send"].waitForExistence(timeout: 5))
+        let reasons = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'report.reason.'")).allElementsBoundByIndex
+        XCTAssertEqual(reasons.first?.identifier, "report.reason.inappropriate-photo", "the photo reasons lead")
+        app.buttons["report.reason.inappropriate-photo"].tap()
+        app.buttons["report.send"].tap()
+        XCTAssertTrue(text(app, "report.thanks").waitForExistence(timeout: 5))
+        app.buttons["report.done"].tap()
+        XCTAssertTrue(text(app, "listing.shareStatus").waitForExistence(timeout: 5), "the listing stays")
+        XCTAssertTrue(text(app, "listing.catalogPhoto").waitForNonExistence(timeout: 5), "the picture goes")
+        XCTAssertFalse(app.buttons["listing.menu"].exists, "the device listing has nothing left to report")
+    }
 }

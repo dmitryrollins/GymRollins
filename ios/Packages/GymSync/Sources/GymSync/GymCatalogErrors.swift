@@ -50,11 +50,14 @@ enum GymCatalogErrors {
         case "photo_missing": return .photoMissing
         case "gym_full": return .gymFull
         case "photo_in_use": return .photoInUse
+        case "unknown target": return .unknownTarget
         case _ where photoRefusals.contains(message): return .photoRefused
         default: break
         }
         if let code {
             if authCodes.contains(code) { return .signedOut }
+            // `reports.note` failed its check: control or invisible characters.
+            if code == "23514" { return .noteRefused }
             if code == "42501" { return hasSession ? .notAllowed : .signedOut }
             if busyCodes.contains(code) || code.hasPrefix("08") || code.hasPrefix("53") { return .offline }
         }

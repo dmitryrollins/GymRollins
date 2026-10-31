@@ -11,6 +11,8 @@ struct GymEquipmentView: View {
     @State private var errorText: String?
     @State private var selected: GymListing?
     @State private var showAdd = false
+    @State private var showReportGym = false
+    @State private var canReportGym = false
     @State private var gridWidth: CGFloat = 330
 
     private static let columnSpacing: CGFloat = 10
@@ -21,6 +23,9 @@ struct GymEquipmentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 if let errorText { Text(errorText).foregroundStyle(Theme.destructive).accessibilityIdentifier("gymEquipment.error") }
+                if let notice = env.gymReportNotice {
+                    Text(notice).foregroundStyle(Theme.destructive).accessibilityIdentifier("gymEquipment.reportNotice")
+                }
                 if let model {
                     if !model.coverage.isEmpty { coverage(model.coverage) }
                     if model.isEmpty { emptyState } else { ForEach(model.sections) { section($0) } }
@@ -39,6 +44,24 @@ struct GymEquipmentView: View {
         }
         .navigationDestination(item: $selected) { ListingDetailView(listing: $0, gym: gym) }
         .sheet(isPresented: $showAdd) { AddEquipmentFlow(gym: gym) }
+        .sheet(isPresented: $showReportGym) {
+            ReportContentSheet(subject: .gym) { reason, note in try env.reportGym(gym.id, reason: reason, note: note) }
+        }
+        .toolbar {
+            if canReportGym {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Report this gym", systemImage: "flag") { showReportGym = true }
+                            .accessibilityIdentifier("gym.report")
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("More")
+                    .accessibilityIdentifier("gymEquipment.menu")
+                }
+            }
+        }
+        .onDisappear { env.gymReportNotice = nil }
         .task(id: env.gymRevision) { await load() }
         .task { await env.gymCatalogRefresh(gymId: gym.id, force: false) }
         .refreshable { await env.gymCatalogRefresh(gymId: gym.id, force: true) }
@@ -133,6 +156,7 @@ struct GymEquipmentView: View {
             return
         }
         errorText = nil
+        canReportGym = (try? env.gyms.gym(gym.id))?.remoteId != nil
         let unit = env.profile.unit
         model = GymEquipmentModel(gym: gym, listings: listings, catalog: env.gymCatalog, unit: unit,
                                   coverage: model?.coverage ?? [])

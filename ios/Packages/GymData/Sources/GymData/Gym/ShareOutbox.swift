@@ -13,6 +13,9 @@ public final class ShareOutbox {
     static let gymFull = "This gym's list is full."
     static let photoRefused = "Couldn't upload this photo. Try again tomorrow, or delete this item."
     static let notAllowed = "This one can't be shared from this account."
+    static let reportDailyLimit = "You've sent a lot of reports today. Try again tomorrow."
+    static let couldNotReport = "Couldn't send that report. Try again later."
+    static let couldNotBlock = "Couldn't hide that user's equipment. Try again later."
     static let log = Logger(subsystem: "com.rollins.gymrollins", category: "share-outbox")
 
     let repository: GymRepository
@@ -21,11 +24,15 @@ public final class ShareOutbox {
     let now: () -> Date
     private var running = false
     private var runAgainFor: UUID?
-    private var generation = 0
+    private(set) var generation = 0
     var cleanups: [Task<Void, Never>] = []
 
     /// The last error from reading or saving the queue itself, for the caller to log.
     public private(set) var storageError: Error?
+
+    /// Why the last report or block the server refused was dropped, for the screen to show once. Cleared by
+    /// `takeReportNotice()`.
+    public internal(set) var reportNotice: String?
 
     public init(repository: GymRepository, transport: GymCatalogTransport, photoData: @escaping (String) -> Data?,
                 now: @escaping () -> Date) {
@@ -166,9 +173,9 @@ public final class ShareOutbox {
     }
 
     /// Thrown after an await when the session changed meanwhile: the run ends without touching anything.
-    private struct SessionChanged: Error {}
+    struct SessionChanged: Error {}
 
-    private func ensureCurrent(_ token: Int) throws {
+    func ensureCurrent(_ token: Int) throws {
         if token != generation { throw SessionChanged() }
     }
 
@@ -177,6 +184,8 @@ public final class ShareOutbox {
             switch Kind(rawValue: row.kindRaw) {
             case .share: try await share(row, token: token)
             case .confirm: try await confirm(row, token: token)
+            case .report: try await sendReport(row, token: token)
+            case .block: try await sendBlock(row, token: token)
             case nil: context.delete(row); try context.save()
             }
             return .next
@@ -290,6 +299,9 @@ public final class ShareOutbox {
 
     /// An answer that isn't "done": the row either waits for another try or the listing shows why it stopped.
     private func settle(_ row: ShareOutboxRecord, _ error: Error) async throws {
+        if Kind(rawValue: row.kindRaw) == .report || Kind(rawValue: row.kindRaw) == .block {
+            return try settleModeration(row, error)
+        }
         let listing = try repository.listingRecord(row.targetId)
         if case GymCatalogError.photoMissing = error {
             listing?.remotePhotoPath = nil
@@ -349,11 +361,11 @@ public final class ShareOutbox {
         try context.fetch(FetchDescriptor<ShareOutboxRecord>(sortBy: [SortDescriptor(\.createdAt)]))
     }
 
-    private func removeRows(kind: Kind, target: UUID) throws {
+    func removeRows(kind: Kind, target: UUID) throws {
         try rows().filter { $0.kindRaw == kind.rawValue && $0.targetId == target }.forEach(context.delete)
     }
 
-    private func itemRecord(_ id: UUID) throws -> EquipmentItemRecord? {
+    func itemRecord(_ id: UUID) throws -> EquipmentItemRecord? {
         try context.fetch(FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id })).first
     }
 }

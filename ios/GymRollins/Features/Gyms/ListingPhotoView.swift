@@ -25,6 +25,8 @@ struct ListingPhotoView: View {
     var cornerRadius: CGFloat = 12
     /// Puts the caption under a borrowed or stock photo.
     var showsNote = false
+    /// Called when a picture from another gym starts or stops being what the listing shows.
+    var onCatalogShown: ((Bool) -> Void)?
     @State private var stock: UIImage?
     /// The kind `stock` is the photo of, so a new kind never shows the old one's while it loads.
     @State private var stockKind: String?
@@ -40,7 +42,9 @@ struct ListingPhotoView: View {
     }
 
     init(photoFile: String?, kindId: String?, catalogPhotoPath: String? = nil, width: CGFloat, height: CGFloat? = nil,
-         full: Bool = false, cornerRadius: CGFloat = 12, showsNote: Bool = false) {
+         full: Bool = false, cornerRadius: CGFloat = 12, showsNote: Bool = false,
+         onCatalogShown: ((Bool) -> Void)? = nil) {
+        self.onCatalogShown = onCatalogShown
         self.photoFile = photoFile
         self.kindId = kindId
         self.catalogPhotoPath = catalogPhotoPath
@@ -68,6 +72,12 @@ struct ListingPhotoView: View {
         }
         .task(id: LoadKey(photoFile: photoFile, kindId: kindId, revision: env.media.revision.value)) { await loadStock() }
         .task(id: CatalogKey(photoFile: photoFile, path: catalogPhotoPath)) { await loadCatalog() }
+        .onChange(of: showsCatalog) { _, shown in onCatalogShown?(shown) }
+    }
+
+    private var showsCatalog: Bool {
+        if case .catalog = shown { return true }
+        return false
     }
 
     @ViewBuilder

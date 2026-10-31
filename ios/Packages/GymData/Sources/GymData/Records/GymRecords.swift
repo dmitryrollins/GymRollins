@@ -98,6 +98,9 @@ public final class GymListingRecord {
     public var demotedOwnerId: UUID?
     /// Whether the row held an edit the server hadn't seen when it was demoted.
     public var demotedDirty: Bool = false
+    /// The user reported this shared listing or blocked its author. It stays out of every list, and a refresh keeps it
+    /// out, until the row itself goes (the server stopped returning it).
+    public var hiddenLocally: Bool = false
 
     public init(id: UUID = UUID(), gymId: UUID, itemId: UUID, kindId: String, loadsData: Data, quantity: Int,
                 notes: String?, photoFile: String?, now: Date) {

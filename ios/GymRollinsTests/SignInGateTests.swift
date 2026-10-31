@@ -43,6 +43,8 @@ import Testing
         #expect(SignInPurpose.share.body == "Share this gym's equipment with other people. " + backup)
         #expect(SignInPurpose.confirm.body == "Confirm that this equipment is at the gym, for everyone who trains there. " + backup)
         #expect(SignInPurpose.sync.body == "Sync this to your account so it is there on your other devices. Only you can see it. " + backup)
+        #expect(SignInPurpose.report.body == "Report this so it can be checked. " + backup)
+        #expect(SignInPurpose.report.title == "Sign in to report")
         #expect(SignInPurpose.sync.title == "Sign in to sync" && SignInPurpose.share.title == "Sign in to share")
     }
 }

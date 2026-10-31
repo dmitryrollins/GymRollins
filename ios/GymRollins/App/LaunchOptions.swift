@@ -94,6 +94,9 @@ struct LaunchOptions {
     /// DEBUG/UI-test only (`-fakeGymCatalog`): the shared gym catalogue is an in-memory fake with fixed listings for
     /// "Iron Works Gym", and that gym is seeded as the current gym (`DebugSharedGymSeed`).
     let fakeGymCatalog: Bool
+    /// DEBUG/UI-test only (`-fakeSignedIn`): the sharing screens treat the phone as signed in, so a report or a
+    /// confirmation is queued and sent to the fake catalogue. Nothing else about the session changes.
+    let fakeSignedIn: Bool
     /// DEBUG/UI-test only (`-fakeHealth`): Apple Health is an in-memory `FakeHealthStore` seeded with three Withings
     /// weigh-ins, so the Health flows can be tested on the simulator without HealthKit.
     let fakeHealth: Bool
@@ -149,6 +152,7 @@ struct LaunchOptions {
         fakeLocation = Self.coordinate(after: "-fakeLocation", in: arguments)
         fakeGymPlaces = arguments.contains("-fakeGymPlaces")
         fakeGymCatalog = arguments.contains("-fakeGymCatalog")
+        fakeSignedIn = arguments.contains("-fakeSignedIn")
         seedHistory = arguments.contains("-seedHistory")
         seedBodyweight = arguments.contains("-seedBodyweight")
         seedPlank = arguments.contains("-seedPlank")
@@ -169,6 +173,7 @@ struct LaunchOptions {
         fakeLocation = nil
         fakeGymPlaces = false
         fakeGymCatalog = false
+        fakeSignedIn = false
         seedHistory = false
         seedBodyweight = false
         seedPlank = false

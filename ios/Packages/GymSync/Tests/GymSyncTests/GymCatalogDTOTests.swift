@@ -211,6 +211,9 @@ struct GymCatalogDTOTests {
         #expect(GymCatalogErrors.map(postgrest("photo_missing", code: "P0001")) == .photoMissing)
         #expect(GymCatalogErrors.map(postgrest("gym_full", code: "P0001")) == .gymFull)
         #expect(GymCatalogErrors.map(postgrest("photo_in_use", code: "P0001")) == .photoInUse)
+        #expect(GymCatalogErrors.map(postgrest("unknown target", code: "P0001")) == .unknownTarget)
+        #expect(GymCatalogErrors.map(postgrest("new row for relation \"reports\" violates check constraint",
+                                               code: "23514")) == .noteRefused)
         #expect(GymCatalogErrors.map(postgrest("JWT expired", code: "PGRST301")) == .signedOut)
         #expect(GymCatalogErrors.map(postgrest("invalid loads", code: "22023")) == .rejected("invalid loads"))
     }

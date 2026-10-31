@@ -122,11 +122,9 @@ import Testing
     @Test func badgeForEachState() throws {
         #expect(GymEquipmentModel.ListingBadge.onlyMe.text == "Only me")
         #expect(GymEquipmentModel.ListingBadge.confirmed(7).text == "\u{2713} 7")
-        #expect(GymEquipmentModel.ListingBadge.flagged.text == "Flagged")
         #expect(GymEquipmentModel.ListingBadge.underReview.text == "Under review")
         #expect(GymEquipmentModel.ListingBadge.onlyMe.kind == .neutral)
         #expect(GymEquipmentModel.ListingBadge.confirmed(1).kind == .success)
-        #expect(GymEquipmentModel.ListingBadge.flagged.kind == .record)
         #expect(GymEquipmentModel.ListingBadge.underReview.kind == .record)
         let rig = try GymTestRig.make()
         let gym = try rig.gym("Badges", ["flat-bench": .none])

@@ -295,6 +295,23 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Listing detail: may already be there")
     }
 
+    func testReportSheetAndBlockCardAudit() {
+        let app = launch(["-fakeGymCatalog", "-fakeSignedIn"])
+        openSharedEquipment(app)
+        openListing(app, app.buttons["gymEquipment.listing.lat-pulldown"])
+        app.buttons["listing.menu"].tap()
+        app.buttons["listing.block"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["listing.block.message"].waitForExistence(timeout: 5))
+        audit(app, "Listing detail: hide everything from this user")
+        app.buttons["listing.block.cancel"].tap()
+        app.buttons["listing.menu"].tap()
+        app.buttons["listing.report"].tap()
+        XCTAssertTrue(app.buttons["report.send"].waitForExistence(timeout: 5))
+        audit(app, "Report sheet")
+        app.buttons["report.reason.other"].tap()
+        audit(app, "Report sheet: a reason picked")
+    }
+
     func testAddEquipmentSharingAudit() {
         let app = launch(["-fakeGymCatalog", "-gymPhotoFixture"])
         openSharedEquipment(app)

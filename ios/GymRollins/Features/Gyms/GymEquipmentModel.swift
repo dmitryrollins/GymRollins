@@ -4,10 +4,10 @@ import GymData
 
 /// What the gym equipment screen shows, worked out once per load so the view only draws it (spec §6).
 struct GymEquipmentModel: Equatable {
-    /// The status chip on a tile. `underReview` has no source until plan 22; `flagged` follows the listing's status
-    /// already. A share that is waiting, stuck or undecided shows before the confirm count.
+    /// The status chip on a tile. My own listing a moderator flagged reads "Under review". A share that is waiting,
+    /// stuck or undecided shows before the confirm count.
     enum ListingBadge: Equatable {
-        case onlyMe, synced, waiting, failed, needsChoice, confirmed(Int), flagged, underReview
+        case onlyMe, synced, waiting, failed, needsChoice, confirmed(Int), underReview
 
         var text: String {
             switch self {
@@ -17,7 +17,6 @@ struct GymEquipmentModel: Equatable {
             case .failed: "Couldn't upload"
             case .needsChoice: "Needs a choice"
             case let .confirmed(count): "\u{2713} \(count)"
-            case .flagged: "Flagged"
             case .underReview: "Under review"
             }
         }
@@ -26,12 +25,12 @@ struct GymEquipmentModel: Equatable {
             switch self {
             case .onlyMe, .synced, .waiting, .needsChoice: .neutral
             case .confirmed: .success
-            case .failed, .flagged, .underReview: .record
+            case .failed, .underReview: .record
             }
         }
 
         init?(_ listing: GymListing) {
-            if listing.status == .flagged { self = .flagged }
+            if listing.status == .flagged { self = .underReview }
             else if listing.uploadState == .failed { self = .failed }
             else if listing.uploadState == .queued { self = .waiting }
             else if listing.uploadState == .waitingForChoice { self = .needsChoice }

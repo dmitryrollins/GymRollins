@@ -227,6 +227,13 @@ struct GymCatalogE2ETests {
             try await base.uploadSharedPhoto(data, name: name)
         }
         func deleteSharedPhoto(path: String) async throws { try await base.deleteSharedPhoto(path: path) }
+        func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
+            try await base.report(targetType: targetType, targetId: targetId, reason: reason, note: note)
+        }
+        func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws {
+            try await base.blockAuthor(targetType: targetType, targetId: targetId)
+        }
+        func unblockAll() async throws -> Int { try await base.unblockAll() }
         func publicPhotoURL(path: String) -> URL? { base.publicPhotoURL(path: path) }
     }
 

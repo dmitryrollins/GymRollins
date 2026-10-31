@@ -84,7 +84,7 @@ public final class GymCatalogClient {
         let rows = try repository.context.fetch(FetchDescriptor<GymListingRecord>(
             predicate: #Predicate { $0.gymId == gymId && $0.visibilityRaw == shared && $0.photoFile == nil },
             sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.id)]))
-        return rows.compactMap { row in row.remotePhotoPath.map { PhotoFetch(listingId: row.id, path: $0) } }
+        return rows.filter { !$0.hiddenLocally }.compactMap { row in row.remotePhotoPath.map { PhotoFetch(listingId: row.id, path: $0) } }
             .prefix(Self.photosPerRefresh).map { $0 }
     }
 
@@ -143,6 +143,7 @@ public final class GymCatalogClient {
         let context = repository.context
         let rows = (try? context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.gymId == gymId }))) ?? []
         let kinds = Set(rows.filter { $0.photoFile == nil }.map(\.kindId))
+        let reported = try QueuedModeration(context: context).reportedPhotos
         for kind in kinds.sorted() {
             guard let items = try? await transport.publicItems(kindId: kind) else { continue }
             guard token == generation else { return }
@@ -150,6 +151,8 @@ public final class GymCatalogClient {
                 let id = remote.id
                 guard let record = try? context.fetch(
                     FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id })).first else { continue }
+                // A picture the user reported keeps off until the report is sent.
+                if let source = remote.photoListingId, reported.contains(source) { continue }
                 record.catalogPhotoPath = remote.photoPath
                 record.catalogPhotoListingId = remote.photoListingId
             }
@@ -183,6 +186,7 @@ public final class GymCatalogClient {
         let confirming = Set(try context.fetch(FetchDescriptor<ShareOutboxRecord>()).filter {
             $0.kindRaw == ShareOutboxRecord.Kind.confirm.rawValue
         }.map(\.targetId))
+        let hiding = try QueuedModeration(context: context).hiding
         for entry in usable {
             let item = try itemRecord(for: entry)
             if let row = locals[entry.id] {
@@ -192,6 +196,8 @@ public final class GymCatalogClient {
                 let row = cache.insert(entry, itemId: item.id, gymId: gymId)
                 locals[entry.id] = row
             }
+            // `update` leaves `hiddenLocally` alone: a reported row stays hidden while the server still returns it.
+            if hiding.contains(entry.id) { locals[entry.id]?.hiddenLocally = true }
             // The server doesn't know about a confirmation that is still queued.
             if confirming.contains(entry.id) { locals[entry.id]?.confirmedByMe = true }
         }

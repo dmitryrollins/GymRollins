@@ -44,6 +44,11 @@ struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func confirm(listingId: UUID) async throws -> Int { throw GymCatalogError.signedOut }
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { throw GymCatalogError.signedOut }
     func deleteSharedPhoto(path: String) async throws { throw GymCatalogError.signedOut }
+    func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
+        throw GymCatalogError.signedOut
+    }
+    func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws { throw GymCatalogError.signedOut }
+    func unblockAll() async throws -> Int { throw GymCatalogError.signedOut }
     func publicPhotoURL(path: String) -> URL? { nil }
 }
 
@@ -111,9 +116,18 @@ extension AppEnvironment {
 
     /// The account a share or confirmation is queued for. Nil while signed out, and while the phone's data still
     /// belongs to another account (nothing goes up under the new one until that is settled).
-    var sharingUserId: UUID? { sync.accountSwitchPending ? nil : sync.authState.userId }
+    var sharingUserId: UUID? {
+        #if DEBUG
+        if options.fakeSignedIn { return Self.fakeSharingUserId }
+        #endif
+        return sync.accountSwitchPending ? nil : sync.authState.userId
+    }
 
-    private func requireSharingUser() throws -> UUID {
+    #if DEBUG
+    static let fakeSharingUserId = UUID(uuidString: "00000000-0000-4000-8000-0000000000F1")!
+    #endif
+
+    func requireSharingUser() throws -> UUID {
         guard let id = sharingUserId else { throw GymCatalogError.signedOut }
         return id
     }
@@ -217,7 +231,7 @@ extension AppEnvironment {
     }
 
     /// Lets the queue go, now that something was added to it.
-    private func sharingChanged() {
+    func sharingChanged() {
         gymsChanged()
         Task { await runShareOutbox() }
     }
@@ -226,6 +240,7 @@ extension AppEnvironment {
         let outbox = gymSharing.outbox
         guard outbox.pendingCount > 0, let userId = sharingUserId else { return }
         await outbox.run(userId: userId)
+        if let notice = outbox.takeReportNotice() { gymReportNotice = notice }
         if let error = outbox.storageError {
             Self.log.error("Share queue failed: \(error.localizedDescription, privacy: .public)")
         }

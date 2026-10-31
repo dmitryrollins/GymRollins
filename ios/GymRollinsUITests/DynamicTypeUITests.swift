@@ -130,6 +130,32 @@ final class DynamicTypeUITests: XCTestCase {
         screenshot("add-equipment-ax-xl")
     }
 
+    func testReportSheetAtAccessibilityXL() {
+        let app = launch(extra: ["-fakeGymCatalog", "-fakeSignedIn"])
+        app.buttons["today.gymChip"].tap()
+        XCTAssertTrue(app.buttons["gymPicker.currentEquipment"].waitForExistence(timeout: 5))
+        app.buttons["gymPicker.currentEquipment"].tap()
+        let tile = app.buttons["gymEquipment.listing.lat-pulldown"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 15))
+        tile.tapWhenHittable()
+        let menu = app.buttons["listing.menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        XCTAssertTrue(menu.isHittable)
+        menu.tap()
+        app.buttons["listing.report"].tap()
+        let send = app.buttons["report.send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 5))
+        let reason = app.buttons["report.reason.person-in-photo"]
+        for _ in 0..<4 where !reason.isHittable { app.swipeUp() }
+        XCTAssertTrue(reason.isHittable)
+        XCTAssertGreaterThanOrEqual(reason.frame.height, 44)
+        screenshot("report-sheet-ax-xl")
+        reason.tap()
+        for _ in 0..<4 where !send.isHittable { app.swipeUp() }
+        XCTAssertTrue(send.isHittable)
+        XCTAssertGreaterThanOrEqual(send.frame.height, 44)
+    }
+
     func testSharingScreensAtAccessibilityXL() {
         let app = launch(extra: ["-fakeGymCatalog", "-gymPhotoFixture"])
         app.buttons["today.gymChip"].tap()

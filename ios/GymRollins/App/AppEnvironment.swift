@@ -51,6 +51,8 @@ final class AppEnvironment {
     private(set) var dataRevision = 0
     /// Bumps whenever the current gym or its equipment changes, for screens that show them.
     private(set) var gymRevision = 0
+    /// Why the server refused a report or a block the user made, until the gym screen has shown it.
+    var gymReportNotice: String?
     private(set) var session: WorkoutSession?
     /// The proposal just applied from the review, for Today's "Undo" toast (cleared by undo or closing it).
     private(set) var lastApplied: (id: UUID, count: Int)?

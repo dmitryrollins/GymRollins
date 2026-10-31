@@ -76,9 +76,33 @@ import Testing
         let shown = try rig.env.gyms.listings(gymId: gym.id, includingUnsupported: true)
         #expect(shown.map(\.id) == [flagged.id], "only my own flagged row is listed")
         let model = GymEquipmentModel(gym: gym, listings: shown, catalog: rig.env.gymCatalog, unit: .lb, coverage: [])
-        #expect(model.sections.first?.tiles.first?.badge?.text == "Flagged")
+        #expect(model.sections.first?.tiles.first?.badge?.text == "Under review")
         #expect(try rig.env.gyms.listings(gymId: gym.id).isEmpty, "the default list is what the rules use")
         #expect(try rig.env.gyms.inventory(gymId: gym.id).listings.isEmpty)
+    }
+
+    @Test func myOwnFlaggedListingSaysUnderReviewInItsDetail() throws {
+        let rig = try GymTestRig.make()
+        let gym = try mapsGym(rig)
+        let flagged = try listing(rig, gym: gym, visibility: .shared, upload: .uploaded, status: .flagged)
+        let status = ShareStatusModel(listing: flagged, gym: gym)
+        #expect(status.text == "Under review")
+        #expect(status.actions.isEmpty)
+    }
+
+    @Test func aReportedListingLeavesEveryListButStaysOnThePhoneForTheQueue() throws {
+        let rig = try GymTestRig.make()
+        let gym = try mapsGym(rig)
+        let theirs = try listing(rig, gym: gym, kind: "lat-pulldown", visibility: .shared, upload: .uploaded, own: false)
+        let context = rig.env.container.mainContext
+        let id = theirs.id
+        try #require(try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first)
+            .hiddenLocally = true
+        try context.save()
+        #expect(try rig.env.gyms.listings(gymId: gym.id, includingUnsupported: true).isEmpty)
+        #expect(try rig.env.gyms.listing(id) == nil)
+        #expect(try rig.env.gyms.inventory(gymId: gym.id).listings.isEmpty)
+        #expect(try rig.env.gyms.itemCounts()[gym.id] == nil)
     }
 
     // MARK: Status row

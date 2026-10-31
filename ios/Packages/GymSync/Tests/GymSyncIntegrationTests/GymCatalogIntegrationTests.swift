@@ -186,4 +186,40 @@ struct GymCatalogIntegrationTests {
     @Test func aGymNobodyHasSharedYetIsAbsent() async throws {
         #expect(try await anonCatalog().publicGym(mapsPlaceId: freshPlace()) == nil)
     }
+
+    // MARK: Reports and blocks
+
+    @Test func aReportBlockAndUnblockGoThroughTheServer() async throws {
+        let author = try await Account.signUp()
+        let reader = try await Account.signUp()
+        let gymId = try await gym(catalog(author), place: freshPlace())
+        let kept = UUID(), reported = UUID()
+        _ = try await catalog(author).share(request(kept, gym: gymId, kind: "cable-station", brand: nil))
+        _ = try await catalog(author).share(request(reported, gym: gymId, kind: "leg-press", brand: nil))
+
+        // Nothing to say about the author's own listing: the server answers `own`, which is not an error.
+        try await catalog(author).report(targetType: .listing, targetId: reported, reason: .spam, note: nil)
+        try await catalog(reader).report(targetType: .listing, targetId: reported, reason: .wrongInfo, note: "a note")
+        try await catalog(reader).report(targetType: .listing, targetId: reported, reason: .wrongInfo, note: nil)
+        try await catalog(reader).report(targetType: .gym, targetId: gymId, reason: .notHereAnymore, note: nil)
+
+        await #expect(throws: GymCatalogError.unknownTarget) {
+            try await catalog(reader).report(targetType: .listing, targetId: UUID(), reason: .spam, note: nil)
+        }
+        await #expect(throws: GymCatalogError.noteRefused) {
+            try await catalog(reader).report(targetType: .listing, targetId: kept, reason: .other, note: "bad\u{7}note")
+        }
+        await #expect(throws: GymCatalogError.signedOut) {
+            try await anonCatalog().report(targetType: .listing, targetId: kept, reason: .spam, note: nil)
+        }
+
+        try await catalog(reader).blockAuthor(targetType: .listing, targetId: kept)
+        #expect(try await catalog(reader).publicListings(gymId: gymId).listings.isEmpty)
+        #expect(try await catalog(author).publicListings(gymId: gymId).listings.count == 2)
+        #expect(try await catalog(reader).unblockAll() == 1)
+        #expect(try await catalog(reader).publicListings(gymId: gymId).listings.count == 2)
+        #expect(try await catalog(reader).unblockAll() == 0)
+        try await author.deleteAccount()
+        try await reader.deleteAccount()
+    }
 }
