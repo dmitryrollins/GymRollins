@@ -7,7 +7,7 @@ import Testing
     @Test func fixedSetPicksTheNearestWeight() {
         #expect(AvailableLoads.fit(weightKg: 21, reps: 10, to: bells) == FittedLoad(weightKg: 20, reps: 10))
         #expect(AvailableLoads.fit(weightKg: 23, reps: 10, to: bells) == FittedLoad(weightKg: 24, reps: 10))
-        #expect(AvailableLoads.fit(weightKg: 10, reps: 10, to: bells) == FittedLoad(weightKg: 20, reps: 10))
+        #expect(AvailableLoads.fit(weightKg: 18, reps: 10, to: bells) == FittedLoad(weightKg: 20, reps: 10))
     }
 
     @Test func fixedSetTiesGoToTheLighterWeight() {
@@ -89,5 +89,41 @@ import Testing
                 "a timed exercise has no rep target to raise")
         let plates = Suggestion(weightKg: 61.2, reps: 8, sec: nil, reason: .noChange)
         #expect(plates.fitted(to: .plates) == plates)
+    }
+
+    // MARK: A fit never raises the weight by much (a crowd's typo must not become the user's load)
+
+    @Test func aTypoOfAHugeWeightNeverRaisesTheSuggestion() {
+        #expect(AvailableLoads.fit(weightKg: 20, reps: 8, to: .fixed(kg: [500])) == FittedLoad(weightKg: 20, reps: 8))
+        #expect(AvailableLoads.fit(weightKg: 20, reps: 8, to: .fixed(kg: [50])) == FittedLoad(weightKg: 20, reps: 8))
+        #expect(AvailableLoads.fit(weightKg: 20, reps: 8, to: .stack(maxKg: 200, stepKg: 50))
+            == FittedLoad(weightKg: 20, reps: 8))
+    }
+
+    @Test func aGymWithOnlyAHeavyBellKeepsTheLighterSuggestion() {
+        #expect(AvailableLoads.fit(weightKg: 16, reps: 10, to: .fixed(kg: [32])) == FittedLoad(weightKg: 16, reps: 10))
+        #expect(AvailableLoads.fit(weightKg: 16, reps: 10, to: .fixed(kg: [24])) == FittedLoad(weightKg: 16, reps: 10))
+    }
+
+    @Test func aSmallRiseIsStillAllowed() {
+        // 25 % of 16 is 4 kg: 12 and 20 are equally near, and the tie goes to the lighter one as it always did.
+        #expect(AvailableLoads.fit(weightKg: 16, reps: 10, to: .fixed(kg: [12, 20])) == FittedLoad(weightKg: 12, reps: 10))
+        #expect(AvailableLoads.fit(weightKg: 17, reps: 10, to: .fixed(kg: [12, 20])) == FittedLoad(weightKg: 20, reps: 10))
+        #expect(AvailableLoads.fit(weightKg: 20, reps: 10, to: .fixed(kg: [25])) == FittedLoad(weightKg: 25, reps: 10),
+                "+5 kg is within max(5 kg, 25 %)")
+        #expect(AvailableLoads.fit(weightKg: 2.5, reps: 10, to: .fixed(kg: [5])) == FittedLoad(weightKg: 5, reps: 10))
+    }
+
+    @Test func aBiggerRiseUsesTheHeaviestLoadAtOrBelowTheWantedWeight() {
+        // 30 wants 40-ish: the nearest is 40 (+10 > max(5, 7.5)); 25 is the heaviest not above 30.
+        #expect(AvailableLoads.fit(weightKg: 30, reps: 10, to: .fixed(kg: [25, 40])) == FittedLoad(weightKg: 25, reps: 10))
+        #expect(AvailableLoads.fit(weightKg: 76, reps: 10, to: .stack(maxKg: 200, stepKg: 50))
+            == FittedLoad(weightKg: 50, reps: 10), "rounding 76 up to 100 would add 24 kg; the stack's 50 does not")
+    }
+
+    @Test func goingDownHasNoLimit() {
+        #expect(AvailableLoads.fit(weightKg: 100, reps: 5, to: .fixed(kg: [10, 12])) == FittedLoad(weightKg: 12, reps: 7, atHeaviest: true))
+        #expect(AvailableLoads.fit(weightKg: 100, reps: 5, to: .stack(maxKg: 40, stepKg: 5))
+            == FittedLoad(weightKg: 40, reps: 7, atHeaviest: true))
     }
 }
