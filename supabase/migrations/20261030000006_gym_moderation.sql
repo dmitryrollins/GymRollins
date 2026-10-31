@@ -28,8 +28,10 @@ begin
 end $$;
 revoke execute on function gym_private.set_status(text, uuid, text) from public, anon, authenticated;
 
--- One report per user per target. Three unresolved reports hide the target until an admin decides. An author's report
--- of their own content doesn't count towards the three.
+-- One report per user per target. Three unresolved reports from accounts that still exist hide the target until an
+-- admin decides. An author's report of their own content doesn't count towards the three, and neither does one whose
+-- author has since deleted their account: otherwise a loop of sign up, report, delete reaches three alone, and the
+-- daily limit never applies because it counts per reporter. Such a report stays for the queue.
 create or replace function public.report_content(p_target_type text, p_target_id uuid, p_reason text,
                                                  p_note text default null) returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -54,7 +56,7 @@ begin
   values (p_target_type, p_target_id, me, p_reason, nullif(btrim(p_note), ''))
   on conflict do nothing;
   select count(*) into reporters from public.reports
-    where target_type = p_target_type and target_id = p_target_id and resolved_at is null;
+    where target_type = p_target_type and target_id = p_target_id and resolved_at is null and reporter_id is not null;
   if reporters >= 3 and target.status = 'active' then
     perform gym_private.set_status(p_target_type, p_target_id, 'flagged');
   end if;

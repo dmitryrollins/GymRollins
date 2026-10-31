@@ -39,15 +39,21 @@ grant usage on schema gym_private to anon, authenticated;
 
 -- No control characters, invisible characters or text-direction overrides. Line breaks only where text has lines. Gym
 -- names reach Claude, so anything the eye can't see but a model can read is refused: the tag characters (U+E0000
--- block, which spell ASCII invisibly), the Arabic and Mongolian format characters, the interlinear annotation marks.
+-- block, which spell ASCII invisibly), the Arabic and Mongolian format characters, the interlinear annotation marks, the
+-- soft hyphen, the combining grapheme joiner, the Hangul and Khmer fillers, the variation selectors, the line and
+-- paragraph separators, the object replacement character, the private use areas (a font can draw anything there) and the
+-- musical formatting characters.
 -- U+200D and U+200C (the zero width joiners) are also emoji and script characters (a rainbow flag, Indic conjuncts,
 -- Persian words, so a gym's name from Apple Maps can hold them). They stay, but only next to non-ASCII text: between
--- ASCII letters they can only hide something.
+-- ASCII letters they can only hide something. U+FE0F (emoji presentation) follows the same rule, but only after the
+-- character it applies to, so a keycap such as 1 + U+FE0F + U+20E3 is refused: it is the price of the rule.
 create function gym_private.clean_text(t text, lines boolean default false) returns boolean
 language sql immutable set search_path = pg_catalog as $$
   select t !~ (case when lines then '[\u0001-\u0009\u000B\u000C\u000E-\u001F]' else '[\u0001-\u001F]' end)
-     and t !~ '[\u007F-\u009F\u061C\u180E\u200B\u200E\u200F\u202A-\u202E\u2060-\u206F\uFEFF\uFFF9-\uFFFB\U000E0000-\U000E007F]'
-     and t !~ '(^|[\u0001-\u007F])[\u200C\u200D]|[\u200C\u200D]([\u0001-\u007F]|$)'
+     and t !~ ('[\u007F-\u009F­͏؜ᅟᅠ឴឵᠋-᠏​‎‏ -‮'
+               || '⁠-⁯ㅤ︀-︎﻿ﾠ￹-￼-'
+               || '\U0001D173-\U0001D17A\U000E0000-\U000E01EF\U000F0000-\U000FFFFD\U00100000-\U0010FFFD]')
+     and t !~ '(^|[\u0001-\u007F])[‌‍️]|[‌‍]([\u0001-\u007F]|$)'
 $$;
 revoke execute on function gym_private.clean_text(text, boolean) from public;
 grant execute on function gym_private.clean_text(text, boolean) to authenticated;
@@ -102,7 +108,7 @@ grant execute on function gym_private.is_blocked_author(uuid) to anon, authentic
 alter table public.profiles add column mcp_read_gyms boolean not null default true;
 create or replace function public.mcp_flag(flag text) returns boolean
 language sql stable security definer set search_path = public as $$
-  select coalesce((select case flag
+  select flag in ('workouts', 'body', 'propose', 'plan', 'gyms') and coalesce((select case flag
       when 'workouts' then mcp_read_workouts when 'body' then mcp_read_body when 'propose' then mcp_propose
       when 'plan' then mcp_read_plan when 'gyms' then mcp_read_gyms end
     from public.profiles where user_id = auth.uid()), true)
@@ -512,8 +518,32 @@ alter table public.workouts add column gym_id uuid references public.gyms on del
 alter table public.workout_entries add column gym_equipment_id uuid references public.gym_equipment on delete set null;
 create index workouts_gym on public.workouts (gym_id) where gym_id is not null;
 
--- A link stands only if the caller can read the row (security invoker, so the policies decide). Anything else becomes
+-- A new link stands only if the caller can read the row (security invoker, so the policies decide). Anything else becomes
 -- null instead of an error, so a gym the caller lost access to can't block their workout and ids can't be probed.
+--
+-- A link the workout already had is kept for as long as what it points at is only flagged: that is a brief state an admin
+-- may undo, and a phone re-pushing meanwhile must not cut the link for good. Removed rows, rows under a removed gym or
+-- item, and a blocked author's listings are lost, and their links go. These two answer from the caller's id, are only
+-- reachable from the triggers and upsert_workout (PostgREST doesn't expose this schema), and say nothing about rows the
+-- workout never linked.
+create function gym_private.gym_link_survives(p_gym uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.gyms g
+                 where g.id = p_gym and g.status <> 'removed' and (g.visibility = 'public' or g.owner_id = auth.uid()))
+$$;
+create function gym_private.listing_link_survives(p_listing uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.gym_equipment e
+    join public.gyms g on g.id = e.gym_id
+    join public.equipment_items i on i.id = e.item_id
+    where e.id = p_listing and e.status <> 'removed' and g.status <> 'removed' and i.status <> 'removed'
+      and ((e.visibility = 'public' and not gym_private.is_blocked_author(e.added_by))
+           or (e.visibility = 'private' and e.owner_id = auth.uid())))
+$$;
+revoke execute on function gym_private.gym_link_survives(uuid), gym_private.listing_link_survives(uuid) from public;
+grant execute on function gym_private.gym_link_survives(uuid), gym_private.listing_link_survives(uuid) to authenticated;
+
 create function gym_private.workout_gym_link() returns trigger
 language plpgsql set search_path = public as $$
 begin
@@ -522,10 +552,16 @@ begin
   end if;
   return new;
 end $$;
+-- upsert_workout deletes a workout's entries and inserts them again, so it leaves their old links in
+-- gym.entry_links (entry id -> listing id, for this transaction only) for an entry to keep.
 create function gym_private.workout_entry_gym_link() returns trigger
 language plpgsql set search_path = public as $$
+declare
+  kept uuid;
 begin
   if new.gym_equipment_id is not null and (tg_op = 'INSERT' or new.gym_equipment_id is distinct from old.gym_equipment_id) then
+    kept := (nullif(current_setting('gym.entry_links', true), '')::jsonb ->> new.id::text)::uuid;
+    if kept = new.gym_equipment_id and gym_private.listing_link_survives(kept) then return new; end if;
     new.gym_equipment_id := (select e.id from public.gym_equipment e where e.id = new.gym_equipment_id);
   end if;
   return new;

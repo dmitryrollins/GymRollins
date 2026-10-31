@@ -2,7 +2,7 @@
 -- mcp_take_call() hands out at most 60 call slots per user per trailing minute.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(30);
+select plan(31);
 
 insert into auth.users (id, email, aud, role) values
   ('77777777-1111-1111-1111-777777777777', 'plan-owner@test.local', 'authenticated', 'authenticated'),
@@ -41,6 +41,7 @@ select is((select count(*) from public.week_schedule)::int, 0,
 select is((select count(*) from public.custom_exercises)::int, 0,
   'MCP client reads no custom_exercises once mcp_read_plan is off');
 select is(public.mcp_flag('plan'), false, 'MCP client still evaluates its own flag (security definer)');
+select is(public.mcp_flag('nonsense'), false, 'a flag that does not exist is off, not on');
 
 -- The app session still sees its own data.
 set local request.jwt.claims = '{"sub":"77777777-1111-1111-1111-777777777777","role":"authenticated"}';

@@ -1,11 +1,11 @@
 -- Report, block, moderate and account deletion for shared gym data (spec §5, §9).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(64);
+select plan(68);
 
 insert into auth.users (id, email, aud, role)
 select ('cccccccc-0000-0000-0000-00000000000' || n)::uuid, 'mod-' || n || '@test.local', 'authenticated', 'authenticated'
-from generate_series(1, 5) n;
+from generate_series(1, 8) n;
 insert into public.app_admins (user_id) values ('cccccccc-0000-0000-0000-000000000005');
 insert into storage.objects (bucket_id, name, owner_id, metadata)
   values ('gym-photos', 'dddddddd-0000-4000-8000-000000000001.jpg', 'cccccccc-0000-0000-0000-000000000001', '{"mimetype":"image/jpeg"}');
@@ -144,6 +144,36 @@ select is((select count(*) from public.public_gym_equipment where gym_id = curre
   'listings of a removed gym are hidden');
 select pg_temp.as_user(5);
 select public.moderate_content('gym', current_setting('t.gym')::uuid, 'restore');
+
+-- One person cannot reach three reports --------------------------------------------------------------------------------
+select pg_temp.as_user(6);
+select public.report_content('listing', 'dddddddd-0000-0000-0000-000000000002', 'spam');
+reset role;
+delete from auth.users where id = 'cccccccc-0000-0000-0000-000000000006';
+select pg_temp.as_user(7);
+select public.report_content('listing', 'dddddddd-0000-0000-0000-000000000002', 'spam');
+reset role;
+delete from auth.users where id = 'cccccccc-0000-0000-0000-000000000007';
+select pg_temp.as_user(8);
+select public.report_content('listing', 'dddddddd-0000-0000-0000-000000000002', 'spam');
+reset role;
+select is((select status from public.gym_equipment where id = 'dddddddd-0000-0000-0000-000000000002'), 'active',
+  'three reports whose authors were deleted do not flag a listing');
+select pg_temp.as_user(2);
+select public.report_content('listing', 'dddddddd-0000-0000-0000-000000000002', 'spam');
+select pg_temp.as_user(3);
+select public.report_content('listing', 'dddddddd-0000-0000-0000-000000000002', 'spam');
+reset role;
+select is((select status from public.gym_equipment where id = 'dddddddd-0000-0000-0000-000000000002'), 'flagged',
+  'three reports from live accounts do');
+reset role;
+delete from auth.users where id = 'cccccccc-0000-0000-0000-000000000008';
+select is((select status from public.gym_equipment where id = 'dddddddd-0000-0000-0000-000000000002'), 'flagged',
+  'and deleting one of the authors afterwards leaves it flagged');
+select pg_temp.as_user(5);
+select is((select report_count from public.moderation_queue() where target_id = 'dddddddd-0000-0000-0000-000000000002'), 5::bigint,
+  'every report still shows in the queue');
+select public.moderate_content('listing', 'dddddddd-0000-0000-0000-000000000002', 'restore');
 
 -- Throwaway accounts cannot clear a flag's trail --------------------------------------------------------------------------
 select pg_temp.as_user(2);

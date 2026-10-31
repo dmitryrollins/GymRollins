@@ -2,7 +2,7 @@
 -- what a hidden gym reveals, invisible text, and a workout keeping its gym link across phones.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(54);
 
 insert into auth.users (id, email, aud, role) values
   ('fafafafa-0000-0000-0000-000000000001', 'rule-a@test.local', 'authenticated', 'authenticated'),
@@ -156,6 +156,97 @@ select public.upsert_workout(jsonb_build_object('id', 'fafafafa-0000-4000-8000-0
   'client_updated_at', '2026-10-31T12:00:00Z', 'gym_id', 'fafafafa-0000-4000-8000-0000000000a1'));
 select is((select gym_id from public.workouts where id = 'fafafafa-0000-4000-8000-000000000a02'), null::uuid,
   'and a link sent for a gym the caller cannot read is still dropped');
+
+-- More text no one can see ------------------------------------------------------------------------------------------------
+select is((select array_agg(h order by h) from unnest(array['AD', '34F', '115F', '1160', '17B4', '17B5', '180B', '180C',
+    '180D', '180E', '180F', '2028', '2029', '3164', 'FE00', 'FE0A', 'FE0E', 'FFA0', 'FFFC', 'E000', 'F8FF', 'F0000',
+    'FFFFD', '100000', '10FFFD', '1D173', '1D17A', 'E0080', 'E01EF']) h
+  where gym_private.clean_text('Iron' || chr(('x' || lpad(h, 8, '0'))::bit(32)::int) || 'Gym')), null,
+  'every hidden character in the later review is refused, at both ends of each range');
+select is((select array_agg(h order by h) from unnest(array['AC', 'AE', '34E', '350', '115E', '1161', '17B3', '17B6',
+    '180A', '1810', '2027', '202F', '3163', '3165', 'FDFF', 'FE10', 'FF9F', 'FFA1', 'FFFD', 'D7FF', 'F900', 'EFFFF',
+    'FFFFE', '1D172', '1D17B', 'E01F0', '1F4AA']) h
+  where not gym_private.clean_text('Iron' || chr(('x' || lpad(h, 8, '0'))::bit(32)::int) || 'Gym')), null,
+  'and the characters next to those ranges still pass');
+select is(gym_private.clean_text('Équinoxe Fitness – 24/7 (Nørre) 健身房 Спорт-зал'), true, 'ordinary text in several scripts passes');
+select is(gym_private.clean_text('Heart ' || chr(10084) || chr(65039)), true, 'an emoji presentation selector after a non-ASCII character passes');
+select is(gym_private.clean_text('Iron' || chr(65039) || 'Gym'), false, 'but not between ASCII letters');
+select is(gym_private.clean_text(chr(65039) || 'Iron'), false, 'nor at the start');
+select is(gym_private.clean_text('Iron ' || chr(65039)), false, 'nor after ASCII at the end');
+select is(gym_private.clean_text(E'two\nlines' || chr(8232), true), false, 'the line separator is refused even where lines are allowed');
+reset role;
+select throws_ok(format($$ insert into public.gyms (visibility, name, maps_place_id) values ('public', %L, 'rules-hidden') $$,
+  'Iron' || chr(173) || 'Gym'), '23514'::char(5), null, 'a gym name is checked by the same rule');
+select throws_ok(format($$ insert into public.equipment_items (kind_id, brand) values ('barbell', %L) $$, 'Ac' || chr(983040) || 'me'),
+  '23514'::char(5), null, 'and a brand');
+
+-- A brief flag does not cut a workout's links -----------------------------------------------------------------------------
+insert into public.gyms (id, visibility, name, maps_place_id)
+  values ('fafafafa-0000-4000-8000-0000000010a0', 'public', 'Link Gym', 'rules-link');
+insert into public.gym_equipment (id, gym_id, item_id, visibility, added_by)
+  select v.id, 'fafafafa-0000-4000-8000-0000000010a0',
+         (select id from public.equipment_items where kind_id = 'flat-bench' and brand is null), 'public',
+         'fafafafa-0000-0000-0000-000000000002'
+  from (values ('fafafafa-0000-4000-8000-0000000010b1'::uuid), ('fafafafa-0000-4000-8000-0000000010b2')) v(id);
+create function pg_temp.push(ts text, with_links boolean) returns void language sql as $$
+  select public.upsert_workout(jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000001001', 'started_at', now(), 'name', 'L',
+    'client_updated_at', ts, 'force', true) || case when with_links then jsonb_build_object('gym_id', 'fafafafa-0000-4000-8000-0000000010a0') else '{}'::jsonb end
+    || jsonb_build_object('entries', jsonb_build_array(
+      jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000001011', 'exercise_id', '0025', 'position', 0)
+        || case when with_links then jsonb_build_object('gym_equipment_id', 'fafafafa-0000-4000-8000-0000000010b1') else '{}'::jsonb end,
+      jsonb_build_object('id', 'fafafafa-0000-4000-8000-000000001012', 'exercise_id', '0025', 'position', 1)
+        || case when with_links then jsonb_build_object('gym_equipment_id', 'fafafafa-0000-4000-8000-0000000010b2') else '{}'::jsonb end)))
+$$;
+grant execute on function pg_temp.push(text, boolean) to authenticated;
+select pg_temp.as_user(3);
+select pg_temp.push('2026-11-01T10:00:00Z', true);
+select is((select gym_id from public.workouts where id = 'fafafafa-0000-4000-8000-000000001001'),
+  'fafafafa-0000-4000-8000-0000000010a0'::uuid, 'a workout is linked to a public gym');
+reset role;
+update public.gyms set status = 'flagged' where id = 'fafafafa-0000-4000-8000-0000000010a0';
+select pg_temp.as_user(3);
+select pg_temp.push('2026-11-01T11:00:00Z', true);
+select is((select gym_id from public.workouts where id = 'fafafafa-0000-4000-8000-000000001001'),
+  'fafafafa-0000-4000-8000-0000000010a0'::uuid, 'a re-push while the gym is flagged keeps the link');
+select is((select count(*) from public.workout_entries where workout_id = 'fafafafa-0000-4000-8000-000000001001'
+           and gym_equipment_id is not null)::int, 2, 'and the entries'' links');
+select pg_temp.push('2026-11-01T12:00:00Z', false);
+select is((select gym_id from public.workouts where id = 'fafafafa-0000-4000-8000-000000001001'),
+  'fafafafa-0000-4000-8000-0000000010a0'::uuid, 'so does a push that sends none');
+select is((select count(*) from public.workout_entries where workout_id = 'fafafafa-0000-4000-8000-000000001001'
+           and gym_equipment_id is not null)::int, 2, 'and its entries');
+reset role;
+update public.gyms set status = 'active' where id = 'fafafafa-0000-4000-8000-0000000010a0';
+select pg_temp.as_user(3);
+select pg_temp.push('2026-11-01T13:00:00Z', true);
+select is((select count(*) from public.workout_entries where workout_id = 'fafafafa-0000-4000-8000-000000001001'
+           and gym_equipment_id is not null)::int, 2, 'the links are still there after the restore');
+reset role;
+update public.gym_equipment set status = 'flagged' where id = 'fafafafa-0000-4000-8000-0000000010b1';
+select pg_temp.as_user(3);
+select pg_temp.push('2026-11-01T14:00:00Z', true);
+select is((select gym_equipment_id from public.workout_entries where id = 'fafafafa-0000-4000-8000-000000001011'),
+  'fafafafa-0000-4000-8000-0000000010b1'::uuid, 'a flagged listing keeps an entry''s link too');
+reset role;
+update public.gym_equipment set status = 'removed' where id = 'fafafafa-0000-4000-8000-0000000010b1';
+select pg_temp.as_user(3);
+select pg_temp.push('2026-11-01T15:00:00Z', true);
+select is((select gym_equipment_id from public.workout_entries where id = 'fafafafa-0000-4000-8000-000000001011'),
+  null::uuid, 'but a removed one does not');
+select is((select gym_equipment_id from public.workout_entries where id = 'fafafafa-0000-4000-8000-000000001012'),
+  'fafafafa-0000-4000-8000-0000000010b2'::uuid, 'and the other entry is untouched');
+select public.block_author('listing', 'fafafafa-0000-4000-8000-0000000010b2');
+select pg_temp.push('2026-11-01T16:00:00Z', false);
+select is((select gym_equipment_id from public.workout_entries where id = 'fafafafa-0000-4000-8000-000000001012'),
+  null::uuid, 'a listing whose author the caller blocked is lost, so its link goes');
+reset role;
+update public.gyms set status = 'removed' where id = 'fafafafa-0000-4000-8000-0000000010a0';
+select pg_temp.as_user(3);
+select pg_temp.push('2026-11-01T17:00:00Z', true);
+select is((select gym_id from public.workouts where id = 'fafafafa-0000-4000-8000-000000001001'), null::uuid,
+  'a removed gym is not linked, even when the phone sends it');
+select is((select count(*) from public.workout_entries where workout_id = 'fafafafa-0000-4000-8000-000000001001'
+           and gym_equipment_id is not null)::int, 0, 'nor its listings');
 
 select * from finish();
 rollback;
