@@ -44,7 +44,9 @@ try it, open an issue, or send a pull request.
   OpenPowerlifting data.
 - **Train with what's actually there.** Keep a photo catalogue of each gym's equipment, no account needed. Today's
   plan swaps what this gym can't do for that session only, weights snap to the bells and stacks that exist, and Build
-  workout makes a session from what's there. An item with no photo shows a sample until you add yours.
+  workout makes a session from what's there. An item with no photo shows a sample until you add yours. Anyone can
+  browse what people have shared at a gym without signing in; sign in to share your own or confirm theirs. Anything
+  marked This phone only never leaves the phone.
 - **Bring your history.** CSV import from Fitbod, Strong, Hevy and FitNotes.
 - **Offline-first.** Everything lives on the device (SwiftData); cloud sync through Supabase is optional.
 
@@ -163,6 +165,7 @@ defaults in `Base.xcconfig` with a signing team and, later, cloud Supabase crede
 | Database tests (pgTAP; **resets the local `gymrollins` DB**) — needs the local stack up (`scripts/supabase-up.sh`) | `scripts/test-db.sh` |
 | MCP HTTP e2e + OAuth consent e2e in headless Chromium — needs Docker/local stack (starts `supabase functions serve mcp` and `consent-server.mjs` itself if not already running; one-time `cd web/consent && npm ci && npx playwright install chromium`) | `scripts/test-mcp.sh` |
 | GymSync integration tests (`GymSyncIntegrationTests`) against the local stack — needs `scripts/supabase-up.sh` already run (`supabase/.env.local` present); verifies account deletion leaves no rows | `scripts/test-sync-integration.sh` |
+| Shared gyms E2E: two users and an anonymous client, photo upload rules over real HTTP, and a check that "This phone only" stays off the server — needs `scripts/supabase-up.sh` already run | `scripts/test-gym-e2e.sh` |
 | iOS sync E2E UI tests (`SyncUITests`, `ProposalSyncUITests`) — starts the local stack itself, needs the iOS 26 simulator (`iPhone 17 Pro`) | `scripts/ios-test-sync.sh` |
 | Performance baselines (not in test-all; GymData repository timings + iOS launch/scroll metrics, release build + simulator) | `scripts/test-perf.sh [data\|ui]` — see `docs/testing/performance.md` |
 

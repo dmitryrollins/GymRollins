@@ -174,11 +174,14 @@ The current gym is a per-device preference (not synced): `nil` means today's beh
 - Browsing a public gym's shared equipment needs no account (anon reads).
 - At a public gym the user can keep their own listings "This phone only"; the rules use shared listings plus the
   user's own.
-- Sharing is always an explicit tap ("Share with this gym"), which asks for Sign in with Apple if needed. Nothing is
-  uploaded in the background except queued writes the user already asked for.
+- Sharing is always an explicit tap ("Share with this gym"), which asks for Sign in with Apple if needed. Signing in
+  backs up the account's workouts, routines, weigh-ins and profile, as it does from Settings, and the sign-in sheet says
+  so. Gyms and equipment go up only when the user shares or syncs them.
 - Private gyms (home) can never be shared; they can only be synced.
 - Signing out or switching accounts keeps "This phone only" gyms, listings and their photos, because they were never
   tied to an account and the promise is that they stay on the phone. Erase All Data and Delete Account remove them.
+  A synced row with changes the server hasn't got becomes "This phone only" at sign-out and remembers the account. The
+  same account signing back in gets it back as synced; another account gets it under a new id.
 
 ### Gym picker and location
 - The picker lists My gyms (with visibility badges), an Apple Maps search (`MKLocalSearch`, point-of-interest filter
@@ -277,7 +280,7 @@ Arms = biceps, triceps, forearms; Legs = quads, hamstrings, glutes, calves, addu
    are unmapped, so the app never picks them.
 8. **Sets, reps, weight:** `ModeDefaults` for sets and reps; weight from `ProgressionEngine` on the exercise's own
    history, then fitted by `AvailableLoads`: a weight stack caps at its maximum and snaps to its step (never below
-   one step); a fixed set picks the nearest weight it has (ties go to the lighter one). Past the heaviest weight it
+   one step); a fixed set picks the nearest weight it has (ties go to the lighter one). A fit never raises the weight by more than 5 kg or 25%, whichever is more, because the loads may be someone's typo at a shared gym: past that it takes the heaviest load at or below the wanted weight, or leaves the wanted weight alone. Past the heaviest weight it
    stays there and adds 2 reps to the target.
 9. **Determinism and Rebuild:** the seed is the day (UTC), so the same input gives the same workout. Rebuild passes
    the current result's exercises as `avoid`: they are used again only when nothing else fits, even a repeat, and
@@ -346,8 +349,10 @@ the table above: 60 photo uploads a day, 100 private gyms and 1,000 private list
 ### Account deletion
 Deletes private gyms, private listings, the user's confirmations, blocks and all of the user's photos in both buckets.
 Shared listings and gyms stay without the author, because they describe the gym; their notes go, because those are the
-author's own words. Reports stay without the reporter, so deleting accounts can't erase a flag's history. The app removes
-the photos first, through Storage; if that fails the account stays and the user can retry.
+author's own words. So does a brand and model only that author's listings use: those listings fall back to the kind's
+generic item. Reports stay without the reporter and without their note, so deleting accounts can't erase a flag's history.
+The app removes the photos first, through Storage; if that fails the account stays and the user can retry. The server
+refuses the deletion while the caller still owns photos, so a custom client can't leave them behind.
 
 ### Claude (MCP)
 - `list_gyms`: the user's synced private gyms, plus public gyms the user trained at or shared to (from `workouts.gym_id`
@@ -434,7 +439,11 @@ the photos first, through Storage; if that fails the account stays and the user 
 | The requirements mapping is wrong for some exercises | The review file for the owner; unmapped exercises are never generated; reports with `wrong-info` |
 | Thin catalogues at launch make Build feel empty | Thin-inventory banner with a direct add link; bodyweight fill; plan adaptation still works with partial data |
 | Abuse or bad photos | Phone-side face blur, rate limits, 3-report auto-hide, admin removal, block |
-| Orphan photos (uploaded, never linked) | Accepted for now; a cleanup job is a follow-up once the cloud project exists |
+| Orphan photos (uploaded, never linked) | The app deletes what it can: on a refused share, "Yes, that's it", a cancelled share and before sign-out. What's left: sign-out while offline, a failed delete, an upload that finishes after the session changed. Names are unguessable. Before the cloud launch: a job that sweeps objects no listing has used for some days |
+| The photo rules live in a trigger on `storage.objects` | Upload tokens and Storage's final write skip row-level policies, so the rules (owner exists, JPEG only, name unused, 60 a day, immutable) are in a trigger that fires on every write. It reads how Storage 1.77 writes a row: a rolled-back check in the caller's session, then the real write with no session. Whether a hosted project allows this trigger couldn't be confirmed from the docs. Before the cloud launch: apply the migration to a throwaway hosted project and run `scripts/test-gym-storage-rules.sh` against it. Re-run it after a Storage upgrade. Fallback: uploads through an Edge Function |
+| A moderated user keeps their account | Removing content doesn't stop its author, and a block only works for the person who blocks. Before the cloud launch: consider a `banned_users` check in `gym_require_user` |
+| Cached photos of other people's listings take space | A gym holds at most 300 active shared listings and a refresh fetches at most 100 photos. Nothing evicts old ones yet. Before the cloud launch: evict photos of gyms not opened for a while |
+| A synced row deleted while signed out | At the next sign-in the server's copy comes back. Accepted: the account is the source of truth for synced rows |
 | Apple Maps ids change or a place is missing | Fallback to manual gyms; `maps_place_id` is unique but nullable |
 | Shared features need the cloud project | Milestones 1–2 are useful alone; 3–4 run on the local stack until the owner approves the cloud project |
 | Throwaway accounts report something to hide it | It stays in the admin queue, an admin can restore it and the same accounts can't report it again. Before the cloud launch: turn email sign-up off (the app uses Sign in with Apple), which makes throwaway accounts costly |

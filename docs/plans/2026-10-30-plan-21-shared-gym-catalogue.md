@@ -36,7 +36,8 @@ Each of these settles something the spec leaves open.
    phone only" and "Shared at this gym". The SQL still allows a private listing on a public gym; the app doesn't offer it
    yet because the rows would mix two sync paths at one gym for little benefit.
 4. **Syncing a listing syncs its gym.** Choosing "Synced to my account" marks the private gym `synced` too. A `device`
-   listing at a synced gym stays on the phone.
+   listing at a synced gym stays on the phone until the user syncs it from its detail. "Sync to my account" on the gym
+   takes the gym and all its listings, after a confirmation that says so.
 5. **Item reconciliation.** `share_listing` may store a branded listing under an existing item with a different id from
    the phone's. On the next refresh of the gym, the listing's `itemId` is repointed to the server's item. An unreferenced
    local item row stays; it's a few bytes and `catalogueItems` only counts items with listings.
@@ -45,14 +46,20 @@ Each of these settles something the spec leaves open.
    need a paid feature.
 7. **Who owns an outbox row.** Each row records the user who queued it. The outbox runs only rows of the signed-in user,
    so one person's queued share can't be uploaded under another account after a sign-out. A wipe removes all rows.
-8. **Local links stay local.** A workout's link to a `device` gym is never sent. A pull that brings back `gym_id = null`
-   doesn't clear a local link: the server can't know about it.
+8. **Local links stay local.** A workout's link to a gym that's only on this phone is never sent. A Maps gym with a server
+   id is a public place, so its link goes in the user's own private workout row. A pull that brings back `gym_id = null`
+   doesn't clear a local link: the server can't know about it. A push with a null link doesn't clear the server's either,
+   so a phone that can't resolve the gym doesn't erase it.
 9. **Signing out keeps what only this phone has.** `resetAccountData()` (used by sign-out and the account switch) keeps
-   `device` gyms, listings and their photos, and removes `synced` rows and cached `shared` rows, with their photo files,
-   because those are safe on the server. It clears `catalogRefreshedAt`, so the next open downloads again. A Maps gym with
-   a `device` listing stays. A gym left with no listings and only ever known from the server goes. Queued outbox rows of
-   that user are dropped and their listings go back to `device`, `.local`: nothing is lost, the share just didn't happen.
-   `resetAll()` (Erase All, Delete Account) still removes everything.
+   `device` gyms, listings and their photos, and removes clean `synced` rows and cached `shared` rows, with their photo
+   files, because those are safe on the server. A `synced` row with changes the server hasn't got becomes `device`, so a
+   sign-out never loses an edit. A synced gym that still has `device` listings stays as a `device` gym. It clears
+   `catalogRefreshedAt`, so the next open downloads again. A Maps gym with a `device` listing stays. A gym left with no
+   listings and only ever known from the server goes. Queued outbox rows of that user are dropped and their listings go back
+   to `device`, `.local`: nothing is lost, the share just didn't happen. `resetAll()` (Erase All, Delete Account) still removes
+   everything. A demoted row remembers the account (`demotedOwnerId`). `settleDemotedRows` at sign-in gives the same account
+   its rows back as `synced`, with unpushed edits still dirty; another account gets them under new ids, so its sync can
+   never hit the first account's rows.
 10. **Photo names carry no user.** Each upload gets a new `<uuid>.jpg`, with no folder, in either bucket. A folder per user
     would give every reader of a public URL the uploader's id. The name is stored in `remotePhotoPath` as soon as the
     upload succeeds, so a retry skips the upload: once a listing uses a name, the bucket refuses that name again.
@@ -102,8 +109,8 @@ This task adds the limits and commits.
   every migration has run together, and plan 22 starts from a tree with no uncommitted SQL.
 - Modify: `DomainLimits.swift`, `supabase/functions/_shared/domain-limits.ts`, `GymRepository.swift`, `scripts/test-all.sh`
 
-- [ ] **Step 1: Run `scripts/test-db.sh`.** Expected: `Result: PASS`, 395 tests.
-- [ ] **Step 2: Move the limits.** Add to `DomainLimits` in Swift and to `domain-limits.ts` (the drift guard compares
+- [x] **Step 1: Run `scripts/test-db.sh`.** Expected: `Result: PASS`, 395 tests.
+- [x] **Step 2: Move the limits.** Add to `DomainLimits` in Swift and to `domain-limits.ts` (the drift guard compares
   names, so use the same ones):
   ```swift
   // Gyms and equipment
@@ -129,15 +136,15 @@ This task adds the limits and commits.
   `20261030000001_gyms.sql` and `20261030000002_gym_functions.sql` by reading them; if one differs, the SQL wins and the
   difference goes in your report. The pgTAP suites already assert the SQL's bounds through behaviour, so no new ones are needed
   there.
-- [ ] **Step 3: Pin the generic item ids.** Add `GymRepositoryTests.genericItemIdMatchesTheServerSeed`: the generic item
+- [x] **Step 3: Pin the generic item ids.** Add `GymRepositoryTests.genericItemIdMatchesTheServerSeed`: the generic item
   for `dumbbells` has id `cdd9d434-9eca-5d33-8406-2bdea6b4c561`, the value in `20261030000004_equipment_seed.sql`.
-- [ ] **Step 4: Add to `scripts/test-all.sh`**, after the existing node suites:
+- [x] **Step 4: Add to `scripts/test-all.sh`**, after the existing node suites:
   ```bash
   echo "==> Equipment seed generator (node test, drift against the migration)"
   node --test "$ROOT/scripts/gen-equipment-seed.test.mjs"
   node "$ROOT/scripts/gen-equipment-seed.mjs" --check
   ```
-- [ ] **Step 5: Verify and commit.** Run `scripts/test-db.sh`, the deno `_shared` tests, `swift test` in GymCore and
+- [x] **Step 5: Verify and commit.** Run `scripts/test-db.sh`, the deno `_shared` tests, `swift test` in GymCore and
   GymData. Commit: `feat(db): shared gym catalogue tables, functions, buckets and seed`.
 
 ---
@@ -148,11 +155,11 @@ This task adds the limits and commits.
 - Create: `GymData/Gym/GymCatalogTransport.swift`, `GymData/Gym/GymCatalogClient.swift`, `GymDataTests/FakeGymCatalogTransport.swift`, `GymDataTests/GymCatalogClientTests.swift`
 - Modify: `Records/GymRecords.swift`, `Values/GymValues.swift`, `Repositories/GymRepository.swift`
 
-- [ ] **Step 1: Add the fields.** All optional or defaulted, so the store migrates lightly.
+- [x] **Step 1: Add the fields.** All optional or defaulted, so the store migrates lightly.
   - `GymRecord`: `catalogRefreshedAt: Date?`.
   - `GymListingRecord`: `remotePhotoPath: String?`, `confirmedByMe: Bool = false`, `duplicatesData: Data?`.
   - `UploadState` gains `.waitingForChoice`, meaning `share_listing` returned duplicates.
-- [ ] **Step 2: Define the protocol exactly:**
+- [x] **Step 2: Define the protocol exactly:**
   ```swift
   /// The server side of the shared catalogue. Reads work with no account; writes need a signed-in user.
   public protocol GymCatalogTransport: Sendable {
@@ -183,7 +190,7 @@ This task adds the limits and commits.
   public enum GymCatalogError: Error, Equatable { case signedOut, dailyLimit, offline, gymNotShareable, photoMissing, rejected(String) }
   ```
   `loads` is optional because a newer app version may store a shape this one can't read.
-- [ ] **Step 3: Write the failing tests** in `GymCatalogClientTests` against a fake transport:
+- [x] **Step 3: Write the failing tests** in `GymCatalogClientTests` against a fake transport:
   - `refreshCachesPublicListingsAsLocalRows`: a Maps gym with `remoteId` nil finds its server gym, sets `remoteId`, and
     stores two listings with `visibility == .shared`, `isOwn` from `isMine`, `id == remoteId`.
   - `aDeviceListingAtTheGymIsLeftAlone`.
@@ -198,8 +205,8 @@ This task adds the limits and commits.
   - `aRefreshKeepsTheNameAppleMapsGave`: decision 12. The server's name, address and coordinates differ, and the local
     ones stay.
   - `offlineLeavesTheCacheAlone`: the transport throws `.offline`, rows unchanged, no throw to the UI.
-- [ ] **Step 4: Run them.** Expected: compile failure, then failures once stubbed.
-- [ ] **Step 5: Implement `GymCatalogClient`:**
+- [x] **Step 4: Run them.** Expected: compile failure, then failures once stubbed.
+- [x] **Step 5: Implement `GymCatalogClient`:**
   ```swift
   @MainActor public final class GymCatalogClient {
       public init(repository: GymRepository, transport: GymCatalogTransport, knownKinds: Set<String>, now: @escaping () -> Date)
@@ -210,7 +217,7 @@ This task adds the limits and commits.
   public struct CatalogRefresh: Sendable, Equatable { public let photosToFetch: [PhotoFetch], filesToDelete: [String] }
   ```
   `items(kindId:)` merges `publicItems` with local `catalogueItems`, using the local list alone when offline.
-- [ ] **Step 6: Run the tests and all of GymData.** Commit: `feat(data): cache a gym's shared listings`.
+- [x] **Step 6: Run the tests and all of GymData.** Commit: `feat(data): cache a gym's shared listings`.
 
 ---
 
@@ -220,7 +227,7 @@ This task adds the limits and commits.
 - Create: `Records/ShareOutboxRecord.swift`, `Gym/ShareOutbox.swift`, `GymDataTests/ShareOutboxTests.swift`, `GymDataTests/StaysOnThePhoneTests.swift`
 - Modify: `GymStore.models`, `SyncStore.resetAll`
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `sharingCreatesTheGymThenUploadsThePhotoThenCallsTheFunction`: asserts the order of fake transport calls, a name of a
     fresh lowercase uuid plus `.jpg` with no folder and no user id, and that the listing ends `.shared`, `.uploaded`, with
     `remotePhotoPath` set.
@@ -242,8 +249,8 @@ This task adds the limits and commits.
   - `retryRequeuesAFailedItem`.
   - `aPrivateGymCanNeverBeShared`: `enqueueShare` throws, and no row is written.
   - `resetAllRemovesTheQueue`.
-- [ ] **Step 2: Run them.** Expected: compile failure.
-- [ ] **Step 3: Implement:**
+- [x] **Step 2: Run them.** Expected: compile failure.
+- [x] **Step 3: Implement:**
   ```swift
   @Model public final class ShareOutboxRecord {
       @Attribute(.unique) public var id: UUID
@@ -266,7 +273,7 @@ This task adds the limits and commits.
   }
   ```
   `run(userId: nil)` does nothing. A re-entrant `run` returns at once, so two triggers can't send a row twice.
-- [ ] **Step 4: Write `StaysOnThePhoneTests` (criterion 6).** A fake transport that records every call, and a `device`
+- [x] **Step 4: Write `StaysOnThePhoneTests` (criterion 6).** A fake transport that records every call, and a `device`
   Maps gym and a `device` private gym, each with listings and photos:
   - browsing with `refresh` on the private gym makes no calls;
   - `refresh` on the Maps gym makes only `publicGym` and `publicListings` calls, which carry the place id, never a row of
@@ -274,7 +281,7 @@ This task adds the limits and commits.
   - signed in, `run` with an empty queue makes no calls;
   - `SyncStore.dirtyGyms()` and `dirtyGymListings()` (Task 5 adds them; keep this test here and extend it there) return
     nothing for `device` rows.
-- [ ] **Step 5: Run the tests and all of GymData.** Commit: `feat(data): a persisted outbox for sharing and confirming`.
+- [x] **Step 5: Run the tests and all of GymData.** Commit: `feat(data): a persisted outbox for sharing and confirming`.
 
 ---
 
@@ -283,12 +290,12 @@ This task adds the limits and commits.
 **Files:**
 - Create: `GymSync/SupabaseGymCatalogTransport.swift`, `GymSyncTests/GymCatalogDTOTests.swift`, `GymSyncIntegrationTests/GymCatalogIntegrationTests.swift`
 
-- [ ] **Step 1: Write failing decoding tests** in `GymCatalogDTOTests`: a `public_gym_equipment` row JSON decodes to
+- [x] **Step 1: Write failing decoding tests** in `GymCatalogDTOTests`: a `public_gym_equipment` row JSON decodes to
   `RemoteListing`, with all four load shapes and an unknown one (`loads == nil`); **a response with one unreadable row
   returns the other rows** (decision 13); a `share_listing` response decodes to each `ShareResult`; a PostgREST error with
   `daily_limit` maps to `.dailyLimit`, `gym_not_shareable` to `.gymNotShareable`, `photo_missing` to `.photoMissing`, a
   network error (`AuthFailure.isNetwork`) to `.offline`, and an auth error to `.signedOut`.
-- [ ] **Step 2: Write failing integration tests** against the local stack, following `IntegrationSupport.swift`. Add them
+- [x] **Step 2: Write failing integration tests** against the local stack, following `IntegrationSupport.swift`. Add them
   to the filter in `scripts/test-sync-integration.sh`:
   - signed in, share with a photo, then read it back through an anon client, including `is_mine == false` and the public
     photo URL returning 200 with `image/jpeg`;
@@ -297,13 +304,13 @@ This task adds the limits and commits.
   - after a listing uses a name, deleting and uploading that name again is refused;
   - a photo URL contains no user id;
   - sharing another user's uploaded photo is refused.
-- [ ] **Step 3: Implement.** Reuse `SupabaseTransport`'s `mappingRejections` and `SyncJSON` date handling where they fit.
+- [x] **Step 3: Implement.** Reuse `SupabaseTransport`'s `mappingRejections` and `SyncJSON` date handling where they fit.
   Lowercase every UUID in Storage paths and function arguments, because the policies and `share_listing` compare against
   lowercase text. Read views only with an explicit `select` list. Storage answers HTTP 400 for both a duplicate and a
   policy refusal. The body tells them apart (`"statusCode":"409","error":"Duplicate"`), and only the duplicate counts as
   already uploaded. Decode rows one at a time, per decision 13. Checked against the local stack on 2026-10-30: `owner_id`
   is set when the insert policy runs, and PostgREST upserts on `gyms` and `gym_equipment` work with the column grants.
-- [ ] **Step 4: Run** `swift test --filter GymCatalogDTOTests` and `scripts/test-sync-integration.sh`. Commit:
+- [x] **Step 4: Run** `swift test --filter GymCatalogDTOTests` and `scripts/test-sync-integration.sh`. Commit:
   `feat(sync): the Supabase side of the gym catalogue`.
 
 ---
@@ -314,10 +321,10 @@ This task adds the limits and commits.
 - Create: `GymData/Sync/SyncStore+Gyms.swift`, `GymSync/DTO/GymDTO.swift`, `GymSync/DTO/GymListingDTO.swift`, tests beside the existing DTO and engine tests
 - Modify: `SyncEntity`, `GymRecords.swift`, `GymRepository.swift`, `SyncTransport.swift`, `SupabaseTransport.swift`, `SyncEngine+Rounds.swift`, `SyncEngine.swift`
 
-- [ ] **Step 1: Read `SyncStore+Preferences.swift`, `SyncStore+Workouts.swift` and `DTO/RoutineDTO.swift`** and follow them.
-- [ ] **Step 2: Add the sync fields** to `GymRecord` and `GymListingRecord`: conform to `SyncTracked`, adding whatever
+- [x] **Step 1: Read `SyncStore+Preferences.swift`, `SyncStore+Workouts.swift` and `DTO/RoutineDTO.swift`** and follow them.
+- [x] **Step 2: Add the sync fields** to `GymRecord` and `GymListingRecord`: conform to `SyncTracked`, adding whatever
   it needs (`dirty`, `serverUpdatedAt`, `deletedAt`).
-- [ ] **Step 3: Write the failing tests:**
+- [x] **Step 3: Write the failing tests:**
   - `dirtyGyms` and `dirtyGymListings` only return rows with `visibility == .synced`; a `device` row, and a `shared` row
     (written only through the outbox), never appear;
   - deleting a synced gym or listing leaves a tombstone until it's pushed and then removes it; deleting a `device` row
@@ -334,8 +341,8 @@ This task adds the limits and commits.
   - a synced listing with a brand sends the generic item id and `private_brand`, and comes back with the same brand;
   - engine test: a pulled listing with a `photo_path` and no local file downloads it; a failed download doesn't fail the
     round and is retried at the next pull.
-- [ ] **Step 4: Run them.** Expected: compile failure.
-- [ ] **Step 5: Implement.** Add `.gyms, .gymListings` to `SyncEntity` after `muscleTargets` and before `bodyweight`.
+- [x] **Step 4: Run them.** Expected: compile failure.
+- [x] **Step 5: Implement.** Add `.gyms, .gymListings` to `SyncEntity` after `muscleTargets` and before `bodyweight`.
   The transport gets `push(gyms:)`, `push(gymListings:)`, `pullGyms(since:)`, `pullGymListings(since:)`, with no-op
   defaults in the `extension SyncTransport` so older test doubles compile. It also gets:
   ```swift
@@ -348,9 +355,9 @@ This task adds the limits and commits.
   one finds or creates the local item with that kind, brand and model.
   The engine gets an optional `GymPhotoFiles` port (`data(file:)`, `save(_:file:)`), default nil, so existing tests
   compile. With nil, the engine sends the row without a photo and logs it.
-- [ ] **Step 6: Extend the integration suite:** a private gym, listing and photo pushed by one client reach a second
+- [x] **Step 6: Extend the integration suite:** a private gym, listing and photo pushed by one client reach a second
   signed-in client of the same user; another user and anon see nothing, and the private photo's path returns an error.
-- [ ] **Step 7: Run** GymData and GymSync tests, then `scripts/test-sync-integration.sh`, then extend
+- [x] **Step 7: Run** GymData and GymSync tests, then `scripts/test-sync-integration.sh`, then extend
   `StaysOnThePhoneTests`. Commit: `feat(sync): private gyms and listings sync to the account`.
 
 ---
@@ -360,21 +367,22 @@ This task adds the limits and commits.
 **Files:**
 - Modify: `Workout` and `WorkoutEntry` values in GymCore, their records and mapping in GymData, `DTO/WorkoutDTO.swift`, `SyncStore+Workouts.swift`, `SessionPlanner.swift`, `AppEnvironment+Gyms.swift`
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - a workout started at the current gym stores `gymId`; each entry whose exercise has a load listing stores
     `gymListingId` (the same listing Today showed);
   - with no current gym, both are nil, and old records read back as nil;
-  - `dirtyWorkouts` sends `gym_id` only when the gym has a `remoteId` and isn't `device`, and `gym_equipment_id` only when
+  - `dirtyWorkouts` sends `gym_id` only when the gym has a server id (a Maps gym's `remoteId` or a synced gym's id, never a
+    private `device` gym), and `gym_equipment_id` only when
     the listing is `shared` or `synced` with a `remoteId`. The server already accepts these (`20261030000005`) and turns a
     link the caller can't see into null;
   - **decision 8:** after a push that left the link out, a pull of the same workout with `gym_id = null` keeps the local
     `gymId`;
   - a pulled non-null `gym_id` resolves to the local gym with that `remoteId`, and stays nil when there's none;
   - a deleted gym leaves the workout readable, and the exercise still shows, with no crash on the dangling id.
-- [ ] **Step 2: Run them.** Expected: compile failure.
-- [ ] **Step 3: Implement.** `WorkoutDTO` encodes `gym_id` and `gym_equipment_id` only when present. Keep the fields
+- [x] **Step 2: Run them.** Expected: compile failure.
+- [x] **Step 3: Implement.** `WorkoutDTO` encodes `gym_id` and `gym_equipment_id` only when present. Keep the fields
   optional in every initializer with a nil default, so existing call sites stay as they are.
-- [ ] **Step 4: Run** GymCore, GymData, GymSync, and the app suites that touch sessions (`SessionPlannerTests`,
+- [x] **Step 4: Run** GymCore, GymData, GymSync, and the app suites that touch sessions (`SessionPlannerTests`,
   `GymEnvironmentTests`), then `scripts/test-sync-integration.sh`. Commit: `feat(sync): workouts link their gym and equipment`.
 
 ---
@@ -398,7 +406,7 @@ a launch flag `-fakeGymCatalog` swaps in an in-memory fake with fixed listings, 
 - After a refresh, `gymsChanged` runs, so Today re-adapts to the new listings.
 
 **Sign-in.** `SignInForSharingSheet` reuses the existing Sign in with Apple flow. Copy: title "Sign in to share", body
-"Your gym's equipment stays yours until you share it. Nothing else leaves your phone." After success the original action
+"Share this gym's equipment with other people. Signing in also backs up your workouts, routines, weigh-ins and profile to your account. Gyms and equipment marked This phone only stay on this phone." After success the original action
 continues. Cancelling queues nothing.
 
 **Add equipment, step 4.** `GymVisibilityPicker` (`add.visibility.device`, `add.visibility.shared`,
@@ -432,17 +440,17 @@ Confirming asks for sign-in if needed, enqueues the confirm and closes the flow.
 **Picker.** Badges on My gyms: `Only me`, `Synced`, or `Shared` when the gym has a `remoteId`. Private gyms get a "Sync to
 my account" action in the gym's menu (`picker.sync.<id>`).
 
-- [ ] **Step 1: Write failing unit tests** for the models: visibility options per gym type; a signed-out share asks for
+- [x] **Step 1: Write failing unit tests** for the models: visibility options per gym type; a signed-out share asks for
   sign-in and queues nothing; a signed-in share queues and finishes; step 3 ordering; `Already added`; the badge for each
   state; `GymPhotoCache` rejects non-JPEG and files over 1 MB.
-- [ ] **Step 2: Write failing XCUITests** with `-fakeGymCatalog`:
+- [x] **Step 2: Write failing XCUITests** with `-fakeGymCatalog`:
   `GymSharingUITests.testBrowsingWithNoAccountShowsSharedEquipment`, `testAListingWithoutAPhotoBorrowsTheCataloguePhoto`
   (adding one replaces it, also after reopening), `testShareAsksForSignIn` (cancel leaves it `Only
   me`), `testConfirmAsksForSignIn`, `testDuplicatesShowTheExistingListings`, `testAFailedShareOffersRetry`.
-- [ ] **Step 3: Implement.** Keep files under 400 lines.
-- [ ] **Step 4: Extend the audits.** Add the new states to `AccessibilityAuditUITests` and `DynamicTypeUITests`, with no
+- [x] **Step 3: Implement.** Keep files under 400 lines.
+- [x] **Step 4: Extend the audits.** Add the new states to `AccessibilityAuditUITests` and `DynamicTypeUITests`, with no
   exclusions.
-- [ ] **Step 5: Run the unit and UI suites for gyms.** Commit: `feat(gyms): share, confirm and sync from the app`.
+- [x] **Step 5: Run the unit and UI suites for gyms.** Commit: `feat(gyms): share, confirm and sync from the app`.
 
 ---
 
@@ -452,7 +460,7 @@ my account" action in the gym's menu (`picker.sync.<id>`).
 - Create: `ios/Packages/GymSync/Tests/GymSyncIntegrationTests/GymCatalogE2ETests.swift`, `scripts/test-gym-e2e.sh`
 - Modify: `scripts/test-all.sh`
 
-- [ ] **Step 1: Write the tests.** Real transports against the local stack, with the rules from GymCore:
+- [x] **Step 1: Write the tests.** Real transports against the local stack, with the rules from GymCore:
   - **Criterion 2:** user A creates a gym by place id and shares 5 listings. User B and an anon client each run
     `GymCatalogClient.refresh`, get those listings, and `WorkoutBuilder` builds a chest workout from them with neither
     adding anything; every equipment exercise links one of A's listings.
@@ -464,9 +472,9 @@ my account" action in the gym's menu (`picker.sync.<id>`).
   - **Criterion 6:** with real transports, a `device` gym with a marker name and a `device` listing with a marker note
     stay out of every table: query `gyms` and `gym_equipment` through the script's `psql_local` for the markers and expect
     zero rows.
-- [ ] **Step 2: Write `scripts/test-gym-e2e.sh`**, copying the guard from `test-sync-integration.sh`: refuses a non-local
+- [x] **Step 2: Write `scripts/test-gym-e2e.sh`**, copying the guard from `test-sync-integration.sh`: refuses a non-local
   `API_URL`, removes `gym-%@test.local` users before and after, and exits non-zero on failure.
-- [ ] **Step 3: Add to `scripts/test-all.sh`:**
+- [x] **Step 3: Add to `scripts/test-all.sh`:**
   ```bash
   # Gyms shared between two users and an anonymous client, against the local stack (needs Docker): opt in with GYM_E2E=1.
   if [[ "${GYM_E2E:-0}" == "1" ]]; then
@@ -474,16 +482,62 @@ my account" action in the gym's menu (`picker.sync.<id>`).
     "$ROOT/scripts/test-gym-e2e.sh"
   fi
   ```
-- [ ] **Step 4: Run it twice** to prove the cleanup. Commit: `test: two users and an anonymous client share a gym`.
+- [x] **Step 4: Run it twice** to prove the cleanup. Commit: `test: two users and an anonymous client share a gym`.
 
 ---
 
 ### Task 9: Finish
 
-- [ ] **Step 1:** Run everything: GymCore with the coverage gate, GymData, GymSync, `scripts/test-db.sh`, deno, the node
+- [x] **Step 1:** Run everything: GymCore with the coverage gate, GymData, GymSync, `scripts/test-db.sh`, deno, the node
   suites, `scripts/test-sync-integration.sh`, `scripts/test-gym-e2e.sh`, and the app suite with
   `DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2'`.
-- [ ] **Step 2:** Open the app on the simulator against the local stack and walk through: browse signed out, sign in,
+- [x] **Step 2:** Open the app on the simulator against the local stack and walk through: browse signed out, sign in,
   share a listing with a photo, watch it reach a second account. Screenshots go in the scratchpad, not the repo.
-- [ ] **Step 3:** Update `README.md` and the spec for the decisions above. Tick the boxes and add `## Outcome` with real
+- [x] **Step 3:** Update `README.md` and the spec for the decisions above. Tick the boxes and add `## Outcome` with real
   numbers. Commit: `docs: plan 21 outcome`.
+
+## Outcome
+
+Done on 2026-10-31, branch `feat-gym-shared`, not pushed. Supabase stays local. Final run at `4ffb769`:
+
+| Suite | Result |
+|---|---|
+| App, unit and UI, iPhone 17 Pro Max, iOS 26.2, `PerformanceUITests` excluded | 925 tests: 909 passed, 1 failed, 15 skipped |
+| GymCore | 486 tests, 96.25% line coverage |
+| GymData | 302 tests |
+| GymSync | 153 tests |
+| `scripts/test-db.sh` | 473 assertions in 16 files |
+| `scripts/test-sync-integration.sh` | 33 tests, "Account deletion verified: 44 deleted users, 0 rows left" |
+| `scripts/test-gym-e2e.sh` | 5 tests, photo upload rules, "stays on the phone" and cleanup verified |
+| `scripts/test-mcp.sh` | 121 deno tests, 18 consent tests |
+| `node --test scripts/*.test.mjs` | 148 tests |
+
+**The one failure:** `testWorkoutOverviewAndLoggingAudit` reported "Text clipped" on all the text on the workout screen. Its screenshot shows nothing clipped, and the test then passed 5 times out of 5 alone, on the same simulator. The Mac was short of memory, with a load average near 80. It reads as a false positive under load, but the cause isn't proved, and the full suite wasn't run again.
+
+The real app was walked on the simulator against the local stack with three accounts. Browsing signed out showed another user's listing and photo. The sign-in sheet's copy was right, and cancelling it left nothing queued. A share reached the server, and its public photo URL returned `image/jpeg`. A second account saw it and confirmed it, and the count went to 1. A private gym synced after its confirmation card. Signing out and back in restored it, and another account on that phone got new ids and left the first account's rows alone. A failed share showed Retry and Delete. Not seen in the walk: the Delete tap on a failed share, which only UI tests cover, and "Waiting to upload" on screen.
+
+**Added after this plan's reviews**
+- A trigger on `storage.objects` holds the photo rules, because upload tokens and Storage's final write skip row-level policies. Proved with real HTTP in `scripts/test-gym-storage-rules.sh`.
+- A gym holds at most 300 active shared listings (`gym_full`).
+- Private caps are checked again when a tombstone is cleared.
+- Deleting an account removes a brand and model only that user added, and the notes in their reports.
+- `clean_text` refuses hidden characters. U+200C and U+200D pass only next to non-ASCII text.
+- A phone that can't read a workout's gym no longer erases the server's link.
+- Sign-out moves the session's rows to "This phone only" and remembers the account. The same account gets them back, and another account gets new ids.
+- "Sync to my account" asks first. A `device` listing at a synced gym can be synced from its detail screen.
+- A listing that hasn't finished uploading can be deleted. Shared listings are read-only.
+- A borrowed photo goes through the same limited downloader as a saved one: JPEG only, up to 1 MB, with a time limit.
+- `AvailableLoads.fit` never raises a weight by more than `max(5 kg, 25%)`.
+
+**Decisions**
+- A Maps gym's link goes up with a workout, since it's a public place in the user's own private row. A phone-only gym's link never does.
+- Signing in to share also backs up workouts, routines, weigh-ins and profile, as signing in from Settings does. The sheet says so. There's no share-without-backup mode.
+- A delete refunds a daily photo slot. Only 60 stay stored per day.
+- A synced row deleted while signed out comes back from the server at the next sign-in.
+- When saving to the outbox fails, the flow still closes, the listing stays "Only me", the error is logged, and detail offers Share or Sync again.
+
+**Must ship with plan 22 Task 4:** Delete Account doesn't remove photos until then.
+
+**Not tested:** real Sign in with Apple, and `signInWithApple(waitingForSync: false)`, which is only compile-checked. SwiftData's light migration for the new optional fields wasn't run against a real old store.
+
+**Known and left:** restoring an edited private listing uploads its photo under a new name and orphans the old one. The launch list is in the spec's risks table: confirming the trigger on a hosted project, an orphan-photo sweep, `banned_users`, cached photo eviction, email sign-up off, Apple Maps verification, and image-byte checks. Service-role uploads to the gym buckets are refused too, so an admin script can't write there.

@@ -164,6 +164,9 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
 - [ ] **Step 2: Implement.** `AuthService.deleteAccount` takes an optional `removePhotos: (@Sendable (UUID) async throws
   -> Void)?` port with a nil default, so existing callers compile. `SupabaseGymCatalogTransport.deleteAllPhotos()` calls
   `my_gym_photos()` and removes each object through Storage.
+  **The server refuses too:** `delete_my_account` raises `photos_remain` while the caller still owns objects in either gym
+  bucket, so a custom or older client can't leave them behind. pgTAP for it, and `deleteAccountRemovesPhotosFirst` covers the
+  app's order.
 - [ ] **Step 3: Write the UI.**
   - Settings → "Unblock everyone" (`settings.unblockAll`), signed in only, with an inline confirmation card, then
     "Unblocked N people."
