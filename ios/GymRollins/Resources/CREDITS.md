@@ -1,6 +1,6 @@
 # Credits
 - Exercise names and instructions: hasaneyldrm/exercises-dataset (MIT License). Its images and GIFs are not used.
-- Exercise photos: free-exercise-db by yuhonas (github.com/yuhonas/free-exercise-db), public domain (Unlicense). Downloaded when first shown and kept on this iPhone.
+- Exercise photos: free-exercise-db by yuhonas (github.com/yuhonas/free-exercise-db), public domain (Unlicense). Exercise photos are downloaded when first shown and kept on this iPhone; the sample photos of equipment in a gym are resized copies shipped inside the app.
 - Body map: react-native-body-highlighter by ELABBASSI Hicham, MIT License (Copyright (c) 2022 ELABBASSI Hicham): the body figure on the recovery map and the exercise muscle badges. License: body-highlighter-LICENSE.txt in the app bundle.
 - Barlow Condensed font: Jeremy Tribby, SIL Open Font License 1.1 (see Fonts/OFL.txt).
 - Data model and naming inspired by openGym (AGPL-3.0); no openGym source code is included.
