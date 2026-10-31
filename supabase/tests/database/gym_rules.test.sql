@@ -2,7 +2,7 @@
 -- what a hidden gym reveals, invisible text, and a workout keeping its gym link across phones.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(30);
+select plan(32);
 
 insert into auth.users (id, email, aud, role) values
   ('fafafafa-0000-0000-0000-000000000001', 'rule-a@test.local', 'authenticated', 'authenticated'),
@@ -121,6 +121,8 @@ select is(gym_private.clean_text('Iron' || chr(65529) || 'Gym'), false, 'U+FFF9 
 select is(gym_private.clean_text('Iron' || chr(8205) || 'Gym'), false, 'a joiner between ASCII letters is refused');
 select is(gym_private.clean_text(chr(8205) || 'Iron'), false, 'or at the start');
 select is(gym_private.clean_text(chr(128104) || chr(8205) || chr(128105)), true, 'a joiner in an emoji sequence passes');
+select is(gym_private.clean_text('Iron' || chr(8204) || 'Gym'), false, 'a non-joiner between ASCII letters is refused');
+select is(gym_private.clean_text(chr(1605) || chr(8204) || chr(1740)), true, 'and passes in a Persian word');
 select is(gym_private.clean_text('Iron Gym 💪 ' || chr(2325) || chr(8205) || chr(2359)), true, 'and in a script that needs it');
 select throws_ok(format($$ insert into public.reports (target_type, target_id, reason, note)
   values ('gym', gen_random_uuid(), 'other', %L) $$, 'see ' || chr(917569)), '23514'::char(5), null, 'a report note is cleaned too');

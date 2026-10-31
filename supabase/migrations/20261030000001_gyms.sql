@@ -40,14 +40,14 @@ grant usage on schema gym_private to anon, authenticated;
 -- No control characters, invisible characters or text-direction overrides. Line breaks only where text has lines. Gym
 -- names reach Claude, so anything the eye can't see but a model can read is refused: the tag characters (U+E0000
 -- block, which spell ASCII invisibly), the Arabic and Mongolian format characters, the interlinear annotation marks.
--- U+200D (zero width joiner) is also an emoji and script character (a rainbow flag, a family, Indic conjuncts), so it
--- stays, but only next to non-ASCII text: between ASCII letters it can only hide something. U+200C stays refused;
--- Persian gym names that need it can be written without.
+-- U+200D and U+200C (the zero width joiners) are also emoji and script characters (a rainbow flag, Indic conjuncts,
+-- Persian words, so a gym's name from Apple Maps can hold them). They stay, but only next to non-ASCII text: between
+-- ASCII letters they can only hide something.
 create function gym_private.clean_text(t text, lines boolean default false) returns boolean
 language sql immutable set search_path = pg_catalog as $$
   select t !~ (case when lines then '[\u0001-\u0009\u000B\u000C\u000E-\u001F]' else '[\u0001-\u001F]' end)
-     and t !~ '[\u007F-\u009F\u061C\u180E\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u206F\uFEFF\uFFF9-\uFFFB\U000E0000-\U000E007F]'
-     and t !~ '(^|[\u0001-\u007F])\u200D|\u200D([\u0001-\u007F]|$)'
+     and t !~ '[\u007F-\u009F\u061C\u180E\u200B\u200E\u200F\u202A-\u202E\u2060-\u206F\uFEFF\uFFF9-\uFFFB\U000E0000-\U000E007F]'
+     and t !~ '(^|[\u0001-\u007F])[\u200C\u200D]|[\u200C\u200D]([\u0001-\u007F]|$)'
 $$;
 revoke execute on function gym_private.clean_text(text, boolean) from public;
 grant execute on function gym_private.clean_text(text, boolean) to authenticated;
