@@ -40,5 +40,6 @@ final class StubCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     }
     func confirm(listingId: UUID) async throws -> Int { try record("confirm"); return 1 }
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { try record("upload"); return name }
+    func deleteSharedPhoto(path: String) async throws { try record("deleteSharedPhoto") }
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://photos.uitest.invalid/gym-photos/\(path)") }
 }

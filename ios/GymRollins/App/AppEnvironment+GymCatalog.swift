@@ -40,6 +40,7 @@ struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func share(_ request: ShareRequest) async throws -> ShareResult { throw GymCatalogError.signedOut }
     func confirm(listingId: UUID) async throws -> Int { throw GymCatalogError.signedOut }
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { throw GymCatalogError.signedOut }
+    func deleteSharedPhoto(path: String) async throws { throw GymCatalogError.signedOut }
     func publicPhotoURL(path: String) -> URL? { nil }
 }
 
@@ -77,6 +78,10 @@ extension AppEnvironment {
     func wireGymSharing() {
         sync.onGymIdsMoved = { [weak self] moves in self?.gymIdsMoved(moves) }
         sync.onSessionEnding = { [weak self] in self?.gymSharing.invalidate() }
+        sync.onWillSignOut = { [weak self] in
+            guard let self, let userId = self.sharingUserId else { return }
+            await self.gymSharing.outbox.discardQueuedPhotos(userId: userId)
+        }
         sync.onSignedIn = { [weak self] in
             guard let self else { return }
             Task { await self.runShareOutbox() }

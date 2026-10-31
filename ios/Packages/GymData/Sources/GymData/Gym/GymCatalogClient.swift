@@ -143,9 +143,9 @@ public final class GymCatalogClient {
             let item = try itemRecord(for: entry)
             if let row = locals[entry.id] {
                 if row.visibilityRaw == GymVisibility.device.rawValue { continue }
-                update(row, from: entry, itemId: item.id)
+                cache.update(row, from: entry, itemId: item.id)
             } else {
-                let row = insert(entry, itemId: item.id, gymId: gymId)
+                let row = cache.insert(entry, itemId: item.id, gymId: gymId)
                 locals[entry.id] = row
             }
             if let path = entry.photoPath, locals[entry.id]?.photoFile == nil {
@@ -179,36 +179,7 @@ public final class GymCatalogClient {
         return record
     }
 
-    private func insert(_ entry: RemoteListing, itemId: UUID, gymId: UUID) -> GymListingRecord {
-        let row = GymListingRecord(id: entry.id, gymId: gymId, itemId: itemId, kindId: entry.kindId,
-                                   loadsData: Data(), quantity: entry.quantity, notes: entry.notes, photoFile: nil,
-                                   now: now())
-        row.visibilityRaw = GymVisibility.shared.rawValue
-        row.uploadStateRaw = UploadState.uploaded.rawValue
-        update(row, from: entry, itemId: itemId)
-        repository.context.insert(row)
-        return row
-    }
-
-    private func update(_ row: GymListingRecord, from entry: RemoteListing, itemId: UUID) {
-        row.itemId = itemId
-        row.kindId = entry.kindId
-        row.loadsData = entry.loads.flatMap { try? JSONEncoder().encode($0) } ?? Data("{}".utf8)
-        row.quantity = entry.quantity
-        row.notes = entry.notes
-        row.remotePhotoPath = entry.photoPath
-        row.statusRaw = entry.loads == nil ? ListingStatus.unsupported.rawValue : Self.status(entry.status).rawValue
-        row.confirmCount = entry.confirmCount
-        row.confirmedByMe = entry.confirmedByMe
-        row.isOwn = entry.isMine
-        row.remoteId = entry.id
-        if row.uploadStateRaw != UploadState.queued.rawValue { row.uploadStateRaw = UploadState.uploaded.rawValue }
-        row.updatedAt = now()
-    }
-
-    private static func status(_ raw: String) -> ListingStatus {
-        ListingStatus(rawValue: raw) ?? .unsupported
-    }
+    private var cache: RemoteListingCache { RemoteListingCache(context: repository.context, now: now) }
 
     private static func catalogueItem(_ remote: RemoteItem) -> CatalogueItem? {
         guard remote.brand != nil || remote.model != nil else { return nil }

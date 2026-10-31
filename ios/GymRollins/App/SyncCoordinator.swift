@@ -48,6 +48,9 @@ final class SyncCoordinator {
     /// Called once a sign-in or a restored session has settled and the account owns this phone's data: queued shares
     /// can go.
     @ObservationIgnored var onSignedIn: @MainActor () -> Void = {}
+    /// Awaited at the start of a sign-out, while the session still works: the app clears what it left on the server
+    /// for work that never finished (photos uploaded for queued shares).
+    @ObservationIgnored var onWillSignOut: @MainActor () async -> Void = {}
     /// Called when the session is about to end or change (sign-out, account deletion or switch, a revoked session), before
     /// anything is wiped: work waiting on the server for the old session must not touch the rows when it comes back.
     @ObservationIgnored var onSessionEnding: @MainActor () -> Void = {}
@@ -198,6 +201,7 @@ final class SyncCoordinator {
     /// Signs out and removes this iPhone's copy of the data (the caller confirms first; the data stays in the
     /// account).
     func signOutAndRemoveLocalData() async throws {
+        await onWillSignOut()
         onSessionEnding()
         try await auth?.signOut()
         accountSwitchPending = false

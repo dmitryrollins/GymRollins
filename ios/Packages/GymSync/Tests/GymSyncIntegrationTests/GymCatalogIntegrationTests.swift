@@ -123,10 +123,33 @@ struct GymCatalogIntegrationTests {
         _ = try await transport.share(request(listingId, gym: gymId, photo: name))
 
         _ = try await user.auth.client.storage.from("gym-photos").remove(paths: [name])
-        await #expect(throws: GymCatalogError.self) {
+        // Storage shows the trigger's refusal as a plain row-level-security error; it reaches the queue as one answer.
+        await #expect(throws: GymCatalogError.photoRefused) {
             _ = try await transport.uploadSharedPhoto(photo(), name: name)
         }
         try await user.deleteAccount()
+    }
+
+    private func isServed(_ transport: SupabaseGymCatalogTransport, _ name: String) async throws -> Bool {
+        let url = try #require(transport.publicPhotoURL(path: name))
+        let (_, response) = try await URLSession.shared.data(from: url)
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    @Test func onlyTheOwnerCanDeleteAnUploadedPhoto() async throws {
+        let owner = try await Account.signUp()
+        let other = try await Account.signUp()
+        let name = photoName()
+        _ = try await catalog(owner).uploadSharedPhoto(photo(), name: name)
+        #expect(try await isServed(catalog(owner), name))
+
+        try await catalog(other).deleteSharedPhoto(path: name)
+        #expect(try await isServed(catalog(owner), name), "another user's delete removes nothing")
+        try await catalog(owner).deleteSharedPhoto(path: name)
+        #expect(try await !isServed(catalog(owner), name))
+        try await catalog(owner).deleteSharedPhoto(path: name) // already gone: fine
+        try await owner.deleteAccount()
+        try await other.deleteAccount()
     }
 
     @Test func anotherUsersUploadedPhotoCannotBeShared() async throws {

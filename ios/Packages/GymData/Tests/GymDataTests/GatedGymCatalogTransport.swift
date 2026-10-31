@@ -85,5 +85,10 @@ final class GatedGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         return try await inner.uploadSharedPhoto(data, name: name)
     }
 
+    func deleteSharedPhoto(path: String) async throws {
+        await gate("deleteSharedPhoto")
+        try await inner.deleteSharedPhoto(path: path)
+    }
+
     func publicPhotoURL(path: String) -> URL? { inner.publicPhotoURL(path: path) }
 }

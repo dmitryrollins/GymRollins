@@ -18,6 +18,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private var _uploads: [String] = []
     private var _confirmed: [UUID] = []
     private var _confirmResult = 1
+    private var _deleted: [String] = []
 
     var calls: [String] { lock.withLock { _calls } }
     var gym: RemoteGym? { get { lock.withLock { _gym } } set { lock.withLock { _gym = newValue } } }
@@ -34,6 +35,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     }
     var requests: [ShareRequest] { lock.withLock { _requests } }
     var uploads: [String] { lock.withLock { _uploads } }
+    var deletedPhotos: [String] { lock.withLock { _deleted } }
     var confirmed: [UUID] { lock.withLock { _confirmed } }
     var confirmResult: Int { get { lock.withLock { _confirmResult } } set { lock.withLock { _confirmResult = newValue } } }
     var failure: GymCatalogError? { get { lock.withLock { _failure } } set { lock.withLock { _failure = newValue } } }
@@ -76,6 +78,10 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try record("uploadSharedPhoto")
         lock.withLock { _uploads.append(name) }
         return name
+    }
+    func deleteSharedPhoto(path: String) async throws {
+        try record("deleteSharedPhoto")
+        lock.withLock { _deleted.append(path) }
     }
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://example.test/gym-photos/\(path)") }
 }

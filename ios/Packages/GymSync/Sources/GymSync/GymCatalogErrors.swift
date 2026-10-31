@@ -5,15 +5,20 @@ import Supabase
 /// Turns what PostgREST, Storage and Auth throw into the few cases `ShareOutbox` reacts to: offline and signed-out
 /// stop the queue, the rest settle one row. The server's own words are the function's `raise exception` messages.
 enum GymCatalogErrors {
-    private static let signedOutCodes: Set<String> = ["42501", "PGRST301", "PGRST302", "PGRST303"]
+    private static let authCodes: Set<String> = ["PGRST301", "PGRST302", "PGRST303"]
+    /// PostgREST's own "the database isn't reachable or is busy" answers, and Postgres classes 08 (connection) and
+    /// 53 (resources, e.g. too many connections).
+    private static let busyCodes: Set<String> = ["PGRST000", "PGRST001", "PGRST002", "PGRST003"]
 
-    static func map(_ error: Error) -> GymCatalogError {
+    /// `hasSession` matters for 42501: with no session the caller is signed out; with one, the server refused this
+    /// row (not allowed here), and the queue goes on with the next.
+    static func map(_ error: Error, hasSession: Bool = false) -> GymCatalogError {
         switch error {
         case let known as GymCatalogError: known
-        case let failure as PostgrestError: map(message: failure.message, code: failure.code)
+        case let failure as PostgrestError: map(message: failure.message, code: failure.code, hasSession: hasSession)
         case let failure as StorageError: mapStorage(failure)
         case is AuthError: .signedOut
-        case let failure as HTTPError: failure.response.statusCode == 401 ? .signedOut : .rejected(failure.localizedDescription)
+        case let failure as HTTPError: map(status: failure.response.statusCode, text: failure.localizedDescription)
         case _ where AuthFailure.isNetwork(error): .offline
         default: .rejected(error.localizedDescription)
         }
@@ -24,18 +29,40 @@ enum GymCatalogErrors {
         error.statusCode == "409" || error.error == "Duplicate"
     }
 
-    private static func map(message: String, code: String?) -> GymCatalogError {
+    /// A busy or overloaded server is a reason to try again later, not a verdict on the row.
+    static func isTemporary(status: Int) -> Bool { status == 429 || (500...599).contains(status) }
+
+    private static func map(status: Int, text: String) -> GymCatalogError {
+        if status == 401 { return .signedOut }
+        return isTemporary(status: status) ? .offline : .rejected(text)
+    }
+
+    private static func map(message: String, code: String?, hasSession: Bool) -> GymCatalogError {
         switch message {
         case "daily_limit": return .dailyLimit
         case "gym_not_shareable": return .gymNotShareable
         case "photo_missing": return .photoMissing
+        case "gym_full": return .gymFull
+        case "photo_in_use": return .photoInUse
         default: break
         }
-        if let code, signedOutCodes.contains(code) { return .signedOut }
+        if let code {
+            if authCodes.contains(code) { return .signedOut }
+            if code == "42501" { return hasSession ? .notAllowed : .signedOut }
+            if busyCodes.contains(code) || code.hasPrefix("08") || code.hasPrefix("53") { return .offline }
+        }
         return .rejected(message)
     }
 
+    /// The trigger on the buckets refuses an upload with a row-level-security error: the daily photo limit, or a
+    /// name a listing already uses. Storage shows only that, as HTTP 400 `AccessDenied`, so every such refusal is one
+    /// answer for the row. A repeated name (409 `Duplicate`) is told apart before this runs.
     private static func mapStorage(_ error: StorageError) -> GymCatalogError {
-        error.statusCode == "401" ? .signedOut : .rejected(error.message)
+        if error.statusCode == "401" { return .signedOut }
+        if let status = error.statusCode.flatMap(Int.init), isTemporary(status: status) { return .offline }
+        if error.error == "AccessDenied" || error.message.localizedCaseInsensitiveContains("row-level security") {
+            return .photoRefused
+        }
+        return .rejected(error.message)
     }
 }

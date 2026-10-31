@@ -114,13 +114,17 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
         do {
             _ = try await call {
                 try await client.storage.from(Self.bucket).upload(
-                    stored, data: data, options: FileOptions(cacheControl: "31536000", contentType: "image/jpeg",
+                    stored, data: data, options: FileOptions(cacheControl: "3600", contentType: "image/jpeg",
                                                              upsert: false))
             }
         } catch UploadOutcome.alreadyThere {
             // The same photo, uploaded by an earlier try whose answer was lost.
         }
         return stored
+    }
+
+    public func deleteSharedPhoto(path: String) async throws {
+        _ = try await call { try await client.storage.from(Self.bucket).remove(paths: [path.lowercased()]) }
     }
 
     // MARK: Helpers
@@ -135,7 +139,7 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
         } catch let failure as StorageError where GymCatalogErrors.isDuplicateUpload(failure) {
             throw UploadOutcome.alreadyThere
         } catch {
-            throw GymCatalogErrors.map(error)
+            throw GymCatalogErrors.map(error, hasSession: client.auth.currentSession != nil)
         }
     }
 

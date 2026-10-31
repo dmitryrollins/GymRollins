@@ -154,10 +154,34 @@ struct GymCatalogDTOTests {
         #expect(GymCatalogErrors.map(postgrest("daily_limit", code: "P0001")) == .dailyLimit)
         #expect(GymCatalogErrors.map(postgrest("gym_not_shareable", code: "P0001")) == .gymNotShareable)
         #expect(GymCatalogErrors.map(postgrest("photo_missing", code: "P0001")) == .photoMissing)
-        #expect(GymCatalogErrors.map(postgrest("not allowed", code: "42501")) == .signedOut)
+        #expect(GymCatalogErrors.map(postgrest("gym_full", code: "P0001")) == .gymFull)
+        #expect(GymCatalogErrors.map(postgrest("photo_in_use", code: "P0001")) == .photoInUse)
         #expect(GymCatalogErrors.map(postgrest("JWT expired", code: "PGRST301")) == .signedOut)
-        #expect(GymCatalogErrors.map(postgrest("photo_in_use", code: "P0001")) == .rejected("photo_in_use"))
         #expect(GymCatalogErrors.map(postgrest("invalid loads", code: "22023")) == .rejected("invalid loads"))
+    }
+
+    @Test func notAllowedMeansSignedOutOnlyWithoutASession() {
+        let refused = postgrest("not allowed", code: "42501")
+        #expect(GymCatalogErrors.map(refused, hasSession: false) == .signedOut)
+        // With a session the server refused this row: the queue settles it and goes on.
+        #expect(GymCatalogErrors.map(refused, hasSession: true) == .notAllowed)
+    }
+
+    @Test func aBusyServerIsOfflineNotARefusal() {
+        for status in [429, 500, 502, 503, 504] {
+            let response = HTTPURLResponse(url: URL(string: "https://x.test")!, statusCode: status, httpVersion: nil,
+                                           headerFields: nil)!
+            #expect(GymCatalogErrors.map(HTTPError(data: Data(), response: response)) == .offline, "HTTP \(status)")
+        }
+        #expect(GymCatalogErrors.map(postgrest("Could not query the database", code: "PGRST002")) == .offline)
+        #expect(GymCatalogErrors.map(postgrest("too many connections", code: "53300")) == .offline)
+        let notFound = HTTPURLResponse(url: URL(string: "https://x.test")!, statusCode: 404, httpVersion: nil,
+                                       headerFields: nil)!
+        if case .rejected = GymCatalogErrors.map(HTTPError(data: Data(), response: notFound)) {} else {
+            Issue.record("a 404 is a refusal")
+        }
+        #expect(GymCatalogErrors.map(StorageError(statusCode: "503", message: "down", error: "Unavailable")) == .offline)
+        #expect(GymCatalogErrors.map(StorageError(statusCode: "429", message: "slow down", error: "Too Many")) == .offline)
     }
 
     @Test func networkAndAuthFailuresMap() {
@@ -169,12 +193,18 @@ struct GymCatalogDTOTests {
     @Test func storageAnswersAreToldApart() {
         let duplicate = StorageError(statusCode: "409", message: "The resource already exists", error: "Duplicate")
         #expect(GymCatalogErrors.isDuplicateUpload(duplicate))
-        let refused = StorageError(statusCode: "403", message: "new row violates row-level security policy",
-                                   error: "Unauthorized")
+        // The trigger's refusals (daily limit, a name a listing uses) come back as HTTP 400 `AccessDenied`.
+        let refused = StorageError(statusCode: "400", message: "new row violates row-level security policy",
+                                   error: "AccessDenied")
         #expect(!GymCatalogErrors.isDuplicateUpload(refused))
-        #expect(GymCatalogErrors.map(refused) == .rejected("new row violates row-level security policy"))
+        #expect(GymCatalogErrors.map(refused) == .photoRefused)
+        let policy = StorageError(statusCode: "403", message: "new row violates row-level security policy",
+                                  error: "Unauthorized")
+        #expect(GymCatalogErrors.map(policy) == .photoRefused)
         #expect(GymCatalogErrors.map(StorageError(statusCode: "401", message: "bad jwt", error: "Unauthorized"))
                 == .signedOut)
+        #expect(GymCatalogErrors.map(StorageError(statusCode: "413", message: "too big", error: "Payload"))
+                == .rejected("too big"))
     }
 }
 

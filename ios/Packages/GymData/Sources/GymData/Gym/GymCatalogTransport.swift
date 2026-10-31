@@ -12,6 +12,8 @@ public protocol GymCatalogTransport: Sendable {
     func confirm(listingId: UUID) async throws -> Int
     /// Uploads to `gym-photos/<name>`. A photo the caller already uploaded under that name counts as uploaded.
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String
+    /// Removes a photo the caller uploaded to `gym-photos`. Only the owner may; a name that is already gone is fine.
+    func deleteSharedPhoto(path: String) async throws
     func publicPhotoURL(path: String) -> URL?
 }
 
@@ -112,4 +114,11 @@ public enum ShareResult: Sendable, Equatable { case created(UUID), duplicates([R
 
 public enum GymCatalogError: Error, Equatable {
     case signedOut, dailyLimit, offline, gymNotShareable, photoMissing, rejected(String)
+    /// The server refused this row for this account while the session is fine (as opposed to `.signedOut`).
+    case notAllowed
+    case gymFull
+    /// Storage refused the upload: the daily photo limit, or a name a listing already uses.
+    case photoRefused
+    /// `share_listing` found the photo already used by another listing.
+    case photoInUse
 }
