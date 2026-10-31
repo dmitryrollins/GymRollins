@@ -154,6 +154,38 @@ final class FakePhotoFiles: GymPhotoFiles, @unchecked Sendable {
         #expect(photos.stored[file] == Data("far".utf8))
     }
 
+    @Test func aRefusedGymDoesNotStopTheEntitiesAfterIt() async throws {
+        defer { f.tearDown() }
+        let (gym, listing) = try syncedListing()
+        await f.server.reject(ids: [gym.id.uuidString, listing.id.uuidString])
+        try f.body.upsert(BodyweightEntry(date: f.clock.now, weightKg: 81))
+        try f.workouts.save(workout(name: "Push", at: f.clock.now))
+        await engine.sync()
+        #expect(await f.server.bodyweight.count == 1)
+        #expect(await f.server.workouts.count == 1)
+        let failed = Set(f.store.syncFailures().map(\.entity))
+        #expect(failed == [.gyms, .gymListings])
+        #expect(engine.status == .idle)
+    }
+
+    @Test func aListingRefusedWithItsGymIsTriedAgainOnceTheGymIsAccepted() async throws {
+        defer { f.tearDown() }
+        let (gym, listing) = try syncedListing()
+        await f.server.reject(ids: [gym.id.uuidString, listing.id.uuidString])
+        await engine.sync()
+        #expect(try f.store.isSyncBlocked(.gymListings, id: listing.id.uuidString,
+                                          clientUpdatedAt: try #require(f.store.dirtyGymListings().first).clientUpdatedAt))
+
+        await f.server.reject(ids: [])
+        f.clock.advance()
+        try gyms.updateGym(gym.id, name: "Home 2", address: nil) // an edit is what lets the gym through again
+        await engine.sync()
+        #expect(await f.server.gyms[gym.id] != nil)
+        #expect(await f.server.gymListings[listing.id] != nil)
+        #expect(try f.store.dirtyGymListings().isEmpty)
+        #expect(f.store.syncFailures().isEmpty)
+    }
+
     @Test func nothingMarkedThisPhoneOnlyIsPushed() async throws {
         defer { f.tearDown() }
         let gym = try gyms.addPrivateGym(name: "Device", address: nil)

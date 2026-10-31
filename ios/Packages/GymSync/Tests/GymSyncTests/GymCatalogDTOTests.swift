@@ -177,3 +177,27 @@ struct GymCatalogDTOTests {
                 == .signedOut)
     }
 }
+
+struct GymPushRefusalTests {
+    private func error(_ message: String, _ code: String) -> PostgrestError {
+        PostgrestError(detail: nil, hint: nil, code: code, message: message)
+    }
+
+    @Test func aRowAnotherAccountHoldsIsRefusedForThatRowAlone() throws {
+        let refusal = try #require(SupabaseTransport.gymRefusal(for: error("new row violates row-level security", "42501")))
+        #expect(refusal.code == "42501")
+        // The shared rule stays narrow: on other tables 42501 can mean the session is gone.
+        #expect(!SyncRecordRejected.isRowRejection(code: "42501"))
+    }
+
+    @Test func theNamedLimitsAreRefusedForThatRowAlone() {
+        #expect(SupabaseTransport.gymRefusal(for: error("too_many_gyms", "P0001")) != nil)
+        #expect(SupabaseTransport.gymRefusal(for: error("too_many_listings", "P0001")) != nil)
+    }
+
+    @Test func otherErrorsAreNotRefusals() {
+        #expect(SupabaseTransport.gymRefusal(for: error("photo_missing", "P0001")) == nil)
+        #expect(SupabaseTransport.gymRefusal(for: error("JWT expired", "PGRST301")) == nil)
+        #expect(SupabaseTransport.gymRefusal(for: error("boom", "XX000")) == nil)
+    }
+}

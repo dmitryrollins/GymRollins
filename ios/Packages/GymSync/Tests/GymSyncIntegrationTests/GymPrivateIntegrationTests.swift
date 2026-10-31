@@ -131,4 +131,74 @@ struct GymPrivateIntegrationTests {
 
         try await owner.deleteAccount()
     }
+    // MARK: Two accounts on one phone
+
+    @Test func theNextAccountOnThePhoneGetsItsOwnGymIdsAndBothAccountsKeepTheirRows() async throws {
+        let first = try await Account.signUp()
+        let second = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let phone = try Phone(first, clock: clock)
+        phone.store.ownerUserId = first.userId
+        let gym = try phone.repo.addPrivateGym(name: "Garage", address: nil)
+        let listing = try phone.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station"))
+        try phone.repo.makeSynced(listing: listing.id)
+        await phone.engine.sync()
+        #expect(try phone.store.dirtyGyms().isEmpty)
+        // Edited while offline, so the listing survives the sign-out as an unpushed change.
+        clock.advance(60)
+        _ = try phone.repo.updateListing(listing.id, loads: .none, quantity: 2, notes: "edited offline")
+        _ = try phone.store.resetAccountData()
+
+        // The second account signs in on the same phone, syncs the gym and a workout.
+        phone.store.ownerUserId = second.userId
+        let moves = try phone.store.settleDemotedRows(for: second.userId)
+        let newGym = try #require(moves[gym.id])
+        let workouts = WorkoutRepository(context: phone.container.mainContext, now: { clock.now })
+        try workouts.save(finishedWorkout(name: "Push", at: clock.now))
+        try phone.repo.makeSynced(gym: newGym)
+        let engine = SyncEngine(store: phone.store, transport: second.transport, photos: phone.photos,
+                                now: { clock.now })
+        await engine.sync()
+        #expect(engine.status == .idle, "\(phone.store.syncFailures().map(\.message))")
+        #expect(phone.store.syncFailures().isEmpty)
+
+        #expect(try await second.transport.pullGyms(since: nil).map(\.id) == [newGym])
+        #expect(try await second.transport.pullWorkouts(since: nil).count == 1)
+        let untouched = try await first.transport.pullGyms(since: nil)
+        #expect(untouched.map(\.id) == [gym.id] && untouched.first?.name == "Garage")
+        let theirs = try await first.transport.pullGymListings(since: nil)
+        #expect(theirs.map(\.id) == [listing.id] && theirs.first?.notes == nil)
+
+        try await first.deleteAccount()
+        try await second.deleteAccount()
+    }
+
+    @Test func aGymAnotherAccountHoldsIsRefusedForThatRowAndTheRoundGoesOn() async throws {
+        let first = try await Account.signUp()
+        let second = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let phoneA = try Phone(first, clock: clock)
+        let gym = try phoneA.repo.addPrivateGym(name: "Garage", address: nil)
+        try phoneA.repo.makeSynced(gym: gym.id)
+        await phoneA.engine.sync()
+
+        // A phone whose row carries the first account's id (what an old demoted row used to look like).
+        let phoneB = try Phone(second, clock: clock)
+        let clash = GymRecord(id: gym.id, name: "Mine now", address: nil, now: clock.now)
+        clash.visibilityRaw = GymVisibility.synced.rawValue
+        clash.dirty = true
+        phoneB.container.mainContext.insert(clash)
+        try phoneB.container.mainContext.save()
+        let workouts = WorkoutRepository(context: phoneB.container.mainContext, now: { clock.now })
+        try workouts.save(finishedWorkout(name: "Push", at: clock.now))
+        await phoneB.engine.sync()
+
+        #expect(try await second.transport.pullWorkouts(since: nil).count == 1, "the workout is not held back")
+        #expect(phoneB.store.syncFailures().map(\.entity) == [.gyms])
+        let untouched = try await first.transport.pullGyms(since: nil)
+        #expect(untouched.first?.name == "Garage")
+
+        try await first.deleteAccount()
+        try await second.deleteAccount()
+    }
 }

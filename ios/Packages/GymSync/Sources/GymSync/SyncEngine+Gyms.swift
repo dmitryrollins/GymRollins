@@ -6,9 +6,13 @@ extension SyncEngine {
     // MARK: Push
 
     func pushGyms() async throws {
+        let sent = try store.dirtyGyms().map(\.value.id)
         try await pushBatch(.gyms, rows: try store.dirtyGyms(), key: { $0.value.id.uuidString }, send: {
             try await self.transport.push(gyms: $0.map(GymDTO.init))
         })
+        // A listing refused because its gym was refused is tried again once the gym is accepted.
+        let stillDirty = Set(try store.dirtyGyms().map(\.value.id))
+        for id in sent where !stillDirty.contains(id) { try store.unblockListings(ofGym: id) }
         try await pushGymListings()
     }
 

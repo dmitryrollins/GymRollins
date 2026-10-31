@@ -158,6 +158,7 @@ actor FakeTransport: SyncTransport {
     func push(gyms dtos: [GymDTO]) throws -> [RowAck] {
         try gate()
         callLog.append("push:gyms")
+        try checkRejected(dtos.map(\.id.uuidString))
         return try dtos.compactMap { dto in
             try accept(dto, into: &gyms, key: dto.id).map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
         }
@@ -166,6 +167,7 @@ actor FakeTransport: SyncTransport {
     func push(gymListings dtos: [GymListingDTO]) throws -> [RowAck] {
         try gate()
         callLog.append("push:gymListings")
+        try checkRejected(dtos.map(\.id.uuidString))
         return try dtos.compactMap { dto in
             listingKinds[dto.id] = dto.kindId
             return try accept(dto, into: &gymListings, key: dto.id)
