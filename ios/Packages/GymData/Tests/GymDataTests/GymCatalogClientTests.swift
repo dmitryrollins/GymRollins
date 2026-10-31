@@ -214,4 +214,83 @@ import Testing
         let offline = await client.items(kindId: "cable-stack")
         #expect(offline.map(\.item.brand) == ["Hammer"])
     }
+
+    // MARK: - Catalogue photos
+
+    private func itemRecord(_ id: UUID) throws -> EquipmentItemRecord? {
+        try f.context.fetch(FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id })).first
+    }
+
+    @Test func refreshCachesAnItemsCataloguePhoto() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let item = UUID(), source = UUID()
+        transport.listings = [remote(item: item)]
+        transport.items = [RemoteItem(id: item, kindId: "cable-stack", brand: nil, model: nil, gymCount: 1,
+                                      photoPath: "p.jpg", photoListingId: source)]
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        let row = try #require(try itemRecord(item))
+        #expect(row.catalogPhotoPath == "p.jpg")
+        #expect(row.catalogPhotoListingId == source)
+        #expect(row.id == item)
+        let value = try #require(try repo.listings(gymId: gym.id).first?.item)
+        #expect(value.catalogPhotoPath == "p.jpg")
+        #expect(value.catalogPhotoListingId == source)
+        #expect(transport.calls == ["publicListings", "publicItems"])
+        #expect(try listingRecord(transport.listings[0].id)?.photoFile == nil)
+        #expect(try listingRecord(transport.listings[0].id)?.remotePhotoPath == nil)
+    }
+
+    @Test func refreshClearsACataloguePhotoTheServerNoLongerReturns() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let item = UUID()
+        transport.listings = [remote(item: item)]
+        transport.items = [RemoteItem(id: item, kindId: "cable-stack", brand: nil, model: nil, gymCount: 1,
+                                      photoPath: "p.jpg", photoListingId: UUID())]
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        transport.items = [RemoteItem(id: item, kindId: "cable-stack", brand: nil, model: nil, gymCount: 1)]
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        let row = try #require(try itemRecord(item))
+        #expect(row.catalogPhotoPath == nil)
+        #expect(row.catalogPhotoListingId == nil)
+    }
+
+    @Test func aFailedItemsCallKeepsTheCachedPhoto() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let item = UUID(), source = UUID()
+        transport.listings = [remote(item: item)]
+        transport.items = [RemoteItem(id: item, kindId: "cable-stack", brand: nil, model: nil, gymCount: 1,
+                                      photoPath: "p.jpg", photoListingId: source)]
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        transport.failingCalls = ["publicItems"]
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        let row = try #require(try itemRecord(item))
+        #expect(row.catalogPhotoPath == "p.jpg")
+        #expect(row.catalogPhotoListingId == source)
+    }
+
+    @Test func aGymWithNoPlaceNeverAsksForItems() async throws {
+        defer { f.tearDown() }
+        let gym = try repo.addPrivateGym(name: "Home", address: nil)
+        try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        #expect(transport.calls.isEmpty)
+    }
+
+    @Test func upsertItemStoresTheChosenModelOnce() async throws {
+        defer { f.tearDown() }
+        let id = UUID(), source = UUID()
+        let remoteItem = RemoteItem(id: id, kindId: "cable-stack", brand: "Hammer", model: "MD", gymCount: 4,
+                                    photoPath: "p.jpg", photoListingId: source)
+        let first = try client.upsertItem(remoteItem)
+        let second = try client.upsertItem(remoteItem)
+        #expect(first == second)
+        #expect(first.id == id)
+        #expect(first.brand == "Hammer")
+        #expect(first.model == "MD")
+        #expect(first.catalogPhotoPath == "p.jpg")
+        #expect(try f.context.fetch(FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id })).count == 1)
+    }
 }

@@ -24,7 +24,20 @@ public struct EquipmentItem: Sendable, Hashable, Identifiable {
     public let kindId: String
     public let brand: String?
     public let model: String?
+    /// A catalogue picture for the item, from the listing `catalogPhotoListingId`.
+    public let catalogPhotoPath: String?
+    public let catalogPhotoListingId: UUID?
     public var isGeneric: Bool { brand == nil && model == nil }
+
+    init(id: UUID, kindId: String, brand: String?, model: String?, catalogPhotoPath: String? = nil,
+         catalogPhotoListingId: UUID? = nil) {
+        self.id = id
+        self.kindId = kindId
+        self.brand = brand
+        self.model = model
+        self.catalogPhotoPath = catalogPhotoPath
+        self.catalogPhotoListingId = catalogPhotoListingId
+    }
 }
 
 public struct GymListing: Sendable, Hashable, Identifiable {

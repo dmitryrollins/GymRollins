@@ -10,17 +10,22 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private var _listings: [RemoteListing] = []
     private var _items: [RemoteItem] = []
     private var _failure: GymCatalogError?
+    private var _failingCalls: Set<String> = []
+    private var _photoData: Data?
 
     var calls: [String] { lock.withLock { _calls } }
     var gym: RemoteGym? { get { lock.withLock { _gym } } set { lock.withLock { _gym = newValue } } }
     var listings: [RemoteListing] { get { lock.withLock { _listings } } set { lock.withLock { _listings = newValue } } }
     var items: [RemoteItem] { get { lock.withLock { _items } } set { lock.withLock { _items = newValue } } }
+    /// Calls that fail with `.offline` while the rest work.
+    var failingCalls: Set<String> { get { lock.withLock { _failingCalls } } set { lock.withLock { _failingCalls = newValue } } }
     var failure: GymCatalogError? { get { lock.withLock { _failure } } set { lock.withLock { _failure = newValue } } }
 
     private func record(_ name: String) throws {
         try lock.withLock {
             _calls.append(name)
             if let _failure { throw _failure }
+            if _failingCalls.contains(name) { throw GymCatalogError.offline }
         }
     }
 

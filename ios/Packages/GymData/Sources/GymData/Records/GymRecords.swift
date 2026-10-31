@@ -39,6 +39,9 @@ public final class EquipmentItemRecord {
     public var kindId: String
     public var brand: String?
     public var model: String?
+    /// A picture of this item from another gym's listing, loaded by URL. Never uploaded, never a listing's own photo.
+    public var catalogPhotoPath: String?
+    public var catalogPhotoListingId: UUID?
     public var createdAt: Date
 
     public init(id: UUID = UUID(), kindId: String, brand: String?, model: String?, now: Date) {

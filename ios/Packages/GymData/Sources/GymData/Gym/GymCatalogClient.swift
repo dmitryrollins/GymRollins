@@ -44,7 +44,9 @@ public final class GymCatalogClient {
                 return .empty
             }
             let remote = try await transport.publicListings(gymId: serverId)
-            return try apply(remote, to: gym)
+            let result = try apply(remote, to: gym)
+            try await refreshCataloguePhotos(gymId: gym.id)
+            return result
         } catch GymCatalogError.offline {
             return .empty
         }
@@ -65,7 +67,43 @@ public final class GymCatalogClient {
         }
     }
 
+    /// Writes the item as the server has it. The id decides: an item the phone already has is updated, not copied.
+    @discardableResult
+    public func upsertItem(_ remote: RemoteItem) throws -> EquipmentItem {
+        let context = repository.context
+        let id = remote.id
+        let record = try context.fetch(FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id })).first
+            ?? EquipmentItemRecord(id: id, kindId: remote.kindId, brand: remote.brand, model: remote.model,
+                                   now: now())
+        record.brand = remote.brand
+        record.model = remote.model
+        record.catalogPhotoPath = remote.photoPath
+        record.catalogPhotoListingId = remote.photoListingId
+        if record.modelContext == nil { context.insert(record) }
+        try context.save()
+        return GymRepository.item(record)
+    }
+
     // MARK: - Helpers
+
+    /// One `publicItems` call per kind that has a listing here without its own picture. A failed call keeps the
+    /// pictures already cached: the next refresh asks again.
+    private func refreshCataloguePhotos(gymId: UUID) async throws {
+        let context = repository.context
+        let rows = (try? context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.gymId == gymId }))) ?? []
+        let kinds = Set(rows.filter { $0.photoFile == nil }.map(\.kindId))
+        for kind in kinds.sorted() {
+            guard let items = try? await transport.publicItems(kindId: kind) else { continue }
+            for remote in items {
+                let id = remote.id
+                guard let record = try? context.fetch(
+                    FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id })).first else { continue }
+                record.catalogPhotoPath = remote.photoPath
+                record.catalogPhotoListingId = remote.photoListingId
+            }
+        }
+        try context.save()
+    }
 
     private func serverGymId(_ gym: GymRecord, placeId: String) async throws -> UUID? {
         if let known = gym.remoteId { return known }

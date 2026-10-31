@@ -235,8 +235,9 @@ public final class GymRepository {
             remoteId: r.remoteId)
     }
 
-    private static func item(_ r: EquipmentItemRecord) -> EquipmentItem {
-        EquipmentItem(id: r.id, kindId: r.kindId, brand: r.brand, model: r.model)
+    static func item(_ r: EquipmentItemRecord) -> EquipmentItem {
+        EquipmentItem(id: r.id, kindId: r.kindId, brand: r.brand, model: r.model,
+                      catalogPhotoPath: r.catalogPhotoPath, catalogPhotoListingId: r.catalogPhotoListingId)
     }
 
     private static func same(_ a: String?, _ b: String?) -> Bool {
