@@ -64,3 +64,9 @@ if [[ "${MCP_E2E:-0}" == "1" ]]; then
   echo "==> MCP HTTP E2E (local Supabase, functions serve)"
   "$ROOT/scripts/test-mcp.sh"
 fi
+
+# Gyms shared between two users and an anonymous client, against the local stack (needs Docker): opt in with GYM_E2E=1.
+if [[ "${GYM_E2E:-0}" == "1" ]]; then
+  echo "==> Shared gym catalogue E2E (local Supabase)"
+  "$ROOT/scripts/test-gym-e2e.sh"
+fi
