@@ -156,12 +156,12 @@ struct ListingPhotoView: View {
     /// The picture another gym took of this item, loaded by URL: it is shown, never saved. Offline or on a failed
     /// load nothing changes, so the stock photo or the placeholder stays.
     private func loadCatalog() async {
-        guard photoFile == nil, let path = catalogPhotoPath, let url = env.catalogPhotoURL(path) else {
+        guard photoFile == nil, let path = catalogPhotoPath else {
             catalog = nil
             catalogPath = nil
             return
         }
-        let image = try? await env.media.loader.image(for: url, maxPixelSize: max(width, displayHeight) * scale)
+        let image = await env.catalogPhoto(path)
         guard !Task.isCancelled else { return }
         catalog = image
         catalogPath = image == nil ? nil : path

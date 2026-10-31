@@ -3,6 +3,7 @@ import GymCore
 import GymData
 import GymSync
 import Supabase
+import UIKit
 
 /// The shared catalogue's pieces on the phone: the server, the cache of other people's listings, the queue of shares
 /// and the downloader for their pictures.
@@ -14,6 +15,8 @@ final class GymSharing {
     let photos: GymPhotoCache
     /// Gyms being refreshed right now, so a second ask for the same gym doesn't start a second download.
     var refreshing: Set<UUID> = []
+    /// Pictures borrowed from the catalogue, by path: shown, never saved. Tiles of the same item share one download.
+    let borrowedPictures = NSCache<NSString, UIImage>()
 
     init(repository: GymRepository, transport: any GymCatalogTransport, knownKinds: Set<String>, photos: GymPhotoCache,
          photoData: @escaping (String) -> Data?, now: @escaping () -> Date) {
@@ -88,8 +91,21 @@ extension AppEnvironment {
         }
     }
 
-    /// Where a picture from the shared catalogue is loaded from.
-    func catalogPhotoURL(_ path: String) -> URL? { gymSharing.transport.publicPhotoURL(path: path) }
+    /// The picture another gym took of an item, to show on a listing that has none. It comes through the same limited
+    /// downloader as a saved one (JPEG, 1 MB, a total deadline) and is kept in memory only; nil when it can't be had.
+    func catalogPhoto(_ path: String) async -> UIImage? {
+        let sharing = gymSharing
+        if let cached = sharing.borrowedPictures.object(forKey: path as NSString) { return cached }
+        guard let url = sharing.transport.publicPhotoURL(path: path) else { return nil }
+        do {
+            let image = try await sharing.photos.image(from: url)
+            sharing.borrowedPictures.setObject(image, forKey: path as NSString)
+            return image
+        } catch {
+            Self.log.error("Download of a borrowed gym photo failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
 
     // MARK: Who is signed in
 
