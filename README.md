@@ -38,6 +38,7 @@ try it, open an issue, or send a pull request.
   rounding, rest timer, supersets, and a one-tap "reps left" effort rating.
 - **Claude as your coach, via MCP.** Add GymRollins as a custom connector in Claude (OAuth 2.1 with dynamic client
   registration, no API keys to copy). Claude reads your history and proposes changes; you approve them in the app.
+  With the Gyms toggle on, it also reads the equipment at your gyms.
 - **Apple Watch.** Log sets from the wrist, rest timer with haptics, heart rate during the workout.
 - **Apple Health.** Workouts and weigh-ins go to Health; body weight comes back from it.
 - **Insights.** Muscle recovery map, weekly sets per muscle, streaks, and strength levels compared with
@@ -46,7 +47,8 @@ try it, open an issue, or send a pull request.
   plan swaps what this gym can't do for that session only, weights snap to the bells and stacks that exist, and Build
   workout makes a session from what's there. An item with no photo shows a sample until you add yours. Anyone can
   browse what people have shared at a gym without signing in; sign in to share your own or confirm theirs. Anything
-  marked This phone only never leaves the phone.
+  marked This phone only never leaves the phone. Shared listings can be reported, and their authors blocked; three
+  reports hide a listing until a moderator decides.
 - **Bring your history.** CSV import from Fitbod, Strong, Hevy and FitNotes.
 - **Offline-first.** Everything lives on the device (SwiftData); cloud sync through Supabase is optional.
 
@@ -142,7 +144,7 @@ defaults in `Base.xcconfig` with a signing team and, later, cloud Supabase crede
 
 | Suite | Command |
 |---|---|
-| Everything (Docker suites opt-in: `SYNC_E2E=1`, `MCP_E2E=1`, `PHOTO_E2E=1`) | `scripts/test-all.sh` |
+| Everything (Docker suites opt-in: `SYNC_E2E=1`, `MCP_E2E=1`, `PHOTO_E2E=1`, `GYM_E2E=1`) | `scripts/test-all.sh` |
 | GymCore unit tests | `cd ios/Packages/GymCore && swift test` |
 | GymCore coverage (≥ 90%) | `scripts/coverage-gymcore.sh` |
 | Equipment requirements mapping (writes `equipment-requirements.json` and its review file) | `node --test scripts/map-equipment-requirements.test.mjs && node scripts/map-equipment-requirements.mjs` |

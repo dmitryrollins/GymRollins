@@ -1,7 +1,7 @@
 # Plan 22: Gym moderation and Claude
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
-> superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Shared gym data is safe to publish: anyone can report or block, three reports hide content until an admin
 decides, deleting an account removes the user's photos, and Claude can read gym data when the user allows it.
@@ -62,9 +62,9 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
 
 ### Task 1: Server functions
 
-- [ ] **Step 1:** Add to `DomainLimits` and `domain-limits.ts`: `dailyReports = 20`, `reportNoteMax = 280`.
-- [ ] **Step 2:** Run `scripts/test-db.sh` and the deno `_shared` tests. Expected: `Result: PASS`.
-- [ ] **Step 3:** Commit: `feat(core): limits for reports`.
+- [x] **Step 1:** Add to `DomainLimits` and `domain-limits.ts`: `dailyReports = 20`, `reportNoteMax = 280`.
+- [x] **Step 2:** Run `scripts/test-db.sh` and the deno `_shared` tests. Expected: `Result: PASS`.
+- [x] **Step 3:** Commit: `feat(core): limits for reports`.
 
 ---
 
@@ -74,7 +74,7 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
 - Modify: `GymCatalogTransport.swift`, `FakeGymCatalogTransport.swift`, `ShareOutbox.swift`, `ShareOutboxTests.swift`, `SupabaseGymCatalogTransport.swift`, `GymCatalogDTOTests.swift`, `GymCatalogIntegrationTests.swift`, `ListingDetailView.swift`, `GymEquipmentModel.swift`
 - Create: `ReportContentSheet.swift`
 
-- [ ] **Step 1: Extend the protocol:**
+- [x] **Step 1: Extend the protocol:**
   ```swift
   func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws
   func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws
@@ -87,7 +87,7 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
       case inappropriatePhoto = "inappropriate-photo", personInPhoto = "person-in-photo", spam, other
   }
   ```
-- [ ] **Step 2: Write the failing tests** in `ShareOutboxTests`:
+- [x] **Step 2: Write the failing tests** in `ShareOutboxTests`:
   - `reportingQueuesAndHidesTheListingAtOnce`: the row leaves `inventory(gymId:)` before `run`.
   - `aReportSurvivesOfflineAndIsSentLater`.
   - `blockingHidesEveryListingFromThatAuthor`: the phone doesn't know the author, so block hides this listing at once and
@@ -98,10 +98,10 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
   - `aDeviceListingCannotBeReported`: throws, and no row is written.
   - `reportingYourOwnListingIsNotOffered`: the server answers `own`, which the outbox treats as done, with nothing hidden.
   - `aGymReportHidesNothingLocally`: the gym stays in My gyms if it's the user's.
-- [ ] **Step 3: Run them.** Expected: compile failure.
-- [ ] **Step 4: Implement** the transport and outbox. Add a `hiddenLocally: Bool` field to `GymListingRecord`, which
+- [x] **Step 3: Run them.** Expected: compile failure.
+- [x] **Step 4: Implement** the transport and outbox. Add a `hiddenLocally: Bool` field to `GymListingRecord`, which
   `inventory(gymId:)` and the listing queries skip.
-- [ ] **Step 5: Write the UI.** `ReportContentSheet` (`report.reason.<raw>`, `report.note`, `report.send`) shows these
+- [x] **Step 5: Write the UI.** `ReportContentSheet` (`report.reason.<raw>`, `report.note`, `report.send`) shows these
   reasons in this order: "Wrong information", "Not here anymore", "Duplicate", "Inappropriate photo", "Person in the
   photo", "Spam", "Something else". Note is optional, 280 characters. After sending: "Thanks. We'll take a look."
   - The listing detail menu shows Report (`listing.report`) for any shared listing that isn't yours, and "Hide everything
@@ -112,7 +112,7 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
     `device` listing, with the two photo reasons first. It reports `photo_listing_id` and clears the cached photo. Test:
     `reportingABorrowedPhotoRemovesItAndKeepsTheListing`.
   - Your own flagged listing shows "Under review".
-- [ ] **Step 6: Tests and commit.** Run GymData, GymSync, `scripts/test-sync-integration.sh`, and the gym UI suites, with
+- [x] **Step 6: Tests and commit.** Run GymData, GymSync, `scripts/test-sync-integration.sh`, and the gym UI suites, with
   a new `GymSharingUITests.testReportingHidesTheListing`. Commit: `feat(gyms): report and block`.
 
 ---
@@ -123,7 +123,7 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
 - Create: `ModerationModel.swift`, `ModerationView.swift`, `ModerationModelTests.swift`
 - Modify: `SettingsView.swift`, `GymCatalogTransport.swift`, `SupabaseGymCatalogTransport.swift`, `LaunchOptions`
 
-- [ ] **Step 1: Extend the protocol:**
+- [x] **Step 1: Extend the protocol:**
   ```swift
   func isAdmin() async throws -> Bool
   func moderationQueue() async throws -> [ModerationEntry]
@@ -131,20 +131,20 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
   func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String?
   func deleteSharedPhoto(path: String) async throws
   ```
-- [ ] **Step 2: Write the failing tests** for `ModerationModel`:
+- [x] **Step 2: Write the failing tests** for `ModerationModel`:
   - it loads the queue, showing reasons by count and notes;
   - `remove` deletes the returned photo, then drops the row;
   - a photo delete failure shows "Removed, but the photo couldn't be deleted. Try again from Storage." and still drops
     the row, since the listing is already hidden and has no path;
   - `restore` drops the row;
   - a failed `moderate` keeps the row and shows the error.
-- [ ] **Step 3: Implement.** Settings shows a Moderation row (`settings.moderation`) only when `isAdmin()` returned
+- [x] **Step 3: Implement.** Settings shows a Moderation row (`settings.moderation`) only when `isAdmin()` returned
   true. Checked once per sign-in, and hidden when it fails or the user is offline. Each row shows the photo, the title,
   count, reasons and notes, plus Restore (`moderation.restore.<id>`) and Remove (`moderation.remove.<id>`, with an inline
   confirmation card).
-- [ ] **Step 4: Add an integration test:** an admin (added by the script through `psql_local`) removes another user's
+- [x] **Step 4: Add an integration test:** an admin (added by the script through `psql_local`) removes another user's
   listing with a photo; the public URL then returns 400 or 404.
-- [ ] **Step 5: Add a UI test** with `-fakeGymCatalog -fakeGymAdmin`: Restore and Remove empty the list. Add the screen to
+- [x] **Step 5: Add a UI test** with `-fakeGymCatalog -fakeGymAdmin`: Restore and Remove empty the list. Add the screen to
   both audits. Commit: `feat(gyms): moderation list for admins`.
 
 ---
@@ -154,7 +154,7 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
 **Files:**
 - Modify: `SettingsView.swift`, the About screen (`CreditsView.swift` or `PrivacyPolicyView.swift`; read them and pick the one that holds About), `AuthService.swift`, `AuthServiceTests`, `scripts/test-sync-integration.sh`
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `deleteAccountRemovesPhotosFirst`: the port is called before the RPC, and when it throws, the RPC isn't called and
     the error reaches the caller;
   - integration: a user with a shared and a private photo deletes the account. Both objects are gone, `photo_path` is null
@@ -162,17 +162,17 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
   - extend the `left=` query in `scripts/test-sync-integration.sh` with `gyms` (`owner_id`), `gym_equipment` (`owner_id`),
     `equipment_confirmations`, `reports` (`reporter_id`: these rows stay but lose the id), `user_blocks` (`blocker_id`),
     and `storage.objects` in both buckets by `owner_id`.
-- [ ] **Step 2: Implement.** `AuthService.deleteAccount` takes an optional `removePhotos: (@Sendable (UUID) async throws
+- [x] **Step 2: Implement.** `AuthService.deleteAccount` takes an optional `removePhotos: (@Sendable (UUID) async throws
   -> Void)?` port with a nil default, so existing callers compile. `SupabaseGymCatalogTransport.deleteAllPhotos()` calls
   `my_gym_photos()` and removes each object through Storage.
   **The server refuses too:** `delete_my_account` raises `photos_remain` while the caller still owns objects in either gym
   bucket, so a custom or older client can't leave them behind. pgTAP for it, and `deleteAccountRemovesPhotosFirst` covers the
   app's order.
-- [ ] **Step 3: Write the UI.**
-  - Settings → "Unblock everyone" (`settings.unblockAll`), signed in only, with an inline confirmation card, then
+- [x] **Step 3: Write the UI.**
+  - Settings → "Unblock everyone" (`settings.unblockAll`), signed in only, with a confirmation dialog, then
     "Unblocked N people."
   - About shows "Report a content problem: <address>" (`about.contentContact`). See decision 9.
-- [ ] **Step 4: Tests and commit.** Commit: `feat(gyms): unblock, contact address, photos go with the account`.
+- [x] **Step 4: Tests and commit.** Commit: `feat(gyms): unblock, contact address, photos go with the account`.
 
 ---
 
@@ -182,7 +182,7 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
 - Create: `supabase/functions/mcp/tools/gyms.ts`, `gyms_test.ts`
 - Modify: `db.ts`, `tools/fake_db.ts`, `tools/register.ts`, `tools/schemas.ts`, `ClaudeConnectionView.swift`, the disconnect path, `ProfileDTO.swift` and its profile value, `supabase/tests/database/mcp_hardening.test.sql`
 
-- [ ] **Step 1: Write the failing deno tests**, following `read_test.ts`:
+- [x] **Step 1: Write the failing deno tests**, following `read_test.ts`:
   - `list_gyms` returns the user's private gyms, plus public gyms the user trained at or shared to, and no other public
     gyms;
   - it never returns a user id, `created_by`, `added_by` or `owner_id`;
@@ -193,25 +193,85 @@ admin list reads `moderation_queue()`. MCP gets two read-only tools behind a new
   - a listing with `status` other than active doesn't count;
   - flag off: both tools answer the existing "turned off" error;
   - a gym the user can't see answers "not found", the same as one that doesn't exist.
-- [ ] **Step 2: Write the failing pgTAP test** in `mcp_hardening.test.sql`: an MCP client with `mcp_read_gyms` off reads no
+- [x] **Step 2: Write the failing pgTAP test** in `mcp_hardening.test.sql`: an MCP client with `mcp_read_gyms` off reads no
   private gym, and with it on reads only its own.
-- [ ] **Step 3: Run them.** Expected: failures.
-- [ ] **Step 4: Implement** the tools. Each result stays small: `get_gym_equipment` lists exercise ids only, since Claude
+- [x] **Step 3: Run them.** Expected: failures.
+- [x] **Step 4: Implement** the tools. Each result stays small: `get_gym_equipment` lists exercise ids only, since Claude
   has `search_exercises` for details.
-- [ ] **Step 5: Write the UI.** `ClaudeConnectionView` adds a "Gyms" toggle next to the existing flags, default on, plus a
+- [x] **Step 5: Write the UI.** `ClaudeConnectionView` adds a "Gyms" toggle next to the existing flags, default on, plus a
   line: "Claude can read gyms you've synced or shared. "This phone only" gyms stay on your phone, so Claude can't see
   them." Disconnect turns it off with the others. Add `mcp_read_gyms` to `ProfileDTO` and the profile value, following
   the existing flags. Check that `pullProfile` on an old row reads as true.
-- [ ] **Step 6: Tests and commit.** Run deno `mcp/`, `scripts/test-mcp.sh`, `scripts/test-db.sh`, and the affected app
+- [x] **Step 6: Tests and commit.** Run deno `mcp/`, `scripts/test-mcp.sh`, `scripts/test-db.sh`, and the affected app
   tests. Commit: `feat(mcp): Claude can read synced and shared gyms`.
 
 ---
 
 ### Task 6: Finish
 
-- [ ] **Step 1:** Run everything, including `SYNC_E2E`, `MCP_E2E`, `GYM_E2E` and the coverage gate. The app suite uses
+- [x] **Step 1:** Run everything, including `SYNC_E2E`, `MCP_E2E`, `GYM_E2E` and the coverage gate. The app suite uses
   `DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2'`.
-- [ ] **Step 2:** Walk the flow on the simulator against the local stack: three accounts report a listing, it disappears,
+- [x] **Step 2:** Walk the flow on the simulator against the local stack: three accounts report a listing, it disappears,
   and an admin restores it.
-- [ ] **Step 3:** Update `README.md` and the spec. Tick the boxes and add `## Outcome` with real numbers. Commit:
+- [x] **Step 3:** Update `README.md` and the spec. Tick the boxes and add `## Outcome` with real numbers. Commit:
   `docs: plan 22 outcome`.
+
+---
+
+## Outcome
+
+Done on 2026-10-31, branch `feat-gym-moderation`, stacked on `feat-gym-shared`, not pushed. Supabase stays local. Final run at `1afe73a`:
+
+| Suite | Result |
+|---|---|
+| App, unit and UI, iPhone 17 Pro Max, iOS 26.2, `PerformanceUITests` excluded | 1000 tests: 985 passed, 0 failed, 15 skipped |
+| `scripts/ios-test-sync.sh`, the app against the real local stack | 5 tests, all passed (5 of the 15 skips above) |
+| `scripts/test-photo-hosting.sh`, the exercise-photos bucket next to the new trigger | 1 test, passed (1 of the 15 skips above) |
+| GymCore (`scripts/coverage-gymcore.sh`) | 96.25% line coverage, threshold 90% |
+| GymData | 352 tests in 48 suites |
+| GymSync | 181 tests in 31 suites |
+| `scripts/test-db.sh` | 570 assertions in 17 files |
+| `scripts/test-sync-integration.sh` | 39 tests in 11 suites, "Account deletion verified: 56 deleted users, 0 rows left; 0 test users remain" |
+| `scripts/test-gym-e2e.sh` | 5 tests, photo upload rules, "stays on the phone" and cleanup verified |
+| `scripts/test-mcp.sh` | 154 deno tests, 18 consent tests |
+| `node --test scripts/*.test.mjs` | 148 tests |
+
+**Skips left:** `ReadmeScreenshotsUITests` (8) only runs when regenerating the README's screenshots. `RealExportImportTests` (1) needs the owner's export file.
+
+**The walk.** The real app, on the simulator against the local stack with real accounts, on `a64a294`. It took several attempts, so the record is a mix of runs, not one unbroken pass.
+- Three accounts reported a listing. `status` read `active`, `active`, then `flagged`. An anonymous REST read and a signed-out browse no longer showed it.
+- An admin saw "Hidden, 3 reports" with the reasons and notes and restored it. The reports resolved, and it came back for everyone.
+- One report put a listing on the admin's list with "1 report". Remove set `status` to `removed`, cleared `photo_path` and deleted the Storage object, and the old URL returned 400.
+- A block hid all the author's listings. Unblock everyone brought them back.
+- Deleting an account with a photo removed the user and the Storage object, and the old URL returned 400. The listing stayed public with no photo, notes, author or owner. The app went back to signed out with its gym data erased.
+- "Deleting your account..." went by too fast to catch on screen, and no UI test covers that row.
+
+**What the walk changed,** in `1afe73a`:
+- A listing's row in the moderation list now names its gym. It only gave an address, which doesn't identify a listing.
+- Unblock everyone uses a system dialog instead of the inline card from Task 4.
+- The report sheet's keyboard can be dismissed by scrolling.
+- The privacy screen said photos stay on the phone and that deletion removes everything, both false once sharing exists. It and the delete confirmation now say what happens. A hosted privacy policy will need the same wording.
+
+**Changed from the decisions above**
+- Decision 5: the order is detach, remove, delete, not photos first. The server forgets the names, then Storage deletes the objects, then the account goes. A failure after detaching leaves no listing naming a missing photo. A synced listing with a local copy uploads it again at the next sync.
+- Decision 9: no address exists anywhere in the app, so `GymConstants.contentContactEmail` is nil and the About row is hidden. **The owner must set one before release.** The App Store's rules for user-generated content ask for it.
+
+**Added after this plan's reviews**
+- A refused report brings the listing back and tells the user. A rejected note sends again without the note.
+- Sign-out offers to send queued reports and blocks first, waits for a run already going, and counts what's left.
+- A failed account deletion restarts sync and leaves the phone's data alone.
+- The moderation list keeps a removed row until its photo is gone ("Removed, but the photo couldn't be deleted. Tap Remove to try again.").
+- Limits on blocks. Photos over 4096 px are refused by reading the JPEG's frame header before decoding.
+- `reports.note` is checked the way `clean_text` cleans it, and counted in code points.
+
+**Decisions**
+- After a report is sent the listing stays hidden on that phone while it's cached. A report can't be undone. A block can, in Settings.
+- Sign-in is asked at Send. A gym report leaves out the photo reasons. Send is never disabled.
+- One report puts a listing on the admin's list. Three hide it.
+- Flagged keeps workout links; removed and blocked drop them.
+- `get_gym_equipment` refuses a public gym the user hasn't used.
+- `reportedPhotoListingId` holds one listing per item, so a second report on another picture overwrites the first. Accepted.
+
+**Not tested:** the camera, real location, Apple Maps search, `PhotosPicker` and real Sign in with Apple, all of which need a device.
+
+**Known and left:** the "Moderation" section header and its row read the same, as Apple Health's do. The thanks text doesn't say the item hides. The launch list is in the spec's risks table. **First on it: an OAuth token Claude holds can set a password through `PUT /auth/v1/user` and get a full session.** It predates this plan and has to be fixed on the hosted project.

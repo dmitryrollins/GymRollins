@@ -342,25 +342,37 @@ the table above: 60 photo uploads a day, 100 private gyms and 1,000 private list
 ### Moderation UI
 - Every shared gym, item and listing has Report (reason list plus optional note) in its menu. User profiles aren't a
   thing, so Block is offered on a listing ("Hide everything from this user"). Settings has "Unblock everyone".
-- Settings → Moderation, visible only to admins: flagged items with photo, reasons and counts, plus Restore and
-  Remove. Remove also deletes the photo object.
-- Settings → About lists a contact address for content complaints (App Store user-generated content guideline).
+- Settings → Moderation, visible only to admins: every reported item with its photo, status, reasons, counts, notes and
+  where it is (a listing names its gym), hidden items first, plus Restore and Remove. One report is enough to reach this list, because a photo with a person in
+  it needs no second opinion. Three reports from live accounts hide an item before anyone decides; a deleted account's
+  report stays in the list but doesn't count towards the three.
+- Remove keeps the photo's name on the row until Storage has deleted the object. If the delete fails, the row stays in the
+  list so the admin can try again, and the author can't reuse the object.
+- Blocks are limited to 20 a day and "Unblock everyone" to 3 a day, because blocking shows which listings share an author.
+- Settings → About lists a contact address for content complaints (App Store user-generated content guideline). The app
+  has no address yet, so the row stays hidden until `GymConstants.contentContactEmail` is set. It must be set before release.
 
 ### Account deletion
 Deletes private gyms, private listings, the user's confirmations, blocks and all of the user's photos in both buckets.
 Shared listings and gyms stay without the author, because they describe the gym; their notes go, because those are the
 author's own words. So does a brand and model only that author's listings use: those listings fall back to the kind's
 generic item. Reports stay without the reporter and without their note, so deleting accounts can't erase a flag's history.
-The app removes the photos first, through Storage; if that fails the account stays and the user can retry. The server
-refuses the deletion while the caller still owns photos, so a custom client can't leave them behind.
+The app detaches the photos on the server first, then removes them through Storage, then deletes the account. If detaching
+fails nothing has changed. If a later step fails the account stays, no listing names a missing photo, the message says the
+photos were removed, and the user can retry; a synced listing with a local copy uploads it again at the next sync. The server
+refuses the deletion while the caller still owns photos, and takes the same per-user lock as uploads, so a client racing an
+upload against the deletion can't leave objects behind.
 
 ### Claude (MCP)
 - `list_gyms`: the user's synced private gyms, plus public gyms the user trained at or shared to (from `workouts.gym_id`
   and `gym_equipment.added_by`).
 - `get_gym_equipment(gym_id)`: the gym's active listings visible to the user (kind, loads rebuilt from known keys,
-  quantity, confirm count, visibility; brand and model only on the user's own listings; never notes) plus the library
+  quantity, confirm count, visibility; brand and model only on a private listing, or on the user's own public listing of an
+  item the user wrote; never notes) plus the library
   exercise ids that are available there, computed from `exercise_requirements`. Strangers' free text doesn't reach Claude,
-  since it would be a path for prompt injection. A public gym's name is the one exception and is labelled unverified.
+  since it would be a path for prompt injection. A public gym's name is the one exception. It is labelled unverified,
+  stripped of invisible characters and capped at 60 characters. A private listing's brand and model can be words the user
+  picked from another person's item; the user read and chose those.
 - Both are read-only and gated by a new `mcp_flag('gyms')`, which the user can switch off like the existing flags.
 - "This phone only" data never reaches the server, so Claude can't see it. The Claude settings screen says so.
 - Proposals are unchanged. When a proposal adds an exercise the gym can't do, `GymAdapter` swaps it at workout time.
@@ -446,7 +458,12 @@ refuses the deletion while the caller still owns photos, so a custom client can'
 | A synced row deleted while signed out | At the next sign-in the server's copy comes back. Accepted: the account is the source of truth for synced rows |
 | Apple Maps ids change or a place is missing | Fallback to manual gyms; `maps_place_id` is unique but nullable |
 | Shared features need the cloud project | Milestones 1–2 are useful alone; 3–4 run on the local stack until the owner approves the cloud project |
-| Throwaway accounts report something to hide it | It stays in the admin queue, an admin can restore it and the same accounts can't report it again. Before the cloud launch: turn email sign-up off (the app uses Sign in with Apple), which makes throwaway accounts costly |
+| Throwaway accounts report something to hide it | It stays in the admin queue, an admin can restore it and the same accounts can't report it again. Deleting a reporting account takes its report out of the three. Before the cloud launch: turn email sign-up off (the app uses Sign in with Apple), which makes throwaway accounts costly |
 | The first person to share at a place sets its name on the server | The app shows the name Apple Maps gave it, never the server's, so other users don't see it. Claude sees it labelled unverified. Before the cloud launch: consider resolving names through the Apple Maps Server API |
 | A custom client skips the phone's face blur | Reports and admin removal. Before the cloud launch: consider checking image bytes on the server |
-| Someone blocks an author and compares lists | They can tell which listings share an author, but never who the author is. Accepted |
+| Someone blocks an author and compares lists | They can tell which listings share an author, but never who the author is. Daily limits on blocks and unblocks slow it down; a blocked author's listings disappearing is how blocking works. Accepted |
+| An OAuth token isn't limited to the MCP tools | **Must be fixed before the cloud launch.** A token Claude holds is a user token, so it can also call `PUT /auth/v1/user` and set a password or email. Proved locally: that password then gives a full session without the OAuth client, which can be used as an admin or to delete the account. It predates the gym work. Before the cloud launch: turn off the email provider on the hosted project, prove a token can't get a session that way, and don't rely on `secure_password_change`. Consider closing open client registration if Claude's client can be registered ahead of time |
+| A token used directly can read `workouts.gym_id` | With gyms off and workouts on, the MCP tools show nothing, but the same token against PostgREST can read which gyms a user trained at. Same cause as the row above. Column-level access would touch sync, so it isn't done yet. Before the cloud launch: put these columns behind a view or function that honours the flag |
+| A hidden photo can still be fetched by URL | Public URLs ignore row-level policies. A flagged listing's photo, and the photos of a removed gym's listings, stay at their URL for anyone who already has it, and an uploader can choose a long cache lifetime. The names can't be guessed, and Remove deletes the object. Before the cloud launch: force a short cache lifetime, purge the CDN when a photo is removed, and consider deleting a flagged photo sooner |
+| Uploads with no listing are unmoderated hosting | An uploaded object nobody links can't be reported, and JPEG is checked by declared type, not bytes. Limited to 60 photos a day. Before the cloud launch: the sweep above, plus a server-side check of the image bytes |
+| Who moderated what isn't recorded | `moderate_content` keeps no actor or action. Before the cloud launch: add an audit trail, write down how admins are granted, and write a runbook for accounts removed from the dashboard, which skip `delete_my_account` |
