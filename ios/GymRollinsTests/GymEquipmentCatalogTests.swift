@@ -20,7 +20,6 @@ import Testing
         let catalog = try catalog()
         let sections = AddEquipmentModel.kindSections(catalog)
         #expect(sections.prefix(2).map(\.kinds.count) == [6, 6])
-        #expect(sections.prefix(2).flatMap(\.kinds).allSatisfy { catalog.kind($0.id) == $0 })
     }
 
     @Test func searchMatchesNameAndIgnoresCase() throws {

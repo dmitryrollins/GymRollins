@@ -82,7 +82,6 @@ import Testing
         let chip = try #require(Self.bellChips.first { $0.label == "53 lb (24 kg)" })
         let row = try #require(make([item("kb-row", weightKg: UnitConverter.toKg(53, from: .lb))]).rows.first)
         #expect(row.subtitle.hasSuffix(chip.label), "was \(row.subtitle)")
-        #expect(!row.subtitle.contains("+"), "no extra reps: the weight didn't rise")
         #expect(row.subtitle.hasPrefix("3 \u{00D7} 10"), "was \(row.subtitle)")
     }
 

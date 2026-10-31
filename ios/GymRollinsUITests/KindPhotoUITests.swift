@@ -22,12 +22,16 @@ final class KindPhotoUITests: XCTestCase {
     }
 
     /// The tile is one combined element, so the "Sample" capsule shows up in its label.
-    private func tileLabelHasSample(_ tile: XCUIElement, _ expected: Bool, timeout: TimeInterval = 10) -> Bool {
+    private func tileLabelHasSample(_ tile: XCUIElement, timeout: TimeInterval = 10) -> Bool {
         let predicate = NSPredicate(format: "label CONTAINS 'Sample'")
-        if expected {
-            return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: tile)], timeout: timeout) == .completed
-        }
-        return !predicate.evaluate(with: tile)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: tile)], timeout: timeout) == .completed
+    }
+
+    /// "No Sample" can only be asserted once photos have had time to load, or it passes before anything shows. The
+    /// `other` tile has a stock photo, so waiting for its capsule proves the load finished on this screen.
+    private func tileHasNoSample(_ tile: XCUIElement, afterSampleShowsOn other: XCUIElement) -> Bool {
+        guard tileLabelHasSample(other) else { return false }
+        return !NSPredicate(format: "label CONTAINS 'Sample'").evaluate(with: tile)
     }
 
     private func addSkiErg(_ app: XCUIApplication) {
@@ -51,7 +55,7 @@ final class KindPhotoUITests: XCTestCase {
         openEquipment(app)
         let tile = app.buttons["gymEquipment.listing.flat-bench"]
         XCTAssertTrue(tile.waitForExistence(timeout: 5))
-        XCTAssertTrue(tileLabelHasSample(tile, true), "the tile reads Sample: \(tile.label)")
+        XCTAssertTrue(tileLabelHasSample(tile), "the tile reads Sample: \(tile.label)")
         tile.tap()
         XCTAssertTrue(app.staticTexts["listing.samplePhoto"].waitForExistence(timeout: 10), "the capsule shows")
         XCTAssertTrue(app.staticTexts["listing.samplePhotoNote"].exists, "the caption shows")
@@ -63,7 +67,9 @@ final class KindPhotoUITests: XCTestCase {
         openEquipment(app)
         addSkiErg(app)
         let tile = app.buttons["gymEquipment.listing.skierg"]
-        XCTAssertTrue(tileLabelHasSample(tile, false), "no capsule on the tile: \(tile.label)")
+        let bells = app.buttons["gymEquipment.listing.kettlebells"]
+        XCTAssertTrue(bells.exists, "the seeded kettlebells are on the same screen")
+        XCTAssertTrue(tileHasNoSample(tile, afterSampleShowsOn: bells), "no capsule on the tile: \(tile.label)")
         tile.tap()
         XCTAssertTrue(app.buttons["listing.addPhoto"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["listing.samplePhoto"].waitForExistence(timeout: 2))
@@ -83,7 +89,9 @@ final class KindPhotoUITests: XCTestCase {
         app.navigationBars.buttons.firstMatch.tap()
         let tile = app.buttons["gymEquipment.listing.flat-bench"]
         XCTAssertTrue(tile.waitForExistence(timeout: 5))
-        XCTAssertTrue(tileLabelHasSample(tile, false), "the tile shows their photo: \(tile.label)")
+        let bells = app.buttons["gymEquipment.listing.kettlebells"]
+        XCTAssertTrue(bells.waitForExistence(timeout: 5), "the seeded kettlebells are on the same screen")
+        XCTAssertTrue(tileHasNoSample(tile, afterSampleShowsOn: bells), "the tile shows their photo: \(tile.label)")
         tile.tap()
         XCTAssertTrue(app.buttons["listing.save"].waitForExistence(timeout: 5), "the listing reopened")
         XCTAssertFalse(app.staticTexts["listing.samplePhoto"].exists)

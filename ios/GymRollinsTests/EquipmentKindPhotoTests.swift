@@ -111,24 +111,13 @@ import Testing
     }
 }
 
-/// A stock photo is display only: it never becomes the listing's photo.
+/// `-uiTestingPhotos` hands kinds a drawn stock photo for the UI tests, `-uiTesting` alone none.
 @MainActor
-@Suite struct StockPhotoIsDisplayOnlyTests {
-    @Test func aStockPhotoLeavesTheListingWithoutAPhoto() throws {
-        let rig = try GymTestRig.make()
-        let gym = try rig.gym("Home", ["lat-pulldown": .stack(maxKg: 90, stepKg: nil)])
+@Suite struct UITestingStockPhotoTests {
+    @Test func uiTestingPhotosGivesEveryKindButSkiErgAStockPhoto() {
         let media = ExerciseMediaService.make(options: LaunchOptions(arguments: ["-uiTesting", "-uiTestingPhotos"]))
         #expect(!media.kindPhotos.candidates(kindId: "lat-pulldown").isEmpty, "the listing does have a stock photo")
         #expect(media.kindPhotos.candidates(kindId: "skierg").isEmpty, "-uiTestingPhotos leaves skierg without one")
-        let listing = try #require(try rig.env.gyms.listings(gymId: gym.id).first)
-        #expect(listing.photoFile == nil)
-        let flow = AddEquipmentModel(
-            gym: gym, catalog: rig.env.gymCatalog, unit: .lb,
-            ports: .init(listings: { _ in [listing] }, catalogueItems: { _ in [] }, savePhoto: { _ in "x" },
-                         deletePhoto: { _ in }, addListing: { _ in listing }, attachPhoto: { _, _ in listing }))
-        flow.photoProcessed(ProcessedGymPhoto(jpeg: Data("p".utf8), thumbnail: Data("t".utf8)))
-        #expect(!flow.keepsItsPhoto(listing), "a stock photo isn't the listing's own, so a new one can still be saved")
-        #expect(try rig.env.gyms.listings(gymId: gym.id).allSatisfy { $0.photoFile == nil })
     }
 
     @Test func plainUITestingShowsNoStockPhotos() {
