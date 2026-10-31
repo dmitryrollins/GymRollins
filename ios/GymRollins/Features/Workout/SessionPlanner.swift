@@ -37,7 +37,7 @@ enum SessionPlanner {
         return WorkoutEntry(exerciseId: item.exerciseId, sets: fresh, supersetGroup: item.supersetGroup)
     }
 
-    static func empty(now: Date) -> Workout { Workout(startedAt: now, name: "Workout") }
+    static func empty(now: Date, gymId: UUID? = nil) -> Workout { Workout(startedAt: now, name: "Workout", gymId: gymId) }
 
     /// Picks the barbell/dumbbell rounder and increment and returns the suggested weight/reps/time for an
     /// exercise's next session. Shared by `SessionPlanner.entry` (starting a workout) and `TodayModel` (showing

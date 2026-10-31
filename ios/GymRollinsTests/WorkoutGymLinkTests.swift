@@ -51,6 +51,24 @@ import Testing
         #expect(stored.gymId == gym.id && stored.entries.first?.gymListingId == bells.id)
     }
 
+    @Test func anEmptyWorkoutStartedAtTheCurrentGymStoresTheGym() throws {
+        let rig = try GymTestRig.make()
+        let gym = try rig.gym("Kettlebells", kettlebellGym)
+        rig.env.setCurrentGym(gym.id)
+
+        rig.env.startSession(routine: nil)
+
+        let workout = try #require(rig.env.session?.workout)
+        #expect(workout.gymId == gym.id && workout.entries.isEmpty)
+        #expect(try rig.env.workouts.active()?.gymId == gym.id)
+    }
+
+    @Test func anEmptyWorkoutWithNoGymHasNoLink() throws {
+        let rig = try GymTestRig.make()
+        rig.env.startSession(routine: nil)
+        #expect(try #require(rig.env.session?.workout).gymId == nil)
+    }
+
     @Test func withNoCurrentGymBothLinksAreNil() throws {
         let rig = try GymTestRig.make()
         let routine = Routine(name: "KB", exercises: [RoutineExercise(exerciseId: "0541", sets: 3, reps: 12)])

@@ -331,7 +331,7 @@ final class AppEnvironment {
                                  autoWarmups: WarmupPreferences.autoWarmupsEnabled(defaults), setOverrides: setOverrides,
                                  loads: { gymContext?.loads(for: $0) }, gymId: currentGym?.id,
                                  loadListing: { gymContext?.loadListingId(for: $0) })
-        } ?? SessionPlanner.empty(now: now())
+        } ?? SessionPlanner.empty(now: now(), gymId: currentGym?.id)
         let workout = debugStartOffset(planned)
         // Today's rest (if set) goes with this workout, so a relaunch restores it too (`makeSession`).
         ActiveRestDurationStore(defaults: defaults).save(restSec, workoutId: workout.id)
