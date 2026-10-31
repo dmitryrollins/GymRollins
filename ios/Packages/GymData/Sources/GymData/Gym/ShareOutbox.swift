@@ -13,16 +13,16 @@ public final class ShareOutbox {
     static let gymFull = "This gym's list is full."
     static let photoRefused = "Couldn't upload this photo. Try again tomorrow, or remove it from the listing."
     static let notAllowed = "This one can't be shared from this account."
-    private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "share-outbox")
+    static let log = Logger(subsystem: "com.rollins.gymrollins", category: "share-outbox")
 
-    private let repository: GymRepository
-    private let transport: GymCatalogTransport
+    let repository: GymRepository
+    let transport: GymCatalogTransport
     private let photoData: (String) -> Data?
-    private let now: () -> Date
+    let now: () -> Date
     private var running = false
     private var runAgainFor: UUID?
     private var generation = 0
-    private var cleanups: [Task<Void, Never>] = []
+    var cleanups: [Task<Void, Never>] = []
 
     /// The last error from reading or saving the queue itself, for the caller to log.
     public private(set) var storageError: Error?
@@ -35,7 +35,7 @@ public final class ShareOutbox {
         self.now = now
     }
 
-    private var context: ModelContext { repository.context }
+    var context: ModelContext { repository.context }
 
     public var pendingCount: Int { (try? context.fetchCount(FetchDescriptor<ShareOutboxRecord>())) ?? 0 }
 
@@ -328,88 +328,24 @@ public final class ShareOutbox {
 
     /// Refusals after which no listing of mine uses the uploaded photo. A generic refusal is left out: its answer may
     /// be one this phone couldn't read, with the listing created.
-    private static func deletesPhoto(after error: Error) -> Bool {
+    static func deletesPhoto(after error: Error) -> Bool {
         switch error as? GymCatalogError {
         case .dailyLimit, .gymNotShareable, .notAllowed, .gymFull: true
         default: false
         }
     }
 
-    private static func freesPhoto(after error: Error) -> Bool {
+    static func freesPhoto(after error: Error) -> Bool {
         if case .photoInUse = error as? GymCatalogError { return true }
         if case .photoRefused = error as? GymCatalogError { return true }
         return deletesPhoto(after: error)
     }
 
-    // MARK: - Photos in the public bucket
-
-    /// Best effort, never failing the flow: an object that can't be deleted is logged and stays (a server sweep
-    /// is the backstop).
-    private func deleteUploaded(_ path: String) async {
-        do {
-            try await transport.deleteSharedPhoto(path: path)
-        } catch is CancellationError {
-            return
-        } catch {
-            Self.log.error("Delete of an uploaded photo failed: \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    private func deleteInBackground(_ path: String) {
-        cleanups.append(Task { await self.deleteUploaded(path) })
-    }
-
-    /// Waits for the deletions started in the background (tests, and a caller that must not quit before they end).
-    public func finishCleanups() async {
-        let running = cleanups
-        cleanups = []
-        for task in running { await task.value }
-    }
-
-    /// Sign-out with shares still queued: deletes the photos they already uploaded, while the session can. Offline,
-    /// or past `limit`, the objects stay in the bucket. Run before `invalidate()` and before the session ends.
-    public func discardQueuedPhotos(userId: UUID, limit: Duration = .seconds(5)) async {
-        let queued = ((try? rows()) ?? []).filter { $0.kindRaw == Kind.share.rawValue && $0.ownerId == userId }
-        let listings = queued.compactMap { try? repository.listingRecord($0.targetId) }
-        let found = listings.compactMap { listing in listing.remotePhotoPath.map { (listing.id, $0) } }
-        guard !found.isEmpty else { return }
-        let work = Task {
-            for (id, path) in found where !Task.isCancelled {
-                guard (try? await deleteOrThrow(path)) != nil else { continue }
-                try? repository.listingRecord(id)?.remotePhotoPath = nil
-            }
-            try? context.save()
-        }
-        let timer = Task {
-            try? await Task.sleep(for: limit)
-            work.cancel()
-        }
-        await work.value
-        timer.cancel()
-    }
-
-    private func deleteOrThrow(_ path: String) async throws {
-        do {
-            try await transport.deleteSharedPhoto(path: path)
-        } catch {
-            Self.log.error("Delete of a queued photo failed: \(String(describing: error), privacy: .public)")
-            throw error
-        }
-    }
-
-    /// Caches the listing the user chose from a duplicates answer when this phone doesn't have it.
-    private func cacheChosen(_ id: UUID, at gymId: UUID, from listingId: UUID) throws {
-        guard try repository.listingRecord(id) == nil,
-              let chosen = try duplicates(listingId: listingId).first(where: { $0.id == id }) else { return }
-        let item = try repository.itemRecord(kindId: chosen.kindId, brand: chosen.brand, model: chosen.model)
-        _ = RemoteListingCache(context: context, now: now).insert(chosen, itemId: item.id, gymId: gymId)
-    }
-
     // MARK: - Helpers
 
-    private typealias Kind = ShareOutboxRecord.Kind
+    typealias Kind = ShareOutboxRecord.Kind
 
-    private func rows() throws -> [ShareOutboxRecord] {
+    func rows() throws -> [ShareOutboxRecord] {
         try context.fetch(FetchDescriptor<ShareOutboxRecord>(sortBy: [SortDescriptor(\.createdAt)]))
     }
 
