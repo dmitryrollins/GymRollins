@@ -19,7 +19,7 @@ struct GymCatalogDTOTests {
         """
     }
 
-    private func listings(_ json: String) -> [RemoteListing] { GymCatalogRows.listings(from: Data(json.utf8)) }
+    private func listings(_ json: String) -> [RemoteListing] { (try? GymCatalogRows.listings(from: Data(json.utf8)).rows) ?? [] }
 
     @Test func aListingRowDecodesWithEveryLoadShape() throws {
         let shapes: [(String, ListingLoads)] = [
@@ -65,8 +65,21 @@ struct GymCatalogDTOTests {
         #expect(listings(json).map(\.id) == [UUID(uuidString: listingId)!, UUID(uuidString: other)!])
     }
 
-    @Test func aBodyThatIsNotAnArrayGivesNoRowsInsteadOfThrowing() {
-        #expect(listings(#"{"message":"nope"}"#).isEmpty)
+    @Test func aBodyThatIsNotAnArrayThrows() {
+        // A 200 with some other shape is a server this version can't read, not a gym with no equipment.
+        let body = Data(#"{"message":"nope"}"#.utf8)
+        #expect(throws: GymCatalogError.self) { try GymCatalogRows.listings(from: body) }
+        #expect(throws: GymCatalogError.self) { try GymCatalogRows.gyms(from: body) }
+        #expect(throws: GymCatalogError.self) { try GymCatalogRows.items(from: body) }
+    }
+
+    @Test func thePageSaysHowManyRowsItCouldNotRead() throws {
+        let json = """
+        [\(row(loads: #"{"type":"none"}"#)), {"id":"not-a-uuid"}, "garbage"]
+        """
+        let page = try GymCatalogRows.listings(from: Data(json.utf8))
+        #expect(page.rows.count == 1)
+        #expect(page.skipped == 2)
     }
 
     @Test func gymAndItemRowsDecodeOneAtATime() {
@@ -75,7 +88,7 @@ struct GymCatalogDTOTests {
           "maps_place_id":"p1","status":"active","is_mine":false},
          {"id":"bad"}]
         """
-        let gym = GymCatalogRows.gyms(from: Data(gyms.utf8))
+        let gym = try? GymCatalogRows.gyms(from: Data(gyms.utf8)).rows
         #expect(gym == [RemoteGym(id: UUID(uuidString: gymId)!, name: "Iron Works", address: "1 Main St",
                                   latitude: 1.5, longitude: -2.5, mapsPlaceId: "p1")])
         let items = """
@@ -83,10 +96,26 @@ struct GymCatalogDTOTests {
           "photo_listing_id":"\(listingId)","gym_count":4},
          {"id":"\(itemId)"}]
         """
-        #expect(GymCatalogRows.items(from: Data(items.utf8)) == [
+        #expect((try? GymCatalogRows.items(from: Data(items.utf8)).rows) == [
             RemoteItem(id: UUID(uuidString: itemId)!, kindId: "cable", brand: nil, model: nil, gymCount: 4,
                        photoPath: "a.jpg", photoListingId: UUID(uuidString: listingId)),
         ])
+    }
+
+    @Test func theListingReadStopsAtItsCapAndSaysSo() async throws {
+        let two = "[\(row(loads: #"{"type":"none"}"#)), \(row(loads: #"{"type":"none"}"#))]"
+        var starts: [Int] = []
+        let capped = try await SupabaseGymCatalogTransport.readListings(pageSize: 2, maxPages: 2) { start in
+            starts.append(start)
+            return Data(two.utf8)
+        }
+        #expect(starts == [0, 2])
+        #expect(capped.capped)
+        #expect(!capped.isComplete)
+
+        let short = try await SupabaseGymCatalogTransport.readListings(pageSize: 3, maxPages: 2) { _ in Data(two.utf8) }
+        #expect(!short.capped)
+        #expect(short.isComplete)
     }
 
     @Test func shareResultsDecode() throws {

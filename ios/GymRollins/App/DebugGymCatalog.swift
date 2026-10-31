@@ -40,9 +40,9 @@ struct FakeGymCatalogTransport: GymCatalogTransport {
             : nil
     }
 
-    func publicListings(gymId: UUID) async throws -> [RemoteListing] {
-        gymId == FakeGymCatalog.serverGymId
-            ? [FakeGymCatalog.latPulldown, FakeGymCatalog.cable, FakeGymCatalog.newerApp] : []
+    func publicListings(gymId: UUID) async throws -> PublicListings {
+        PublicListings(listings: gymId == FakeGymCatalog.serverGymId
+            ? [FakeGymCatalog.latPulldown, FakeGymCatalog.cable, FakeGymCatalog.newerApp] : [])
     }
 
     /// The flat bench has a picture another gym took; the pulldown's model is listed at four gyms.

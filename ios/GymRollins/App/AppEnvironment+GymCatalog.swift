@@ -27,7 +27,7 @@ final class GymSharing {
 /// Stands in when the build has no Supabase config: reads find nothing, writes need an account.
 struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { throw GymCatalogError.offline }
-    func publicListings(gymId: UUID) async throws -> [RemoteListing] { throw GymCatalogError.offline }
+    func publicListings(gymId: UUID) async throws -> PublicListings { throw GymCatalogError.offline }
     func publicItems(kindId: String) async throws -> [RemoteItem] { throw GymCatalogError.offline }
     func findOrCreateGym(mapsPlaceId: String, name: String, address: String?, latitude: Double?,
                          longitude: Double?) async throws -> UUID { throw GymCatalogError.signedOut }

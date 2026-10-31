@@ -53,7 +53,7 @@ struct GymCatalogIntegrationTests {
         let found = try #require(try await anon.publicGym(mapsPlaceId: place))
         #expect(found.id == gymId)
         #expect(found.name == "Iron Works")
-        let listings = try await anon.publicListings(gymId: gymId)
+        let listings = try await anon.publicListings(gymId: gymId).listings
         let listing = try #require(listings.first)
         #expect(listing.id == listingId)
         #expect(listing.kindId == "cable-station")
@@ -64,7 +64,7 @@ struct GymCatalogIntegrationTests {
         #expect(!listing.isMine)
         #expect(!listing.confirmedByMe)
 
-        let mine = try #require(try await transport.publicListings(gymId: gymId).first)
+        let mine = try #require(try await transport.publicListings(gymId: gymId).listings.first)
         #expect(mine.isMine)
 
         let items = try await anon.publicItems(kindId: "cable-station")
@@ -96,7 +96,7 @@ struct GymCatalogIntegrationTests {
 
         let forced = UUID()
         #expect(try await catalog(second).share(request(forced, gym: gymId, forceNew: true)) == .created(forced))
-        let listings = try await catalog(second).publicListings(gymId: gymId)
+        let listings = try await catalog(second).publicListings(gymId: gymId).listings
         #expect(Set(listings.map(\.id)) == [original, forced])
         #expect(try await catalog(second).confirm(listingId: original) == 1)
         #expect(try await catalog(second).confirm(listingId: original) == 1)

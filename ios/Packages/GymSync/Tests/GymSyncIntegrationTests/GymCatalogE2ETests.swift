@@ -182,7 +182,7 @@ struct GymCatalogE2ETests {
         #expect(try phoneB.repo.listing(mine.id) == nil)
         #expect(try phoneB.repo.listing(original.id)?.confirmCount == 1)
 
-        let server = try await phoneB.catalog.publicListings(gymId: try #require(phoneB.repo.gym(gymB.id)?.remoteId))
+        let server = try await phoneB.catalog.publicListings(gymId: try #require(phoneB.repo.gym(gymB.id)?.remoteId)).listings
         #expect(server.map(\.id) == [original.id])
         #expect(server.first?.confirmCount == 1)
         #expect(server.first?.confirmedByMe == true)
@@ -214,7 +214,7 @@ struct GymCatalogE2ETests {
         let gymB = try phoneB.mapsGym(place())
         let without = try phoneB.add(gymB, "cable-station", brand: "E2E Hammer")
         try await phoneB.share(without, as: b.userId)
-        let serverB = try await phoneB.catalog.publicListings(gymId: try #require(phoneB.repo.gym(gymB.id)?.remoteId))
+        let serverB = try await phoneB.catalog.publicListings(gymId: try #require(phoneB.repo.gym(gymB.id)?.remoteId)).listings
         #expect(serverB.first?.photoPath == nil, "share_listing with no photo stores none")
 
         _ = try await phoneB.client.refresh(gymId: gymB.id, force: true)

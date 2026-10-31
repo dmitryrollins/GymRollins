@@ -9,6 +9,8 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private var _gym: RemoteGym?
     private var _listings: [RemoteListing] = []
     private var _items: [RemoteItem] = []
+    private var _skipped = 0
+    private var _capped = false
     private var _failure: GymCatalogError?
     private var _failingCalls: Set<String> = []
     private var _shareScript: [Result<ShareResult, GymCatalogError>] = []
@@ -20,6 +22,9 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     var calls: [String] { lock.withLock { _calls } }
     var gym: RemoteGym? { get { lock.withLock { _gym } } set { lock.withLock { _gym = newValue } } }
     var listings: [RemoteListing] { get { lock.withLock { _listings } } set { lock.withLock { _listings = newValue } } }
+    /// Rows the server "sent" that no version could read, and a read that hit its cap.
+    var skipped: Int { get { lock.withLock { _skipped } } set { lock.withLock { _skipped = newValue } } }
+    var capped: Bool { get { lock.withLock { _capped } } set { lock.withLock { _capped = newValue } } }
     var items: [RemoteItem] { get { lock.withLock { _items } } set { lock.withLock { _items = newValue } } }
     /// Calls that fail with `.offline` while the rest work.
     var failingCalls: Set<String> { get { lock.withLock { _failingCalls } } set { lock.withLock { _failingCalls = newValue } } }
@@ -42,7 +47,10 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     }
 
     func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { try record("publicGym"); return gym }
-    func publicListings(gymId: UUID) async throws -> [RemoteListing] { try record("publicListings"); return listings }
+    func publicListings(gymId: UUID) async throws -> PublicListings {
+        try record("publicListings")
+        return PublicListings(listings: listings, skipped: skipped, capped: capped)
+    }
     func publicItems(kindId: String) async throws -> [RemoteItem] {
         try record("publicItems")
         return items.filter { $0.kindId == kindId }

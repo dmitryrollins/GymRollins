@@ -8,16 +8,25 @@ import os
 enum GymCatalogRows {
     private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "gym-catalog")
 
-    static func listings(from data: Data) -> [RemoteListing] {
-        rows(ListingRow.self, from: data).map { $0.listing(gymId: nil) }
+    /// What one page decoded to, and how many of its rows could not be read.
+    struct Decoded<Row> {
+        let rows: [Row]
+        let skipped: Int
     }
 
-    static func gyms(from data: Data) -> [RemoteGym] {
-        rows(GymRow.self, from: data).map(\.gym)
+    static func listings(from data: Data) throws -> Decoded<RemoteListing> {
+        let page = try rows(ListingRow.self, from: data)
+        return Decoded(rows: page.rows.map { $0.listing(gymId: nil) }, skipped: page.skipped)
     }
 
-    static func items(from data: Data) -> [RemoteItem] {
-        rows(ItemRow.self, from: data).map(\.item)
+    static func gyms(from data: Data) throws -> Decoded<RemoteGym> {
+        let page = try rows(GymRow.self, from: data)
+        return Decoded(rows: page.rows.map(\.gym), skipped: page.skipped)
+    }
+
+    static func items(from data: Data) throws -> Decoded<RemoteItem> {
+        let page = try rows(ItemRow.self, from: data)
+        return Decoded(rows: page.rows.map(\.item), skipped: page.skipped)
     }
 
     /// How many rows the server sent, readable or not (a page is full when this reaches the page size).
@@ -34,24 +43,29 @@ enum GymCatalogRows {
             guard let id = answer.listingId else { throw GymCatalogError.rejected("share answer without a listing") }
             return .created(id)
         case "duplicates":
-            let found = rows(ListingRow.self, from: try JSONEncoder().encode(answer.listings))
-            return .duplicates(found.map { $0.listing(gymId: gymId) })
+            let found = try rows(ListingRow.self, from: try JSONEncoder().encode(answer.listings))
+            return .duplicates(found.rows.map { $0.listing(gymId: gymId) })
         default:
             throw GymCatalogError.rejected("unknown share status")
         }
     }
 
-    private static func rows<T: Decodable>(_ type: T.Type, from data: Data) -> [T] {
-        guard let array = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else { return [] }
-        return array.compactMap { element in
+    private static func rows<T: Decodable>(_ type: T.Type, from data: Data) throws -> Decoded<T> {
+        guard let array = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
+            throw GymCatalogError.rejected("unreadable response")
+        }
+        var skipped = 0
+        let found: [T] = array.compactMap { element in
             do {
                 guard JSONSerialization.isValidJSONObject(element) else { throw RowError.notAnObject }
                 return try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: element))
             } catch {
+                skipped += 1
                 log.error("Skipped an unreadable \(String(describing: T.self)) row: \(error.localizedDescription)")
                 return nil
             }
         }
+        return Decoded(rows: found, skipped: skipped)
     }
 
     private enum RowError: Error { case notAnObject }

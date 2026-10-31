@@ -44,7 +44,7 @@ public final class GymCatalogClient {
                 return .empty
             }
             let remote = try await transport.publicListings(gymId: serverId)
-            let result = try apply(remote, to: gym)
+            let result = try apply(remote.listings, to: gym, complete: remote.isComplete && !knownKinds.isEmpty)
             try await refreshCataloguePhotos(gymId: gym.id)
             return result
         } catch GymCatalogError.offline {
@@ -118,7 +118,10 @@ public final class GymCatalogClient {
         try repository.context.save()
     }
 
-    private func apply(_ remote: [RemoteListing], to gym: GymRecord) throws -> CatalogRefresh {
+    /// An incomplete read (rows this version couldn't read, a capped read, or no known kinds to tell usable rows by)
+    /// adds and updates what it did see but removes nothing and leaves the gym unstamped, so the next open tries
+    /// again: a listing missing from it may only be one this phone couldn't read.
+    private func apply(_ remote: [RemoteListing], to gym: GymRecord, complete: Bool) throws -> CatalogRefresh {
         let context = repository.context
         let gymId = gym.id
         let usable = remote.filter { knownKinds.contains($0.kindId) }
@@ -139,13 +142,13 @@ public final class GymCatalogClient {
                 fetches.append(PhotoFetch(listingId: entry.id, path: path))
             }
         }
-        let present = Set(usable.map(\.id))
+        let present = Set(remote.map(\.id))
         var files: [String] = []
-        for row in locals.values where isGone(row, present: present) {
+        for row in locals.values where complete && isGone(row, present: present) {
             if let file = row.photoFile { files.append(file) }
             context.delete(row)
         }
-        gym.catalogRefreshedAt = now()
+        if complete { gym.catalogRefreshedAt = now() }
         try context.save()
         return CatalogRefresh(photosToFetch: fetches, filesToDelete: files)
     }

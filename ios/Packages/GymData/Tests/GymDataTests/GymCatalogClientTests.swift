@@ -77,6 +77,67 @@ import Testing
         #expect(result.filesToDelete.isEmpty)
     }
 
+    /// A cached shared listing of the user's own, on the server, that a refresh would delete if it were missing.
+    private func cachedOwnListing(at gym: Gym) throws -> RemoteListing {
+        let own = remote(mine: true)
+        transport.listings = [own]
+        return own
+    }
+
+    @Test func rowsTheAppCouldNotReadDeleteNothingAndDoNotStamp() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let own = try cachedOwnListing(at: gym)
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        let fresh = remote(kind: "kettlebell", loads: .fixed(kg: [16]))
+        try gymRecord(gym.id).catalogRefreshedAt = nil
+        transport.listings = [fresh] // `own` is missing, as it would be if its row failed to decode
+        transport.skipped = 1
+        let result = try await client.refresh(gymId: gym.id, force: true)
+        #expect(try listingRecord(own.id) != nil)
+        #expect(try listingRecord(fresh.id) != nil)
+        #expect(result.filesToDelete.isEmpty)
+        #expect(try gymRecord(gym.id).catalogRefreshedAt == nil)
+    }
+
+    @Test func aCappedReadDeletesNothingAndDoesNotStamp() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let own = try cachedOwnListing(at: gym)
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        try gymRecord(gym.id).catalogRefreshedAt = nil
+        transport.listings = []
+        transport.capped = true
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        #expect(try listingRecord(own.id) != nil)
+        #expect(try gymRecord(gym.id).catalogRefreshedAt == nil)
+    }
+
+    @Test func noKnownKindsDeleteNothingAndDoNotStamp() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let own = try cachedOwnListing(at: gym)
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        try gymRecord(gym.id).catalogRefreshedAt = nil
+        // The equipment catalog failed to load, so every kind reads as unknown.
+        let blind = GymCatalogClient(repository: repo, transport: transport, knownKinds: [],
+                                     now: { [clock = f.clock] in clock.now })
+        _ = try await blind.refresh(gymId: gym.id, force: true)
+        #expect(try listingRecord(own.id) != nil)
+        #expect(try gymRecord(gym.id).catalogRefreshedAt == nil)
+    }
+
+    @Test func aCompleteReadStillRemovesWhatIsGoneAndStamps() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let own = try cachedOwnListing(at: gym)
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        transport.listings = []
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        #expect(try listingRecord(own.id) == nil)
+        #expect(try gymRecord(gym.id).catalogRefreshedAt != nil)
+    }
+
     @Test func aListingGoneFromTheServerIsRemovedLocallyAndItsPhotoReturned() async throws {
         defer { f.tearDown() }
         let gym = try mapsGym(remoteId: serverGymId)

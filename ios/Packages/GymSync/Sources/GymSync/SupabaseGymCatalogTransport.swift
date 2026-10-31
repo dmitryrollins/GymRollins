@@ -8,6 +8,9 @@ import Supabase
 /// the policies and `share_listing` compare against lowercase text.
 public struct SupabaseGymCatalogTransport: GymCatalogTransport {
     static let pageSize = 500
+    /// A gym holds at most `DomainLimits.gymActiveListingsMax` (300) active listings, so one page covers it; two pages
+    /// is the most this reads, and a gym past that is reported as partial instead of looped on.
+    static let maxPages = 2
     static let bucket = "gym-photos"
     private static let gymColumns = "id,name,address,latitude,longitude,maps_place_id,status"
     private static let itemColumns = "id,kind_id,brand,model,photo_path,photo_listing_id,gym_count"
@@ -26,23 +29,35 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
                 .eq("maps_place_id", value: mapsPlaceId).neq("status", value: "removed")
                 .order("created_at", ascending: false).limit(1).execute().data
         }
-        return GymCatalogRows.gyms(from: data).first
+        return try GymCatalogRows.gyms(from: data).rows.first
     }
 
-    public func publicListings(gymId: UUID) async throws -> [RemoteListing] {
-        var found: [RemoteListing] = []
-        var start = 0
-        while true {
-            let data = try await call {
+    public func publicListings(gymId: UUID) async throws -> PublicListings {
+        try await Self.readListings { start in
+            try await call {
                 try await client.from("public_gym_equipment").select(Self.listingColumns)
                     .eq("gym_id", value: Self.text(gymId)).order("created_at").order("id")
                     .range(from: start, to: start + Self.pageSize - 1).execute().data
             }
-            found += GymCatalogRows.listings(from: data)
+        }
+    }
+
+    /// Reads pages until one is short or `maxPages` is used up; the second case comes back marked as capped.
+    static func readListings(pageSize: Int = Self.pageSize, maxPages: Int = Self.maxPages,
+                             page: (Int) async throws -> Data) async throws -> PublicListings {
+        var found: [RemoteListing] = []
+        var skipped = 0
+        var start = 0
+        for _ in 0..<maxPages {
+            let data = try await page(start)
+            let decoded = try GymCatalogRows.listings(from: data)
+            found += decoded.rows
+            skipped += decoded.skipped
             let count = GymCatalogRows.rawCount(of: data)
-            if count < Self.pageSize { return found }
+            if count < pageSize { return PublicListings(listings: found, skipped: skipped) }
             start += count
         }
+        return PublicListings(listings: found, skipped: skipped, capped: true)
     }
 
     public func publicItems(kindId: String) async throws -> [RemoteItem] {
@@ -50,7 +65,7 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
             try await client.from("public_equipment_items").select(Self.itemColumns)
                 .eq("kind_id", value: kindId).eq("status", value: "active").order("id").execute().data
         }
-        return GymCatalogRows.items(from: data)
+        return try GymCatalogRows.items(from: data).rows
     }
 
     public func publicPhotoURL(path: String) -> URL? {

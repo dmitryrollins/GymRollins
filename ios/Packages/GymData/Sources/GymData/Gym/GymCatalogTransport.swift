@@ -4,7 +4,7 @@ import GymCore
 /// The server side of the shared catalogue. Reads work with no account; writes need a signed-in user.
 public protocol GymCatalogTransport: Sendable {
     func publicGym(mapsPlaceId: String) async throws -> RemoteGym?
-    func publicListings(gymId: UUID) async throws -> [RemoteListing]
+    func publicListings(gymId: UUID) async throws -> PublicListings
     func publicItems(kindId: String) async throws -> [RemoteItem]
     func findOrCreateGym(mapsPlaceId: String, name: String, address: String?, latitude: Double?,
                          longitude: Double?) async throws -> UUID
@@ -13,6 +13,24 @@ public protocol GymCatalogTransport: Sendable {
     /// Uploads to `gym-photos/<name>`. A photo the caller already uploaded under that name counts as uploaded.
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String
     func publicPhotoURL(path: String) -> URL?
+}
+
+/// A gym's public listings as one read found them. A read that couldn't see everything says so: the cache must not
+/// treat what it didn't see as removed.
+public struct PublicListings: Sendable, Equatable {
+    public let listings: [RemoteListing]
+    /// Rows the server sent that this version couldn't read.
+    public let skipped: Int
+    /// The read stopped at its cap before reaching the end.
+    public let capped: Bool
+
+    public init(listings: [RemoteListing], skipped: Int = 0, capped: Bool = false) {
+        self.listings = listings
+        self.skipped = skipped
+        self.capped = capped
+    }
+
+    public var isComplete: Bool { skipped == 0 && !capped }
 }
 
 public struct RemoteGym: Sendable, Equatable {

@@ -21,7 +21,10 @@ final class StubCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     }
 
     func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { try record("publicGym"); return gym }
-    func publicListings(gymId: UUID) async throws -> [RemoteListing] { try record("publicListings"); return listings }
+    func publicListings(gymId: UUID) async throws -> PublicListings {
+        try record("publicListings")
+        return PublicListings(listings: listings)
+    }
     func publicItems(kindId: String) async throws -> [RemoteItem] {
         try record("publicItems")
         return items.filter { $0.kindId == kindId }
