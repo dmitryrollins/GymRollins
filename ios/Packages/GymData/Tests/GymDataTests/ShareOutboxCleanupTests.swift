@@ -61,8 +61,8 @@ import Testing
         defer { f.tearDown() }
         let cases: [(GymCatalogError, String)] = [
             (.gymFull, "This gym's list is full."),
-            (.photoRefused, "Couldn't upload this photo. Try again tomorrow, or remove it from the listing."),
-            (.photoInUse, "Couldn't upload this photo. Try again tomorrow, or remove it from the listing."),
+            (.photoRefused, "Couldn't upload this photo. Try again tomorrow, or delete this item."),
+            (.photoInUse, "Couldn't upload this photo. Try again tomorrow, or delete this item."),
         ]
         let gym = try mapsGym()
         for (error, text) in cases {

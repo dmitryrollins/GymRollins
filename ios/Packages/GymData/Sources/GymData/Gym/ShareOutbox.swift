@@ -11,7 +11,7 @@ public final class ShareOutbox {
     static let dailyLimit = "You've shared a lot today. Try again tomorrow."
     static let couldNotShare = "Couldn't share this one. Try again later."
     static let gymFull = "This gym's list is full."
-    static let photoRefused = "Couldn't upload this photo. Try again tomorrow, or remove it from the listing."
+    static let photoRefused = "Couldn't upload this photo. Try again tomorrow, or delete this item."
     static let notAllowed = "This one can't be shared from this account."
     static let log = Logger(subsystem: "com.rollins.gymrollins", category: "share-outbox")
 
