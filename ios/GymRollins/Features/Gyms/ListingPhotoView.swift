@@ -23,6 +23,8 @@ struct ListingPhotoView: View {
     /// Puts the "Sample photo, not from this gym" caption under a stock photo.
     var showsNote = false
     @State private var stock: UIImage?
+    /// The kind `stock` is the photo of, so a new kind never shows the old one's while it loads.
+    @State private var stockKind: String?
 
     init(listing: GymListing, width: CGFloat, height: CGFloat? = nil, full: Bool = false, cornerRadius: CGFloat = 12,
          showsNote: Bool = false) {
@@ -54,7 +56,7 @@ struct ListingPhotoView: View {
         VStack(alignment: .leading, spacing: 8) {
             frame
             if showsNote, case .stock = shown {
-                Text("Sample photo, not from this gym. Add yours so people can recognise it.")
+                Text("Sample photo, not from this gym. Add yours to show the real one.")
                     .font(.footnote).foregroundStyle(Theme.textSecondary)
                     .accessibilityIdentifier("listing.samplePhotoNote")
             }
@@ -101,18 +103,20 @@ struct ListingPhotoView: View {
         let revision: Int
     }
 
-    /// Tries the hosted photo, then the bundled one; keeps the placeholder when neither loads.
+    /// Shows the bundled photo at once, then swaps in the hosted one if it loads: a gym-floor screen must not wait on
+    /// the network for a picture that is already in the app. `candidates` lists hosted first, so this walks it backwards.
+    /// A failed load keeps whatever is showing; the placeholder stays when neither loads.
     private func loadStock() async {
-        guard photoFile == nil, let kindId else { stock = nil; return }
+        guard photoFile == nil, let kindId else { stock = nil; stockKind = nil; return }
+        if stockKind != kindId { stock = nil }
         let maxPixels = max(width, displayHeight) * scale
-        for url in env.media.kindPhotos.candidates(kindId: kindId) {
-            if let image = try? await env.media.loader.image(for: url, maxPixelSize: maxPixels) {
-                guard !Task.isCancelled else { return }
-                stock = image
-                return
-            }
+        for url in env.media.kindPhotos.candidates(kindId: kindId).reversed() {
+            let image = try? await env.media.loader.image(for: url, maxPixelSize: maxPixels)
             guard !Task.isCancelled else { return }
+            if let image {
+                stock = image
+                stockKind = kindId
+            }
         }
-        stock = nil
     }
 }
