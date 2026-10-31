@@ -88,6 +88,51 @@ import Testing
         #expect(saved.isSelected(24))
     }
 
+    private static let nominalBells: [Double] = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40]
+
+    /// A bell saved by a chip, or as its nominal kilograms, or by a unit switch, is the same bell: one chip, selected.
+    @Test func everyUsualBellIsOneSelectedChipWhicheverWayItWasStored() throws {
+        for unit in [WeightUnit.lb, .kg] {
+            for nominal in Self.nominalBells {
+                let wholeLb = UnitConverter.fromKg(nominal, to: .lb).rounded()
+                let tenthLb = (UnitConverter.fromKg(nominal, to: .lb) * 10).rounded() / 10
+                let chipLb = UnitConverter.toKg(nominal * 2.2046226 >= 10 ? wholeLb : tenthLb, from: .lb)
+                for stored in [nominal, chipLb] {
+                    let editing = ListingLoadsEditing(kind: kettlebells, unit: unit, loads: .fixed(kg: [stored]))
+                    let note = "\(nominal) kg stored as \(stored), shown in \(unit)"
+                    #expect(editing.options.map(\.tag) == Self.nominalBells, "one chip per bell: \(note)")
+                    let chip = try #require(editing.options.first { $0.tag == nominal }, "\(note)")
+                    #expect(editing.isSelected(chip.kg), "selected: \(note)")
+                    #expect(chip.label.contains("(\(Int(nominal)) kg)") || unit == .kg, "bracket is nominal: \(chip.label)")
+                    let toggledOff = editing.toggled(chip.kg)
+                    #expect(toggledOff == .fixed(kg: []), "tapping the selected chip clears it: \(note)")
+                }
+            }
+        }
+    }
+
+    @Test func aSixteenKiloBellReadsAsTheNominalBracket() throws {
+        let lb = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .none)
+        #expect(lb.options.first { $0.tag == 16 }?.label == "35 lb (16 kg)")
+        #expect(lb.options.first { $0.tag == 12 }?.label == "26 lb (12 kg)")
+        let saved = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .fixed(kg: [16]))
+        #expect(saved.options.filter { $0.tag == 16 }.count == 1)
+        #expect(saved.options.first { $0.tag == 16 }?.label == "35 lb (16 kg)")
+        let every = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: lb.togglingAll())
+        #expect(every.allSelected)
+        let mixed = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .fixed(kg: [15.876]))
+        #expect(mixed.options.filter { $0.tag == 16 }.count == 1)
+        let kg = ListingLoadsEditing(kind: kettlebells, unit: .kg, loads: .fixed(kg: [15.876]))
+        #expect(kg.options.filter { $0.label == "16 kg" }.count == 1)
+        #expect(kg.options.count == Self.nominalBells.count)
+    }
+
+    @Test func aBellTheUserTypedKeepsItsRealValue() throws {
+        let editing = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .fixed(kg: [15.5]))
+        let odd = try #require(editing.options.first { $0.kg == 15.5 })
+        #expect(odd.label == "34 lb (15.5 kg)")
+    }
+
     @Test func dumbbellChipsRunFiveToHundredLbOrTwoToFiftyKg() {
         let lb = ListingLoadsEditing(kind: dumbbells, unit: .lb, loads: .none).options
         #expect(lb.count == 20)

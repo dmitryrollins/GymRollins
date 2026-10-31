@@ -14,8 +14,9 @@ struct ListingLoadsEditing: Equatable {
     }
 
     static let maxStackKg = 1000.0
-    /// A chip counts as selected for either spelling of its bell: 53 lb (24.04 kg) or 24 kg.
-    private static let tolerance = 0.1
+    /// A chip counts as selected for either spelling of its bell: 53 lb (24.04 kg) or 24 kg, 35 lb (15.88 kg) or
+    /// 16 kg. The same slack the gym's loads are fitted with, so the chips and the fitting agree.
+    private static let tolerance = AvailableLoads.toleranceKg
     private static let kettlebellKg: [Double] = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40]
 
     let kind: EquipmentKind
@@ -80,8 +81,9 @@ struct ListingLoadsEditing: Equatable {
     var options: [Option] {
         let usual = kind.id == "kettlebells" ? kettlebellChips : dumbbellKg.map { (kg: $0, tag: $0) }
         let extra = selectedKg.filter { chosen in !usual.contains { Self.same($0.kg, chosen) } }
-        return (usual + extra.map { (kg: $0, tag: $0) }).sorted { $0.kg < $1.kg }
-            .map { Option(kg: $0.kg, label: label(for: $0.kg), tag: $0.tag) }
+        let usualOptions = usual.map { Option(kg: $0.kg, label: label(for: $0.kg, nominalKg: $0.tag), tag: $0.tag) }
+        let extraOptions = extra.map { Option(kg: $0, label: label(for: $0, nominalKg: $0), tag: $0) }
+        return (usualOptions + extraOptions).sorted { $0.kg < $1.kg }
     }
 
     var selectedKg: [Double] { if case let .fixed(kg) = loads { kg } else { [] } }
@@ -117,12 +119,13 @@ struct ListingLoadsEditing: Equatable {
             : stride(from: 2.0, through: 50, by: 2).map { $0 }
     }
 
-    /// "44 lb (20 kg)" for kettlebells to an lb user, "20 kg", "25 lb".
-    private func label(for kg: Double) -> String {
+    /// "44 lb (20 kg)" for kettlebells to an lb user, "20 kg", "25 lb". A usual bell is named by its nominal kilograms
+    /// (35 lb is "16 kg", not the 15.9 its pounds convert to); a weight the user typed shows what it is.
+    private func label(for kg: Double, nominalKg: Double) -> String {
         let converted = UnitConverter.fromKg(kg, to: unit)
         let value = converted >= 10 ? String(Int(converted.rounded())) : WeightFormatter.number(converted)
         guard unit == .lb, kind.id == "kettlebells" else { return "\(value) \(unit.rawValue)" }
-        return "\(value) lb (\(WeightFormatter.number(kg)) kg)"
+        return "\(value) lb (\(WeightFormatter.number(nominalKg)) kg)"
     }
 
     private static func same(_ a: Double, _ b: Double) -> Bool { abs(a - b) < tolerance }
