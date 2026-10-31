@@ -2,7 +2,7 @@
 -- Spec §5 "Reads and access rules" and "Sharing, confirming, reporting", §8. Criteria 2 and 4 at the database level.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(134);
+select plan(146);
 
 insert into auth.users (id, email, aud, role) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'gym-a@test.local', 'authenticated', 'authenticated'),
@@ -245,6 +245,34 @@ select lives_ok(format($$ insert into public.gyms (id, visibility, name, client_
     on conflict (id) do update set name = excluded.name $$, (select id from public.gyms where name = 'Gym 1')),
   'an upsert of a gym you have still works at the limit');
 select lives_ok($$ delete from public.gyms where name like 'Gym %' or name = 'Renamed' $$, 'cleanup');
+
+-- Tombstones don't count, and clearing one is a new row for the limit
+insert into public.gyms (visibility, name, deleted_at) select 'private', 'Tomb ' || n, now() from generate_series(1, 150) n;
+select is((select count(*) from public.gyms where name like 'Tomb %')::int, 150, 'deleted gyms past the limit are stored');
+select throws_ok($$ update public.gyms set deleted_at = null where name like 'Tomb %' $$, 'P0001'::char(5), 'too_many_gyms',
+  'clearing the tombstones cannot go past the limit');
+select is((select count(*) from public.gyms where name like 'Tomb %' and deleted_at is null)::int, 0, 'and none of them came back');
+select lives_ok($$ update public.gyms set deleted_at = null where name in ('Tomb 1', 'Tomb 2', 'Tomb 3') $$,
+  'clearing a tombstone within the limit works (sync needs it)');
+select lives_ok($$ update public.gyms set deleted_at = now() where name = 'Tomb 1' $$, 'deleting frees a slot');
+insert into public.gyms (visibility, name) select 'private', 'Live ' || n from generate_series(1, 98) n;
+select throws_ok($$ insert into public.gyms (visibility, name) values ('private', 'Over') $$, 'P0001'::char(5), 'too_many_gyms',
+  'at the limit with deleted ones around, a new gym is refused');
+select lives_ok($$ delete from public.gyms where name like 'Tomb %' or name like 'Live %' $$, 'cleanup');
+
+-- The same for private listings
+insert into public.gyms (id, visibility, name) values ('dddddddd-0000-0000-0000-0000000000c1', 'private', 'Cap gym');
+insert into public.gym_equipment (gym_id, item_id, visibility, deleted_at, private_brand)
+  select 'dddddddd-0000-0000-0000-0000000000c1', (select id from public.equipment_items where kind_id = 'barbell' and brand is null),
+         'private', now(), 'Tomb ' || n from generate_series(1, 1100) n;
+select throws_ok($$ update public.gym_equipment set deleted_at = null where private_brand like 'Tomb %' $$,
+  'P0001'::char(5), 'too_many_listings', 'clearing the tombstones cannot go past the listing limit');
+select is((select count(*) from public.gym_equipment where private_brand like 'Tomb %' and deleted_at is null)::int,
+  0, 'and none of them came back');
+select lives_ok($$ update public.gym_equipment set deleted_at = null where private_brand in ('Tomb 1', 'Tomb 2') $$,
+  'clearing a listing within the limit works');
+select lives_ok($$ delete from public.gym_equipment where private_brand like 'Tomb %' $$, 'cleanup listings');
+select lives_ok($$ delete from public.gyms where name = 'Cap gym' $$, 'cleanup gym');
 
 -- Workout links --------------------------------------------------------------------------------------------------------
 select pg_temp.as_user(1);

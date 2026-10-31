@@ -136,21 +136,37 @@ begin
   if auth.uid() is not null and new.visibility = 'private' then
     new.owner_id := auth.uid();
     new.created_by := auth.uid();
-    -- An upsert fires this for a row that already exists, which adds nothing.
-    if (select count(*) from public.gyms where owner_id = auth.uid() and deleted_at is null) >= 100
-       and not exists (select 1 from public.gyms where id = new.id) then
-      raise exception 'too_many_gyms' using errcode = 'P0001';
-    end if;
   end if;
   return new;
 end $$;
 revoke execute on function public.gyms_stamp_author() from public, anon, authenticated;
 create trigger a_author before insert on public.gyms
   for each row execute function public.gyms_stamp_author();
+
+-- At most 100 live private gyms per user (privateGymsMax). Checked when a gym becomes live: a new row, or a tombstone
+-- cleared, since a row inserted with deleted_at set and cleared later would otherwise slip past. Tombstones don't count,
+-- so deleting frees a slot. Under the user's lock, so parallel requests can't each see a count under the limit. It
+-- fires after a_lww, so an update that last-write-wins skips never reaches it. The row itself is left out of the count:
+-- an upsert of a live gym adds nothing.
+create function gym_private.check_private_gym_cap() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and new.visibility = 'private' and new.deleted_at is null
+     and (tg_op = 'INSERT' or old.deleted_at is not null) then
+    perform gym_private.lock_user(new.owner_id);
+    if (select count(*) from public.gyms where owner_id = new.owner_id and deleted_at is null and id <> new.id) >= 100 then
+      raise exception 'too_many_gyms' using errcode = 'P0001';
+    end if;
+  end if;
+  return new;
+end $$;
+revoke execute on function gym_private.check_private_gym_cap() from public, anon, authenticated;
 create trigger a_lww before update on public.gyms
   for each row execute function public.lww_guard();
 create trigger b_updated_at before insert or update on public.gyms
   for each row execute function public.set_updated_at();
+create trigger c_cap before insert or update of deleted_at on public.gyms
+  for each row execute function gym_private.check_private_gym_cap();
 
 alter table public.gyms enable row level security;
 create policy gyms_read_anon on public.gyms for select to anon
@@ -288,11 +304,6 @@ begin
                        where bucket_id = 'gym-photos-private' and name = new.photo_path and owner_id = me::text) then
       raise exception 'photo_missing' using errcode = 'P0001';
     end if;
-    -- An upsert fires this for a row that already exists, which adds nothing.
-    if tg_op = 'INSERT' and (select count(*) from public.gym_equipment where owner_id = me and deleted_at is null) >= 1000
-       and not exists (select 1 from public.gym_equipment where id = new.id) then
-      raise exception 'too_many_listings' using errcode = 'P0001';
-    end if;
   end if;
   return new;
 end $$;
@@ -303,6 +314,25 @@ create trigger a_lww before update on public.gym_equipment
   for each row execute function public.lww_guard();
 create trigger b_updated_at before insert or update on public.gym_equipment
   for each row execute function public.set_updated_at();
+
+-- At most 1000 live private listings per user (privateListingsMax), checked like the gym cap above: when a listing
+-- becomes live, under the user's lock, and tombstones don't count.
+create function gym_private.check_private_listing_cap() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and new.visibility = 'private' and new.deleted_at is null
+     and (tg_op = 'INSERT' or old.deleted_at is not null) then
+    perform gym_private.lock_user(new.owner_id);
+    if (select count(*) from public.gym_equipment
+        where owner_id = new.owner_id and deleted_at is null and id <> new.id) >= 1000 then
+      raise exception 'too_many_listings' using errcode = 'P0001';
+    end if;
+  end if;
+  return new;
+end $$;
+revoke execute on function gym_private.check_private_listing_cap() from public, anon, authenticated;
+create trigger c_cap before insert or update of deleted_at on public.gym_equipment
+  for each row execute function gym_private.check_private_listing_cap();
 
 -- A public listing is only readable while its gym and item are active. In the policy, not just the views, because the
 -- table itself is readable too. Security definer so these policies don't recurse into each other.
