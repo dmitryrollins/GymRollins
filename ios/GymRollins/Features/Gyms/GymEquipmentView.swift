@@ -87,8 +87,7 @@ struct GymEquipmentView: View {
     private func tile(_ tile: GymEquipmentModel.Tile) -> some View {
         Button { selected = tile.listing } label: {
             VStack(alignment: .leading, spacing: 0) {
-                GymPhotoView(fileName: tile.listing.photoFile, width: tileWidth, height: 96, cornerRadius: 0,
-                             placeholderSymbol: "dumbbell")
+                ListingPhotoView(listing: tile.listing, width: tileWidth, height: 96, cornerRadius: 0)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tile.title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
                         .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)

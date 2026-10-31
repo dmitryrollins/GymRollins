@@ -65,8 +65,8 @@ struct ListingDetailView: View {
 
     private var photo: some View {
         VStack(spacing: 10) {
-            GymPhotoView(fileName: photoFile, width: photoWidth, height: photoWidth * 0.7, full: true,
-                         cornerRadius: Theme.cardRadius, placeholderSymbol: "dumbbell")
+            ListingPhotoView(photoFile: photoFile, kindId: listing.item.kindId, width: photoWidth,
+                             height: photoWidth * 0.7, full: true, cornerRadius: Theme.cardRadius, showsNote: true)
             if photoFile == nil, kind != nil { addPhotoButtons }
         }
         .fullScreenCover(isPresented: $showCamera) {

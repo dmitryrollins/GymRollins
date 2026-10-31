@@ -28,7 +28,7 @@ struct AddEquipmentDuplicateStep: View {
     private func existingCard(_ listing: GymListing) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                GymPhotoView(fileName: listing.photoFile, width: 64, placeholderSymbol: "dumbbell")
+                ListingPhotoView(listing: listing, width: 64)
                     .clipShape(.rect(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.title(listing)).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)

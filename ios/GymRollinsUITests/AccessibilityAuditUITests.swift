@@ -204,6 +204,21 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Gym equipment")
     }
 
+    func testGymEquipmentWithSamplePhotosAudit() {
+        let app = launch(["-seedGym", "-uiTestingPhotos"])
+        openPicker(app)
+        app.buttons["gymPicker.currentEquipment"].tap()
+        XCTAssertTrue(app.staticTexts["gymEquipment.coverage.chest"].waitForExistence(timeout: 10))
+        let tile = app.buttons["gymEquipment.listing.flat-bench"]
+        XCTAssertTrue(NSPredicate(format: "label CONTAINS 'Sample'").evaluate(with: tile) ||
+                      XCTWaiter().wait(for: [expectation(for: NSPredicate(format: "label CONTAINS 'Sample'"),
+                                                         evaluatedWith: tile)], timeout: 10) == .completed)
+        audit(app, "Gym equipment with sample photos")
+        tile.tap()
+        XCTAssertTrue(app.staticTexts["listing.samplePhotoNote"].waitForExistence(timeout: 10))
+        audit(app, "Listing detail with a sample photo")
+    }
+
     func testAddEquipmentAudit() {
         let app = launch(["-seedGym", "-gymPhotoFixture"])
         openPicker(app)
