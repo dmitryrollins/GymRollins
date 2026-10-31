@@ -49,4 +49,6 @@ export const DomainLimits = {
   dailyShares: 30,
   dailyConfirmations: 100,
   dailyPhotoUploads: 60,
+  dailyReports: 20,
+  reportNoteMax: 280,
 } as const

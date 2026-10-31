@@ -49,6 +49,8 @@ public enum DomainLimits {
     public static let dailyShares = 30
     public static let dailyConfirmations = 100
     public static let dailyPhotoUploads = 60
+    public static let dailyReports = 20
+    public static let reportNoteMax = 280
 
     /// User-facing reason the routine can't be saved, or nil when it fits.
     public static func routineViolation(_ routine: Routine) -> String? {
