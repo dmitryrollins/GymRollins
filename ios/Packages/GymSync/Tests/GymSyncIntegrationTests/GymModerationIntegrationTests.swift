@@ -67,7 +67,9 @@ struct GymModerationIntegrationTests {
         #expect(photo == name)
         try await catalog(admin).deleteSharedPhoto(path: name)
         #expect(try await !isServed(catalog(admin), name), "an admin's delete reaches another user's photo")
-        #expect(try await catalog(admin).moderationQueue().allSatisfy { $0.targetId != listingId })
+        // The name stays on a removed listing until the app confirms the object is gone (moderation_photo_deleted), so
+        // a failed delete can be retried: the queue still shows it.
+        #expect(try await catalog(admin).moderationQueue().contains { $0.targetId == listingId })
 
         for account in [author, admin, plain] + reporters { try await account.deleteAccount() }
     }

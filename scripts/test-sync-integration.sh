@@ -19,6 +19,22 @@ psql_local() { docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON
 # Leftovers from an interrupted earlier run (test accounts only).
 psql_local -c "delete from auth.users where email like 'sync-%@test.local'" >/dev/null
 
+DELETED_FILE="$(mktemp -t gymsync-deleted-users)"
+# Set before the temporary trigger below exists, so an early exit can't leave it behind. A cleanup that fails fails the
+# run: a leftover trigger would make every later sync-admin-* sign-up an admin.
+cleanup() {
+  local status=$?
+  rm -f "$DELETED_FILE"
+  if ! psql_local -c "drop trigger if exists it_make_admin on auth.users;
+                      drop function if exists public.it_make_admin();
+                      delete from auth.users where email like 'sync-admin-%@test.local'" >/dev/null; then
+    echo "Cleanup failed: the it_make_admin trigger may still be installed on auth.users" >&2
+    status=1
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+
 # The moderation test signs up an account named sync-admin-*@test.local; this makes it an admin the moment it exists
 # (the app has no way to become one). The trigger and its function are dropped on exit, and the admin row goes with its
 # account (on delete cascade), like every other sync-* test user.
@@ -30,14 +46,8 @@ psql_local -c "
   create trigger it_make_admin after insert on auth.users for each row
     when (new.email like 'sync-admin-%@test.local') execute function public.it_make_admin()" >/dev/null
 
-DELETED_FILE="$(mktemp -t gymsync-deleted-users)"
-cleanup() {
-  rm -f "$DELETED_FILE"
-  psql_local -c "drop trigger if exists it_make_admin on auth.users;
-                 drop function if exists public.it_make_admin();
-                 delete from auth.users where email like 'sync-admin-%@test.local'" >/dev/null || true
-}
-trap cleanup EXIT
+# Reports of accounts deleted earlier stay anonymised for good, so the check at the end compares with this count.
+reports_before=$(psql_local -c "select count(*) from public.reports where reporter_id is null")
 
 export SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SYNC_DELETED_USERS_FILE="$DELETED_FILE"
 (cd "$ROOT/ios/Packages/GymSync" && swift test --filter GymSyncIntegrationTests)
@@ -70,7 +80,9 @@ if [[ "$left" != "0" ]]; then
   exit 1
 fi
 # A report outlives its reporter: the row stays and only the id goes (the query above counted none by id).
-reports_kept=$(psql_local -c "select count(*) from public.reports where reporter_id is null")
-[[ "$reports_kept" -gt 0 ]] || { echo "Account deletion removed the reports instead of anonymising them" >&2; exit 1; }
+reports_after=$(psql_local -c "select count(*) from public.reports where reporter_id is null")
+[[ "$reports_after" -gt "$reports_before" ]] || {
+  echo "Account deletion removed the reports instead of anonymising them ($reports_before before, $reports_after after)" >&2
+  exit 1; }
 remaining=$(psql_local -c "select count(*) from auth.users where email like 'sync-%@test.local'")
 echo "Account deletion verified: $(echo "$ids" | tr ',' '\n' | wc -l | tr -d ' ') deleted users, 0 rows left; $remaining test users remain"
