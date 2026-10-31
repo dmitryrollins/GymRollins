@@ -215,6 +215,17 @@ import Testing
         #expect(offline.map(\.item.brand) == ["Hammer"])
     }
 
+    /// The add flow stores a picked server model with `upsertItem`, so the items it lists carry the picture too.
+    @Test func aServersItemKeepsItsCataloguePhoto() async throws {
+        defer { f.tearDown() }
+        let listingId = UUID()
+        transport.items = [RemoteItem(id: UUID(), kindId: "cable-stack", brand: "Hammer", model: nil, gymCount: 5,
+                                      photoPath: "h.jpg", photoListingId: listingId)]
+        let item = try #require(await client.items(kindId: "cable-stack").first)
+        #expect(item.item.catalogPhotoPath == "h.jpg")
+        #expect(item.item.catalogPhotoListingId == listingId)
+    }
+
     // MARK: - Catalogue photos
 
     private func itemRecord(_ id: UUID) throws -> EquipmentItemRecord? {

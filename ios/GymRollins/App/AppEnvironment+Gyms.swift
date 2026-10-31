@@ -43,6 +43,7 @@ extension AppEnvironment {
             defaults.removeObject(forKey: Self.currentGymKey)
         }
         gymsChanged()
+        if let id { Task { await gymCatalogRefresh(gymId: id, force: false) } }
         return true
     }
 

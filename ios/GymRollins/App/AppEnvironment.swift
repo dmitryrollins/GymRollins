@@ -29,6 +29,8 @@ final class AppEnvironment {
     /// Where the phone is, and Apple Maps' fitness centers (both fake or empty under `-uiTesting`).
     let gymLocator: any GymLocator
     let gymPlaces: any GymPlaceSearch
+    /// The shared catalogue: server, cache of other people's listings, share queue (tests replace it).
+    @ObservationIgnored var gymSharing: GymSharing
     /// The owner's "recommend more / less / never" choices (normal ones left out); change them with `setPreference`.
     var exercisePreferences: [String: ExercisePreference] = [:]
     /// Exercise photos (own media -> free-exercise-db -> wger -> illustration) and their on-demand loader.
@@ -107,6 +109,9 @@ final class AppEnvironment {
             let gym = try DebugGymSeed.apply(context: context, now: now())
             defaults.set(gym.id.uuidString, forKey: Self.currentGymKey)
         }
+        if options.fakeGymCatalog {
+            defaults.set(try DebugSharedGymSeed.apply(context: context, now: now()).id.uuidString, forKey: Self.currentGymKey)
+        }
         #endif
         guard let url = Bundle.main.url(forResource: "exercises", withExtension: "json") else {
             throw CocoaError(.fileNoSuchFile)
@@ -140,7 +145,10 @@ final class AppEnvironment {
         self.onboardingComplete = Self.resolveOnboardingComplete(options: options, defaults: defaults,
                                                                   hasExistingData: hasExistingData)
         self.syncStore = syncStore
-        self.sync = makeSync?(syncStore, now) ?? SyncCoordinator.make(options: options, store: syncStore, now: now)
+        let sync = makeSync?(syncStore, now) ?? SyncCoordinator.make(options: options, store: syncStore, now: now)
+        self.sync = sync
+        self.gymSharing = Self.makeGymSharing(options: options, sync: sync, gyms: gyms, catalog: gymCatalog,
+                                              photoStore: self.gymPhotos, now: now)
         let calories = CalorieService(library: { [bundledLibrary] in bundledLibrary }, body: body)
         self.calories = calories
         self.health = Self.makeHealth(options: options, defaults: defaults, workouts: workouts, body: body,
@@ -162,6 +170,7 @@ final class AppEnvironment {
         sync.onGymDataErased = { [weak self] in self?.removeGymLocalState() }
         sync.gymPhotoFiles = self.gymPhotos
         wireHealth()
+        wireGymSharing()
     }
 
     func setLastApplied(_ value: (id: UUID, count: Int)?) { lastApplied = value }
@@ -231,17 +240,6 @@ final class AppEnvironment {
         }
     }
 
-    /// UI tests keep photos in tmp (a `-diskStore` relaunch keeps them, `-resetStore` drops them); real runs use
-    /// Application Support.
-    private static func makeGymPhotos(options: LaunchOptions) -> GymPhotoStore {
-        guard options.inMemory else { return GymPhotoStore() }
-        let name = options.diskStoreURL == nil ? "gymrollins-uitest-gym-photos-\(UUID().uuidString)"
-            : "gymrollins-uitest-gym-photos"
-        let store = GymPhotoStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(name))
-        if options.resetStore { try? store.removeAll() }
-        return store
-    }
-
     func reloadLibrary() {
         do { library = bundledLibrary.merging(custom: try customExercises.all()) }
         catch { Self.log.error("Reload library failed: \(error.localizedDescription, privacy: .public)") }
@@ -266,12 +264,13 @@ final class AppEnvironment {
         exportToHealth()
     }
 
-    /// The current gym or a gym's equipment changed: Today reloads and the watch is re-sent today's plan. Nothing
-    /// about gyms syncs yet, so unlike `planChanged()` this schedules no sync.
+    /// The current gym or a gym's equipment changed: Today reloads, the watch is re-sent today's plan, and a synced
+    /// gym's edit is pushed (a sync round does nothing for rows that aren't synced).
     func gymsChanged() {
         gymRevision += 1
         planRevision += 1
         todayPlanChanged()
+        sync.localDataChanged()
     }
 
     /// The local copy was wiped: gyms and their photos go with it, and no gym is current any more.

@@ -200,7 +200,9 @@ public final class GymCatalogClient {
     private static func catalogueItem(_ remote: RemoteItem) -> CatalogueItem? {
         guard remote.brand != nil || remote.model != nil else { return nil }
         return CatalogueItem(item: EquipmentItem(id: remote.id, kindId: remote.kindId, brand: remote.brand,
-                                                 model: remote.model), gymCount: remote.gymCount)
+                                                 model: remote.model, catalogPhotoPath: remote.photoPath,
+                                                 catalogPhotoListingId: remote.photoListingId),
+                             gymCount: remote.gymCount)
     }
 
     private static func key(_ item: EquipmentItem) -> String {

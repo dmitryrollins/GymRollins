@@ -45,6 +45,9 @@ final class SyncCoordinator {
     /// Called, before `onLocalDataReset`, when the wipe also erased the gyms (account deletion only). Sign-out and
     /// the account switch keep "This phone only" gyms.
     @ObservationIgnored var onGymDataErased: @MainActor () -> Void = {}
+    /// Called once a sign-in or a restored session has settled and the account owns this phone's data: queued shares
+    /// can go.
+    @ObservationIgnored var onSignedIn: @MainActor () -> Void = {}
     /// The phone's gym photo files. The engine reads and downloads through it, and a sign-out deletes the files of
     /// the gym rows it removed through it (`wipeLocal`).
     @ObservationIgnored var gymPhotoFiles: (any GymPhotoFiles)?
@@ -223,6 +226,7 @@ final class SyncCoordinator {
         }
         refreshEngine()
         await syncNow()
+        if auth?.state.userId != nil, !accountSwitchPending { onSignedIn() }
     }
 
     /// An auth change the app didn't ask for (the SDK's refresh found the session revoked, or refreshed it).

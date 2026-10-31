@@ -71,6 +71,23 @@ import Testing
         #expect(try repo.gyms().count == 2)
     }
 
+    /// A newer app's listing shows on the screen but is invisible to the rules.
+    @Test func unsupportedListingsShowOnlyWhenAskedFor() throws {
+        defer { f.tearDown() }
+        let gym = try makeGym()
+        let odd = try add(gym, kind: "cable-stack")
+        try add(gym, kind: "barbell")
+        let row = try #require(try repo.listingRecord(odd.id))
+        row.statusRaw = ListingStatus.unsupported.rawValue
+        row.confirmedByMe = true
+        try f.context.save()
+        #expect(try repo.listings(gymId: gym.id).count == 1)
+        #expect(try repo.inventory(gymId: gym.id).listings.count == 1)
+        let shown = try repo.listings(gymId: gym.id, includingUnsupported: true)
+        #expect(shown.count == 2)
+        #expect(shown.first { $0.id == odd.id }?.confirmedByMe == true)
+    }
+
     @Test func gymsAreSortedByName() throws {
         defer { f.tearDown() }
         for name in ["Charlie", "alpha", "Bravo"] { _ = try makeGym(name) }

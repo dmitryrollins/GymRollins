@@ -13,7 +13,7 @@ struct ListingLoadsEditing: Equatable {
         var id: Double { kg }
     }
 
-    static let maxStackKg = 1000.0
+    static let maxStackKg = DomainLimits.listingStackKg.upperBound
     /// A chip counts as selected for either spelling of its bell: 53 lb (24.04 kg) or 24 kg, 35 lb (15.88 kg) or
     /// 16 kg. The same slack the gym's loads are fitted with, so the chips and the fitting agree.
     private static let tolerance = AvailableLoads.toleranceKg
@@ -61,7 +61,7 @@ struct ListingLoadsEditing: Equatable {
     var canDecrement: Bool { stackKg.map { nextStack($0, direction: -1) != nil } ?? false }
     var canIncrement: Bool { stackKg.map { nextStack($0, direction: 1) != nil } ?? false }
 
-    /// One step up or down, landing on a multiple of the step; never below one step or above 1000 kg.
+    /// One step up or down, landing on a multiple of the step; never below one step or above the top of the allowed range.
     func steppedStack(_ direction: Int) -> ListingLoads {
         guard case let .stack(maxKg, step) = loads, let next = nextStack(maxKg, direction: direction) else { return loads }
         return .stack(maxKg: next, stepKg: step)

@@ -29,7 +29,7 @@ public struct EquipmentItem: Sendable, Hashable, Identifiable {
     public let catalogPhotoListingId: UUID?
     public var isGeneric: Bool { brand == nil && model == nil }
 
-    init(id: UUID, kindId: String, brand: String?, model: String?, catalogPhotoPath: String? = nil,
+    public init(id: UUID, kindId: String, brand: String?, model: String?, catalogPhotoPath: String? = nil,
          catalogPhotoListingId: UUID? = nil) {
         self.id = id
         self.kindId = kindId
@@ -55,6 +55,7 @@ public struct GymListing: Sendable, Hashable, Identifiable {
     public let status: ListingStatus
     public let confirmCount: Int
     public let isOwn: Bool
+    public let confirmedByMe: Bool
     public let remoteId: UUID?
     public let createdAt: Date
 }
@@ -87,4 +88,9 @@ public struct CatalogueItem: Sendable, Hashable, Identifiable {
     public let item: EquipmentItem
     public let gymCount: Int
     public var id: UUID { item.id }
+
+    public init(item: EquipmentItem, gymCount: Int) {
+        self.item = item
+        self.gymCount = gymCount
+    }
 }

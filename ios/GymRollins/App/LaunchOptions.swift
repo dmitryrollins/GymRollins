@@ -91,6 +91,9 @@ struct LaunchOptions {
     /// DEBUG/UI-test only (`-fakeGymPlaces`): Maps search returns "Iron Works Gym" and "Test Fitness" (ids
     /// `fake-iron-works`, `fake-test-fitness`), 50 m and 2 km from the fake location.
     let fakeGymPlaces: Bool
+    /// DEBUG/UI-test only (`-fakeGymCatalog`): the shared gym catalogue is an in-memory fake with fixed listings for
+    /// "Iron Works Gym", and that gym is seeded as the current gym (`DebugSharedGymSeed`).
+    let fakeGymCatalog: Bool
     /// DEBUG/UI-test only (`-fakeHealth`): Apple Health is an in-memory `FakeHealthStore` seeded with three Withings
     /// weigh-ins, so the Health flows can be tested on the simulator without HealthKit.
     let fakeHealth: Bool
@@ -145,6 +148,7 @@ struct LaunchOptions {
         gymPhotoFixture = arguments.contains("-gymPhotoFixture")
         fakeLocation = Self.coordinate(after: "-fakeLocation", in: arguments)
         fakeGymPlaces = arguments.contains("-fakeGymPlaces")
+        fakeGymCatalog = arguments.contains("-fakeGymCatalog")
         seedHistory = arguments.contains("-seedHistory")
         seedBodyweight = arguments.contains("-seedBodyweight")
         seedPlank = arguments.contains("-seedPlank")
@@ -164,6 +168,7 @@ struct LaunchOptions {
         gymPhotoFixture = false
         fakeLocation = nil
         fakeGymPlaces = false
+        fakeGymCatalog = false
         seedHistory = false
         seedBodyweight = false
         seedPlank = false

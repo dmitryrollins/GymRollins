@@ -109,10 +109,15 @@ public final class GymRepository {
 
     // MARK: - Listings
 
-    public func listings(gymId: UUID) throws -> [GymListing] {
+    /// The gym's usable listings. A screen passes `includingUnsupported` to show the rows a newer app wrote, which the
+    /// rules never see.
+    public func listings(gymId: UUID, includingUnsupported: Bool = false) throws -> [GymListing] {
         let rows = try context.fetch(FetchDescriptor<GymListingRecord>(
             predicate: #Predicate { $0.gymId == gymId }, sortBy: [SortDescriptor(\.createdAt)]))
-        return try rows.filter { $0.deletedAt == nil && $0.statusRaw == ListingStatus.active.rawValue }.map(listing)
+        return try rows.filter {
+            $0.deletedAt == nil && ($0.statusRaw == ListingStatus.active.rawValue
+                || (includingUnsupported && $0.statusRaw == ListingStatus.unsupported.rawValue))
+        }.map(listing)
     }
 
     public func listing(_ id: UUID) throws -> GymListing? { try listingRecord(id).map(listing) }
@@ -270,7 +275,8 @@ public final class GymRepository {
             visibility: GymVisibility(rawValue: record.visibilityRaw) ?? .device,
             uploadState: UploadState(rawValue: record.uploadStateRaw) ?? .local, uploadError: record.uploadError,
             status: ListingStatus(rawValue: record.statusRaw) ?? .active, confirmCount: record.confirmCount,
-            isOwn: record.isOwn, remoteId: record.remoteId, createdAt: record.createdAt)
+            isOwn: record.isOwn, confirmedByMe: record.confirmedByMe, remoteId: record.remoteId,
+            createdAt: record.createdAt)
     }
 
     private static func gym(_ r: GymRecord) -> Gym {
