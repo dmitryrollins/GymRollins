@@ -11,10 +11,9 @@ DB_CONTAINER="supabase_db_gymrollins"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE — run scripts/supabase-up.sh first" >&2; exit 1; }
 # shellcheck disable=SC1090
 source "$ENV_FILE"
-case "$API_URL" in
-  http://127.0.0.1:*|http://localhost:*) ;;
-  *) echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1 ;;
-esac
+# A prefix match would accept http://127.0.0.1:1@evil.example/, whose host is evil.example.
+[[ "$API_URL" =~ ^http://(127\.0\.0\.1|localhost):[0-9]+/?$ ]] || {
+  echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1; }
 
 psql_local() { docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -tA "$@"; }
 
@@ -32,6 +31,9 @@ trap 'rm -f "$MARKERS_FILE"; cleanup || true' EXIT
 
 export SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" GYM_E2E_MARKERS_FILE="$MARKERS_FILE"
 (cd "$ROOT/ios/Packages/GymSync" && swift test --filter GymCatalogE2ETests)
+
+# The photo upload rules, over real HTTP (a trigger on storage.objects, which the Swift tests don't reach).
+"$ROOT/scripts/test-gym-storage-rules.sh"
 
 # Criterion 6: look for each marker in every column of every table that could hold it.
 count_rows() {

@@ -29,11 +29,11 @@ end $$;
 grant execute on function pg_temp.as_user(int), pg_temp.as_mcp(int), pg_temp.as_anon() to anon, authenticated;
 
 -- Photos the Storage API would have stored. Names are bare: a folder per user would show every reader the uploader's id.
-insert into storage.objects (bucket_id, name, owner_id) values
-  ('gym-photos', 'cccccccc-0000-4000-8000-000000000001.jpg', 'aaaaaaaa-0000-0000-0000-000000000001'),
-  ('gym-photos', 'cccccccc-0000-4000-8000-000000000002.jpg', 'aaaaaaaa-0000-0000-0000-000000000002'),
-  ('gym-photos', 'cccccccc-0000-4000-8000-000000000003.jpg', 'aaaaaaaa-0000-0000-0000-000000000001'),
-  ('gym-photos-private', 'cccccccc-0000-4000-8000-000000000004.jpg', 'aaaaaaaa-0000-0000-0000-000000000002');
+insert into storage.objects (bucket_id, name, owner_id, metadata) values
+  ('gym-photos', 'cccccccc-0000-4000-8000-000000000001.jpg', 'aaaaaaaa-0000-0000-0000-000000000001', '{"mimetype":"image/jpeg"}'),
+  ('gym-photos', 'cccccccc-0000-4000-8000-000000000002.jpg', 'aaaaaaaa-0000-0000-0000-000000000002', '{"mimetype":"image/jpeg"}'),
+  ('gym-photos', 'cccccccc-0000-4000-8000-000000000003.jpg', 'aaaaaaaa-0000-0000-0000-000000000001', '{"mimetype":"image/jpeg"}'),
+  ('gym-photos-private', 'cccccccc-0000-4000-8000-000000000004.jpg', 'aaaaaaaa-0000-0000-0000-000000000002', '{"mimetype":"image/jpeg"}');
 
 -- Seeds ---------------------------------------------------------------------------------------------------------------
 select is((select count(*) from public.equipment_kinds)::int, 46, '46 kinds are seeded');
@@ -292,8 +292,9 @@ select pg_temp.as_user(1);
 select throws_ok($$ insert into storage.objects (bucket_id, name, owner_id) values ('gym-photos', 'cccccccc-0000-4000-8000-000000000001.jpg', 'aaaaaaaa-0000-0000-0000-000000000001') $$,
   '42501'::char(5), null, 'a listing''s photo cannot be swapped by uploading the name again');
 reset role;
-insert into storage.objects (bucket_id, name, owner_id, created_at)
-  select 'gym-photos', gen_random_uuid()::text || '.jpg', 'aaaaaaaa-0000-0000-0000-000000000003', now() from generate_series(1, 60);
+insert into storage.objects (bucket_id, name, owner_id, created_at, metadata)
+  select 'gym-photos', gen_random_uuid()::text || '.jpg', 'aaaaaaaa-0000-0000-0000-000000000003', now(), '{"mimetype":"image/jpeg"}'
+  from generate_series(1, 60);
 select pg_temp.as_user(3);
 select throws_ok($$ insert into storage.objects (bucket_id, name, owner_id) values ('gym-photos', 'cccccccc-0000-4000-8000-000000000014.jpg', 'aaaaaaaa-0000-0000-0000-000000000003') $$,
   '42501'::char(5), null, 'uploads are limited per day');
@@ -369,9 +370,9 @@ reset role;
 delete from public.user_blocks where blocker_id = 'aaaaaaaa-0000-0000-0000-000000000003';
 insert into public.equipment_items (id, kind_id, brand, model)
   values ('eeeeeeee-0000-4000-8000-000000000001', 'leg-curl', 'PhotoBrand', 'One');
-insert into storage.objects (bucket_id, name, owner_id) values
-  ('gym-photos', 'cccccccc-0000-4000-8000-0000000000a1.jpg', 'aaaaaaaa-0000-0000-0000-000000000001'),
-  ('gym-photos', 'cccccccc-0000-4000-8000-0000000000a2.jpg', 'aaaaaaaa-0000-0000-0000-000000000002');
+insert into storage.objects (bucket_id, name, owner_id, metadata) values
+  ('gym-photos', 'cccccccc-0000-4000-8000-0000000000a1.jpg', 'aaaaaaaa-0000-0000-0000-000000000001', '{"mimetype":"image/jpeg"}'),
+  ('gym-photos', 'cccccccc-0000-4000-8000-0000000000a2.jpg', 'aaaaaaaa-0000-0000-0000-000000000002', '{"mimetype":"image/jpeg"}');
 insert into public.gym_equipment (id, gym_id, item_id, visibility, photo_path, loads, added_by, created_at, confirm_count) values
   ('bbbbbbbb-0000-4000-8000-0000000000a1', current_setting('t.gym')::uuid, 'eeeeeeee-0000-4000-8000-000000000001',
    'public', 'cccccccc-0000-4000-8000-0000000000a1.jpg', '{"type":"none"}', 'aaaaaaaa-0000-0000-0000-000000000001', now() - interval '2 days', 0),

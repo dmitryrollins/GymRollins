@@ -7,8 +7,8 @@ insert into auth.users (id, email, aud, role)
 select ('cccccccc-0000-0000-0000-00000000000' || n)::uuid, 'mod-' || n || '@test.local', 'authenticated', 'authenticated'
 from generate_series(1, 5) n;
 insert into public.app_admins (user_id) values ('cccccccc-0000-0000-0000-000000000005');
-insert into storage.objects (bucket_id, name, owner_id)
-  values ('gym-photos', 'dddddddd-0000-4000-8000-000000000001.jpg', 'cccccccc-0000-0000-0000-000000000001');
+insert into storage.objects (bucket_id, name, owner_id, metadata)
+  values ('gym-photos', 'dddddddd-0000-4000-8000-000000000001.jpg', 'cccccccc-0000-0000-0000-000000000001', '{"mimetype":"image/jpeg"}');
 
 create function pg_temp.as_user(n int) returns void language plpgsql as $$
 begin
