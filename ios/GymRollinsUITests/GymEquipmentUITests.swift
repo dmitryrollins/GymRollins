@@ -83,13 +83,19 @@ final class GymEquipmentUITests: XCTestCase {
         let app = launch()
         openEquipment(app)
         app.buttons["gymEquipment.listing.flat-bench"].tap()
-        app.buttons["listing.delete"].tapCenter()
-        let cancel = app.buttons["listing.delete.cancel"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        // A phone-only listing at a private gym also offers Sync, which pushes Delete down.
+        func reveal(_ id: String) -> XCUIElement {
+            let button = app.buttons[id]
+            XCTAssertTrue(button.waitForExistence(timeout: 5), "missing \(id)")
+            for _ in 0..<3 where !button.isHittable { app.swipeUp() }
+            return button
+        }
+        reveal("listing.delete").tap()
+        let cancel = reveal("listing.delete.cancel")
         cancel.tap()
         XCTAssertTrue(app.buttons["listing.delete"].waitForExistence(timeout: 5), "Cancel keeps it")
-        app.buttons["listing.delete"].tapCenter()
-        app.buttons["listing.delete.confirm"].tapCenter()
+        reveal("listing.delete").tap()
+        reveal("listing.delete.confirm").tap()
         XCTAssertTrue(app.buttons["gymEquipment.add"].waitForExistence(timeout: 5), "back on the equipment screen")
         XCTAssertTrue(app.buttons["gymEquipment.listing.flat-bench"].waitForNonExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["gymEquipment.subtitle"].label, "1 item")

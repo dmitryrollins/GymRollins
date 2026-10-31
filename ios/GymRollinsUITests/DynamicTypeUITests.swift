@@ -137,7 +137,9 @@ final class DynamicTypeUITests: XCTestCase {
         app.buttons["gymPicker.currentEquipment"].tap()
         XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForExistence(timeout: 15))
         screenshot("shared-gym-equipment-ax-xl")
-        app.buttons["gymEquipment.listing.barbell"].tap()
+        let barbell = app.buttons["gymEquipment.listing.barbell"]
+        for _ in 0..<8 where !barbell.exists { app.swipeUp() } // tiles below the fold aren't built until scrolled to
+        barbell.tapWhenHittable()
         let retry = app.buttons["listing.retry"]
         XCTAssertTrue(retry.waitForExistence(timeout: 5))
         for _ in 0..<4 where !retry.isHittable { app.swipeUp() }

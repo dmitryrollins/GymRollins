@@ -32,14 +32,17 @@ final class GymSharingUITests: XCTestCase {
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: timeout) == .completed
     }
 
+    private let backupCopy = "Signing in also backs up your workouts, routines, weigh-ins and profile to your account. "
+        + "Gyms and equipment marked This phone only stay on this phone."
+
     /// The sign-in sheet opened with its copy; cancelling closes it.
-    private func cancelSignIn(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+    private func cancelSignIn(_ app: XCUIApplication, title expectedTitle: String = "Sign in to share",
+                              intro: String = "Share this gym's equipment with other people. ",
+                              file: StaticString = #filePath, line: UInt = #line) {
         let title = text(app, "signInForSharing.title")
         XCTAssertTrue(title.waitForExistence(timeout: 5), "the sign-in sheet opens", file: file, line: line)
-        XCTAssertEqual(title.label, "Sign in to share", file: file, line: line)
-        XCTAssertEqual(text(app, "signInForSharing.body").label,
-                       "Your gym's equipment stays yours until you share it. Nothing else leaves your phone.",
-                       file: file, line: line)
+        XCTAssertEqual(title.label, expectedTitle, file: file, line: line)
+        XCTAssertEqual(text(app, "signInForSharing.body").label, intro + backupCopy, file: file, line: line)
         app.buttons["signInForSharing.cancel"].tap()
         XCTAssertTrue(title.waitForNonExistence(timeout: 5), "the sheet closes", file: file, line: line)
     }
@@ -59,6 +62,7 @@ final class GymSharingUITests: XCTestCase {
         XCTAssertTrue(pulldown.waitForExistence(timeout: 15), "the gym's shared equipment shows without an account")
         XCTAssertTrue(pulldown.label.contains("\u{2713} 3"), "with its confirm count: \(pulldown.label)")
         let newer = app.buttons["gymEquipment.listing.leg-press"]
+        for _ in 0..<4 where !newer.exists { app.swipeUp() } // the tiles below the fold aren't built yet
         XCTAssertTrue(newer.waitForExistence(timeout: 5))
         XCTAssertTrue(newer.label.contains("Update the app to use this item"), "a row it can't read says so")
         XCTAssertEqual(app.staticTexts["gymEquipment.subtitle"].label, "12 Main St \u{00B7} 6 items")
@@ -116,7 +120,7 @@ final class GymSharingUITests: XCTestCase {
         openEquipment(app)
         openTile(app, "lat-pulldown")
         app.buttons["listing.confirm"].tap()
-        cancelSignIn(app)
+        cancelSignIn(app, intro: "Confirm that this equipment is at the gym, for everyone who trains there. ")
         XCTAssertTrue(app.buttons["listing.confirm"].exists, "cancelling confirmed nothing")
         XCTAssertNotEqual(text(app, "listing.shareStatus").label, "You confirmed this")
     }
@@ -138,7 +142,7 @@ final class GymSharingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["\u{2713} 3"].exists, "with its confirm count")
         XCTAssertTrue(app.buttons["addEquipment.generic"].exists && app.buttons["addEquipment.different"].exists)
         confirm.tapCenter()
-        cancelSignIn(app)
+        cancelSignIn(app, intro: "Confirm that this equipment is at the gym, for everyone who trains there. ")
         XCTAssertTrue(confirm.exists, "cancelling stays on the list")
         app.buttons["addEquipment.back"].tap()
         let again = app.textFields["addEquipment.kindSearch"]
@@ -198,7 +202,33 @@ final class GymSharingUITests: XCTestCase {
         let sync = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'picker.sync.'")).firstMatch
         XCTAssertTrue(sync.waitForExistence(timeout: 5), "the gym's menu offers Sync to my account")
         sync.tap()
-        cancelSignIn(app)
+        XCTAssertEqual(text(app, "picker.sync.title").label, "Sync Garage?")
+        XCTAssertEqual(text(app, "picker.sync.body").label, "The gym goes to your account. Only you can see it.")
+        XCTAssertFalse(text(app, "signInForSharing.title").exists, "it asks before it asks for a sign-in")
+        app.buttons["picker.sync.cancel"].tap()
+        XCTAssertTrue(text(app, "picker.sync.title").waitForNonExistence(timeout: 5))
+        XCTAssertFalse(text(app, "signInForSharing.title").exists, "cancelling the question uploads nothing")
+        row.press(forDuration: 1.2)
+        XCTAssertTrue(sync.waitForExistence(timeout: 5))
+        sync.tap()
+        app.buttons["picker.sync.confirm"].tap()
+        cancelSignIn(app, title: "Sign in to sync",
+                     intro: "Sync this to your account so it is there on your other devices. Only you can see it. ")
         XCTAssertTrue(app.buttons["gymPicker.gym.Garage"].label.contains("Only me"), "cancelling synced nothing")
+    }
+
+    func testAShareThatNeverWentUpCanBeDeleted() {
+        let app = launch()
+        openEquipment(app)
+        let tile = app.buttons["gymEquipment.listing.barbell"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        tile.tap()
+        XCTAssertEqual(text(app, "listing.shareStatus").label, "Couldn't upload")
+        app.buttons["listing.delete"].tap()
+        XCTAssertEqual(text(app, "listing.delete.message").label,
+                       "It and its photo will be deleted from this phone and won't be shared.")
+        app.buttons["listing.delete.confirm"].tap()
+        XCTAssertTrue(app.buttons["gymEquipment.add"].waitForExistence(timeout: 5), "back on the equipment screen")
+        XCTAssertTrue(tile.waitForNonExistence(timeout: 5), "the failed share is gone")
     }
 }

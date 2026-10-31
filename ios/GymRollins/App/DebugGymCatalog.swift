@@ -19,7 +19,8 @@ enum FakeGymCatalog {
                                      brand: "Life Fitness", model: "Pulldown", photo: "lat-pulldown.jpg",
                                      loads: .stack(maxKg: 90, stepKg: 5), confirms: 3)
     static let cable = listing(id: cableId, itemId: GymRepository.genericItemId(forKind: "cable-station"),
-                               kind: "cable-station", brand: nil, model: nil, photo: nil, loads: .none, confirms: 2)
+                               kind: "cable-station", brand: nil, model: nil, photo: nil, loads: ListingLoads.none,
+                               confirms: 2)
     /// Loads this app can't read: it comes back unsupported.
     static let newerApp = listing(id: newerAppId, itemId: GymRepository.genericItemId(forKind: "leg-press"),
                                   kind: "leg-press", brand: nil, model: nil, photo: nil, loads: nil, confirms: 1)
