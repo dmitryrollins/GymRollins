@@ -28,9 +28,12 @@ extension ShareOutbox {
     }
 
     /// Reports the borrowed catalogue photo a listing shows, which belongs to another listing. The source is the
-    /// target. The listing stays and this picture stays off the phone; a refresh can bring another listing's.
+    /// target. The listing stays and this picture stays off the phone; a refresh can bring another listing's. When the
+    /// source listing is cached here too, its tile loses the picture the same way. Returns the local picture files the
+    /// caller deletes.
+    @discardableResult
     public func enqueueCataloguePhotoReport(listingId: UUID, reason: ReportReason, note: String?,
-                                            ownerId: UUID) throws {
+                                            ownerId: UUID) throws -> [String] {
         guard let listing = try repository.listingRecord(listingId),
               let item = try itemRecord(listing.itemId),
               item.catalogPhotoPath != nil, let source = item.catalogPhotoListingId else {
@@ -41,7 +44,14 @@ extension ShareOutbox {
         item.catalogPhotoPath = nil
         item.catalogPhotoListingId = nil
         item.reportedPhotoListingId = source
+        var files: [String] = []
+        if let cached = try repository.listingRecord(source) {
+            cached.photoHiddenLocally = true
+            if let file = cached.photoFile { files.append(file) }
+            cached.photoFile = nil
+        }
         try context.save()
+        return files
     }
 
     /// Hides everything the listing's author wrote. The phone doesn't know the author, so this listing goes now and
@@ -60,6 +70,8 @@ extension ShareOutbox {
     /// server had. Called with the session gone, it leaves the rows alone.
     public func unblockAll() async throws -> Int {
         let token = generation
+        unblocking = true
+        defer { unblocking = false }
         let cleared = try await transport.unblockAll()
         guard token == generation else { return cleared }
         for row in try rows() where row.kindRaw == Kind.block.rawValue { context.delete(row) }
@@ -67,7 +79,7 @@ extension ShareOutbox {
             listing.hiddenLocally = false
             listing.hiddenByBlock = false
         }
-        for gym in try context.fetch(FetchDescriptor<GymRecord>()) { gym.catalogRefreshedAt = nil }
+        try refreshEverywhere()
         try context.save()
         return cleared
     }
@@ -106,6 +118,8 @@ extension ShareOutbox {
             // The listing is gone, and so is the way to find its author.
         }
         try ensureCurrent(token)
+        // What the author wrote elsewhere is gone from the server now: the next open of every gym reads it again.
+        try refreshEverywhere()
         try drop(row)
     }
 
@@ -121,6 +135,7 @@ extension ShareOutbox {
             let items = try context.fetch(FetchDescriptor<EquipmentItemRecord>(
                 predicate: #Predicate { $0.reportedPhotoListingId == source }))
             for item in items { item.reportedPhotoListingId = nil }
+            try repository.listingRecord(source)?.photoHiddenLocally = false
         }
         let block = Kind(rawValue: row.kindRaw) == .block
         switch error as? GymCatalogError {
@@ -137,6 +152,20 @@ extension ShareOutbox {
         try context.save()
     }
 
+    /// Makes every gym read the server at its next open, whatever its stamp says.
+    private func refreshEverywhere() throws {
+        for gym in try context.fetch(FetchDescriptor<GymRecord>()) { gym.catalogRefreshedAt = nil }
+    }
+
+    /// The user chose this listing as the same machine as theirs, so a report or block of it no longer hides it. The
+    /// report itself is still sent.
+    func showAgain(_ id: UUID) throws {
+        guard let listing = try repository.listingRecord(id) else { return }
+        listing.hiddenLocally = false
+        listing.hiddenByBlock = false
+        for row in try rows() where row.hidesListing && row.targetId == id { row.hidesListing = false }
+    }
+
     private func sharedListing(_ id: UUID) throws -> GymListingRecord {
         guard let listing = try repository.listingRecord(id),
               listing.visibilityRaw == GymVisibility.shared.rawValue,
@@ -151,7 +180,7 @@ extension ShareOutbox {
                        ownerId: UUID, hides: Bool = false, aboutPhoto: Bool = false) throws {
         let queued = try rows().contains {
             $0.kindRaw == kind.rawValue && $0.targetTypeRaw == type.rawValue && $0.targetId == target
-                && $0.ownerId == ownerId
+                && $0.ownerId == ownerId && $0.aboutPhoto == aboutPhoto
         }
         guard !queued else { return }
         let text = note?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -165,11 +194,19 @@ extension ShareOutbox {
 struct QueuedModeration {
     /// Listings hidden while their report or block waits.
     let hiding: Set<UUID>
+    /// The ones among them that wait on a block, which an unblock can undo.
+    let blocking: Set<UUID>
+    /// Listings whose picture the user reported, queued or sent: the picture stays off.
+    let photoHiding: Set<UUID>
 
     init(context: ModelContext) throws {
         let rows = try context.fetch(FetchDescriptor<ShareOutboxRecord>()).filter {
             $0.kindRaw == ShareOutboxRecord.Kind.report.rawValue || $0.kindRaw == ShareOutboxRecord.Kind.block.rawValue
         }
         hiding = Set(rows.filter(\.hidesListing).map(\.targetId))
+        blocking = Set(rows.filter { $0.hidesListing && $0.kindRaw == ShareOutboxRecord.Kind.block.rawValue }
+            .map(\.targetId))
+        let sent = try context.fetch(FetchDescriptor<EquipmentItemRecord>()).compactMap(\.reportedPhotoListingId)
+        photoHiding = Set(rows.filter(\.aboutPhoto).map(\.targetId)).union(sent)
     }
 }

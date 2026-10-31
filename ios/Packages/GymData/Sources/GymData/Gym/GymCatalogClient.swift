@@ -84,7 +84,7 @@ public final class GymCatalogClient {
         let rows = try repository.context.fetch(FetchDescriptor<GymListingRecord>(
             predicate: #Predicate { $0.gymId == gymId && $0.visibilityRaw == shared && $0.photoFile == nil },
             sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.id)]))
-        return rows.filter { !$0.hiddenLocally }.compactMap { row in row.remotePhotoPath.map { PhotoFetch(listingId: row.id, path: $0) } }
+        return rows.filter { !$0.hiddenLocally && !$0.photoHiddenLocally }.compactMap { row in row.remotePhotoPath.map { PhotoFetch(listingId: row.id, path: $0) } }
             .prefix(Self.photosPerRefresh).map { $0 }
     }
 
@@ -128,8 +128,7 @@ public final class GymCatalogClient {
                                    now: now())
         record.brand = remote.brand
         record.model = remote.model
-        record.catalogPhotoPath = remote.photoPath
-        record.catalogPhotoListingId = remote.photoListingId
+        Self.setCataloguePhoto(on: record, from: remote)
         if record.modelContext == nil { context.insert(record) }
         try context.save()
         return GymRepository.item(record)
@@ -150,13 +149,18 @@ public final class GymCatalogClient {
                 let id = remote.id
                 guard let record = try? context.fetch(
                     FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id })).first else { continue }
-                // The user reported this picture, so it isn't shown to them again.
-                let reported = remote.photoListingId != nil && remote.photoListingId == record.reportedPhotoListingId
-                record.catalogPhotoPath = reported ? nil : remote.photoPath
-                record.catalogPhotoListingId = reported ? nil : remote.photoListingId
+                Self.setCataloguePhoto(on: record, from: remote)
             }
         }
         try context.save()
+    }
+
+    /// The user reported the picture of that listing, so it isn't shown to them again: not on a refresh, and not when
+    /// they pick the model in Add equipment.
+    private static func setCataloguePhoto(on record: EquipmentItemRecord, from remote: RemoteItem) {
+        let reported = remote.photoListingId != nil && remote.photoListingId == record.reportedPhotoListingId
+        record.catalogPhotoPath = reported ? nil : remote.photoPath
+        record.catalogPhotoListingId = reported ? nil : remote.photoListingId
     }
 
     private func serverGymId(_ gym: GymRecord, placeId: String, token: Int) async throws -> UUID? {
@@ -185,7 +189,7 @@ public final class GymCatalogClient {
         let confirming = Set(try context.fetch(FetchDescriptor<ShareOutboxRecord>()).filter {
             $0.kindRaw == ShareOutboxRecord.Kind.confirm.rawValue
         }.map(\.targetId))
-        let hiding = try QueuedModeration(context: context).hiding
+        let queued = try QueuedModeration(context: context)
         for entry in usable {
             let item = try itemRecord(for: entry)
             if let row = locals[entry.id] {
@@ -195,8 +199,7 @@ public final class GymCatalogClient {
                 let row = cache.insert(entry, itemId: item.id, gymId: gymId)
                 locals[entry.id] = row
             }
-            // `update` leaves `hiddenLocally` alone: a reported row stays hidden while the server still returns it.
-            if hiding.contains(entry.id) { locals[entry.id]?.hiddenLocally = true }
+            if let row = locals[entry.id] { applyModeration(to: row, entry: entry, queued: queued) }
             // The server doesn't know about a confirmation that is still queued.
             if confirming.contains(entry.id) { locals[entry.id]?.confirmedByMe = true }
         }
@@ -209,6 +212,20 @@ public final class GymCatalogClient {
         if complete { gym.catalogRefreshedAt = now() }
         try context.save()
         return CatalogRefresh(photosToFetch: try missingPhotos(gymId: gymId), filesToDelete: files)
+    }
+
+    /// `update` leaves the hiding flags alone: a reported row stays hidden while the server still returns it, and a
+    /// row that comes back while its report or block waits is hidden again. A row the server says is the user's own
+    /// is never hidden: a report of it was made before sign-in, when the cached answer said it wasn't.
+    private func applyModeration(to row: GymListingRecord, entry: RemoteListing, queued: QueuedModeration) {
+        if entry.isMine {
+            row.hiddenLocally = false
+            row.hiddenByBlock = false
+        } else if queued.hiding.contains(entry.id) {
+            row.hiddenLocally = true
+            if queued.blocking.contains(entry.id) { row.hiddenByBlock = true }
+        }
+        if queued.photoHiding.contains(entry.id) { row.photoHiddenLocally = true }
     }
 
     private func isGone(_ row: GymListingRecord, present: Set<UUID>) -> Bool {

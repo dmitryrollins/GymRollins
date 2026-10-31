@@ -53,6 +53,22 @@ extension SyncStore {
         try context.save()
     }
 
+    /// Account deletion has detached the user's photos on the server: the user's own synced listings that still have a
+    /// picture file on this phone forget the removed object's name and wait to be pushed, so the next sync uploads the
+    /// picture again under a new name.
+    public func forgetRemotePhotos() throws {
+        let synced = Self.synced
+        let rows = try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate {
+            $0.visibilityRaw == synced && $0.deletedAt == nil && $0.photoFile != nil && $0.remotePhotoPath != nil
+        }))
+        for row in rows {
+            row.remotePhotoPath = nil
+            row.updatedAt = now()
+            row.dirty = true
+        }
+        try context.save()
+    }
+
     // MARK: Pull
 
     /// Applies pulled gyms; returns the photo files of listings that went with a removed gym.
@@ -229,6 +245,8 @@ extension SyncStore {
         for listing in try context.fetch(FetchDescriptor<GymListingRecord>()) {
             files += resetListing(listing, owner: owner)
         }
+        // Which pictures were reported belongs to the account that reported them.
+        for item in try context.fetch(FetchDescriptor<EquipmentItemRecord>()) { item.reportedPhotoListingId = nil }
         let remaining = Set(try context.fetch(FetchDescriptor<GymListingRecord>()).map(\.gymId))
         for gym in try context.fetch(FetchDescriptor<GymRecord>()) {
             gym.catalogRefreshedAt = nil

@@ -32,6 +32,8 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private var _unblocks = 0
     private var _reportScript: [GymCatalogError?] = []
     private var _unblockResult = 0
+    private var _ownTargets: Set<UUID> = []
+    private var _reportAnswers: [UUID: String] = [:]
 
     struct ReportCall: Equatable {
         let type: GymTargetType, id: UUID, reason: ReportReason, note: String?
@@ -44,6 +46,10 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     var unblocks: Int { lock.withLock { _unblocks } }
     /// Answers for the next `report` calls, used up in order: an error refuses it, nil lets it through.
     var reportScript: [GymCatalogError?] { get { lock.withLock { _reportScript } } set { lock.withLock { _reportScript = newValue } } }
+    /// Targets the caller wrote: the server answers `own` for a report of one and files nothing, as the real function does.
+    var ownTargets: Set<UUID> { get { lock.withLock { _ownTargets } } set { lock.withLock { _ownTargets = newValue } } }
+    /// What the server said to each reported target: `reported` or `own`.
+    var reportAnswers: [UUID: String] { lock.withLock { _reportAnswers } }
     var unblockResult: Int { get { lock.withLock { _unblockResult } } set { lock.withLock { _unblockResult = newValue } } }
     var gym: RemoteGym? { get { lock.withLock { _gym } } set { lock.withLock { _gym = newValue } } }
     var listings: [RemoteListing] { get { lock.withLock { _listings } } set { lock.withLock { _listings = newValue } } }
@@ -150,6 +156,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try record("report")
         let scripted: GymCatalogError? = lock.withLock {
             _reports.append(ReportCall(type: targetType, id: targetId, reason: reason, note: note))
+            _reportAnswers[targetId] = _ownTargets.contains(targetId) ? "own" : "reported"
             return _reportScript.isEmpty ? nil : _reportScript.removeFirst()
         }
         if let scripted { throw scripted }

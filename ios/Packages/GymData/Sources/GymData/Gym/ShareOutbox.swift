@@ -25,6 +25,8 @@ public final class ShareOutbox {
     private var running = false
     private var runAgainFor: UUID?
     private(set) var generation = 0
+    /// An unblock is on the wire: a queued block must not go out meanwhile, or it would undo the unblock.
+    var unblocking = false
     var cleanups: [Task<Void, Never>] = []
 
     /// The last error from reading or saving the queue itself, for the caller to log.
@@ -99,6 +101,7 @@ public final class ShareOutbox {
         if let mine { try cacheChosen(existingId, at: mine.gymId, from: listingId) }
         let photo = try repository.removeListing(listingId)
         try removeRows(kind: .share, target: listingId)
+        try showAgain(existingId)
         try enqueueConfirm(listingId: existingId, ownerId: ownerId)
         if let uploaded { deleteInBackground(uploaded) }
         return photo
@@ -169,7 +172,10 @@ public final class ShareOutbox {
     }
 
     private func nextRow(for userId: UUID, attempts: [UUID: Int]) throws -> ShareOutboxRecord? {
-        try rows().first { $0.ownerId == userId && attempts[$0.id, default: 0] < Self.attemptsPerRun }
+        try rows().first {
+            $0.ownerId == userId && attempts[$0.id, default: 0] < Self.attemptsPerRun
+                && !(unblocking && $0.kindRaw == Kind.block.rawValue)
+        }
     }
 
     /// Thrown after an await when the session changed meanwhile: the run ends without touching anything.

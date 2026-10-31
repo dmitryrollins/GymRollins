@@ -130,4 +130,14 @@ import Testing
         #expect(try f.context.fetchCount(FetchDescriptor<GymRecord>()) == 0)
         #expect(try f.context.fetchCount(FetchDescriptor<GymListingRecord>()) == 0)
     }
+
+    @Test func aSignOutForgetsWhichPicturesWereReported() throws {
+        defer { f.tearDown() }
+        let item = EquipmentItemRecord(kindId: "cable-stack", brand: nil, model: nil, now: f.clock.now)
+        item.reportedPhotoListingId = UUID()
+        f.context.insert(item)
+        try f.context.save()
+        _ = try f.store.resetAccountData()
+        #expect(item.reportedPhotoListingId == nil, "the next account has reported nothing")
+    }
 }

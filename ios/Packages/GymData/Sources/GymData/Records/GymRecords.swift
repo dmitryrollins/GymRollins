@@ -105,6 +105,9 @@ public final class GymListingRecord {
     public var hiddenLocally: Bool = false
     /// `hiddenLocally` comes from a block, which the user can undo. A report can't be undone.
     public var hiddenByBlock: Bool = false
+    /// The user reported this listing's picture, from another listing that borrows it. The picture stays off this
+    /// phone and isn't downloaded again; the listing itself stays.
+    public var photoHiddenLocally: Bool = false
 
     public init(id: UUID = UUID(), gymId: UUID, itemId: UUID, kindId: String, loadsData: Data, quantity: Int,
                 notes: String?, photoFile: String?, now: Date) {

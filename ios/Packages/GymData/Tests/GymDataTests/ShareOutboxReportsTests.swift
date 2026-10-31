@@ -6,46 +6,12 @@ import Testing
 
 /// Reports and blocks through the queue: hiding is immediate on the phone, the server hears about it when it can.
 @MainActor
-@Suite struct ShareOutboxReportsTests {
+@Suite struct ShareOutboxReportsTests: ReportsTestRig {
     let f: SyncFixture
     let transport = FakeGymCatalogTransport()
     let serverGymId = UUID()
     let user = UUID()
     init() throws { f = try SyncFixture() }
-
-    private var repo: GymRepository { GymRepository(context: f.context, now: { [clock = f.clock] in clock.now }) }
-    private var outbox: ShareOutbox {
-        ShareOutbox(repository: repo, transport: transport, photoData: { _ in Data("jpeg".utf8) },
-                    now: { [clock = f.clock] in clock.now })
-    }
-    private var client: GymCatalogClient {
-        GymCatalogClient(repository: repo, transport: transport, knownKinds: ["cable-stack", "kettlebell"],
-                         now: { [clock = f.clock] in clock.now })
-    }
-
-    private func mapsGym() throws -> Gym {
-        transport.gym = RemoteGym(id: serverGymId, name: "Server", address: nil, latitude: nil, longitude: nil,
-                                  mapsPlaceId: "P1")
-        let gym = try repo.addMapsGym(placeId: "P1", name: "Apple Name", address: "1 Main", latitude: 1, longitude: 2)
-        try #require(try repo.gymRecord(gym.id)).remoteId = serverGymId
-        return gym
-    }
-
-    private func remote(_ id: UUID = UUID(), mine: Bool = false) -> RemoteListing {
-        RemoteListing(id: id, gymId: serverGymId, itemId: UUID(), kindId: "cable-stack", brand: nil, model: nil,
-                      photoPath: nil, loads: .stack(maxKg: 90, stepKg: 5), quantity: 1, notes: nil, status: "active",
-                      confirmCount: 1, isMine: mine, confirmedByMe: false)
-    }
-
-    /// Fills the cache the way a refresh does.
-    private func cache(_ gym: Gym, _ listings: [RemoteListing]) async throws {
-        transport.listings = listings
-        _ = try await client.refresh(gymId: gym.id, force: true)
-    }
-
-    private func shown(_ gym: Gym) throws -> Set<UUID> {
-        Set(try repo.listings(gymId: gym.id, includingUnsupported: true).map(\.id))
-    }
 
     @Test func reportingQueuesAndHidesTheListingAtOnce() async throws {
         defer { f.tearDown() }
@@ -244,16 +210,17 @@ import Testing
         #expect(box.pendingCount == 0)
     }
 
-    @Test func reportingYourOwnListingIsNotOffered() async throws {
+    @Test func aReportOnYourOwnListingHidesNothingAndTheServerAnswersOwn() async throws {
         defer { f.tearDown() }
         let gym = try mapsGym()
         let mine = remote(mine: true)
         try await cache(gym, [mine])
+        transport.ownTargets = [mine.id]
         let box = outbox
-        // The server answers `own`, which is done: nothing is hidden on the phone.
         try box.enqueueReport(listingId: mine.id, reason: .spam, note: nil, ownerId: user)
         #expect(try shown(gym) == [mine.id])
         await box.run(userId: user)
+        #expect(transport.reportAnswers[mine.id] == "own", "the server saw a report of the reporter's own listing")
         #expect(box.pendingCount == 0)
         #expect(try shown(gym) == [mine.id])
     }
@@ -280,99 +247,6 @@ import Testing
             }
         }
         #expect(box.pendingCount == 0)
-    }
-
-    @Test func reportingABorrowedPhotoReportsItsSourceAndKeepsTheListing() async throws {
-        defer { f.tearDown() }
-        let gym = try mapsGym()
-        let source = UUID()
-        let mine = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack", brand: "Hammer"))
-        let item = try #require(try f.context.fetch(FetchDescriptor<EquipmentItemRecord>()).first {
-            $0.id == mine.item.id
-        })
-        item.catalogPhotoPath = "\(UUID()).jpg"
-        item.catalogPhotoListingId = source
-        try f.context.save()
-        let box = outbox
-        try box.enqueueCataloguePhotoReport(listingId: mine.id, reason: .inappropriatePhoto, note: nil, ownerId: user)
-        #expect(item.catalogPhotoPath == nil && item.catalogPhotoListingId == nil)
-        #expect(try shown(gym) == [mine.id], "the listing stays")
-        await box.run(userId: user)
-        #expect(transport.reports == [.init(type: .listing, id: source, reason: .inappropriatePhoto, note: nil)])
-        #expect(try shown(gym) == [mine.id])
-        #expect(throws: GymDataError.self) {
-            try box.enqueueCataloguePhotoReport(listingId: mine.id, reason: .spam, note: nil, ownerId: user)
-        }
-    }
-
-    @Test func aRefreshKeepsTheBorrowedPhotoOffWhileItsReportIsQueued() async throws {
-        defer { f.tearDown() }
-        let gym = try mapsGym()
-        let source = UUID()
-        let mine = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
-        let item = try #require(try f.context.fetch(FetchDescriptor<EquipmentItemRecord>()).first {
-            $0.id == mine.item.id
-        })
-        item.catalogPhotoPath = "\(UUID()).jpg"
-        item.catalogPhotoListingId = source
-        try f.context.save()
-        let box = outbox
-        transport.failingCalls = ["report"]
-        try box.enqueueCataloguePhotoReport(listingId: mine.id, reason: .personInPhoto, note: nil, ownerId: user)
-        await box.run(userId: user)
-        transport.items = [RemoteItem(id: item.id, kindId: "cable-stack", brand: nil, model: nil, gymCount: 2,
-                                      photoPath: "\(UUID()).jpg", photoListingId: source)]
-        try await cache(gym, [remote()])
-        #expect(item.catalogPhotoPath == nil, "the photo stays off until the report is sent")
-    }
-
-    @Test func aReportedPhotoStaysOffAfterItsReportIsSent() async throws {
-        defer { f.tearDown() }
-        let gym = try mapsGym()
-        let source = UUID()
-        let mine = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
-        let item = try #require(try f.context.fetch(FetchDescriptor<EquipmentItemRecord>()).first {
-            $0.id == mine.item.id
-        })
-        item.catalogPhotoPath = "\(UUID()).jpg"
-        item.catalogPhotoListingId = source
-        try f.context.save()
-        let box = outbox
-        try box.enqueueCataloguePhotoReport(listingId: mine.id, reason: .personInPhoto, note: nil, ownerId: user)
-        await box.run(userId: user)
-        transport.items = [RemoteItem(id: item.id, kindId: "cable-stack", brand: nil, model: nil, gymCount: 2,
-                                      photoPath: "\(UUID()).jpg", photoListingId: source)]
-        try await cache(gym, [remote()])
-        #expect(item.catalogPhotoPath == nil, "the user who reported a picture isn't shown it again")
-
-        let another = "\(UUID()).jpg"
-        transport.items = [RemoteItem(id: item.id, kindId: "cable-stack", brand: nil, model: nil, gymCount: 2,
-                                      photoPath: another, photoListingId: UUID())]
-        try await cache(gym, [remote()])
-        #expect(item.catalogPhotoPath == another, "another listing's picture of the item is fine")
-    }
-
-    @Test func aRefusedPhotoReportLetsThePictureBack() async throws {
-        defer { f.tearDown() }
-        let gym = try mapsGym()
-        let source = UUID()
-        let mine = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
-        let item = try #require(try f.context.fetch(FetchDescriptor<EquipmentItemRecord>()).first {
-            $0.id == mine.item.id
-        })
-        item.catalogPhotoPath = "\(UUID()).jpg"
-        item.catalogPhotoListingId = source
-        try f.context.save()
-        let box = outbox
-        transport.failure = .notAllowed
-        try box.enqueueCataloguePhotoReport(listingId: mine.id, reason: .personInPhoto, note: nil, ownerId: user)
-        await box.run(userId: user)
-        transport.failure = nil
-        let path = "\(UUID()).jpg"
-        transport.items = [RemoteItem(id: item.id, kindId: "cable-stack", brand: nil, model: nil, gymCount: 2,
-                                      photoPath: path, photoListingId: source)]
-        try await cache(gym, [remote()])
-        #expect(item.catalogPhotoPath == path, "the report didn't go, so nothing stands against the picture")
     }
 
     @Test func aRejectedNoteIsSentAgainWithoutIt() async throws {
