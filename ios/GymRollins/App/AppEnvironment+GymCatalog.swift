@@ -44,6 +44,7 @@ struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func confirm(listingId: UUID) async throws -> Int { throw GymCatalogError.signedOut }
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { throw GymCatalogError.signedOut }
     func deleteSharedPhoto(path: String) async throws { throw GymCatalogError.signedOut }
+    func deleteAllPhotos() async throws { throw GymCatalogError.signedOut }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         throw GymCatalogError.signedOut
     }
@@ -93,6 +94,10 @@ extension AppEnvironment {
         sync.onSessionEnding = { [weak self] in
             self?.gymSharing.invalidate()
             self?.gymAdmin.reset()
+        }
+        sync.removePhotos = { [weak self] _ in
+            guard let transport = await self?.gymSharing.transport else { return }
+            try await transport.deleteAllPhotos()
         }
         sync.onWillSignOut = { [weak self] in
             guard let self, let userId = self.sharingUserId else { return }

@@ -51,6 +51,7 @@ private final class GatedTransport: GymCatalogTransport, @unchecked Sendable {
         try await inner.uploadSharedPhoto(data, name: name)
     }
     func deleteSharedPhoto(path: String) async throws { try await inner.deleteSharedPhoto(path: path) }
+    func deleteAllPhotos() async throws { try await inner.deleteAllPhotos() }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         try await inner.report(targetType: targetType, targetId: targetId, reason: reason, note: note)
     }

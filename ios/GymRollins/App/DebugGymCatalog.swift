@@ -55,6 +55,8 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private let admin: Bool
     private let lock = NSLock()
     private var flagged: [ModerationEntry]
+    /// People this signed-in test user has blocked: two to start, so "Unblock everyone" has something to clear.
+    private var blocked = 2
 
     init(admin: Bool = false) {
         self.admin = admin
@@ -93,9 +95,15 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     func confirm(listingId: UUID) async throws -> Int { 4 }
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { name }
     func deleteSharedPhoto(path: String) async throws {}
+    func deleteAllPhotos() async throws {}
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {}
-    func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws {}
-    func unblockAll() async throws -> Int { 0 }
+    func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws { lock.withLock { blocked += 1 } }
+    func unblockAll() async throws -> Int {
+        lock.withLock {
+            defer { blocked = 0 }
+            return blocked
+        }
+    }
     func isAdmin() async throws -> Bool { admin }
     func moderationQueue() async throws -> [ModerationEntry] { lock.withLock { flagged } }
     func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {

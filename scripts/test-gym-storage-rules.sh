@@ -163,6 +163,17 @@ status=$(put_token gym-photos "$DEAD_NAME" "$DEAD_TOKEN" "$WORK/tiny.jpg")
 check "the upload is refused (got $status)" test "$status" != 200
 check "nothing is owned by the deleted account" test "$(objects_of "$ID_D")" = 0
 
+echo "An account that still owns a photo cannot be deleted (decision 5: the app removes the photos first)"
+read -r TOKEN_F ID_F <<<"$(new_user f)"
+KEPT="$(uuid).jpg"
+post_object "$TOKEN_F" gym-photos-private "$KEPT" "$WORK/benign.jpg" >/dev/null
+out=$(rpc "$TOKEN_F" delete_my_account '{}')
+check "the server refuses with photos_remain (${out##*$'\n'})" grep -q photos_remain <<<"$out"
+check "the account is still there" test "$(psql_local -c "select count(*) from auth.users where id = '$ID_F'" </dev/null)" = 1
+curl -s -o /dev/null -X DELETE "$ST/object/gym-photos-private/$KEPT" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN_F"
+out=$(rpc "$TOKEN_F" delete_my_account '{}')
+check "and it goes once the photo is removed (${out##*$'\n'})" test "$(psql_local -c "select count(*) from auth.users where id = '$ID_F'" </dev/null)" = 0
+
 echo "100 parallel uploads leave at most 60 objects"
 read -r TOKEN_E ID_E <<<"$(new_user e)"
 export ST ANON_KEY TOKEN_E WORK

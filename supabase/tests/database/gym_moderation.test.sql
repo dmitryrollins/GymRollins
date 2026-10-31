@@ -1,7 +1,7 @@
 -- Report, block, moderate and account deletion for shared gym data (spec §5, §9).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(57);
+select plan(64);
 
 insert into auth.users (id, email, aud, role)
 select ('cccccccc-0000-0000-0000-00000000000' || n)::uuid, 'mod-' || n || '@test.local', 'authenticated', 'authenticated'
@@ -190,7 +190,27 @@ select is((select count(*) from public.public_gym_equipment where gym_id = curre
 -- Account deletion -------------------------------------------------------------------------------------------------
 select pg_temp.as_user(1);
 select is((select count(*) from public.my_gym_photos())::int, 1, 'a user can list their photos, to remove them first');
-select public.delete_my_account();
+-- An upload that was never linked to a listing, and one in the private bucket: both owned, neither on any listing.
+reset role;
+insert into storage.objects (bucket_id, name, owner_id, metadata) values
+  ('gym-photos', 'dddddddd-0000-4000-8000-000000000002.jpg', 'cccccccc-0000-0000-0000-000000000001', '{"mimetype":"image/jpeg"}'),
+  ('gym-photos-private', 'dddddddd-0000-4000-8000-000000000003.jpg', 'cccccccc-0000-0000-0000-000000000001', '{"mimetype":"image/jpeg"}');
+select pg_temp.as_user(1);
+select is((select count(*) from public.my_gym_photos())::int, 3, 'it lists an orphan upload too, and the private bucket');
+select is((select count(*) from public.my_gym_photos() where bucket_id = 'gym-photos-private')::int, 1, 'with its bucket');
+select throws_ok($$ select public.delete_my_account() $$, 'P0001'::char(5), 'photos_remain',
+  'the account stays while photos remain, whoever asks');
+reset role;
+select is((select count(*) from auth.users where id = 'cccccccc-0000-0000-0000-000000000001')::int, 1, 'and is still there');
+select pg_temp.as_user(2);
+select is((select count(*) from public.my_gym_photos())::int, 0, 'nobody sees another user''s photos');
+-- Storage deletes objects through its API; this stands in for it.
+reset role;
+select set_config('storage.allow_delete_query', 'true', true);
+delete from storage.objects where owner_id = 'cccccccc-0000-0000-0000-000000000001';
+select pg_temp.as_user(1);
+select is((select count(*) from public.my_gym_photos())::int, 0, 'once they are removed none are listed');
+select lives_ok($$ select public.delete_my_account() $$, 'and the account can go');
 reset role;
 select is((select notes from public.gym_equipment where id = 'dddddddd-0000-0000-0000-000000000001'), null,
   'and without their note');

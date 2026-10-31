@@ -1,4 +1,5 @@
 import Foundation
+import GymData
 import Supabase
 
 /// What the user was trying to do when an auth call failed (shapes the message).
@@ -28,11 +29,24 @@ public struct AuthFailure: LocalizedError, Equatable, Sendable {
             self = already
         } else if Self.isNetwork(error) {
             message = "Couldn't \(action.failedVerb). Check your connection and try again."
+        } else if Self.isPhotosRemain(error) {
+            message = Messages.photosRemain
         } else if let known = Self.knownMessage(for: error) {
             message = known
         } else {
             message = "Couldn't \(action.failedVerb). Please try again."
         }
+    }
+
+    /// The photo step of account deletion failed, so the account is still there. Says so, and whether it is worth
+    /// retrying at once.
+    static func photosNotRemoved(_ error: Error) -> AuthFailure {
+        let offline = isNetwork(error) || (error as? GymCatalogError) == .offline
+        return AuthFailure(message: Messages.photosNotRemoved + (offline ? Messages.checkConnection : Messages.tryAgain))
+    }
+
+    private static func isPhotosRemain(_ error: Error) -> Bool {
+        (error as? PostgrestError)?.message == "photos_remain"
     }
 
     static func isNetwork(_ error: Error) -> Bool {
@@ -68,6 +82,10 @@ public struct AuthFailure: LocalizedError, Equatable, Sendable {
         static let weakPassword = "That password is too weak. Use at least 8 characters."
         static let rateLimited = "Too many attempts. Wait a minute and try again."
         static let sessionExpired = "Your session has expired. Please sign in again."
+        static let photosRemain = "Couldn't delete your account because some photos are still being removed. Please try again."
+        static let photosNotRemoved = "Couldn't remove your photos, so your account hasn't been deleted."
+        static let checkConnection = " Check your connection and try again."
+        static let tryAgain = " Please try again."
         static let methodUnavailable = "This sign-in method isn't available right now."
     }
 }

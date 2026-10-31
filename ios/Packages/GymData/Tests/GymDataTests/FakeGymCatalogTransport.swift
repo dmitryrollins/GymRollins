@@ -145,6 +145,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try record("deleteSharedPhoto")
         lock.withLock { _deleted.append(path) }
     }
+    func deleteAllPhotos() async throws { try record("deleteAllPhotos") }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         try record("report")
         let scripted: GymCatalogError? = lock.withLock {

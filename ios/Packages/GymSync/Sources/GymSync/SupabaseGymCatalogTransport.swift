@@ -17,7 +17,7 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
     private static let listingColumns = "id,gym_id,item_id,kind_id,brand,model,photo_path,loads,quantity,notes,status,"
         + "confirm_count,is_mine,confirmed_by_me"
 
-    private let client: SupabaseClient
+    let client: SupabaseClient
 
     public init(client: SupabaseClient) { self.client = client }
 
@@ -178,7 +178,7 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
 
     private enum UploadOutcome: Error { case alreadyThere }
 
-    private func call<R>(_ body: () async throws -> R) async throws -> R {
+    func call<R>(_ body: () async throws -> R) async throws -> R {
         do {
             return try await body()
         } catch let cancelled as CancellationError {

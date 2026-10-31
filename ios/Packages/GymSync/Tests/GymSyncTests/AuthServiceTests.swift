@@ -1,5 +1,6 @@
 import Supabase
 import Foundation
+import GymData
 import Testing
 @testable import GymSync
 
@@ -106,8 +107,26 @@ import Testing
     }
 }
 
+private actor CallLog {
+    private(set) var items: [String] = []
+    func add(_ item: String) { items.append(item) }
+}
+
 @MainActor
 @Suite struct AuthServiceTests {
+    private func signedInService() throws -> AuthService {
+        let user = User(id: UUID(), appMetadata: [:], userMetadata: [:], aud: "authenticated",
+                        createdAt: Date(), updatedAt: Date())
+        let session = Session(accessToken: "token", tokenType: "bearer", expiresIn: 3600,
+                              expiresAt: Date().addingTimeInterval(3600).timeIntervalSince1970,
+                              refreshToken: "refresh", user: user)
+        let config = SupabaseConfig(url: URL(string: "http://127.0.0.1:9")!, anonKey: "anon")
+        let storage = InMemoryAuthStorage()
+        // The SDK's key for this host (`sb-<first label of the host>-auth-token`).
+        try storage.store(key: "sb-127-auth-token", value: AuthClient.Configuration.jsonEncoder.encode(session))
+        return AuthService(client: config.makeClient(storage: storage))
+    }
+
     private func service() throws -> AuthService {
         let config = SupabaseConfig(url: URL(string: "http://127.0.0.1:9")!, anonKey: "anon")
         return AuthService(client: config.makeClient(storage: InMemoryAuthStorage()))
@@ -135,6 +154,46 @@ import Testing
         await #expect(throws: AuthFailure(message: "Your session has expired. Please sign in again.")) {
             try await auth.deleteAccount()
         }
+    }
+
+    @Test func deleteAccountRemovesPhotosFirst() async throws {
+        let auth = try signedInService()
+        let calls = CallLog()
+        try await auth.deleteAccount(removePhotos: { _ in await calls.add("photos") }) { await calls.add("rpc") }
+        #expect(await calls.items == ["photos", "rpc"])
+        #expect(auth.state == .signedOut)
+    }
+
+    @Test func deleteAccountStopsWhenThePhotosCannotGo() async throws {
+        let auth = try signedInService()
+        let calls = CallLog()
+        struct NoPhotos: Error {}
+        let before = auth.state
+        await #expect(throws: AuthFailure.self) {
+            try await auth.deleteAccount(removePhotos: { _ in throw NoPhotos() }) { await calls.add("rpc") }
+        }
+        #expect(await calls.items.isEmpty, "the account is not deleted")
+        #expect(auth.state == before, "and the user stays signed in")
+    }
+
+    @Test func aPhotoFailureDoesNotSayTheAccountIsGone() async throws {
+        let auth = try signedInService()
+        var messages: [String] = []
+        for failure in [URLError(.notConnectedToInternet) as Error, GymCatalogError.offline, GymCatalogError.rejected("x")] {
+            do {
+                try await auth.deleteAccount(removePhotos: { _ in throw failure }) {}
+            } catch let error as AuthFailure { messages.append(error.message) }
+        }
+        #expect(messages.count == 3)
+        #expect(messages.allSatisfy { $0.contains("account hasn't been deleted") })
+        #expect(messages[0] == messages[1] && messages[0].contains("Check your connection"))
+        #expect(messages[2].hasSuffix("Please try again."))
+    }
+
+    @Test func aRefusalForRemainingPhotosReadsAsRetryable() {
+        let refused = PostgrestError(message: "photos_remain")
+        #expect(AuthFailure(refused, during: .deleteAccount).message
+            == "Couldn't delete your account because some photos are still being removed. Please try again.")
     }
 
     @Test func inMemoryStorageRoundTrips() throws {

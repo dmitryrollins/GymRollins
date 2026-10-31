@@ -1,5 +1,6 @@
 import GymCore
 import GymData
+import GymSync
 import SwiftUI
 
 /// The app's single Settings screen (mockup `Settings.dc.html`): account/sync (folded from `AccountSection`),
@@ -254,6 +255,8 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("settings.privacyPolicy")
 
+            if env.sharingUserId != nil { UnblockEveryoneRow() }
+
             Button(isSignedIn ? "Delete Account and Data" : "Erase All Data on This iPhone", role: .destructive) {
                 confirmDelete = true
             }
@@ -286,6 +289,7 @@ struct SettingsView: View {
                 }
             }
             .accessibilityIdentifier("settings.openSource")
+            ContentContactRow(email: GymConstants.contentContactEmail)
         }
     }
 
@@ -333,7 +337,8 @@ struct SettingsView: View {
         Task {
             do { try await action() } catch {
                 AppEnvironment.log.error("Delete/erase failed: \(error.localizedDescription, privacy: .public)")
-                exportError = "Something went wrong. Please try again."
+                // A failed photo step says the account is still there; the rest is the plain message.
+                exportError = (error as? AuthFailure)?.message ?? "Something went wrong. Please try again."
             }
         }
     }

@@ -51,7 +51,8 @@ struct Account {
 
     func deleteAccount() async throws {
         let id = userId
-        try await auth.deleteAccount()
+        let catalog = SupabaseGymCatalogTransport(client: auth.client)
+        try await auth.deleteAccount(removePhotos: { _ in try await catalog.deleteAllPhotos() })
         IntegrationEnv.recordDeletedUser(id)
     }
 

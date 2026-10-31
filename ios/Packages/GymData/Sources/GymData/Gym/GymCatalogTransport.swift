@@ -14,6 +14,9 @@ public protocol GymCatalogTransport: Sendable {
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String
     /// Removes a photo the caller uploaded to `gym-photos`. Only the owner may; a name that is already gone is fine.
     func deleteSharedPhoto(path: String) async throws
+    /// Removes every photo the caller owns in both gym buckets, listed or not, for account deletion. Stops at the first
+    /// failure and throws it; an object that is already gone is not one.
+    func deleteAllPhotos() async throws
     /// Reports a public gym or listing. The server also answers `own` (the reporter wrote it) and `already`; both
     /// count as sent. A target that is gone raises `GymCatalogError.unknownTarget`.
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws

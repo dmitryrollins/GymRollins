@@ -59,10 +59,18 @@ left=$(psql_local -c "
        + (select count(*) from public.bodyweight where user_id in ($ids))
        + (select count(*) from public.proposals where user_id in ($ids))
        + (select count(*) from public.gyms where owner_id in ($ids))
-       + (select count(*) from public.gym_equipment where owner_id in ($ids))")
+       + (select count(*) from public.gym_equipment where owner_id in ($ids))
+       + (select count(*) from public.equipment_confirmations where user_id in ($ids))
+       + (select count(*) from public.reports where reporter_id in ($ids))
+       + (select count(*) from public.user_blocks where blocker_id in ($ids) or blocked_id in ($ids))
+       + (select count(*) from storage.objects where owner_id in ($ids)
+            and bucket_id in ('gym-photos', 'gym-photos-private'))")
 if [[ "$left" != "0" ]]; then
   echo "Account deletion left $left user/data rows behind" >&2
   exit 1
 fi
+# A report outlives its reporter: the row stays and only the id goes (the query above counted none by id).
+reports_kept=$(psql_local -c "select count(*) from public.reports where reporter_id is null")
+[[ "$reports_kept" -gt 0 ]] || { echo "Account deletion removed the reports instead of anonymising them" >&2; exit 1; }
 remaining=$(psql_local -c "select count(*) from auth.users where email like 'sync-%@test.local'")
 echo "Account deletion verified: $(echo "$ids" | tr ',' '\n' | wc -l | tr -d ' ') deleted users, 0 rows left; $remaining test users remain"

@@ -144,7 +144,8 @@ begin
   order by report_count desc, t.target_id;
 end $$;
 
--- The caller's photos in both buckets, so the app can remove them through Storage before deleting the account.
+-- The caller's photos in both buckets, by owner and not by listing: an upload that was never linked is still theirs,
+-- and `delete_my_account` refuses while any remain. The app removes them through Storage first.
 create or replace function public.my_gym_photos() returns table (bucket_id text, name text)
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -161,7 +162,8 @@ grant execute on function public.report_content(text, uuid, text, text), public.
   public.unblock_all(), public.moderate_content(text, uuid, text), public.moderation_queue(),
   public.my_gym_photos() to authenticated;
 
--- Account deletion. The app has already removed the user's photos through Storage. Shared listings and gyms stay without
+-- Account deletion. The app has already removed the user's photos through Storage, and this refuses (`photos_remain`)
+-- while any are left, so a client that skipped that step can't leave objects behind that nobody can remove. Shared listings and gyms stay without
 -- their author because they describe the gym, but the author's own words go: a listing's notes and photo, the brand and
 -- model of an item only they used (their listings fall back to the generic item of the kind, which is what the item
 -- would be with the words taken out), and the note on every report they filed. An item others list too stays: it is
@@ -172,6 +174,10 @@ declare
   me uuid := auth.uid();
 begin
   if me is null or public.is_mcp_client() then raise exception 'not allowed' using errcode = '42501'; end if;
+  if exists (select 1 from storage.objects o
+             where o.owner_id = me::text and o.bucket_id in ('gym-photos', 'gym-photos-private')) then
+    raise exception 'photos_remain';
+  end if;
   update public.gym_equipment set photo_path = null, notes = null where added_by = me and visibility = 'public';
   update public.gym_equipment e
     set item_id = (select g.id from public.equipment_items g

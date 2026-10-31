@@ -132,12 +132,28 @@ public final class AuthService {
         state = .signedOut
     }
 
-    /// Deletes the account and all its data on the server (`delete_my_account`), then signs out locally.
-    public func deleteAccount() async throws {
-        guard client.auth.currentSession != nil else { throw AuthFailure(AuthError.sessionMissing, during: .deleteAccount) }
+    /// Removes the user's photos through `removePhotos`, then deletes the account and all its data on the server
+    /// (`delete_my_account`, which refuses while photos remain), then signs out locally. If the photo step fails the
+    /// account stays and the user stays signed in, so they can try again.
+    public func deleteAccount(removePhotos: (@Sendable (UUID) async throws -> Void)? = nil) async throws {
+        try await deleteAccount(removePhotos: removePhotos) { _ = try await self.client.rpc("delete_my_account").execute() }
+    }
+
+    func deleteAccount(removePhotos: (@Sendable (UUID) async throws -> Void)?,
+                       onServer: () async throws -> Void) async throws {
+        guard client.auth.currentSession != nil else {
+            throw AuthFailure(AuthError.sessionMissing, during: .deleteAccount)
+        }
         do {
-            _ = try await client.auth.session // refreshes an expired access token first
-            try await client.rpc("delete_my_account").execute()
+            let session = try await client.auth.session // refreshes an expired access token first
+            if let removePhotos {
+                do { try await removePhotos(session.user.id) } catch let cancelled as CancellationError {
+                    throw cancelled
+                } catch {
+                    throw AuthFailure.photosNotRemoved(error)
+                }
+            }
+            try await onServer()
         } catch {
             throw AuthFailure(error, during: .deleteAccount)
         }

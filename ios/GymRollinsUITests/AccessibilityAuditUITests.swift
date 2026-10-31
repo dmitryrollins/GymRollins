@@ -187,6 +187,25 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Moderation: confirm a removal")
     }
 
+    func testUnblockEveryoneAudit() {
+        let app = launch(["-fakeGymCatalog", "-fakeSignedIn"])
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.unblockAll"]
+        var swipes = 0
+        while !(row.exists && row.isHittable) && swipes < 15 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["settings.unblockAll.message"].waitForExistence(timeout: 5))
+        audit(app, "Settings: unblock everyone")
+        app.buttons["settings.unblockAll.confirm"].tap()
+        XCTAssertTrue(app.staticTexts["settings.unblockAll.result"].waitForExistence(timeout: 5))
+        audit(app, "Settings: unblocked")
+    }
+
     func testProposalReviewAudit() {
         let app = launch(["-seedProposal"])
         let chip = app.buttons["today.proposal"]

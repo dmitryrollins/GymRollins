@@ -51,6 +51,10 @@ final class StubCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try record("deleteSharedPhoto:\(path)")
         if let deleteFailure { throw deleteFailure }
     }
+    func deleteAllPhotos() async throws {
+        try record("deleteAllPhotos")
+        if let deleteFailure { throw deleteFailure }
+    }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         try record("report")
     }

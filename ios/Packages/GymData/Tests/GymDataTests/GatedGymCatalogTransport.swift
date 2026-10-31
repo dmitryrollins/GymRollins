@@ -90,6 +90,11 @@ final class GatedGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try await inner.deleteSharedPhoto(path: path)
     }
 
+    func deleteAllPhotos() async throws {
+        await gate("deleteAllPhotos")
+        try await inner.deleteAllPhotos()
+    }
+
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         await gate("report")
         try await inner.report(targetType: targetType, targetId: targetId, reason: reason, note: note)
