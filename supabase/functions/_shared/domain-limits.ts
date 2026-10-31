@@ -43,6 +43,7 @@ export const DomainLimits = {
   listingFixedKg: { min: 0.25, max: 500 },
   privateGymsMax: 100,
   privateListingsMax: 1_000,
+  gymActiveListingsMax: 300,
   // Daily limits per user, enforced by the server functions
   dailyGymCreations: 10,
   dailyShares: 30,

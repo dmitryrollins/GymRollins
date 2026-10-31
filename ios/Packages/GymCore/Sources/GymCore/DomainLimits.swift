@@ -43,6 +43,7 @@ public enum DomainLimits {
     public static let listingFixedKg: ClosedRange<Double> = 0.25...500
     public static let privateGymsMax = 100
     public static let privateListingsMax = 1_000
+    public static let gymActiveListingsMax = 300
     // Daily limits per user, enforced by the server functions
     public static let dailyGymCreations = 10
     public static let dailyShares = 30

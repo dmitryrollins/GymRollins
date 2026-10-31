@@ -145,6 +145,14 @@ begin
   perform public.gym_check_daily(
     (select count(*) from public.gym_equipment
      where visibility = 'public' and added_by = me and created_at > now() - interval '1 day'), 30);
+  -- A few accounts adding 30 a day would otherwise fill one gym, and every viewer downloads each photo. The gym's own
+  -- lock makes the count exact across users; the order (user, then gym) is the same everywhere. A retry of a listing
+  -- already there returned at the top, so it still succeeds at the cap.
+  perform pg_advisory_xact_lock(hashtextextended('gym_listings:' || p_gym_id::text, 0));
+  if (select count(*) from public.gym_equipment
+      where gym_id = p_gym_id and visibility = 'public' and status = 'active' and deleted_at is null) >= 300 then
+    raise exception 'gym_full' using errcode = 'P0001';
+  end if;
 
   item := public.ensure_equipment_item(p_kind_id, p_brand, p_model);
   insert into public.gym_equipment (id, gym_id, item_id, visibility, photo_path, loads, quantity, notes, added_by)
