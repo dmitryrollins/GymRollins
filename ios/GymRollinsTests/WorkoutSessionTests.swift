@@ -168,7 +168,7 @@ import Testing
         let s = make(spy, now: { Date(timeIntervalSince1970: 1_100) })
         let bench = s.workout.entries[0].id
         s.logNextSet(entryId: bench, weightKg: 20.41, reps: 10) // warm-up done
-        s.swap(entryId: bench, to: "0289", multiplier: 2, target: .suggested(weightKg: 22, reps: nil))
+        s.swap(entryId: bench, to: "0289", multiplier: 2, target: .suggested(weightKg: 22, loads: nil, timed: false))
         let swapped = s.workout.entries[0]
         #expect(swapped.exerciseId == "0289")
         #expect(swapped.sets.allSatisfy { $0.multiplier == 2 })
@@ -178,6 +178,25 @@ import Testing
         let back = s.workout.entries[0]
         #expect(back.sets.allSatisfy { $0.multiplier == 1 })
         #expect(back.sets[1...].allSatisfy { $0.weightKg == 22 })       // no history: keep
+    }
+
+    /// A logged working set is history: a swap moves the undone sets only, whatever the new target says.
+    @Test func swapNeverChangesALoggedWorkingSet() {
+        let spy = Spy()
+        let s = make(spy, now: { Date(timeIntervalSince1970: 1_100) })
+        let bench = s.workout.entries[0].id
+        s.logNextSet(entryId: bench, weightKg: 20.41, reps: 10) // warm-up
+        s.logNextSet(entryId: bench, weightKg: 63.5, reps: 7)   // first working set
+        let logged = s.workout.entries[0].sets[1]
+        #expect(logged.done && !logged.warmup, "this is a working set, not the warm-up")
+        s.swap(entryId: bench, to: "0289", multiplier: 2, target: .suggested(weightKg: 22, loads: nil, timed: false))
+        let swapped = s.workout.entries[0].sets
+        #expect(swapped[1].weightKg == 63.5 && swapped[1].reps == 7, "the logged working set keeps its load and reps")
+        #expect(swapped[2].weightKg == 22, "the undone one moves")
+        s.swap(entryId: bench, to: "0025", multiplier: 1, target: .fit(.fixed(kg: [10])))
+        let back = s.workout.entries[0].sets
+        #expect(back[0].weightKg == 20.41 && back[1].weightKg == 63.5 && back[1].reps == 7)
+        #expect(back[2].weightKg == 10)
     }
 
     /// A 20 s hold logged against a 30 s target stores 20 s.

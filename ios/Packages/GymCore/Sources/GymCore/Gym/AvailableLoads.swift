@@ -23,7 +23,7 @@ public enum AvailableLoads {
     public static let extraRepsAtHeaviest = 2
     /// This close to the heaviest weight isn't past it: about half a display unit in either unit, so a 53 lb bell
     /// (24.04 kg) is the 24 kg bell and not a weight that rose.
-    private static let toleranceKg = 0.25
+    public static let toleranceKg = 0.25
 
     public static func fit(weightKg: Double, reps: Int, to loads: ListingLoads) -> FittedLoad {
         let unchanged = FittedLoad(weightKg: weightKg, reps: reps)

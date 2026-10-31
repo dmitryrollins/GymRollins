@@ -15,6 +15,14 @@ import Testing
         return (session, try #require(session.workout.entries.first?.id))
     }
 
+    /// Logs the entry's auto warm-ups, then one working set, so a "done set" in these tests is real history.
+    private func logAWorkingSet(_ session: WorkoutSession, _ entryId: UUID, weightKg: Double, reps: Int) {
+        while let next = session.entry(entryId)?.sets.first(where: { !$0.done }), next.warmup {
+            session.logNextSet(entryId: entryId, weightKg: next.weightKg, reps: next.reps)
+        }
+        session.logNextSet(entryId: entryId, weightKg: weightKg, reps: reps)
+    }
+
     private func kettlebellExercise(_ rig: GymTestRig) throws -> Exercise {
         try #require(rig.env.library.exercises.first { $0.equipment == "kettlebell" && $0.mode == .reps })
     }
@@ -22,7 +30,7 @@ import Testing
     @Test func aNeverLoggedExerciseKeepsNoImpossibleWeight() throws {
         let rig = try GymTestRig.make()
         let (session, entryId) = try startedSession(rig)
-        session.logNextSet(entryId: entryId, weightKg: 60, reps: 8)
+        logAWorkingSet(session, entryId, weightKg: 60, reps: 8)
         rig.env.setCurrentGym(try rig.gym("KB", kettlebellGym).id)
         let curl = try kettlebellExercise(rig)
         #expect(rig.env.gymLoads(curl.id) == kettlebells)
@@ -31,9 +39,9 @@ import Testing
             .swap(to: curl, profile: rig.env.profile, history: [], loads: rig.env.gymLoads(curl.id))
 
         let sets = try #require(session.entry(entryId)?.sets)
-        let done = sets.filter(\.done)
-        #expect(done.count == 1)
-        #expect(done.allSatisfy { $0.weightKg == 60 }, "a done set is history")
+        let doneWorking = sets.filter { $0.done && !$0.warmup }
+        #expect(doneWorking.count == 1)
+        #expect(doneWorking.allSatisfy { $0.weightKg == 60 && $0.reps == 8 }, "a done working set is history")
         let undone = sets.filter { !$0.done && !$0.warmup }
         #expect(!undone.isEmpty)
         #expect(undone.allSatisfy { $0.weightKg == 24 }, "60 kg isn't a bell; the heaviest is 24")
