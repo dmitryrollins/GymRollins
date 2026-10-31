@@ -11,7 +11,7 @@ public struct ModerationEntry: Sendable, Equatable, Identifiable {
     public let reasons: [ReasonCount]
     public let notes: [String]
     public let status: Status
-    /// A gym's address and a listing's own notes: what the target says about itself, to judge the reports by.
+    /// Where it is (a gym's address; a listing's gym and address) and a listing's own notes, to judge the reports by.
     public let address: String?
     public let listingNotes: String?
 

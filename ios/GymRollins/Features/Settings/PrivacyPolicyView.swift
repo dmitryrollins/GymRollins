@@ -9,8 +9,13 @@ struct PrivacyPolicyView: View {
         "There are no ads and no third-party trackers. Your data is never sold or shared with advertisers.",
         "Location is asked for only to suggest the gym you're at. It is sent to Apple Maps for that search and "
             + "isn't stored by GymRollins.",
-        "Gym photos are cleaned on your iPhone (faces blurred, location data removed) and kept on this iPhone.",
-        "Deleting your account removes your data from the server and this iPhone.",
+        "Gym photos are cleaned on your iPhone first: location data is removed and any faces it finds are blurred. "
+            + "\"This phone only\" photos stay on this iPhone. Synced ones go to your account, where only you can see "
+            + "them. Shared ones are public: anyone can see them, with no account.",
+        "If you report something, moderators see the reason and your note, but not who sent it.",
+        "Deleting your account removes your data and photos from the server and this iPhone. Equipment you shared "
+            + "stays listed at the gym, without your name, photos or notes. Reports you sent stay, without your name "
+            + "or note.",
     ]
 
     var body: some View {

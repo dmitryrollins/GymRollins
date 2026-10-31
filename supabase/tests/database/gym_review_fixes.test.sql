@@ -2,7 +2,7 @@
 -- gone, a queue that shows every reported target, and detaching photos before an account is deleted.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(50);
+select plan(51);
 
 create function pg_temp.uid(n int) returns uuid language sql immutable as $$
   select ('b0b0b0b0-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid $$;
@@ -154,6 +154,8 @@ select is((select listing_notes from public.moderation_queue() where target_id =
   'a listing with its notes');
 select is((select address from public.moderation_queue() where target_id = 'b0b0b0b0-0000-4000-8000-0000000000a0'), '1 Main St',
   'a gym with its address');
+select is((select address from public.moderation_queue() where target_id = 'b0b0b0b0-0000-4000-8000-0000000000c1'), 'Review Gym, 1 Main St',
+  'a listing with the gym it is at');
 select is((select title from public.moderation_queue() where target_id = 'b0b0b0b0-0000-4000-8000-0000000000a0'), 'Review Gym',
   'and the name as before');
 select is(public.moderate_content('listing', 'b0b0b0b0-0000-4000-8000-0000000000c1', 'restore')->>'status', 'active',

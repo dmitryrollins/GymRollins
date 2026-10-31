@@ -33,6 +33,7 @@ final class ModerationUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["moderation.status.\(pulldown)"].label, "Hidden, 3 reports")
         XCTAssertEqual(app.staticTexts["moderation.status.\(cable)"].label, "1 report", "one report hides nothing")
         XCTAssertTrue(app.staticTexts["14 Side Street"].exists, "a gym shows its address")
+        XCTAssertTrue(app.staticTexts["Iron Works, 1 Barbell Way"].exists, "a listing says which gym it is at")
         XCTAssertTrue(app.staticTexts["Notes: Bring your own towel"].exists, "a listing shows its own notes")
         XCTAssertEqual(app.staticTexts["moderation.status.\(stale)"].label, "Photo still to delete")
         XCTAssertFalse(app.buttons["moderation.restore.\(stale)"].exists, "a removed row can only be removed again")

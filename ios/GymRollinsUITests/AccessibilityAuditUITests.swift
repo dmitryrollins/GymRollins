@@ -218,9 +218,9 @@ final class AccessibilityAuditUITests: XCTestCase {
         }
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["settings.unblockAll.message"].waitForExistence(timeout: 5))
-        audit(app, "Settings: unblock everyone")
-        app.buttons["settings.unblockAll.confirm"].tap()
+        let confirm = app.buttons["settings.unblockAll.confirm"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
         XCTAssertTrue(app.staticTexts["settings.unblockAll.result"].waitForExistence(timeout: 5))
         audit(app, "Settings: unblocked")
     }

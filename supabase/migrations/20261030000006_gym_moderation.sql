@@ -181,8 +181,9 @@ begin
                                               where r.target_type = 'gym' and r.resolved_at is null))
     union all
     select 'listing'::text, e.id, coalesce(nullif(concat_ws(' ', i.brand, i.model), ''), k.name), e.photo_path,
-           e.status, null::text, e.notes
+           e.status, concat_ws(', ', g.name, g.address), e.notes
       from public.gym_equipment e
+      join public.gyms g on g.id = e.gym_id
       join public.equipment_items i on i.id = e.item_id
       join public.equipment_kinds k on k.id = i.kind_id
       where e.visibility = 'public'

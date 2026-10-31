@@ -29,20 +29,24 @@ final class UnblockEveryoneUITests: XCTestCase {
         let row = app.buttons["settings.unblockAll"]
         scrollToHittable(app, row)
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["settings.unblockAll.message"].waitForExistence(timeout: 5))
-        app.buttons["settings.unblockAll.cancel"].tap()
-        XCTAssertTrue(app.buttons["settings.unblockAll.confirm"].waitForNonExistence(timeout: 5), "cancel closes the card")
+        let confirm = app.buttons["settings.unblockAll.confirm"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirm.isHittable, "the dialog can't open under the tab bar")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5), "tapping away closes the dialog")
         XCTAssertFalse(app.staticTexts["settings.unblockAll.result"].exists, "and clears nothing")
 
         row.tap()
-        app.buttons["settings.unblockAll.confirm"].tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
         let result = app.staticTexts["settings.unblockAll.result"]
         XCTAssertTrue(result.waitForExistence(timeout: 5))
         XCTAssertEqual(result.label, "Unblocked 2 people.")
 
         scrollToHittable(app, row)
         row.tap()
-        app.buttons["settings.unblockAll.confirm"].tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
         XCTAssertTrue(app.staticTexts["No one was blocked."].waitForExistence(timeout: 5), "a second time finds none")
     }
 

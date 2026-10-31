@@ -31,6 +31,7 @@ struct ReportContentSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Theme.gutter).padding(.top, 16).padding(.bottom, 24)
             }
+            .scrollDismissesKeyboard(.interactively)
             .background(Theme.background)
             .navigationTitle("Report")
             .navigationBarTitleDisplayMode(.inline)

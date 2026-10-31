@@ -52,7 +52,7 @@ enum FakeModeration {
                         photoPath: "5b0f1c1e-5a37-4b8e-9d1f-0a3c6e7f2b11.jpg", reportCount: 3,
                         reasons: [.init(reason: "person-in-photo", count: 2), .init(reason: "spam", count: 1)],
                         notes: ["There is a face in it", "Looks like an advert"], status: .flagged,
-                        listingNotes: "Bring your own towel"),
+                        address: "Iron Works, 1 Barbell Way", listingNotes: "Bring your own towel"),
         ModerationEntry(targetType: .listing, targetId: cableId, title: "Cable Station", photoPath: nil,
                         reportCount: 1, reasons: [.init(reason: "wrong-info", count: 1)], notes: [], status: .active),
         ModerationEntry(targetType: .gym, targetId: gymId, title: "Iron Works Annex", photoPath: nil, reportCount: 3,

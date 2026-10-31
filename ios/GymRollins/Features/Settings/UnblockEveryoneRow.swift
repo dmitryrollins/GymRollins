@@ -1,7 +1,8 @@
 import GymData
 import SwiftUI
 
-/// "Unblock everyone" in Settings, with an inline confirmation like `BlockAuthorCard`, then how many people it cleared.
+/// "Unblock everyone" in Settings, with a dialog like Delete Account's (a card at the foot of this long list would open
+/// under the tab bar), then how many people it cleared.
 struct UnblockEveryoneRow: View {
     @Environment(AppEnvironment.self) private var env
     @State private var confirming = false
@@ -36,7 +37,11 @@ struct UnblockEveryoneRow: View {
         }
         .disabled(working)
         .accessibilityIdentifier("settings.unblockAll")
-        if confirming { card }
+        .confirmationDialog("Unblock everyone?", isPresented: $confirming, titleVisibility: .visible) {
+            Button("Unblock", action: unblock).accessibilityIdentifier("settings.unblockAll.confirm")
+        } message: {
+            Text("What these users shared will show again at every gym.")
+        }
         switch outcome {
         case .done(let count):
             Text(Self.resultText(count: count)).font(.footnote).foregroundStyle(Theme.textSecondary)
@@ -49,24 +54,7 @@ struct UnblockEveryoneRow: View {
         }
     }
 
-    private var card: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Unblock everyone?").font(.headline).foregroundStyle(Theme.textPrimary)
-            Text("What these users shared will show again at every gym.")
-                .font(.footnote).foregroundStyle(Theme.textSecondary)
-                .accessibilityIdentifier("settings.unblockAll.message")
-            HStack(spacing: 10) {
-                SecondaryGlassButton(title: "Cancel", identifier: "settings.unblockAll.cancel") { confirming = false }
-                PrimaryGlassButton(title: "Unblock", identifier: "settings.unblockAll.confirm", action: unblock)
-            }
-        }
-        .padding(12)
-        .background(Theme.card, in: .rect(cornerRadius: Theme.cardRadius))
-        .accessibilityElement(children: .contain)
-    }
-
     private func unblock() {
-        confirming = false
         working = true
         Task {
             do {
