@@ -33,8 +33,9 @@ written first in every task; test names below are required, and implementers add
    when the user opens the gym picker, where the reason is obvious. The rest of the spec's rule is unchanged.
 3. **Visibility in this plan.** Only "This phone only" is offered; the other two options arrive with plan 21. The
    records already carry `visibility`, `uploadState` and `remoteId`.
-4. **Wipes.** Sign-out-and-remove, account deletion, account switch and Erase All also remove gyms and their photos,
-   like every other local row. Plain sign-out keeps them.
+4. **Wipes.** Account deletion and Erase All also remove gyms and their photos. Sign-out and account switch keep them,
+   because a "This phone only" gym was never tied to an account. (Changed in review: this plan first treated them like
+   other local rows, which lost a user's gyms and photos when they signed out.)
 5. **Workout links.** `workouts.gym_id` and `workout_entries.gym_equipment_id` arrive with plan 21, because they only
    matter on the server.
 
@@ -72,13 +73,13 @@ written first in every task; test names below are required, and implementers add
 **Files:** create `Records/GymRecords.swift`, `Values/GymValues.swift`, `Repositories/GymRepository.swift`; modify
 `Store/GymStore.swift`, `Sync/SyncStore.swift` (`resetAll`); test `Tests/GymDataTests/GymRepositoryTests.swift`.
 
-- [ ] **Step 1: Write the failing tests** (in-memory `GymStore.container(inMemory: true)`, as `ExercisePreferenceTests` does):
+- [x] **Step 1: Write the failing tests** (in-memory `GymStore.container(inMemory: true)`, as `ExercisePreferenceTests` does):
 
   `addPrivateGymTrimsAndValidates` (empty name throws `GymDataError.invalidInput`, 121 characters throws, address over 300 throws, whitespace trimmed, blank address becomes nil, visibility `.device`, `mapsPlaceId` nil) · `addMapsGymIsIdempotentPerPlace` · `gymsAreSortedByName` · `addListingStoresEverythingOnThePhone` (visibility `.device`, uploadState `.local`, `isOwn`, status `.active`, confirmCount 0, remoteId nil) · `addListingValidates` (quantity 0 and 51; note over 280; brand over 60; model over 80; stack `maxKg` 0, negative, or over 1000; step over max or ≤ 0; fixed empty, over 60 weights, or a weight ≤ 0 or over 500; unknown gym) · `genericItemIsStablePerKind` (same id on every call, no duplicate row, nil brand and model) · `sameBrandAndModelReuseTheItem` (case-insensitive) · `catalogueItemsCountGyms` (item used at 2 gyms reports 2; the generic item isn't included; other kinds aren't included) · `listingsOnlyReturnActiveOnesInOrder` (flagged and removed excluded; oldest first) · `inventoryMapsActiveListings` (id, kind, loads, confirmCount, isOwn; `gymName`) · `updateListingChangesLoadsQuantityAndNote` · `removeListingReturnsItsPhoto` · `deleteGymRemovesItsListingsAndReturnsTheirPhotos` (the gym's items stay when another gym uses them) · `itemCountsPerGym` · `resetAllRemovesGymRows` (in `SyncStoreTests`).
 
-- [ ] **Step 2: Run and watch them fail.** From `ios/Packages/GymData`: `swift test --filter GymRepositoryTests`. Expected: build error, `GymRepository` not found.
+- [x] **Step 2: Run and watch them fail.** From `ios/Packages/GymData`: `swift test --filter GymRepositoryTests`. Expected: build error, `GymRepository` not found.
 
-- [ ] **Step 3: Implement.** Records follow `ExercisePreferenceRecord`'s style.
+- [x] **Step 3: Implement.** Records follow `ExercisePreferenceRecord`'s style.
 
 ```swift
 // Values/GymValues.swift
@@ -150,9 +151,9 @@ public struct CatalogueItem: Sendable, Hashable, Identifiable {
 
   Add the three records to `GymStore.models` and `resetAll`. SwiftData migrates by itself because only new models are added.
 
-- [ ] **Step 4: Run and watch them pass.** `swift test --filter GymRepositoryTests`, then all of `swift test` in GymData.
+- [x] **Step 4: Run and watch them pass.** `swift test --filter GymRepositoryTests`, then all of `swift test` in GymData.
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(data): gyms, equipment items and listings on the phone"`
+- [x] **Step 5: Commit.** `git commit -m "feat(data): gyms, equipment items and listings on the phone"`
 
 ---
 
@@ -160,12 +161,12 @@ public struct CatalogueItem: Sendable, Hashable, Identifiable {
 
 **Files:** modify `Gym/GymAdapter.swift`, `Gym/AvailableLoads.swift`, `Gym/WorkoutBuilder.swift`; tests in the matching suites.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `GymAdapterTests.pinnedItemsStayAsPlannedAndBlockDuplicates`: a pinned, missing exercise comes back `.unmapped(item)`, and no other item's replacement is that exercise.
   - `AvailableLoadsTests.suggestionFittedToFixedSet` (30 kg, 8 reps on `[20, 24]` → 24 kg, 10 reps), `suggestionFittedKeepsSecAndReason` (a timed suggestion keeps reps and `sec`).
   - `WorkoutBuilderFallbackTests.itemCountMatchesTheThinNotice`: `itemCount(for:asOf:)` equals `ThinInventoryNotice.itemCount` for the same gym and muscle, and counts each listing once.
 
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
 
 ```swift
 // GymAdapter
@@ -194,9 +195,9 @@ public extension Suggestion {
 public func itemCount(for muscle: BuildMuscle, asOf date: Date) -> Int { /* same Set as build() uses; share one helper */ }
 ```
 
-- [ ] **Step 3: Run** `swift test` and `scripts/coverage-gymcore.sh` (≥ 90%).
+- [x] **Step 3: Run** `swift test` and `scripts/coverage-gymcore.sh` (≥ 90%).
 
-- [ ] **Step 4: Commit.** `git commit -m "feat(core): pinned items, fitted suggestions and a chip's item count"`
+- [x] **Step 4: Commit.** `git commit -m "feat(core): pinned items, fitted suggestions and a chip's item count"`
 
 ---
 
@@ -206,7 +207,7 @@ public func itemCount(for muscle: BuildMuscle, asOf date: Date) -> Int { /* same
 
 The fixture with a real face is the bundled `OwnPhotos/own-0453-0.jpg` (Vision finds one face at about x 0.48, y 0.73, w 0.054, h 0.081, origin bottom-left).
 
-- [ ] **Step 1: Failing tests.** Run app tests with `DEST='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4'` and `-only-testing:GymRollinsTests/GymPhotoProcessorTests` (the 26.2 runtime hangs on this Mac):
+- [x] **Step 1: Failing tests.** Run app tests with `DEST='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4'` and `-only-testing:GymRollinsTests/GymPhotoProcessorTests` (the 26.2 runtime hangs on this Mac):
   - `downscalesToTheLongEdge`: a 4000×3000 generated image comes out with long edge exactly 1600, thumbnail long edge exactly 400, and never upscales a 300×200 one.
   - `staysUnderOneMegabyte`: a noisy 4000×3000 image comes out under 1 MB, or throws `.tooBig`, never above.
   - `rejectsWhatStaysTooBig`: with `maxBytes: 1_000`, throws `.tooBig`.
@@ -218,7 +219,7 @@ The fixture with a real face is the bundled `OwnPhotos/own-0453-0.jpg` (Vision f
   - `findsTheFaceInTheFixture`: the real `VisionFaceDetector` on the bundled photo finds at least one face. If Vision can't run on the simulator (its error names the inference context), skip with `withKnownIssue` and report it; do not fake a pass.
   - `GymPhotoStoreTests`: saves and reads back, thumbnail file exists, delete removes both, `removeAll` empties the folder, a file name containing `/` or `..` is refused, and a missing file is not an error on delete.
 
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
 
 ```swift
 enum GymPhotoError: Error, Equatable { case notAnImage, tooBig, faceDetectionFailed }
@@ -246,9 +247,9 @@ struct GymPhotoProcessor: Sendable {
 
   `GymPhotoStore` is a `Sendable` struct over `Application Support/GymPhotos`: `save(_:) throws -> String` (`<uuid>.jpg`, `<uuid>-thumb.jpg`), `url(_:)`, `thumbnailURL(_:)`, `delete(_:)`, `removeAll()`.
 
-- [ ] **Step 3: Run and pass.**
+- [x] **Step 3: Run and pass.**
 
-- [ ] **Step 4: Commit.** `git commit -m "feat(app): clean gym photos on the phone before saving them"`
+- [x] **Step 4: Commit.** `git commit -m "feat(app): clean gym photos on the phone before saving them"`
 
 ---
 
@@ -258,7 +259,7 @@ struct GymPhotoProcessor: Sendable {
 
 This is the seam that keeps "your plan isn't changed" true. `exercises` holds what the session will do; `gymSwaps` holds what the plan really says for swapped items.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `adaptedSwapsWithoutMarkingEdited`: a swap appears in `exercises`, `edited == false`, `canSaveToRoutine == false`, `hasTodayChanges == false`, `plannedExercises` equals the routine's.
   - `routineToStartUsesTheSwap`, with the same item id and `entryId(for:in:)` still resolving.
   - `adaptedIsIdempotent`: applying twice gives an equal plan.
@@ -276,7 +277,7 @@ This is the seam that keeps "your plan isn't changed" true. `exercises` holds wh
   - `builtPlan`: `title == builtName`, `routineToStart.name == builtName`, `canSaveToRoutine == false`, kind `.built`, Codable round trip.
   - `plansStoredBeforeThisStillDecode`: JSON without the new keys decodes with empty swaps and pins.
 
-- [ ] **Step 2: Implement.** Add to `TodayPlan` (with `init` defaults, `CodingKeys`, `decodeIfPresent`):
+- [x] **Step 2: Implement.** Add to `TodayPlan` (with `init` defaults, `CodingKeys`, `decodeIfPresent`):
 
 ```swift
 enum Kind { ...; /// Built by Build workout for today.
@@ -333,9 +334,9 @@ func adapted(by adapter: GymAdapter?) -> TodayPlan {
 
   `TodayPlanEditor`: add `usePlanned(_ itemId:)` (forget + apply). `replace` and `delete` already go through `TodayPlan`. `TodayPlanStore.save` stores whatever has `hasTodayChanges`, swaps included; that's safe because they're re-decided on load. Also clear a stale store: if `hasTodayChanges` is false it clears, as today.
 
-- [ ] **Step 3: Run** `-only-testing:GymRollinsTests/TodayPlanGymTests` plus every existing `TodayPlan*` and `TodayModel*` suite. Existing tests must pass unchanged.
+- [x] **Step 3: Run** `-only-testing:GymRollinsTests/TodayPlanGymTests` plus every existing `TodayPlan*` and `TodayModel*` suite. Existing tests must pass unchanged.
 
-- [ ] **Step 4: Commit.** `git commit -m "feat(today): today's plan keeps gym swaps apart from the routine"`
+- [x] **Step 4: Commit.** `git commit -m "feat(today): today's plan keeps gym swaps apart from the routine"`
 
 ---
 
@@ -343,7 +344,7 @@ func adapted(by adapter: GymAdapter?) -> TodayPlan {
 
 **Files:** create `Features/Gyms/GymEquipmentCatalog.swift`, `Features/Gyms/ListingLoadsText.swift`, `App/AppEnvironment+Gyms.swift`, `App/DebugGymSeed.swift`; modify `App/AppEnvironment.swift`, `App/AppEnvironment+Watch.swift` (`todaysPlan(at:)`), `App/LaunchOptions.swift`, `Features/Workout/SessionPlanner.swift`, `Features/Today/TodayModel.swift`, `Features/Today/TodayView.swift` (`reload`, `refreshModel`, `choose`); tests `GymEnvironmentTests.swift`, `SessionPlannerTests` additions, `TodayModelGymTests.swift`, `GymEquipmentCatalogTests.swift`, `ListingLoadsTextTests.swift`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `GymEquipmentCatalogTests`: `loadsBundledFiles` (46 kinds, 1,107 requirements), `commonTilesAreRealKinds`, `searchMatchesNameAndIgnoresCase`, `groupsKeepCommonFirst`.
   - `ListingLoadsTextTests`: lb user `.stack(113.4, nil)` → "to 250 lb"; kg user → "to 113 kg"; `.fixed([20, 24])` lb user → "44 · 53 lb"; `.plates` → "plate-loaded"; `.none` → nil.
   - `SessionPlannerTests.loadsFitTheSuggestion`: `entry(..., loads: .fixed(kg: [20, 24]))` with history at 30 kg gives 24 kg and reps + 2; `nil` loads are unchanged (existing tests still pass); warm-ups use the fitted weight.
@@ -357,7 +358,7 @@ func adapted(by adapter: GymAdapter?) -> TodayPlan {
     - `eraseAllRemovesGymsAndPhotos`, `localResetRemovesGymsAndPhotos`, `plainSignOutKeepsThem`.
   - `TodayModelGymTests`: a swapped row has `gymMark == .swapped(planned: "Preacher Curl", missingKind: "preacher bench")`, a `swappedNote` of "1 exercise swapped for this gym. Your plan isn't changed." (and the plural), an unavailable row has `.unavailable`, a kept row has its listing's `photoFile`, and with no gym nothing differs from today's model.
 
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
 
   `LaunchOptions` (DEBUG only, `false`/nil in Release): `-seedGym` (private "Home" gym, kettlebells `.fixed(kg: [20, 24])`, flat bench, set as current, no photos), `-gymPhotoFixture` (the Library button uses a generated image), `-fakeLocation <lat>,<lng>`, `-fakeGymPlaces` (Maps search returns "Iron Works Gym" and "Test Fitness", ids `fake-iron-works`, `fake-test-fitness`, 50 m and 2 km from the fake location).
 
@@ -393,9 +394,9 @@ enum GymMark: Equatable { case swapped(planned: String, missingKind: String); ca
 
   `TodayModel.make(plan:profile:library:history:gym: TodayGymContext? = nil, loads: (String) -> ListingLoads? = { _ in nil })`. Display name for a missing group: the first kind's lowercased name. `TodayView.reload` and `refreshModel` pass the context; `choose` applies `current.switched(to: routine).adapted(by: env.gymAdapter())`; Add and Replace go through `plan.adding`/`replacing`, which pin. `TodayPlanEditor.configure`'s `suggest` closure passes `loads`.
 
-- [ ] **Step 3: Run** the new suites, the existing `SessionPlanner*`, `Today*`, `Watch*` suites, then the whole unit target.
+- [x] **Step 3: Run** the new suites, the existing `SessionPlanner*`, `Today*`, `Watch*` suites, then the whole unit target.
 
-- [ ] **Step 4: Commit.** `git commit -m "feat(app): adapt today's plan to the current gym"`
+- [x] **Step 4: Commit.** `git commit -m "feat(app): adapt today's plan to the current gym"`
 
 ---
 
@@ -403,11 +404,11 @@ enum GymMark: Equatable { case swapped(planned: String, missingKind: String); ca
 
 **Files:** create `Features/Gyms/GymChip.swift`, `GymPickerView.swift`, `AddPrivateGymSheet.swift`, `GymLocator.swift`, `NearbyGymRule.swift`, `GymPlaceSearch.swift`, `GymPhotoView.swift`; modify `TodayView.swift`, `ios/project.yml`; tests `NearbyGymRuleTests.swift`, `ios/GymRollinsUITests/GymPickerUITests.swift`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `NearbyGymRuleTests`: `findsTheNearestWithin150m`, `ignoresTheCurrentGym`, `ignoresGymsWithoutCoordinates`, `prefersMyGymsOverMapsPlacesAtTheSameDistance`, `matchesAMapsPlaceAlreadyInMyGymsOnce`, `throttlesTo30Minutes`, `nothingFarAway`.
   - `GymPickerUITests`: `testAddAPrivateGymAndPickIt`, `testPickerIsReachableAndCancelable`, `testPickAMapsGymWithFakePlaces` (`-fakeLocation -fakeGymPlaces`: search "Iron", tap, chip shows the name, and it's listed under My gyms on reopening), `testNearbySuggestionOffersTrainHere`, `testNoGymGoesBackToThePlainPlan`.
 
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
 
   **`project.yml`:** `NSCameraUsageDescription` "GymRollins uses the camera to photograph gym equipment. Faces are blurred before the photo is saved.", `NSLocationWhenInUseUsageDescription` "GymRollins uses your location once to suggest the gym you're at. It isn't stored or sent anywhere.", `NSPhotoLibraryUsageDescription` isn't needed (`PhotosPicker` runs out of process). Run `xcodegen generate`.
 
@@ -426,9 +427,9 @@ enum GymMark: Equatable { case swapped(planned: String, missingKind: String); ca
 
   Picking a Maps place calls `gyms.addMapsGym` (a local row, `.device`), then `setCurrentGym`.
 
-- [ ] **Step 3: Run** `-only-testing:GymRollinsTests/NearbyGymRuleTests -only-testing:GymRollinsUITests/GymPickerUITests`, then `TodayFlexUITests` and `TodayPlanScreenUITests`.
+- [x] **Step 3: Run** `-only-testing:GymRollinsTests/NearbyGymRuleTests -only-testing:GymRollinsUITests/GymPickerUITests`, then `TodayFlexUITests` and `TodayPlanScreenUITests`.
 
-- [ ] **Step 4: Commit.** `git commit -m "feat(gyms): gym chip, picker and a one-shot nearby suggestion"`
+- [x] **Step 4: Commit.** `git commit -m "feat(gyms): gym chip, picker and a one-shot nearby suggestion"`
 
 ---
 
@@ -436,16 +437,16 @@ enum GymMark: Equatable { case swapped(planned: String, missingKind: String); ca
 
 **Files:** create `GymEquipmentView.swift`, `GymEquipmentModel.swift`, `ListingDetailView.swift`; tests `GymEquipmentModelTests.swift`, UI in `GymEquipmentUITests.swift`.
 
-- [ ] **Step 1: Failing tests.** `GymEquipmentModelTests`: `groupsByCategoryInOrder` (Machines, Cables, Free weights, Benches, Racks, Cardio, Accessories; empty ones left out), `coverageIsAmberBelowThree`, `coverageCountsOnlyServingListings` (a treadmill counts for nothing), `headerCountsAndAddress` ("Home · 3 items"), `unknownKindShowsUpdateTheApp` (a listing with a kind this app doesn't know: title "Update the app to use this item", ignored by the rules), `badgeForEachState` (`Only me` for device, `✓ N` for confirmations; `Flagged` and `Under review` are in the model now, used by plan 22).
+- [x] **Step 1: Failing tests.** `GymEquipmentModelTests`: `groupsByCategoryInOrder` (Machines, Cables, Free weights, Benches, Racks, Cardio, Accessories; empty ones left out), `coverageIsAmberBelowThree`, `coverageCountsOnlyServingListings` (a treadmill counts for nothing), `headerCountsAndAddress` ("Home · 3 items"), `unknownKindShowsUpdateTheApp` (a listing with a kind this app doesn't know: title "Update the app to use this item", ignored by the rules), `badgeForEachState` (`Only me` for device, `✓ N` for confirmations; `Flagged` and `Under review` are in the model now, used by plan 22).
 
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
   - Reached from the picker. Title (`DisplayTitle`), address, item count; coverage badges for the 6 chips (`gymEquipment.coverage.<muscle>`; amber `Theme.record` when under 3), computed once per load with `WorkoutBuilder.itemCount`, off the main thread if it takes over 16 ms on the real library; photo tiles (`gymEquipment.listing.<kindId>`), grouped by category, with kind name (brand and model if any), loads text, badge, `×N` when quantity is over 1. Floating `+ Add equipment` (`gymEquipment.add`, primary glass). Empty state: "Nothing here yet. Add the first piece of equipment." Pull to refresh does nothing until plan 21, so it isn't offered yet.
   - Tile → `ListingDetailView`: full photo, kind, editable loads (the same control as Step 4), quantity, note, Save (`listing.save`), Delete with a confirmation (`listing.delete`, `listing.delete.confirm`), which removes the row and its photo files. A listing with no photo offers "Add a photo" (the camera or library, processed the same way).
   - Changes call `env.gymsChanged()`.
 
-- [ ] **Step 3: Run** the suites.
+- [x] **Step 3: Run** the suites.
 
-- [ ] **Step 4: Commit.** `git commit -m "feat(gyms): the gym's equipment screen"`
+- [x] **Step 4: Commit.** `git commit -m "feat(gyms): the gym's equipment screen"`
 
 ---
 
@@ -453,20 +454,20 @@ enum GymMark: Equatable { case swapped(planned: String, missingKind: String); ca
 
 **Files:** create `AddEquipmentFlow.swift`, `AddEquipmentModel.swift`, `AddEquipmentSteps.swift`, `CameraPicker.swift`; tests `AddEquipmentModelTests.swift`, UI `AddEquipmentUITests.swift`.
 
-- [ ] **Step 1: Failing tests.** `AddEquipmentModelTests`:
+- [x] **Step 1: Failing tests.** `AddEquipmentModelTests`:
   `skippingPhotoGoesToKind` · `kindWithNoListingSkipsTheDuplicateStep` · `kindAlreadyListedShowsTheDuplicateStep` · `yesThatsItCreatesNothing` (own listing at a phone-only gym: "Yes, that's it" ends the flow with no new row) · `pickingACatalogueItemCarriesBrandAndModel` · `differentOneGoesToDetails` · `stackDefaultsAndStepsInTheUserUnit` (lb: 250 lb, steps of 5 lb; kg: 110 kg, steps of 2.5 kg; stored in kg; can't go below one step or above 1000 kg) · `plateLoadedAndBodyweightHaveNoLoadInput` (`.plates`, `.none`) · `fixedSetRequiresAWeight` (Save disabled until one chip is on) · `fixedChipsMatchTheKind` (kettlebells offer 20 kg, shown "44 lb (20 kg)" to an lb user, and 44 and 53 lb chips store 20 and 24 kg; dumbbells offer 5 to 100 lb by 5, or 2 to 50 kg by 2; `All` selects every chip) · `saveStoresPhoneOnly` (`.device`, photo file set when there's a photo, nil when skipped) · `processorFailureOffersRetryOrSkip` (Vision failure message: "We couldn't check this photo for faces, so it wasn't saved. Try again or skip the photo."; too big: "This photo couldn't be made small enough. Try another one.") · `failedSaveDeletesTheJustSavedPhoto` (no orphan file).
 
   `AddEquipmentUITests` with `-gymPhotoFixture -seedGym`: `testAddWithPhoto`, `testSkipPhoto`, `testDuplicateStepAppears`, `testFixedSetChipsSaveAndShowOnTheScreen`, `testCancelLeavesNothing`.
 
-- [ ] **Step 2: Implement.** A sheet with its own `NavigationStack`, reachable from `gymEquipment.add` and from Build's `+ Add equipment`.
+- [x] **Step 2: Implement.** A sheet with its own `NavigationStack`, reachable from `gymEquipment.add` and from Build's `+ Add equipment`.
   1. **Photo** (`addEquipment.photo`): reminder "Photograph the equipment, not people. Faces are blurred automatically." Camera opens at once when available (`UIImagePickerController` via `CameraPicker`, `fullScreenCover`; on the simulator it isn't available, so the step's buttons remain). Buttons: Take Photo (`addEquipment.camera`), Library (`addEquipment.library`, `PhotosPicker`; with `-gymPhotoFixture` it uses a generated image), Skip (`addEquipment.skip`). Processing shows a spinner and runs detached; the original image data is dropped right after.
   2. **Kind** (`addEquipment.kind`): "STEP 2 OF 4 · What is it?". Tiles `addEquipment.kind.<id>`. Common first in two groups: Machines (lat-pulldown, leg-press, chest-press-machine, pec-deck, seated-row-machine, leg-curl), Free weights · benches · racks (dumbbells, kettlebells, barbell, adjustable-bench, power-rack, cable-station), then the rest by category. Search field (`addEquipment.kindSearch`) filters all 46. Footer "Each kind already knows its exercises and muscles. You never tag muscles."
   3. **Already here?** (`addEquipment.duplicate`): existing listings of the kind at this gym with photo and loads, each "Yes, that's it" (`addEquipment.same.<listingId>`; the "+1 confirm" wording and server call are plan 21's); "Or a known model" from `catalogueItems(kindId:)` with "listed at N gyms"; Generic; "No, it's a different one" (`addEquipment.different`), which also offers optional Brand and Model fields on the next step.
   4. **Weights** (`addEquipment.details`): stack stepper (`addEquipment.stackMinus`, `addEquipment.stackPlus`, showing "250 lb (113 kg)"), or fixed-weight chips (`addEquipment.weight.<kg>`, `addEquipment.weightsAll`), or nothing. Who sees it: fixed "This phone only" text. Note (optional, 280). Save (`addEquipment.save`). Save shows errors inline and calls `env.gymsChanged()`.
 
-- [ ] **Step 3: Run** the suites.
+- [x] **Step 3: Run** the suites.
 
-- [ ] **Step 4: Commit.** `git commit -m "feat(gyms): add equipment in 4 steps"`
+- [x] **Step 4: Commit.** `git commit -m "feat(gyms): add equipment in 4 steps"`
 
 ---
 
@@ -474,26 +475,43 @@ enum GymMark: Equatable { case swapped(planned: String, missingKind: String); ca
 
 **Files:** create `BuildWorkoutSheet.swift`, `BuildResultView.swift`, `BuildResultModel.swift`; modify `TodayView.swift`, `TodayExerciseRow.swift`, `DesignSystem/ExerciseRow.swift`; tests `BuildResultModelTests.swift`, `BuildWorkoutScenarioTests.swift`, `BuildWorkoutUITests.swift`, additions to `AccessibilityAuditUITests` and `DynamicTypeUITests`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `BuildResultModelTests`: `titleJoinsChips` ("Back + Arms"), `subtitleCountsAndMinutes` ("Home · 4 exercises · ~45 min"), `rowShowsSetsRepsAndFittedLoad` ("3 × 10 · 53 lb (24 kg)"), `rowNamesItsListing`, `repeatRowHasBadgeAndReason` ("also Tuesday · no other Back option here"), `bodyweightFillIsMarked` ("no equipment"), `thinNoticeWords` ("Only 3 Back items catalogued at Home so far. Add a photo to unlock more variety."), `thinNoticeWithNoItems` ("No Back equipment catalogued at Home yet. Add a photo to unlock more variety."), `skippedChipsAreReported` ("No room for Core at 30 min"), `shortWorkoutSaysSo` ("4 of 6 exercises. That's all this gym has for these muscles right now.").
   - `BuildWorkoutScenarioTests` (criterion 1 and 3 at app level with the real library, a real `AppEnvironment`, and fake photos): `newGymFiveListingsBuildChest` (every equipment exercise links a listing with a photo; every kind is listed; fills are marked), `fourDaysInARow` (build, complete, next day; each of workouts 2 to 4 changes at least half, when the gym offers at least twice as many as the workout needs), `rebuildAlwaysChangesWhileThereIsMore`, `startBecomesTodaysPlan` (`TodayPlan.kind == .built`, title, the routine is unchanged, Start uses it; after `planStore.clear()` Today is back to the schedule).
   - `BuildWorkoutUITests`: `testBuildAtHomeShowsBannerAndStarts` (`-seedGym`), `testBuildWithNoGymOpensThePickerFirst`, `testRebuildChangesTheList`, `testSwappedBadgeOnToday` (a seeded routine with `-seedGym` shows `today.row.swapped.<id>`, the note, and "Your plan isn't changed"), `testUsePlannedAnyway`.
   - Add the gym picker, equipment screen, add flow and Build screens to `AccessibilityAuditUITests` and `DynamicTypeUITests`.
 
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
   - **Today bottom bar:** `Build workout` (`today.build`, secondary glass) next to `Start Workout`; `ViewThatFits(in: .horizontal)` stacks them at large Dynamic Type. Shown whenever no session runs, including rest days and an empty plan. With no gym, it opens the picker and continues to the sheet after a gym is chosen.
   - **Row marks:** `TodayExerciseRow`: `.swapped` shows `Badge("SWAPPED", .record)` and a note line "for <planned> · no <kind> here" (identifier `today.row.swapped.<exerciseId>`); `.unavailable` shows `Badge("NOT HERE", .neutral)` and "not available here". `ExerciseRow` gains `note: String?` and `photoFile: String?`; with a photo, `GymPhotoView` replaces `ExerciseThumbnail`. The note above the rows is `today.gymNote` (glass, amber). The row's menu adds "Use <planned> anyway" (`today.menu.usePlanned`) for swapped rows.
   - **Sheet** (`build.sheet`, `.large`): "Build workout", "at <gym> · <n> items"; 6 large chips (`build.chip.<muscle>`, multi-select in tap order, `.isSelected` trait); segmented 30 / 45 / 60 min (`build.length.<minutes>`, default 45); Build (`build.go`, disabled with no chips). Chips and length are remembered per device (`gymrollins.buildSetup`).
   - **Result** (pushed; `build.result`): title and subtitle; banners (thin, with `+ Add equipment` `build.addEquipment`; skipped; short); rows `build.row.<exerciseId>` with `GymPhotoView` of the load listing, or the exercise thumbnail, subtitle, badges (`REPEAT`, `no equipment`); `Rebuild` (`build.rebuild`) appends the result to `avoid` in order; `Start` (`build.start`). A workout with no exercises says "Nothing fits yet" with the add link and no Start. After adding equipment it builds again with the same request and resets `avoid`.
   - **Start:** `TodayView` applies `TodayPlan.built(name:items:day:)` and starts as usual. If a session started meanwhile, it shows that one (the same rule as `start(from:)`).
 
-- [ ] **Step 3: Run** the new suites and the whole app test target, UI tests included except `PerformanceUITests`, with the 26.4 `DEST`:
+- [x] **Step 3: Run** the new suites and the whole app test target, UI tests included except `PerformanceUITests`, with the 26.4 `DEST`:
 
 ```bash
 DEST='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' scripts/ios-test.sh
 ```
 
-- [ ] **Step 4: Commit.** `git commit -m "feat(gyms): build a workout from the gym's equipment"`
+- [x] **Step 4: Commit.** `git commit -m "feat(gyms): build a workout from the gym's equipment"`
+
+---
+
+### Task 9b: Inventory photos from our storage
+
+Added at the owner's request after Task 9: "make sure that inventory in the gym we can use photo from our storage, and if we
+dont have photo then we can add additional". Spec §5 "What a listing shows".
+
+**Files:**
+- Create: `ios/GymRollins/Resources/OwnPhotos/kind-<kindId>.jpg` (43 public-domain photos), `Features/Media/EquipmentKindPhotos.swift`, `Features/Gyms/ListingPhotoView.swift`
+- Modify: `StoragePhotoManifest.swift`, `SupabaseStoragePhotoProvider.swift`, `ExerciseMediaService.swift`, `GymEquipmentView.swift`, `ListingDetailView.swift`, `AddEquipmentDetailSteps.swift`, `scripts/upload-photos.mjs`, `scripts/upload-photos.test.mjs`, `docs/licenses/free-exercise-db.md`, `Resources/CREDITS.md`
+
+- [x] **Step 1:** Manifest and lookup, tests first: `kinds` in the manifest, hosted before bundled, a hosted failure falls back, every bundled file names a real kind, exactly `lateral-raise-machine`, `skierg` and `upper-body-ergometer` have none.
+- [x] **Step 2:** `scripts/upload-photos.mjs` handles `kind-<kindId>.jpg` and writes `kinds`; run it against the local stack and fetch one public URL.
+- [x] **Step 3:** `ListingPhotoView` on the tile, the detail and the "Yes, that's it" card, with the "Sample" capsule and the note. Add buttons stay while `photoFile` is nil. A stock photo never reaches `photoFile`.
+- [x] **Step 4:** UI tests: sample photo with both add paths; `skierg` shows the placeholder with both add paths; adding a photo removes the capsule, note and buttons, also after reopening. Audits pass with no exclusions.
+- [x] **Step 5:** Commit: `feat(gyms): inventory shows our stock photo until someone adds theirs`.
 
 ---
 
@@ -501,10 +519,10 @@ DEST='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' scripts/ios-test.sh
 
 **Files:** `README.md`, this plan, `docs/specs/2026-10-30-gym-equipment-design.md` (only where behaviour was decided differently: pinned items, location prompt).
 
-- [ ] **Step 1:** Add the feature to the README in the existing voice.
-- [ ] **Step 2:** Look at the app: launch on the simulator with `-seedGym -seedOwner`, walk the picker, add flow and Build, and check screenshots against the wireframes.
-- [ ] **Step 3:** Tick the boxes and append `## Outcome` with real numbers.
-- [ ] **Step 4: Commit.** `git commit -m "docs: plan 20 outcome"`
+- [x] **Step 1:** Add the feature to the README in the existing voice.
+- [x] **Step 2:** Look at the app: launch on the simulator with `-seedGym -seedOwner`, walk the picker, add flow and Build, and check screenshots against the wireframes.
+- [x] **Step 3:** Tick the boxes and append `## Outcome` with real numbers.
+- [x] **Step 4: Commit.** `git commit -m "docs: plan 20 outcome"`
 
 ## Spec coverage (milestone 2)
 
@@ -521,3 +539,32 @@ DEST='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' scripts/ios-test.sh
 | §7 errors: no signal, photo too big, Vision fails, location denied, Maps offline, unknown kind | 3, 6, 7, 8 |
 | §1 criteria 1, 3, 5 at app level | 5, 9 |
 | §1 criterion 6: no network path exists yet; guarded by a test in plan 21 | 21 |
+
+## Outcome
+
+Done on 2026-10-31, branch `feat-gym-phone`, not pushed. Final run on iPhone 17 Pro Max, iOS 26.2: 813 passed, 0 failed, 15
+skipped of 828 app tests (unit and UI, `PerformanceUITests` excluded). GymCore 474 tests with 96.45% line coverage, GymData
+172 tests, uploader 21 tests.
+
+The real app was walked on the simulator with `-seedGym -seedOwner` and no UI-test stubs: the picker, add flow, equipment
+screen and Build match the wireframes. Stock photos load from the bundle, and with `PHOTO_HOSTING=storage` from the local
+bucket: the storage log shows `manifest.json` and `kind-<id>.jpg?v=<rev>` at 200.
+
+**Changed from this plan**
+- Sign-out and account switch keep gyms and photos (decision 4). The first version deleted them.
+- A mid-workout swap fits each set's own reps. No gym: only the weight moves. With a gym: +2 reps only past the heaviest
+  weight there.
+- An lb user's kettlebell chip stores the label's own weight, and every weight check that decides a suggestion allows 0.25 kg.
+  `ProgressionEngine` and `SessionHistory` stay at 0.01, so one re-saved bell can skip a deload once.
+- Prominent buttons use a darker red (`Theme.primaryButtonFill`) for contrast, across the whole app.
+- Task 9b was added at the owner's request.
+
+**iOS 26.4 preview:** the History and Swap sheets don't open on the 26.4 simulator runtime here (build 23E5207p), even on
+`main`, so 14 UI tests fail there. The cause isn't known, nor whether real 26.4 devices are affected. Use 26.2.
+
+**Not tested on a device:** the camera, `openCameraOnce`, `CoreLocationGymLocator`, `MapKitGymPlaceSearch`, `PhotosPicker`.
+Vision can miss a face, and a missed face isn't blurred.
+
+**Known and left:** after a swap, undone warm-ups keep their old weights, and done sets are relabelled as the new exercise, as
+on `main`. The first listing of a kind is always generic, because brand and model only appear after "No, it's a different one".
+Three kinds have no stock photo: `lateral-raise-machine`, `skierg`, `upper-body-ergometer`.

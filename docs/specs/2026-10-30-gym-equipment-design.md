@@ -132,7 +132,7 @@ App target                                                                      
 | `gyms` | `id uuid`, `visibility` (`public`, `private`), `owner_id` (required when private), `name` (1–120), `address` (≤ 300), `latitude`, `longitude`, `maps_place_id` (unique, public only), `created_by` (set null on user delete), `status` (`active`, `flagged`, `removed`), `updated_at` |
 | `equipment_kinds` | `id text`, `name`, `category`, `load_type` (seeded, read-only) |
 | `exercise_requirements` | `exercise_id` → `exercises.id`, `groups jsonb` (array of arrays of kind ids; seeded, read-only) |
-| `equipment_items` | `id uuid`, `kind_id`, `brand` (≤ 60), `model` (≤ 80), `reference_photo_path`, `created_by`, `status`; unique on (`kind_id`, lower `brand`, lower `model`). One generic item per kind (no brand, no model) is seeded |
+| `equipment_items` | `id uuid`, `kind_id`, `brand` (≤ 60), `model` (≤ 80), `created_by`, `status`; unique on (`kind_id`, lower `brand`, lower `model`). One generic item per kind (no brand, no model) is seeded |
 | `gym_equipment` (listings) | `id uuid`, `gym_id`, `item_id`, `visibility` (`public`, `private`), `owner_id` (required when private), `photo_path`, `loads jsonb`, `quantity` (1–50, default 1), `notes` (≤ 280), `added_by` (set null on user delete), `status`, `confirm_count` (kept by a trigger), `updated_at`. A public listing must be on a public gym |
 | `equipment_confirmations` | `listing_id`, `user_id`; primary key on both |
 | `reports` | `id`, `target_type` (`gym`, `item`, `listing`), `target_id`, `reporter_id`, `reason` (`wrong-info`, `not-here-anymore`, `duplicate`, `inappropriate-photo`, `person-in-photo`, `spam`, `other`), `note` (≤ 280), `resolved_at`; unique on (`target_type`, `target_id`, `reporter_id`) |
@@ -177,6 +177,8 @@ The current gym is a per-device preference (not synced): `nil` means today's beh
 - Sharing is always an explicit tap ("Share with this gym"), which asks for Sign in with Apple if needed. Nothing is
   uploaded in the background except queued writes the user already asked for.
 - Private gyms (home) can never be shared; they can only be synced.
+- Signing out or switching accounts keeps "This phone only" gyms, listings and their photos, because they were never
+  tied to an account and the promise is that they stay on the phone. Erase All Data and Delete Account remove them.
 
 ### Gym picker and location
 - The picker lists My gyms (with visibility badges), an Apple Maps search (`MKLocalSearch`, point-of-interest filter
@@ -184,6 +186,8 @@ The current gym is a per-device preference (not synced): `nil` means today's beh
 - On Today's appearance, at most once every 30 minutes, the app asks for one location fix (When In Use). If one of My
   gyms, or a Maps fitness center, is within 150 m and isn't the current gym, Today shows "You're at X?". It never
   switches gyms by itself.
+- Today only asks for a fix when permission is already granted. The first permission prompt comes when the user opens
+  the picker, where the reason is obvious.
 - No location permission: no suggestion; search and My gyms still work. Maps offline: My gyms and "Add a private gym".
 
 ### Adding equipment (4 steps)
@@ -205,8 +209,24 @@ Confirming someone else's listing without an account stores nothing on the serve
 3. Strip all metadata (EXIF, GPS, TIFF) when writing the JPEG.
 4. A 400 px thumbnail for lists.
 
-The cleaned image is what's stored on the phone and what's uploaded. Storage paths: `gym-photos/<uid>/<uuid>.jpg`
-(public bucket, shared listings) and `gym-photos-private/<uid>/<uuid>.jpg` (synced private listings).
+The cleaned image is what's stored on the phone and what's uploaded. Storage paths: `gym-photos/<uuid>.jpg` (public
+bucket, shared listings) and `gym-photos-private/<uuid>.jpg` (synced private listings). Names are bare random ids: a
+folder per user would give every reader of a public URL the uploader's id. Ownership is the Storage API's `owner_id`.
+
+### What a listing shows
+1. **Its own photo**, the one a user took or chose.
+2. **A photo another gym shared of the same item** (a signed-in or anonymous reader with the catalogue cached), labelled
+   "Photo from another gym". The server works it out from the item's active public listings: most confirmations, then
+   oldest. It's never stored on the item, so removing, flagging or blocking the source shows the next one or none, with
+   nothing to clean up. The view also returns that listing's id, because the photo has to be reportable where it's seen.
+3. **Our stock photo of that kind**, labelled "Sample": `exercise-photos/kind-<kindId>.jpg` in our Storage when the manifest
+   lists it, otherwise the copy bundled in the app, so it works offline and with no account. 43 of the 46 kinds have one;
+   the owner adds or replaces one by running `scripts/upload-photos.mjs`, with no app release.
+4. **A placeholder.**
+
+Cases 2 to 4 always offer Take Photo and Add a photo. A borrowed photo is display only: it never becomes the listing's
+photo, is never uploaded again and doesn't count as the listing having a photo. So a gym's thumbnail, Today's rows and the
+"Yes, that's it" photo rule only look at the listing's own photo.
 
 ### Plan adaptation (`GymAdapter`, for the session only)
 For each exercise in today's routine, when a current gym is set:
@@ -219,6 +239,9 @@ For each exercise in today's routine, when a current gym is set:
 - The swapped-in exercise keeps the planned item's id, sets, reps and superset, drops the planned weight, and takes
   the default increment for its own equipment. Its weight comes from its own history through `ProgressionEngine`,
   fitted by `AvailableLoads`. A replacement is never an exercise already in today's list.
+
+- Pinned items: when the user hand-picks an exercise for today, or chooses "Use <planned> anyway" on a swapped row, the
+  adapter leaves that item alone, so the next reload doesn't swap it back and an incomplete catalogue never blocks anyone.
 
 The routine and its progression history are never edited by the adapter.
 
@@ -273,15 +296,26 @@ All are `security definer` functions callable by `authenticated` only, and rejec
 | `find_or_create_gym(maps_place_id, name, address, lat, lng)` | Returns the existing public gym for a Maps place or creates it | 10 creations |
 | `share_listing(gym_id, item, loads, quantity, notes, photo_path, force_new)` | Creates a public listing. When the gym already has active listings of that kind and `force_new` is false, returns them instead. Checks that `photo_path` is in the caller's folder | 30 |
 | `confirm_listing(listing_id)` | Adds the caller's confirmation (idempotent) | 100 |
-| `report_content(target_type, target_id, reason, note)` | One report per user per target. At 3 unresolved reports from different users the target's status becomes `flagged` | 20 |
-| `block_author(target_type, target_id)` / `unblock_all()` | Blocks the author of a gym, item or listing (the client never sees user ids), or clears the caller's blocks | — |
+| `report_content(target_type, target_id, reason, note)` | One report per user per target, for a gym or listing. At 3 unresolved reports from different users the target's status becomes `flagged`. An author's report of their own content isn't stored | 20 |
+| `block_author(target_type, target_id)` / `unblock_all()` | Blocks the author of a gym or listing (the client never sees user ids), or clears the caller's blocks | — |
 | `moderate_content(target_type, target_id, action)` | Admins only: `restore` (status active, reports resolved) or `remove` | — |
 
-Limits live in `DomainLimits` and the existing drift guard (`_shared/domain-limits-drift.test.ts`) covers them.
+Items aren't a report target. Everything visible about an item comes through a listing, and removing that listing takes
+the item's text out of the public catalogue. Items are only ever created by `share_listing`: a private listing points at
+its kind's generic item and keeps any brand and model in its own `private_brand` and `private_model`, so private text
+never enters the shared table.
+
+Every function takes a per-user lock before counting, so concurrent calls can't get past a limit. `moderate_content`
+returns a listing's photo for the app to delete through Storage (SQL can't). Removing a gym hides its listings through
+the access rules and keeps their photos, because they aren't what was reported.
+
+Limits live in `DomainLimits` and the existing drift guard (`_shared/domain-limits-drift.test.ts`) covers them. Besides
+the table above: 60 photo uploads a day, 100 private gyms and 1,000 private listings per user.
 
 ### Reads and access rules
-- Public gyms, items and listings with `status = active`: readable by `anon` and `authenticated`. For signed-in users
-  the policy also hides listings and items whose author the user has blocked.
+- Public gyms, items and listings with `status = active`: readable by `anon` and `authenticated`. A listing is only
+  readable while its gym and item are active too. For signed-in users the policy also hides listings and items whose
+  author the user has blocked.
 - The author of a flagged item can still read it ("Under review" in the app). Admins can read everything.
 - Private gyms and private listings: only `owner_id = auth.uid()`, with the existing pattern (writes blocked for MCP
   clients, reads gated by `mcp_flag('gyms')`).
@@ -289,8 +323,11 @@ Limits live in `DomainLimits` and the existing drift guard (`_shared/domain-limi
 - Reads go through `security_invoker` views (`public_gyms`, `public_equipment_items`, `public_gym_equipment`) that
   drop the author columns and add `is_mine`. Direct `select` on `added_by`, `created_by` and `owner_id` is revoked
   from `anon` and `authenticated`.
-- Storage: public bucket readable by anyone; insert only into the caller's own folder, JPEG only, 1 MB limit; no
-  update; delete own objects; admins may delete any object in `gym-photos`. The private bucket is owner-only.
+- Storage: public bucket readable by anyone; insert only as the caller, under a bare uuid name no listing has used, JPEG
+  only, 1 MB limit; no update; delete own objects; admins may delete any object in `gym-photos`. The private bucket is
+  owner-only. `share_listing` needs the photo to be the caller's own and unused.
+- MCP clients are never admins, can't touch Storage, and with `mcp_flag('gyms')` off get `false` from `is_mine` and
+  `confirmed_by_me`, so Claude can't learn what the user created or confirmed.
 
 ### Offline and the outbox
 - Opening or picking a public gym downloads its active listings and thumbnails and caches them. Refresh on open (at
@@ -307,14 +344,18 @@ Limits live in `DomainLimits` and the existing drift guard (`_shared/domain-limi
 - Settings → About lists a contact address for content complaints (App Store user-generated content guideline).
 
 ### Account deletion
-Deletes private gyms, private listings, the user's confirmations, reports, blocks and all of the user's photos in
-both buckets. Shared listings and gyms stay, without the author (they describe the gym).
+Deletes private gyms, private listings, the user's confirmations, blocks and all of the user's photos in both buckets.
+Shared listings and gyms stay without the author, because they describe the gym; their notes go, because those are the
+author's own words. Reports stay without the reporter, so deleting accounts can't erase a flag's history. The app removes
+the photos first, through Storage; if that fails the account stays and the user can retry.
 
 ### Claude (MCP)
 - `list_gyms`: the user's synced private gyms, plus public gyms the user trained at or shared to (from `workouts.gym_id`
   and `gym_equipment.added_by`).
-- `get_gym_equipment(gym_id)`: the gym's active listings visible to the user (kind, item, loads, quantity, confirm
-  count, visibility) plus the library exercise ids that are available there, computed from `exercise_requirements`.
+- `get_gym_equipment(gym_id)`: the gym's active listings visible to the user (kind, loads rebuilt from known keys,
+  quantity, confirm count, visibility; brand and model only on the user's own listings; never notes) plus the library
+  exercise ids that are available there, computed from `exercise_requirements`. Strangers' free text doesn't reach Claude,
+  since it would be a path for prompt injection. A public gym's name is the one exception and is labelled unverified.
 - Both are read-only and gated by a new `mcp_flag('gyms')`, which the user can switch off like the existing flags.
 - "This phone only" data never reaches the server, so Claude can't see it. The Claude settings screen says so.
 - Proposals are unchanged. When a proposal adds an exercise the gym can't do, `GymAdapter` swaps it at workout time.
@@ -325,7 +366,8 @@ both buckets. Shared listings and gyms stay, without the author (they describe t
   in the picker header opens the gym's equipment. "Build workout" (glass) sits next to "Start workout" (prominent).
   Linked listings' photos replace the exercise thumbnail when present.
 - **Gym equipment:** title, address, item count; coverage badges per chip group, amber when a group has fewer than 3
-  items; photo tiles grouped by category with loads and a badge (`✓ N`, `Only me`, `Flagged`, `Under review`);
+  items; photo tiles grouped by category ("What a listing shows" in §5) with loads and a badge (`✓ N`, `Only me`,
+  `Flagged`, `Under review`);
   floating "+ Add equipment".
 - **Build workout:** a sheet with 6 large muscle chips (multi-select), a 30 / 45 / 60 min segmented control, Build.
   The result screen lists exercises with the listing photo, sets, reps and load; the thin-inventory banner; REPEAT
@@ -395,3 +437,7 @@ both buckets. Shared listings and gyms stay, without the author (they describe t
 | Orphan photos (uploaded, never linked) | Accepted for now; a cleanup job is a follow-up once the cloud project exists |
 | Apple Maps ids change or a place is missing | Fallback to manual gyms; `maps_place_id` is unique but nullable |
 | Shared features need the cloud project | Milestones 1–2 are useful alone; 3–4 run on the local stack until the owner approves the cloud project |
+| Throwaway accounts report something to hide it | It stays in the admin queue, an admin can restore it and the same accounts can't report it again. Before the cloud launch: turn email sign-up off (the app uses Sign in with Apple), which makes throwaway accounts costly |
+| The first person to share at a place sets its name on the server | The app shows the name Apple Maps gave it, never the server's, so other users don't see it. Claude sees it labelled unverified. Before the cloud launch: consider resolving names through the Apple Maps Server API |
+| A custom client skips the phone's face blur | Reports and admin removal. Before the cloud launch: consider checking image bytes on the server |
+| Someone blocks an author and compares lists | They can tell which listings share an author, but never who the author is. Accepted |

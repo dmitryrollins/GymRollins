@@ -42,6 +42,9 @@ try it, open an issue, or send a pull request.
 - **Apple Health.** Workouts and weigh-ins go to Health; body weight comes back from it.
 - **Insights.** Muscle recovery map, weekly sets per muscle, streaks, and strength levels compared with
   OpenPowerlifting data.
+- **Train with what's actually there.** Keep a photo catalogue of each gym's equipment, no account needed. Today's
+  plan swaps what this gym can't do for that session only, weights snap to the bells and stacks that exist, and Build
+  workout makes a session from what's there. An item with no photo shows a sample until you add yours.
 - **Bring your history.** CSV import from Fitbod, Strong, Hevy and FitNotes.
 - **Offline-first.** Everything lives on the device (SwiftData); cloud sync through Supabase is optional.
 
