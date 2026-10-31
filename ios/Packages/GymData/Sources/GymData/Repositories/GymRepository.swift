@@ -109,14 +109,18 @@ public final class GymRepository {
 
     // MARK: - Listings
 
-    /// The gym's usable listings. A screen passes `includingUnsupported` to show the rows a newer app wrote, which the
-    /// rules never see.
+    /// The gym's usable listings. A screen passes `includingUnsupported` to show what the rules never see: the rows a
+    /// newer app wrote, and my own listings a moderator flagged (so their badge can show). Nothing else changes for
+    /// the rules, which read `inventory(gymId:)` and the default list.
     public func listings(gymId: UUID, includingUnsupported: Bool = false) throws -> [GymListing] {
         let rows = try context.fetch(FetchDescriptor<GymListingRecord>(
             predicate: #Predicate { $0.gymId == gymId }, sortBy: [SortDescriptor(\.createdAt)]))
         return try rows.filter {
-            $0.deletedAt == nil && ($0.statusRaw == ListingStatus.active.rawValue
-                || (includingUnsupported && $0.statusRaw == ListingStatus.unsupported.rawValue))
+            guard $0.deletedAt == nil else { return false }
+            if $0.statusRaw == ListingStatus.active.rawValue { return true }
+            guard includingUnsupported else { return false }
+            return $0.statusRaw == ListingStatus.unsupported.rawValue
+                || ($0.statusRaw == ListingStatus.flagged.rawValue && $0.isOwn)
         }.map(listing)
     }
 

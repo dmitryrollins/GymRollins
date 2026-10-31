@@ -88,6 +88,26 @@ import Testing
         #expect(shown.first { $0.id == odd.id }?.confirmedByMe == true)
     }
 
+    /// A listing a moderator flagged: the screen shows my own (with its badge), never the rules, never someone else's.
+    @Test func myOwnFlaggedListingShowsOnTheScreenButNotToTheRules() throws {
+        defer { f.tearDown() }
+        let gym = try makeGym()
+        let mine = try add(gym, kind: "cable-stack")
+        let theirs = try add(gym, kind: "barbell")
+        try add(gym, kind: "bench")
+        for (listing, own) in [(mine, true), (theirs, false)] {
+            let row = try #require(try repo.listingRecord(listing.id))
+            row.statusRaw = ListingStatus.flagged.rawValue
+            row.isOwn = own
+        }
+        try f.context.save()
+        #expect(try repo.listings(gymId: gym.id).count == 1)
+        #expect(try repo.inventory(gymId: gym.id).listings.count == 1)
+        let shown = try repo.listings(gymId: gym.id, includingUnsupported: true)
+        #expect(Set(shown.map(\.id)).contains(mine.id) && !shown.map(\.id).contains(theirs.id))
+        #expect(shown.count == 2)
+    }
+
     @Test func gymsAreSortedByName() throws {
         defer { f.tearDown() }
         for name in ["Charlie", "alpha", "Bravo"] { _ = try makeGym(name) }
