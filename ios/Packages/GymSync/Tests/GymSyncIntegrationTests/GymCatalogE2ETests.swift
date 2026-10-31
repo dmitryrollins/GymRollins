@@ -73,6 +73,10 @@ struct GymCatalogE2ETests {
                                            notes: notes, photoFile: photo))
         }
 
+        func record(_ id: UUID) throws -> GymListingRecord? {
+            try container.mainContext.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first
+        }
+
         func share(_ listing: GymListing, as user: UUID) async throws {
             try outbox.enqueueShare(listingId: listing.id, ownerId: user)
             await outbox.run(userId: user)
@@ -193,6 +197,61 @@ struct GymCatalogE2ETests {
         #expect(theirs.isOwn)
         try await a.deleteAccount()
         try await b.deleteAccount()
+    }
+
+    // MARK: - A lost answer
+
+    /// Sends the first share to the real server and then drops the answer, as a connection lost on the way back does.
+    private final class LosesTheFirstAnswer: GymCatalogTransport, @unchecked Sendable {
+        let base: SupabaseGymCatalogTransport
+        private let lock = NSLock()
+        private var lost = false
+        init(_ base: SupabaseGymCatalogTransport) { self.base = base }
+
+        func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { try await base.publicGym(mapsPlaceId: mapsPlaceId) }
+        func publicListings(gymId: UUID) async throws -> PublicListings { try await base.publicListings(gymId: gymId) }
+        func publicItems(kindId: String) async throws -> [RemoteItem] { try await base.publicItems(kindId: kindId) }
+        func findOrCreateGym(mapsPlaceId: String, name: String, address: String?, latitude: Double?,
+                             longitude: Double?) async throws -> UUID {
+            try await base.findOrCreateGym(mapsPlaceId: mapsPlaceId, name: name, address: address, latitude: latitude,
+                                           longitude: longitude)
+        }
+        func share(_ request: ShareRequest) async throws -> ShareResult {
+            let result = try await base.share(request)
+            let first = lock.withLock { () -> Bool in defer { lost = true }; return !lost }
+            if first { throw GymCatalogError.offline }
+            return result
+        }
+        func confirm(listingId: UUID) async throws -> Int { try await base.confirm(listingId: listingId) }
+        func uploadSharedPhoto(_ data: Data, name: String) async throws -> String {
+            try await base.uploadSharedPhoto(data, name: name)
+        }
+        func deleteSharedPhoto(path: String) async throws { try await base.deleteSharedPhoto(path: path) }
+        func publicPhotoURL(path: String) -> URL? { base.publicPhotoURL(path: path) }
+    }
+
+    @Test func aShareWhoseAnswerWasLostIsRetriedIntoOneListing() async throws {
+        let account = try await signUp()
+        let phone = try Phone(account.auth.client)
+        let flaky = LosesTheFirstAnswer(phone.catalog)
+        let outbox = ShareOutbox(repository: phone.repo, transport: flaky,
+                                 photoData: { _ in Data(repeating: 0xFF, count: 600) }, now: Date.init)
+        let gym = try phone.mapsGym(place())
+        let listing = try phone.add(gym, "cable-station", photo: "mine.jpg")
+        try outbox.enqueueShare(listingId: listing.id, ownerId: account.userId)
+
+        await outbox.run(userId: account.userId)
+        #expect(outbox.pendingCount == 1, "the answer was lost, so the share is still queued")
+        let photo = try #require(try phone.record(listing.id)?.remotePhotoPath)
+        let serverGym = try #require(try phone.repo.gym(gym.id)?.remoteId)
+
+        await outbox.run(userId: account.userId)
+        #expect(outbox.pendingCount == 0)
+        #expect(try phone.record(listing.id)?.uploadStateRaw == UploadState.uploaded.rawValue)
+        #expect(try phone.record(listing.id)?.remotePhotoPath == photo, "the photo is not uploaded twice")
+        let onServer = try await phone.catalog.publicListings(gymId: serverGym).listings
+        #expect(onServer.map(\.id) == [listing.id], "one row on the server")
+        try await account.deleteAccount()
     }
 
     // MARK: - Borrowed photo

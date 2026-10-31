@@ -263,6 +263,16 @@ struct GymCatalogDTOTests {
     }
 }
 
+struct PhotoURLTests {
+    @Test func onlyAUuidJpgBecomesAUrl() throws {
+        let config = SupabaseConfig(url: URL(string: "http://127.0.0.1:1")!, anonKey: "k")
+        let transport = SupabaseGymCatalogTransport(client: config.makeClient(storage: InMemoryAuthStorage()))
+        #expect(transport.publicPhotoURL(path: "3fa85f64-5717-4562-b3fc-2c963f66afa6.jpg") != nil)
+        #expect(transport.publicPhotoURL(path: "../etc/passwd") == nil)
+        #expect(transport.publicPhotoURL(path: "a/3fa85f64-5717-4562-b3fc-2c963f66afa6.jpg") == nil)
+    }
+}
+
 struct GymPushRefusalTests {
     private func error(_ message: String, _ code: String) -> PostgrestError {
         PostgrestError(detail: nil, hint: nil, code: code, message: message)

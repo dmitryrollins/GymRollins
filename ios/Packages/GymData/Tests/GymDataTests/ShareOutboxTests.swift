@@ -74,11 +74,13 @@ import Testing
         let listing = try newListing(try mapsGym())
         let box = outbox
         try box.enqueueShare(listingId: listing.id, ownerId: user)
-        transport.shareScript = [.failure(.offline)]
+        transport.loseNextShareResponse = true // the server stores the row, the answer never arrives
         await box.run(userId: user)
         #expect(box.pendingCount == 1)
+        #expect(transport.serverShares.count == 1, "the first try did reach the server")
         #expect(try record(listing.id).remotePhotoPath != nil)
         await box.run(userId: user)
+        #expect(transport.serverShares.count == 1, "the retry finds the same row by its id")
         #expect(transport.uploads.count == 1)
         #expect(transport.requests.count == 2)
         #expect(transport.requests[0].photoPath == transport.requests[1].photoPath)
@@ -259,16 +261,16 @@ import Testing
         row.isOwn = false
         row.confirmCount = 3
         let box = outbox
-        transport.confirmResult = 7
+        transport.setConfirmCount(3, for: cached.id) // the fake counts like the server: once per listing
         try box.enqueueConfirm(listingId: cached.id, ownerId: user)
         try box.enqueueConfirm(listingId: cached.id, ownerId: user)
         #expect(box.pendingCount == 1)
         await box.run(userId: user)
-        #expect(row.confirmCount == 7)
+        #expect(row.confirmCount == 4)
         #expect(row.confirmedByMe)
         try box.enqueueConfirm(listingId: cached.id, ownerId: user)
         await box.run(userId: user)
-        #expect(row.confirmCount == 7)
+        #expect(row.confirmCount == 4, "confirming again adds nothing")
         #expect(transport.confirmed == [cached.id, cached.id])
     }
 

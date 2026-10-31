@@ -69,7 +69,8 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
     }
 
     public func publicPhotoURL(path: String) -> URL? {
-        try? client.storage.from(Self.bucket).getPublicURL(path: path.lowercased())
+        guard GymPhotoName.isValid(path) else { return nil }
+        return try? client.storage.from(Self.bucket).getPublicURL(path: path.lowercased())
     }
 
     // MARK: Writes

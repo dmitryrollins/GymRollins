@@ -21,6 +21,11 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private var _uploads: [String] = []
     private var _confirmed: [UUID] = []
     private var _confirmResult = 1
+    private var _serverShares: [UUID: ShareRequest] = [:]
+    private var _shareOrder: [UUID] = []
+    private var _loseNextShareResponse = false
+    private var _confirmCounts: [UUID: Int] = [:]
+    private var _confirmers: Set<UUID> = []
     private var _deleted: [String] = []
 
     var calls: [String] { lock.withLock { _calls } }
@@ -44,6 +49,14 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     }
     var requests: [ShareRequest] { lock.withLock { _requests } }
     var uploads: [String] { lock.withLock { _uploads } }
+    /// The rows the fake "server" holds, one per listing id in the order they arrived, as the real function does.
+    var serverShares: [ShareRequest] { lock.withLock { _shareOrder.compactMap { _serverShares[$0] } } }
+    /// The next share is stored and then fails as offline, as when the answer is lost on the way back.
+    var loseNextShareResponse: Bool {
+        get { lock.withLock { _loseNextShareResponse } } set { lock.withLock { _loseNextShareResponse = newValue } }
+    }
+    /// Makes `confirm` count like the server: a listing with a count goes up by one for the first confirm only.
+    func setConfirmCount(_ count: Int, for listingId: UUID) { lock.withLock { _confirmCounts[listingId] = count } }
     var deletedPhotos: [String] { lock.withLock { _deleted } }
     var confirmed: [UUID] { lock.withLock { _confirmed } }
     var confirmResult: Int { get { lock.withLock { _confirmResult } } set { lock.withLock { _confirmResult = newValue } } }
@@ -85,11 +98,27 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
             _requests.append(request)
             return _shareScript.isEmpty ? nil : _shareScript.removeFirst()
         }
-        return try scripted?.get() ?? .created(request.listingId)
+        if let scripted { return try scripted.get() }
+        let lost = lock.withLock { () -> Bool in
+            if _serverShares[request.listingId] == nil {
+                _serverShares[request.listingId] = request
+                _shareOrder.append(request.listingId)
+            }
+            defer { _loseNextShareResponse = false }
+            return _loseNextShareResponse
+        }
+        if lost { throw GymCatalogError.offline }
+        return .created(request.listingId)
     }
     func confirm(listingId: UUID) async throws -> Int {
         try record("confirm")
-        return lock.withLock { _confirmed.append(listingId); return _confirmResult }
+        return lock.withLock {
+            _confirmed.append(listingId)
+            guard let count = _confirmCounts[listingId] else { return _confirmResult }
+            guard _confirmers.insert(listingId).inserted else { return count }
+            _confirmCounts[listingId] = count + 1
+            return count + 1
+        }
     }
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String {
         try record("uploadSharedPhoto")

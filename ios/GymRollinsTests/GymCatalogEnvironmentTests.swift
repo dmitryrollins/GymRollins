@@ -69,7 +69,12 @@ import Testing
         let gym = try rig.gym("Home", ["flat-bench": .none])
         await rig.env.gymCatalogRefresh(gymId: gym.id, force: true)
         let listing = try #require(try rig.env.gyms.listings(gymId: gym.id).first)
-        #expect(throws: (any Error).self) { try rig.env.shareListing(listing.id) }
+        // Signed out, the share stops at the account check; the private-gym rule is the queue's own, checked directly.
+        #expect(throws: GymCatalogError.signedOut) { try rig.env.shareListing(listing.id) }
+        #expect(throws: GymDataError.invalidInput("A private gym can't be shared.")) {
+            try rig.env.gymSharing.outbox.enqueueShare(listingId: listing.id, ownerId: UUID())
+        }
+        #expect(rig.env.gymSharing.outbox.pendingCount == 0)
         #expect(stub.calls.isEmpty)
     }
 

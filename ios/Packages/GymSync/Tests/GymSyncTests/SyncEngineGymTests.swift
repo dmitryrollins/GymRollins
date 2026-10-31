@@ -190,6 +190,23 @@ final class FakePhotoFiles: GymPhotoFiles, @unchecked Sendable {
         #expect(f.store.syncFailures().isEmpty)
     }
 
+    @Test func aPictureTheBucketLostIsUploadedAgainUnderANewName() async throws {
+        defer { f.tearDown() }
+        let (_, listing) = try syncedListing(photo: "mine.jpg")
+        await f.server.missPhotoOnNextListingPush()
+        await engine.sync()
+        #expect(try record(listing.id)?.remotePhotoPath == nil, "the name the bucket lost is forgotten")
+        #expect(try f.store.dirtyGymListings().map(\.value.id) == [listing.id], "the row is still waiting")
+        #expect(f.store.syncFailures().isEmpty, "a lost picture is not a refusal of the row")
+        let first = await f.server.privatePhotos.keys.first
+
+        await engine.sync()
+        let second = try #require(try record(listing.id)?.remotePhotoPath)
+        #expect(second != first)
+        #expect(await f.server.gymListings[listing.id]?.photoPath == second)
+        #expect(try f.store.dirtyGymListings().isEmpty)
+    }
+
     @Test func aPictureAttachedWhileTheDownloadRanIsNotOverwritten() async throws {
         defer { f.tearDown() }
         let gymId = UUID(), listingId = UUID()

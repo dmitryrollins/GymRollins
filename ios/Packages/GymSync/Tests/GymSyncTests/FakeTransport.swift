@@ -42,6 +42,7 @@ actor FakeTransport: SyncTransport {
     private var holdPulls = false
     private var heldPull: CheckedContinuation<Void, Never>?
     private var holdDownloads = false
+    private var missPhoto = false
     private var heldDownload: CheckedContinuation<Void, Never>?
 
     func fail(with error: URLError?) { failure = error }
@@ -166,8 +167,15 @@ actor FakeTransport: SyncTransport {
         }
     }
 
+    /// The next listing push is answered `photo_missing`, as when the bucket lost the picture.
+    func missPhotoOnNextListingPush() { missPhoto = true }
+
     func push(gymListings dtos: [GymListingDTO]) throws -> [RowAck] {
         try gate()
+        if missPhoto {
+            missPhoto = false
+            throw PrivatePhotoMissing()
+        }
         callLog.append("push:gymListings")
         try checkRejected(dtos.map(\.id.uuidString))
         return try dtos.compactMap { dto in
