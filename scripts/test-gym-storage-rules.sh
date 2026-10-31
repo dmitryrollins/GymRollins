@@ -174,6 +174,31 @@ curl -s -o /dev/null -X DELETE "$ST/object/gym-photos-private/$KEPT" -H "apikey:
 out=$(rpc "$TOKEN_F" delete_my_account '{}')
 check "and it goes once the photo is removed (${out##*$'\n'})" test "$(psql_local -c "select count(*) from auth.users where id = '$ID_F'" </dev/null)" = 0
 
+echo "Uploads racing an account deletion leave nothing owned by a missing account"
+# Tokens are signed first, so the uploads that follow need no session. The delete may be refused (photos_remain) when an
+# upload won the race, which is fine: either way no object may belong to an account that is gone. The end state is
+# asserted, not the timing, so the check can't flake; without the lock it failed in each of three trial runs.
+export ST ANON_KEY WORK
+orphans=0; deleted=0
+rounds=12
+for round in $(seq 1 "$rounds"); do
+  read -r TOKEN_G ID_G <<<"$(new_user g)"
+  : > "$WORK/race.txt"
+  for _ in $(seq 1 25); do
+    name="$(uuid).jpg"; echo "$name $(sign "$TOKEN_G" gym-photos "$name")" >> "$WORK/race.txt"
+  done
+  (xargs -P 25 -L 1 bash -c 'curl -s -o /dev/null -X PUT "$ST/object/upload/sign/gym-photos/$0?token=$1" -H "apikey: $ANON_KEY" \
+    -H "Content-Type: image/jpeg" --data-binary "@$WORK/tiny.jpg"' < "$WORK/race.txt") &
+  sleep "0.0$((round % 4))" # the window is a few milliseconds wide, so the delay varies
+  rpc "$TOKEN_G" delete_my_account '{}' >/dev/null
+  wait
+  orphans=$((orphans + $(psql_local -c "select count(*) from storage.objects o where o.owner_id = '$ID_G'
+    and o.bucket_id in ('gym-photos', 'gym-photos-private')
+    and not exists (select 1 from auth.users u where u.id::text = o.owner_id)" </dev/null)))
+  deleted=$((deleted + 1 - $(psql_local -c "select count(*) from auth.users where id = '$ID_G'" </dev/null)))
+done
+check "no object is owned by a deleted account (the account went in $deleted of $rounds rounds)" test "$orphans" = 0
+
 echo "100 parallel uploads leave at most 60 objects"
 read -r TOKEN_E ID_E <<<"$(new_user e)"
 export ST ANON_KEY TOKEN_E WORK
