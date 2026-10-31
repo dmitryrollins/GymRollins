@@ -1,4 +1,5 @@
 import Foundation
+import GymCore
 import GymData
 
 /// A private row of `public.gyms`. `visibility` is always `private` here: shared gyms come through the catalogue
@@ -35,10 +36,10 @@ public struct GymDTO: Codable, Sendable, Equatable, ServerStamped {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
-        name = try c.decode(String.self, forKey: .name)
-        address = try c.decodeIfPresent(String.self, forKey: .address)
-        latitude = try c.decodeIfPresent(Double.self, forKey: .latitude)
-        longitude = try c.decodeIfPresent(Double.self, forKey: .longitude)
+        name = GymCatalogRows.clip(try c.decode(String.self, forKey: .name), to: DomainLimits.gymNameMax) ?? ""
+        address = GymCatalogRows.clip(try c.decodeIfPresent(String.self, forKey: .address), to: DomainLimits.gymAddressMax)
+        latitude = GymCatalogRows.coordinate(try c.decodeIfPresent(Double.self, forKey: .latitude), within: 90)
+        longitude = GymCatalogRows.coordinate(try c.decodeIfPresent(Double.self, forKey: .longitude), within: 180)
         clientUpdatedAt = try c.decode(Date.self, forKey: .clientUpdatedAt)
         deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)

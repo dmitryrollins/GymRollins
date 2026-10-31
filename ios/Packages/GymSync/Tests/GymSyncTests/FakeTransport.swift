@@ -41,6 +41,8 @@ actor FakeTransport: SyncTransport {
     private var rejected: Set<String> = []
     private var holdPulls = false
     private var heldPull: CheckedContinuation<Void, Never>?
+    private var holdDownloads = false
+    private var heldDownload: CheckedContinuation<Void, Never>?
 
     func fail(with error: URLError?) { failure = error }
     func setFailUploads(_ value: Bool) { failUploads = value }
@@ -186,7 +188,19 @@ actor FakeTransport: SyncTransport {
         privatePhotos[path] = nil
     }
 
-    func downloadPrivatePhoto(path: String) throws -> Data {
+    /// The next photo download suspends until `releaseDownload()` (to attach a picture while it is on the wire).
+    func holdNextDownload() { holdDownloads = true }
+    var isDownloadSuspended: Bool { heldDownload != nil }
+    func releaseDownload() {
+        heldDownload?.resume()
+        heldDownload = nil
+    }
+
+    func downloadPrivatePhoto(path: String) async throws -> Data {
+        if holdDownloads {
+            holdDownloads = false
+            await withCheckedContinuation { heldDownload = $0 }
+        }
         if failDownloads { throw URLError(.networkConnectionLost) }
         guard let data = privatePhotos[path] else { throw URLError(.fileDoesNotExist) }
         return data

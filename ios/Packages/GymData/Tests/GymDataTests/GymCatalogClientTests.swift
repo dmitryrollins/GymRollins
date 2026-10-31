@@ -186,16 +186,98 @@ import Testing
     @Test func refreshSkipsWithinSixHoursUnlessForced() async throws {
         defer { f.tearDown() }
         let gym = try mapsGym(remoteId: serverGymId)
+        serverHasGym() // an empty gym is checked against its place, which finds the same gym
+        func reads() -> Int { transport.calls.filter { $0 == "publicListings" }.count }
         _ = try await client.refresh(gymId: gym.id, force: false)
-        #expect(transport.calls == ["publicListings"])
+        #expect(reads() == 1)
         f.clock.advance(5 * 3_600)
         _ = try await client.refresh(gymId: gym.id, force: false)
-        #expect(transport.calls.count == 1)
+        #expect(reads() == 1)
         _ = try await client.refresh(gymId: gym.id, force: true)
-        #expect(transport.calls.count == 2)
+        #expect(reads() == 2)
         f.clock.advance(7 * 3_600)
         _ = try await client.refresh(gymId: gym.id, force: false)
-        #expect(transport.calls.count == 3)
+        #expect(reads() == 3)
+    }
+
+    // MARK: A stale server gym id
+
+    @Test func aKnownIdWithNoListingsIsCheckedAgainstThePlaceAndAnotherIdIsFollowed() async throws {
+        defer { f.tearDown() }
+        let stale = UUID()
+        let gym = try mapsGym(remoteId: stale)
+        serverHasGym()
+        let there = remote()
+        transport.listingsByGym = [stale: [], serverGymId: [there]]
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        #expect(try gymRecord(gym.id).remoteId == serverGymId)
+        #expect(transport.listingsAsked == [stale, serverGymId])
+        #expect(try listingRecord(there.id) != nil)
+        #expect(try gymRecord(gym.id).catalogRefreshedAt != nil)
+    }
+
+    @Test func aKnownIdTheServerNoLongerHasIsClearedAndItsCachedRowsGo() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let there = remote()
+        transport.listings = [there]
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        transport.listings = []
+        transport.gym = nil
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        #expect(try gymRecord(gym.id).remoteId == nil)
+        #expect(try listingRecord(there.id) == nil)
+    }
+
+    @Test func theSameIdWithNoListingsStaysAndIsLookedUpOnce() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        serverHasGym()
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        #expect(try gymRecord(gym.id).remoteId == serverGymId)
+        #expect(transport.calls.filter { $0 == "publicGym" }.count == 1)
+        #expect(transport.listingsAsked == [serverGymId])
+    }
+
+    @Test func aGymFoundJustNowIsNotLookedUpAgain() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        serverHasGym()
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        #expect(transport.calls.filter { $0 == "publicGym" }.count == 1)
+    }
+
+    // MARK: Pictures
+
+    @Test func picturesStillMissingAreWorkedOutFromLocalStateInsideTheSixHours() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let a = remote(photo: "\(UUID().uuidString.lowercased()).jpg")
+        transport.listings = [a]
+        let first = try await client.refresh(gymId: gym.id, force: false)
+        #expect(first.photosToFetch == [PhotoFetch(listingId: a.id, path: a.photoPath!)])
+        let reads = transport.calls.count
+        // The app was closed before the download ended.
+        f.clock.advance(3_600)
+        let again = try await client.refresh(gymId: gym.id, force: false)
+        #expect(again.photosToFetch == first.photosToFetch)
+        #expect(transport.calls.count == reads, "no server call inside the six hours")
+        try listingRecord(a.id)?.photoFile = "got.jpg"
+        let done = try await client.refresh(gymId: gym.id, force: false)
+        #expect(done.photosToFetch.isEmpty)
+    }
+
+    @Test func aRefreshHandsOutAtMostAHundredPicturesAndTheRestComeNext() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym(remoteId: serverGymId)
+        let all = (0..<120).map { _ in remote(photo: "\(UUID().uuidString.lowercased()).jpg") }
+        transport.listings = all
+        let first = try await client.refresh(gymId: gym.id, force: true)
+        #expect(first.photosToFetch.count == 100)
+        for fetch in first.photosToFetch { try listingRecord(fetch.listingId)?.photoFile = "\(fetch.listingId).jpg" }
+        let next = try await client.refresh(gymId: gym.id, force: false)
+        #expect(next.photosToFetch.count == 20)
+        #expect(Set(next.photosToFetch.map(\.listingId)).isDisjoint(with: first.photosToFetch.map(\.listingId)))
     }
 
     @Test func aGymNotOnTheServerStaysLocal() async throws {

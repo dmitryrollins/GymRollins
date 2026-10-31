@@ -41,6 +41,9 @@ final class FakePhotoFiles: GymPhotoFiles, @unchecked Sendable {
         return (gym, listing)
     }
 
+    /// A photo name the pull accepts: a UUID and `.jpg`.
+    private let farName = "3fa85f64-5717-4562-b3fc-2c963f66afa6.jpg"
+
     private func record(_ id: UUID) throws -> GymListingRecord? {
         try f.container.mainContext.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first
     }
@@ -139,9 +142,10 @@ final class FakePhotoFiles: GymPhotoFiles, @unchecked Sendable {
                                                                      latitude: nil, longitude: nil),
                                                     clientUpdatedAt: at)))
         let value = SyncedListing(id: listingId, gymId: gymId, kindId: "cable-stack", brand: nil, model: nil,
-                                  loads: .none, quantity: 1, notes: nil, photoFile: nil, remotePhotoPath: "far.jpg")
+                                  loads: ListingLoads.none, quantity: 1, notes: nil, photoFile: nil,
+                                  remotePhotoPath: farName)
         try await f.server.seed(gymListing: GymListingDTO(SyncRow(value: value, clientUpdatedAt: at)))
-        await f.server.seed(privatePhoto: Data("far".utf8), name: "far.jpg")
+        await f.server.seed(privatePhoto: Data("far".utf8), name: farName)
         await f.server.setFailDownloads(true)
 
         await engine.sync()
@@ -186,6 +190,31 @@ final class FakePhotoFiles: GymPhotoFiles, @unchecked Sendable {
         #expect(f.store.syncFailures().isEmpty)
     }
 
+    @Test func aPictureAttachedWhileTheDownloadRanIsNotOverwritten() async throws {
+        defer { f.tearDown() }
+        let gymId = UUID(), listingId = UUID()
+        let at = f.clock.now
+        try await f.server.seed(gym: GymDTO(SyncRow(value: SyncedGym(id: gymId, name: "Away", address: nil,
+                                                                     latitude: nil, longitude: nil),
+                                                    clientUpdatedAt: at)))
+        let value = SyncedListing(id: listingId, gymId: gymId, kindId: "cable-stack", brand: nil, model: nil,
+                                  loads: ListingLoads.none, quantity: 1, notes: nil, photoFile: nil,
+                                  remotePhotoPath: farName)
+        try await f.server.seed(gymListing: GymListingDTO(SyncRow(value: value, clientUpdatedAt: at)))
+        await f.server.seed(privatePhoto: Data("far".utf8), name: farName)
+        await f.server.holdNextDownload()
+
+        let round = Task { await engine.sync() }
+        for _ in 0..<5_000 where await !f.server.isDownloadSuspended { await Task.yield() }
+        f.clock.advance(60)
+        _ = try gyms.setPhoto(listingId, file: "mine.jpg")
+        await f.server.releaseDownload()
+        await round.value
+
+        #expect(try record(listingId)?.photoFile == "mine.jpg")
+        #expect(photos.deleted.count == 1, "the file the download saved is removed again")
+    }
+
     @Test func nothingMarkedThisPhoneOnlyIsPushed() async throws {
         defer { f.tearDown() }
         let gym = try gyms.addPrivateGym(name: "Device", address: nil)
@@ -221,7 +250,29 @@ final class FakePhotoFiles: GymPhotoFiles, @unchecked Sendable {
             + #""updated_at":"2026-10-30T12:00:01Z","equipment_items":{"kind_id":"cable-stack"}}"#
         let dto = try SyncJSON.decoder.decode(GymListingDTO.self, from: Data(body.utf8))
         let row = try #require(dto.toDomain())
-        #expect(row.value.kindId == "cable-stack" && row.value.brand == "B" && row.value.loads == ListingLoads.none)
+        #expect(row.value.kindId == "cable-stack" && row.value.brand == "B")
+        #expect(row.value.loads == nil, "unknown loads are not read as none: that would be pushed back")
+    }
+
+    private func pulled(loads: String, photo: String = "null", notes: String = "null") throws -> SyncRow<SyncedListing> {
+        let body = #"{"id":"\#(UUID().uuidString)","gym_id":"\#(UUID().uuidString)","item_id":"\#(UUID().uuidString)","#
+            + #""photo_path":\#(photo),"loads":\#(loads),"quantity":1,"notes":\#(notes),"private_brand":null,"#
+            + #""private_model":null,"client_updated_at":"2026-10-30T12:00:00Z","deleted_at":null,"#
+            + #""updated_at":"2026-10-30T12:00:01Z","equipment_items":{"kind_id":"cable-stack"}}"#
+        return try #require(try SyncJSON.decoder.decode(GymListingDTO.self, from: Data(body.utf8)).toDomain())
+    }
+
+    @Test func aPulledListingWithLoadsOutsideTheLimitsIsUnreadableToo() throws {
+        #expect(try pulled(loads: #"{"type":"stack","maxKg":5000}"#).value.loads == nil)
+        #expect(try pulled(loads: #"{"type":"stack","maxKg":90}"#).value.loads == .stack(maxKg: 90, stepKg: nil))
+    }
+
+    @Test func aPulledListingsPhotoPathAndTextAreChecked() throws {
+        #expect(try pulled(loads: #"{"type":"none"}"#, photo: #""../../x.jpg""#).value.remotePhotoPath == nil)
+        let name = "3fa85f64-5717-4562-b3fc-2c963f66afa6.jpg"
+        #expect(try pulled(loads: #"{"type":"none"}"#, photo: #""\#(name)""#).value.remotePhotoPath == name)
+        let long = String(repeating: "n", count: 400)
+        #expect(try pulled(loads: #"{"type":"none"}"#, notes: #""\#(long)""#).value.notes?.count == 280)
     }
 
     @Test func aGymEncodesAsPrivate() throws {

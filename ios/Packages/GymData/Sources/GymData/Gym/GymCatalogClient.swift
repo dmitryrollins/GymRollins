@@ -17,6 +17,8 @@ public struct CatalogRefresh: Sendable, Equatable {
 @MainActor
 public final class GymCatalogClient {
     static let refreshInterval: TimeInterval = 6 * 3_600
+    /// Pictures handed out per refresh; the rest come on the next open, so a gym of hundreds never fetches them all at once.
+    static let photosPerRefresh = 100
 
     private let repository: GymRepository
     private let transport: GymCatalogTransport
@@ -36,29 +38,69 @@ public final class GymCatalogClient {
     /// without touching any row: what it was told is about a session that is gone.
     public func invalidate() { generation += 1 }
 
-    /// Returns the photo paths to download and the local files to delete. Offline leaves the cache as it is.
+    /// Returns the photo paths to download and the local files to delete. Offline leaves the cache as it is. The
+    /// pictures still missing are worked out from the local rows on every call, inside the six hours too, so a
+    /// download that was interrupted doesn't wait for the next full refresh.
     public func refresh(gymId: UUID, force: Bool) async throws -> CatalogRefresh {
         guard let gym = try repository.gymRecord(gymId) else { throw GymDataError.invalidInput("Unknown gym.") }
         guard let placeId = gym.mapsPlaceId else { return .empty }
         if !force, let last = gym.catalogRefreshedAt, now().timeIntervalSince(last) < Self.refreshInterval {
-            return .empty
+            return CatalogRefresh(photosToFetch: try missingPhotos(gymId: gymId), filesToDelete: [])
         }
         let token = generation
         do {
+            let hadId = gym.remoteId != nil
             let known = try await serverGymId(gym, placeId: placeId, token: token)
             guard token == generation else { return .empty }
-            guard let serverId = known else {
+            guard var serverId = known else {
                 try stamp(gym)
                 return .empty
             }
-            let remote = try await transport.publicListings(gymId: serverId)
+            var remote = try await transport.publicListings(gymId: serverId)
             guard token == generation else { return .empty }
+            if hadId, remote.listings.isEmpty, remote.isComplete {
+                // A moderator may have removed that gym and someone recreated the place under a new id.
+                switch try await currentGym(gym, placeId: placeId, was: serverId, token: token) {
+                case .stale: return .empty
+                case .same: break
+                case let .moved(id):
+                    serverId = id
+                    remote = try await transport.publicListings(gymId: id)
+                    guard token == generation else { return .empty }
+                case .gone: break
+                }
+            }
             let result = try apply(remote.listings, to: gym, complete: remote.isComplete && !knownKinds.isEmpty)
             try await refreshCataloguePhotos(gymId: gym.id, token: token)
             return result
         } catch GymCatalogError.offline {
             return .empty
         }
+    }
+
+    /// The pictures of cached shared listings that this phone hasn't downloaded yet, oldest first.
+    public func missingPhotos(gymId: UUID) throws -> [PhotoFetch] {
+        let shared = GymVisibility.shared.rawValue
+        let rows = try repository.context.fetch(FetchDescriptor<GymListingRecord>(
+            predicate: #Predicate { $0.gymId == gymId && $0.visibilityRaw == shared && $0.photoFile == nil },
+            sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.id)]))
+        return rows.compactMap { row in row.remotePhotoPath.map { PhotoFetch(listingId: row.id, path: $0) } }
+            .prefix(Self.photosPerRefresh).map { $0 }
+    }
+
+    private enum CurrentGym { case same, moved(UUID), gone, stale }
+
+    /// Asks which server gym the place has now. A different id replaces the stored one; no gym clears it.
+    private func currentGym(_ gym: GymRecord, placeId: String, was old: UUID, token: Int) async throws -> CurrentGym {
+        let found = try await transport.publicGym(mapsPlaceId: placeId)
+        guard token == generation else { return .stale }
+        guard let found else {
+            gym.remoteId = nil
+            return .gone
+        }
+        guard found.id != old else { return .same }
+        gym.remoteId = found.id
+        return .moved(found.id)
     }
 
     /// Branded items of a kind: the server's, merged with the ones My gyms list. Offline, the local list alone.
@@ -138,7 +180,9 @@ public final class GymCatalogClient {
         var locals = Dictionary(
             try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.gymId == gymId }))
                 .map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var fetches: [PhotoFetch] = []
+        let confirming = Set(try context.fetch(FetchDescriptor<ShareOutboxRecord>()).filter {
+            $0.kindRaw == ShareOutboxRecord.Kind.confirm.rawValue
+        }.map(\.targetId))
         for entry in usable {
             let item = try itemRecord(for: entry)
             if let row = locals[entry.id] {
@@ -148,9 +192,8 @@ public final class GymCatalogClient {
                 let row = cache.insert(entry, itemId: item.id, gymId: gymId)
                 locals[entry.id] = row
             }
-            if let path = entry.photoPath, locals[entry.id]?.photoFile == nil {
-                fetches.append(PhotoFetch(listingId: entry.id, path: path))
-            }
+            // The server doesn't know about a confirmation that is still queued.
+            if confirming.contains(entry.id) { locals[entry.id]?.confirmedByMe = true }
         }
         let present = Set(remote.map(\.id))
         var files: [String] = []
@@ -160,7 +203,7 @@ public final class GymCatalogClient {
         }
         if complete { gym.catalogRefreshedAt = now() }
         try context.save()
-        return CatalogRefresh(photosToFetch: fetches, filesToDelete: files)
+        return CatalogRefresh(photosToFetch: try missingPhotos(gymId: gymId), filesToDelete: files)
     }
 
     private func isGone(_ row: GymListingRecord, present: Set<UUID>) -> Bool {

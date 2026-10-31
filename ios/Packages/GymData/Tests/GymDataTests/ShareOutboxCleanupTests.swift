@@ -273,3 +273,95 @@ import Testing
         #expect(try repo.listings(gymId: gym.id).map(\.id) == [cached.id])
     }
 }
+
+/// A server gym id the phone stored can go stale; and a confirmation still queued must survive a refresh.
+@MainActor
+@Suite struct StaleGymAndQueuedConfirmTests {
+    let f: SyncFixture
+    let transport = FakeGymCatalogTransport()
+    let user = UUID()
+    init() throws { f = try SyncFixture() }
+
+    private var repo: GymRepository { GymRepository(context: f.context, now: { [clock = f.clock] in clock.now }) }
+    private var now: () -> Date { { [clock = f.clock] in clock.now } }
+
+    private func gymRecord(_ id: UUID) throws -> GymRecord {
+        try #require(try repo.gymRecord(id))
+    }
+
+    @Test func aShareToAGymTheServerReplacedGoesToTheNewOne() async throws {
+        defer { f.tearDown() }
+        let old = UUID(), new = UUID()
+        let gym = try repo.addMapsGym(placeId: "P1", name: "G", address: nil, latitude: 1, longitude: 2)
+        try gymRecord(gym.id).remoteId = old
+        let listing = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        transport.unshareableGyms = [old]
+        transport.gym = RemoteGym(id: new, name: "G", address: nil, latitude: nil, longitude: nil, mapsPlaceId: "P1")
+        let box = ShareOutbox(repository: repo, transport: transport, photoData: { _ in nil }, now: now)
+        try box.enqueueShare(listingId: listing.id, ownerId: user)
+        await box.run(userId: user)
+        #expect(transport.requests.map(\.gymId) == [old, new])
+        #expect(try gymRecord(gym.id).remoteId == new)
+        #expect(try repo.listingRecord(listing.id)?.uploadStateRaw == UploadState.uploaded.rawValue)
+    }
+
+    @Test func aGymReallyUnderReviewKeepsItsIdAndTheListingSaysSo() async throws {
+        defer { f.tearDown() }
+        let id = UUID()
+        let gym = try repo.addMapsGym(placeId: "P1", name: "G", address: nil, latitude: 1, longitude: 2)
+        try gymRecord(gym.id).remoteId = id
+        let listing = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        transport.unshareableGyms = [id]
+        transport.gym = RemoteGym(id: id, name: "G", address: nil, latitude: nil, longitude: nil, mapsPlaceId: "P1")
+        let box = ShareOutbox(repository: repo, transport: transport, photoData: { _ in nil }, now: now)
+        try box.enqueueShare(listingId: listing.id, ownerId: user)
+        await box.run(userId: user)
+        #expect(transport.requests.count == 1)
+        #expect(try gymRecord(gym.id).remoteId == id)
+        #expect(try repo.listingRecord(listing.id)?.uploadError == ShareOutbox.gymUnderReview)
+    }
+
+    @Test func aGymTheServerHasNoMoreClearsTheStoredIdAndTheShareWaitsForALaterTry() async throws {
+        defer { f.tearDown() }
+        let id = UUID()
+        let gym = try repo.addMapsGym(placeId: "P1", name: "G", address: nil, latitude: 1, longitude: 2)
+        try gymRecord(gym.id).remoteId = id
+        let listing = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        transport.unshareableGyms = [id]
+        transport.gym = nil
+        let box = ShareOutbox(repository: repo, transport: transport, photoData: { _ in nil }, now: now)
+        try box.enqueueShare(listingId: listing.id, ownerId: user)
+        await box.run(userId: user)
+        #expect(try gymRecord(gym.id).remoteId == nil)
+        #expect(try repo.listingRecord(listing.id)?.uploadError == ShareOutbox.gymUnderReview)
+        // Retrying asks the server for the place again, which finds or creates its gym.
+        transport.unshareableGyms = []
+        try box.retry(listingId: listing.id, ownerId: user)
+        await box.run(userId: user)
+        #expect(try repo.listingRecord(listing.id)?.uploadStateRaw == UploadState.uploaded.rawValue)
+    }
+
+    @Test func aRefreshKeepsMyQueuedConfirmationAndTappingAgainSetsItBack() async throws {
+        defer { f.tearDown() }
+        let serverGym = UUID()
+        let gym = try repo.addMapsGym(placeId: "P1", name: "G", address: nil, latitude: 1, longitude: 2)
+        try gymRecord(gym.id).remoteId = serverGym
+        let theirs = RemoteListing(id: UUID(), gymId: serverGym, itemId: UUID(), kindId: "cable-stack", brand: nil,
+                                   model: nil, photoPath: nil, loads: .none, quantity: 1, notes: nil,
+                                   status: "active", confirmCount: 2, isMine: false, confirmedByMe: false)
+        transport.listings = [theirs]
+        let client = GymCatalogClient(repository: repo, transport: transport, knownKinds: ["cable-stack"], now: now)
+        _ = try await client.refresh(gymId: gym.id, force: true)
+        let box = ShareOutbox(repository: repo, transport: transport, photoData: { _ in nil }, now: now)
+        try box.enqueueConfirm(listingId: theirs.id, ownerId: user)
+        let row = try #require(try repo.listingRecord(theirs.id))
+        #expect(row.confirmedByMe)
+
+        _ = try await client.refresh(gymId: gym.id, force: true) // the server hasn't heard of it yet
+        #expect(row.confirmedByMe, "a refresh must not undo a confirmation that is still queued")
+        row.confirmedByMe = false
+        try box.enqueueConfirm(listingId: theirs.id, ownerId: user)
+        #expect(row.confirmedByMe)
+        #expect(box.pendingCount == 1)
+    }
+}

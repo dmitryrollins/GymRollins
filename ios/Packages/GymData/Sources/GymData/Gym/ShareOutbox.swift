@@ -66,8 +66,9 @@ public final class ShareOutbox {
 
     /// Queues a confirmation. Asking twice queues it once.
     public func enqueueConfirm(listingId: UUID, ownerId: UUID) throws {
-        if try rows().contains(where: { $0.kindRaw == Kind.confirm.rawValue && $0.targetId == listingId }) { return }
-        context.insert(ShareOutboxRecord(kind: .confirm, targetId: listingId, ownerId: ownerId, now: now()))
+        let queued = try rows().contains { $0.kindRaw == Kind.confirm.rawValue && $0.targetId == listingId }
+        if !queued { context.insert(ShareOutboxRecord(kind: .confirm, targetId: listingId, ownerId: ownerId, now: now())) }
+        // Tapping again shows it as confirmed again, though a refresh or a failed try had cleared it.
         if let listing = try repository.listingRecord(listingId) { listing.confirmedByMe = true }
         try context.save()
     }
@@ -199,6 +200,7 @@ public final class ShareOutbox {
             try context.save()
             return
         }
+        let hadId = gym.remoteId != nil
         let gymId = try await serverId(of: gym, token: token)
         let photo = try await uploadedPhoto(of: listing, token: token)
         let item = try itemRecord(listing.itemId)
@@ -206,7 +208,7 @@ public final class ShareOutbox {
         let request = ShareRequest(listingId: listing.id, gymId: gymId, kindId: listing.kindId, brand: item?.brand,
                                    model: item?.model, loads: loads, quantity: listing.quantity,
                                    notes: listing.notes, photoPath: photo, forceNew: row.forceNew)
-        let result = try await transport.share(request)
+        let result = try await send(request, to: gym, hadStoredId: hadId, token: token)
         try ensureCurrent(token)
         switch result {
         case let .created(id):
@@ -222,6 +224,33 @@ public final class ShareOutbox {
         listing.updatedAt = now()
         context.delete(row)
         try context.save()
+    }
+
+    /// Sends the share. A gym the server refuses (`gym_not_shareable`) under an id stored earlier is looked up by its
+    /// place once: a moderator may have removed it and someone recreated the place under a new id. A different id
+    /// replaces the stored one and the share goes there; the same id means it really is under review; no gym clears
+    /// the stored id, and the listing shows the review message.
+    private func send(_ request: ShareRequest, to gym: GymRecord, hadStoredId: Bool, token: Int) async throws
+        -> ShareResult {
+        do {
+            return try await transport.share(request)
+        } catch GymCatalogError.gymNotShareable where hadStoredId {
+            let found = try await transport.publicGym(mapsPlaceId: gym.mapsPlaceId ?? "")
+            try ensureCurrent(token)
+            guard let found else {
+                gym.remoteId = nil
+                try context.save()
+                throw GymCatalogError.gymNotShareable
+            }
+            guard found.id != request.gymId else { throw GymCatalogError.gymNotShareable }
+            gym.remoteId = found.id
+            try context.save()
+            let moved = ShareRequest(listingId: request.listingId, gymId: found.id, kindId: request.kindId,
+                                     brand: request.brand, model: request.model, loads: request.loads,
+                                     quantity: request.quantity, notes: request.notes, photoPath: request.photoPath,
+                                     forceNew: request.forceNew)
+            return try await transport.share(moved)
+        }
     }
 
     private func confirm(_ row: ShareOutboxRecord, token: Int) async throws {

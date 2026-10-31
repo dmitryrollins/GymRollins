@@ -145,8 +145,9 @@ extension AppEnvironment {
                     removeGymPhotos([file])
                     continue
                 }
-                do { try syncStore.setPhotoFile(listingId: fetch.listingId, file: file) }
-                catch {
+                do {
+                    if try !syncStore.setPhotoFile(listingId: fetch.listingId, file: file) { removeGymPhotos([file]) }
+                } catch {
                     removeGymPhotos([file])
                     throw error
                 }

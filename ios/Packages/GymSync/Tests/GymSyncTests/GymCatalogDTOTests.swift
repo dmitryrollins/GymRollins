@@ -92,14 +92,69 @@ struct GymCatalogDTOTests {
         #expect(gym == [RemoteGym(id: UUID(uuidString: gymId)!, name: "Iron Works", address: "1 Main St",
                                   latitude: 1.5, longitude: -2.5, mapsPlaceId: "p1")])
         let items = """
-        [{"id":"\(itemId)","kind_id":"cable","brand":null,"model":null,"photo_path":"a.jpg",
+        [{"id":"\(itemId)","kind_id":"cable","brand":null,"model":null,"photo_path":"\(goodName)",
           "photo_listing_id":"\(listingId)","gym_count":4},
          {"id":"\(itemId)"}]
         """
         #expect((try? GymCatalogRows.items(from: Data(items.utf8)).rows) == [
             RemoteItem(id: UUID(uuidString: itemId)!, kindId: "cable", brand: nil, model: nil, gymCount: 4,
-                       photoPath: "a.jpg", photoListingId: UUID(uuidString: listingId)),
+                       photoPath: goodName, photoListingId: UUID(uuidString: listingId)),
         ])
+    }
+
+    // MARK: What the server sends is checked
+
+    private let goodName = "3fa85f64-5717-4562-b3fc-2c963f66afa6.jpg"
+
+    private func photoRow(_ path: String) -> String {
+        row(loads: #"{"type":"none"}"#).replacingOccurrences(of: #""photo_path":null"#, with: #""photo_path":"\#(path)""#)
+    }
+
+    @Test func aPhotoPathThatIsNotAUuidJpgIsDropped() throws {
+        for bad in ["../../x.jpg", "a/b.jpg", "\(goodName)/../y", "https://evil.test/a.jpg", "x.png"] {
+            let listing = try #require(listings("[\(photoRow(bad))]").first)
+            #expect(listing.photoPath == nil, "\(bad)")
+            #expect(listing.quantity == 2, "the rest of the row is kept")
+        }
+        #expect(listings("[\(photoRow(goodName))]").first?.photoPath == goodName)
+        let items = #"[{"id":"\#(itemId)","kind_id":"cable","brand":null,"model":null,"photo_path":"../z.jpg","gym_count":1}]"#
+        #expect(try GymCatalogRows.items(from: Data(items.utf8)).rows.first?.photoPath == nil)
+    }
+
+    @Test func longTextIsClippedToTheLimits() throws {
+        let long = String(repeating: "x", count: 500)
+        let json = row(loads: #"{"type":"none"}"#)
+            .replacingOccurrences(of: #""notes":"left corner""#, with: #""notes":"\#(long)""#)
+            .replacingOccurrences(of: #""brand":"Hammer""#, with: #""brand":"\#(long)""#)
+            .replacingOccurrences(of: #""model":null"#, with: #""model":"\#(long)""#)
+        let listing = try #require(listings("[\(json)]").first)
+        #expect(listing.notes?.count == DomainLimits.listingNotesMax)
+        #expect(listing.brand?.count == DomainLimits.itemBrandMax)
+        #expect(listing.model?.count == DomainLimits.itemModelMax)
+        let gyms = #"[{"id":"\#(gymId)","name":"\#(long)","address":"\#(long)","latitude":999,"longitude":null,"maps_place_id":"p"}]"#
+        let gym = try #require(try GymCatalogRows.gyms(from: Data(gyms.utf8)).rows.first)
+        #expect(gym.name.count == DomainLimits.gymNameMax)
+        #expect(gym.address?.count == DomainLimits.gymAddressMax)
+        #expect(gym.latitude == nil, "a latitude off the globe is not used")
+    }
+
+    @Test func loadsOutsideTheLimitsMakeTheListingUnsupported() throws {
+        for loads in [#"{"type":"stack","maxKg":5000}"#, #"{"type":"stack","maxKg":90,"stepKg":0}"#,
+                      #"{"type":"fixed","kg":[]}"#, #"{"type":"fixed","kg":[900]}"#] {
+            let listing = try #require(listings("[\(row(loads: loads))]").first)
+            #expect(listing.loads == nil, "\(loads)")
+        }
+    }
+
+    @Test func aNumberThatIsNotFiniteIsRefused() {
+        // Such a number can't be parsed at all, so the page is unreadable and the cache is left alone.
+        let body = Data("[\(row(loads: #"{"type":"stack","maxKg":1e999}"#))]".utf8)
+        #expect(throws: GymCatalogError.self) { try GymCatalogRows.listings(from: body) }
+    }
+
+    @Test func aQuantityOutsideTheLimitsIsClamped() throws {
+        let big = row(loads: #"{"type":"none"}"#).replacingOccurrences(of: #""quantity":2"#, with: #""quantity":900"#)
+        #expect(listings("[\(big)]").first?.quantity == DomainLimits.listingQuantity.upperBound)
     }
 
     @Test func theListingReadStopsAtItsCapAndSaysSo() async throws {
@@ -125,7 +180,7 @@ struct GymCatalogDTOTests {
 
         let json = """
         {"status":"duplicates","listings":[{"id":"\(listingId)","kind_id":"cable","brand":"Hammer","model":null,
-         "photo_path":"p.jpg","loads":{"type":"stack","maxKg":80},"quantity":1,"confirm_count":2},
+         "photo_path":"\(goodName)","loads":{"type":"stack","maxKg":80},"quantity":1,"confirm_count":2},
          {"id":"broken"}]}
         """
         let duplicates = try GymCatalogRows.shareResult(from: Data(json.utf8), gymId: UUID(uuidString: gymId)!)
@@ -135,7 +190,7 @@ struct GymCatalogDTOTests {
         #expect(found[0].gymId == UUID(uuidString: gymId))
         #expect(found[0].loads == .stack(maxKg: 80, stepKg: nil))
         #expect(found[0].confirmCount == 2)
-        #expect(found[0].photoPath == "p.jpg")
+        #expect(found[0].photoPath == goodName)
     }
 
     @Test func anUnknownShareStatusIsRejected() {

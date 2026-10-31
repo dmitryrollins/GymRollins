@@ -69,6 +69,31 @@ enum GymCatalogRows {
     }
 
     private enum RowError: Error { case notAnObject }
+
+    // MARK: What the server sends is checked
+    // Another app version or a bad client may have written these, and some end up in URLs or in the rules.
+
+    /// Text cut to a limit, so a row can't carry kilobytes into the cache.
+    static func clip(_ text: String?, to limit: Int) -> String? {
+        guard let text, text.count > limit else { return text }
+        return String(text.prefix(limit))
+    }
+
+    /// A photo name that is a UUID and `.jpg`, else nil: a name like `../x` would redirect the request, which carries
+    /// the user's token for the private bucket.
+    static func photoName(_ name: String?) -> String? {
+        name.flatMap { GymPhotoName.isValid($0) ? $0 : nil }
+    }
+
+    /// Loads outside the limits read as unreadable, which makes the listing unsupported like any unknown shape.
+    static func inLimits(_ loads: ListingLoads) -> ListingLoads? {
+        loads.isWithinLimits ? loads : nil
+    }
+
+    static func coordinate(_ value: Double?, within limit: Double) -> Double? {
+        guard let value, value.isFinite, abs(value) <= limit else { return nil }
+        return value
+    }
 }
 
 private struct GymRow: Decodable {
@@ -79,8 +104,10 @@ private struct GymRow: Decodable {
     }
 
     var gym: RemoteGym {
-        RemoteGym(id: id, name: name, address: address, latitude: latitude, longitude: longitude,
-                  mapsPlaceId: mapsPlaceId)
+        RemoteGym(id: id, name: GymCatalogRows.clip(name, to: DomainLimits.gymNameMax) ?? "",
+                  address: GymCatalogRows.clip(address, to: DomainLimits.gymAddressMax),
+                  latitude: GymCatalogRows.coordinate(latitude, within: 90),
+                  longitude: GymCatalogRows.coordinate(longitude, within: 180), mapsPlaceId: mapsPlaceId)
     }
 }
 
@@ -94,8 +121,9 @@ private struct ItemRow: Decodable {
     }
 
     var item: RemoteItem {
-        RemoteItem(id: id, kindId: kindId, brand: brand, model: model, gymCount: gymCount, photoPath: photoPath,
-                   photoListingId: photoListingId)
+        RemoteItem(id: id, kindId: kindId, brand: GymCatalogRows.clip(brand, to: DomainLimits.itemBrandMax),
+                   model: GymCatalogRows.clip(model, to: DomainLimits.itemModelMax), gymCount: gymCount,
+                   photoPath: GymCatalogRows.photoName(photoPath), photoListingId: photoListingId)
     }
 }
 
@@ -131,9 +159,14 @@ private struct ListingRow: Codable {
 
     /// `share_listing` doesn't return the item id; a duplicate is only shown, never cached, so its own id stands in.
     func listing(gymId fallbackGym: UUID?) -> RemoteListing {
-        RemoteListing(id: id, gymId: gymId ?? fallbackGym ?? id, itemId: itemId ?? id, kindId: kindId, brand: brand,
-                      model: model, photoPath: photoPath, loads: loads, quantity: quantity, notes: notes,
-                      status: status ?? "active", confirmCount: confirmCount, isMine: isMine ?? false,
+        RemoteListing(id: id, gymId: gymId ?? fallbackGym ?? id, itemId: itemId ?? id, kindId: kindId,
+                      brand: GymCatalogRows.clip(brand, to: DomainLimits.itemBrandMax),
+                      model: GymCatalogRows.clip(model, to: DomainLimits.itemModelMax),
+                      photoPath: GymCatalogRows.photoName(photoPath), loads: loads.flatMap(GymCatalogRows.inLimits),
+                      quantity: min(max(quantity, DomainLimits.listingQuantity.lowerBound),
+                                    DomainLimits.listingQuantity.upperBound),
+                      notes: GymCatalogRows.clip(notes, to: DomainLimits.listingNotesMax),
+                      status: status ?? "active", confirmCount: max(confirmCount, 0), isMine: isMine ?? false,
                       confirmedByMe: confirmedByMe ?? false)
     }
 }

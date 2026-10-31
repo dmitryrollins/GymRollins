@@ -54,7 +54,7 @@ import Testing
             clientUpdatedAt: at, serverUpdatedAt: at)])
         try f.store.applyRemote(gymListings: [SyncRow(
             value: SyncedListing(id: synced.id, gymId: gym.id, kindId: "cable-stack", brand: nil, model: nil,
-                                 loads: .none, quantity: 1, notes: "on the server", photoFile: nil,
+                                 loads: ListingLoads.none, quantity: 1, notes: "on the server", photoFile: nil,
                                  remotePhotoPath: nil),
             clientUpdatedAt: at, serverUpdatedAt: at)])
     }

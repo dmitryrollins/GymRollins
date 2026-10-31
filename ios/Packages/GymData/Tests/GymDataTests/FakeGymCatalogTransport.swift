@@ -10,6 +10,9 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private var _listings: [RemoteListing] = []
     private var _items: [RemoteItem] = []
     private var _skipped = 0
+    private var _byGym: [UUID: [RemoteListing]] = [:]
+    private var _unshareable: Set<UUID> = []
+    private var _listingsAsked: [UUID] = []
     private var _capped = false
     private var _failure: GymCatalogError?
     private var _failingCalls: Set<String> = []
@@ -26,6 +29,12 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     /// Rows the server "sent" that no version could read, and a read that hit its cap.
     var skipped: Int { get { lock.withLock { _skipped } } set { lock.withLock { _skipped = newValue } } }
     var capped: Bool { get { lock.withLock { _capped } } set { lock.withLock { _capped = newValue } } }
+    /// Listings per server gym; a gym with no entry here gets `listings`.
+    var listingsByGym: [UUID: [RemoteListing]] { get { lock.withLock { _byGym } } set { lock.withLock { _byGym = newValue } } }
+    /// Server gyms that refuse a share with `gym_not_shareable`.
+    var unshareableGyms: Set<UUID> { get { lock.withLock { _unshareable } } set { lock.withLock { _unshareable = newValue } } }
+    /// The gyms `publicListings` was asked about, in order.
+    var listingsAsked: [UUID] { lock.withLock { _listingsAsked } }
     var items: [RemoteItem] { get { lock.withLock { _items } } set { lock.withLock { _items = newValue } } }
     /// Calls that fail with `.offline` while the rest work.
     var failingCalls: Set<String> { get { lock.withLock { _failingCalls } } set { lock.withLock { _failingCalls = newValue } } }
@@ -51,7 +60,11 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { try record("publicGym"); return gym }
     func publicListings(gymId: UUID) async throws -> PublicListings {
         try record("publicListings")
-        return PublicListings(listings: listings, skipped: skipped, capped: capped)
+        let found = lock.withLock { () -> [RemoteListing] in
+            _listingsAsked.append(gymId)
+            return _byGym[gymId] ?? _listings
+        }
+        return PublicListings(listings: found, skipped: skipped, capped: capped)
     }
     func publicItems(kindId: String) async throws -> [RemoteItem] {
         try record("publicItems")
@@ -64,6 +77,10 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     }
     func share(_ request: ShareRequest) async throws -> ShareResult {
         try record("share")
+        if lock.withLock({ _unshareable.contains(request.gymId) }) {
+            lock.withLock { _requests.append(request) }
+            throw GymCatalogError.gymNotShareable
+        }
         let scripted: Result<ShareResult, GymCatalogError>? = lock.withLock {
             _requests.append(request)
             return _shareScript.isEmpty ? nil : _shareScript.removeFirst()

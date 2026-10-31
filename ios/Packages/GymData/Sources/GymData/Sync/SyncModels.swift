@@ -108,20 +108,21 @@ public struct SyncedGym: Sendable, Equatable {
 
 /// A private listing as synced. Brand and model travel as their own text (decision 11), never as a catalogue item.
 /// `photoFile` is the local file; `remotePhotoPath` the name in `gym-photos-private`, set once the upload succeeded.
+/// `loads` is nil for a row whose loads this version can't read: it is kept as it is and never sent back.
 public struct SyncedListing: Sendable, Equatable {
     public let id: UUID
     public let gymId: UUID
     public let kindId: String
     public let brand: String?
     public let model: String?
-    public let loads: ListingLoads
+    public let loads: ListingLoads?
     public let quantity: Int
     public let notes: String?
     public let photoFile: String?
     public let remotePhotoPath: String?
 
     // swiftlint:disable:next function_parameter_count
-    public init(id: UUID, gymId: UUID, kindId: String, brand: String?, model: String?, loads: ListingLoads,
+    public init(id: UUID, gymId: UUID, kindId: String, brand: String?, model: String?, loads: ListingLoads?,
                 quantity: Int, notes: String?, photoFile: String?, remotePhotoPath: String?) {
         self.id = id
         self.gymId = gymId

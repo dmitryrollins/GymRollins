@@ -20,11 +20,15 @@ extension SyncStore {
 
     public func dirtyGymListings() throws -> [SyncRow<SyncedListing>] {
         let synced = Self.synced
+        let unsupported = ListingStatus.unsupported.rawValue
         let rows = try context.fetch(FetchDescriptor<GymListingRecord>(
             predicate: #Predicate { $0.dirty && $0.visibilityRaw == synced }, sortBy: [SortDescriptor(\.createdAt)]))
-        return try rows.map { r in
+        // A row whose loads this version can't read is not sent back: its fields would overwrite newer loads on the
+        // server. Deleting it is still sent.
+        return try rows.filter { $0.statusRaw != unsupported || $0.deletedAt != nil }.map { r in
             let item = try itemRecord(r.itemId)
-            let loads = (try? JSONDecoder().decode(ListingLoads.self, from: r.loadsData)) ?? ListingLoads.none
+            let loads: ListingLoads? = r.statusRaw == unsupported
+                ? nil : ((try? JSONDecoder().decode(ListingLoads.self, from: r.loadsData)) ?? ListingLoads.none)
             let value = SyncedListing(id: r.id, gymId: r.gymId, kindId: r.kindId, brand: item?.brand,
                                       model: item?.model, loads: loads, quantity: r.quantity, notes: r.notes,
                                       photoFile: r.photoFile, remotePhotoPath: r.remotePhotoPath)
@@ -109,7 +113,8 @@ extension SyncStore {
             r.gymId = value.gymId
             r.itemId = item.id
             r.kindId = value.kindId
-            r.loadsData = (try? JSONEncoder().encode(value.loads)) ?? Data()
+            r.loadsData = value.loads.flatMap { try? JSONEncoder().encode($0) } ?? Data("{}".utf8)
+            r.statusRaw = (value.loads == nil ? ListingStatus.unsupported : ListingStatus.active).rawValue
             r.quantity = value.quantity
             r.notes = value.notes
             if r.remotePhotoPath != value.remotePhotoPath {
@@ -137,11 +142,14 @@ extension SyncStore {
             .compactMap { row in row.remotePhotoPath.map { PhotoFetch(listingId: row.id, path: $0) } }
     }
 
-    /// Attaches a downloaded picture. Not an edit: nothing goes dirty.
-    public func setPhotoFile(listingId: UUID, file: String) throws {
-        guard let record = try anyListingRecord(listingId) else { return }
+    /// Attaches a downloaded picture. Not an edit: nothing goes dirty. False when the listing is gone or already has a
+    /// picture (the user attached one while this downloaded): the caller deletes the file it just saved.
+    @discardableResult
+    public func setPhotoFile(listingId: UUID, file: String) throws -> Bool {
+        guard let record = try anyListingRecord(listingId), record.photoFile == nil else { return false }
         record.photoFile = file
         try context.save()
+        return true
     }
 
     // MARK: Internals

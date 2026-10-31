@@ -299,3 +299,65 @@ import Testing
         #expect(try f.store.hasLocalData())
     }
 }
+
+/// A private row whose loads this version can't read is kept as it is and not sent back (its fields would overwrite
+/// newer loads on the server).
+@MainActor
+@Suite struct SyncStoreUnsupportedLoadsTests {
+    let f: SyncFixture
+    init() throws { f = try SyncFixture() }
+
+    private var repo: GymRepository { GymRepository(context: f.context, now: { [clock = f.clock] in clock.now }) }
+
+    private func pullUnreadable() throws -> (gym: UUID, listing: UUID) {
+        let gym = UUID(), listing = UUID(), at = f.clock.now.addingTimeInterval(600)
+        try f.store.applyRemote(gyms: [SyncRow(
+            value: SyncedGym(id: gym, name: "Away", address: nil, latitude: nil, longitude: nil),
+            clientUpdatedAt: at, serverUpdatedAt: at)])
+        try f.store.applyRemote(gymListings: [SyncRow(
+            value: SyncedListing(id: listing, gymId: gym, kindId: "cable-stack", brand: nil, model: nil, loads: nil,
+                                 quantity: 1, notes: "n", photoFile: nil, remotePhotoPath: nil),
+            clientUpdatedAt: at, serverUpdatedAt: at)])
+        return (gym, listing)
+    }
+
+    private func record(_ id: UUID) throws -> GymListingRecord {
+        try #require(try f.context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first)
+    }
+
+    @Test func aPulledRowWithUnreadableLoadsIsUnsupportedNotNone() throws {
+        defer { f.tearDown() }
+        let (_, listing) = try pullUnreadable()
+        #expect(try record(listing).statusRaw == ListingStatus.unsupported.rawValue)
+        #expect(try repo.listings(gymId: try #require(try record(listing).gymId)).isEmpty, "the rules don't see it")
+    }
+
+    @Test func itsLocalEditsAreNotPushedButItsDeletionIs() throws {
+        defer { f.tearDown() }
+        let (_, listing) = try pullUnreadable()
+        f.clock.advance(1_000)
+        let row = try record(listing)
+        row.notes = "edited here"
+        row.updatedAt = f.clock.now
+        row.dirty = true
+        #expect(try f.store.dirtyGymListings().isEmpty)
+
+        f.clock.advance(60)
+        _ = try repo.removeListing(listing)
+        let tombstone = try #require(try f.store.dirtyGymListings().first)
+        #expect(tombstone.deletedAt != nil && tombstone.value.loads == nil)
+    }
+
+    @Test func aLaterReadableVersionOfTheRowIsSupportedAgain() throws {
+        defer { f.tearDown() }
+        let (gym, listing) = try pullUnreadable()
+        let at = f.clock.now.addingTimeInterval(900)
+        try f.store.applyRemote(gymListings: [SyncRow(
+            value: SyncedListing(id: listing, gymId: gym, kindId: "cable-stack", brand: nil, model: nil,
+                                 loads: .stack(maxKg: 90, stepKg: 5), quantity: 1, notes: "n", photoFile: nil,
+                                 remotePhotoPath: nil),
+            clientUpdatedAt: at, serverUpdatedAt: at)])
+        #expect(try record(listing).statusRaw == ListingStatus.active.rawValue)
+        #expect(try repo.listings(gymId: gym).first?.loads == .stack(maxKg: 90, stepKg: 5))
+    }
+}

@@ -10,7 +10,8 @@ public struct GymListingDTO: Codable, Sendable, Equatable, ServerStamped {
     /// What the pulled row's embedded item says; nil when it is missing.
     public let kindId: String?
     public let photoPath: String?
-    public let loads: ListingLoads
+    /// Nil when this version can't read them (an unknown shape, or numbers outside the limits).
+    public let loads: ListingLoads?
     public let quantity: Int
     public let notes: String?
     public let brand: String?
@@ -55,12 +56,13 @@ public struct GymListingDTO: Codable, Sendable, Equatable, ServerStamped {
         id = try c.decode(UUID.self, forKey: .id)
         gymId = try c.decode(UUID.self, forKey: .gymId)
         kindId = (try? c.decodeIfPresent(ItemRef.self, forKey: .item))??.kindId
-        photoPath = try c.decodeIfPresent(String.self, forKey: .photoPath)
-        loads = (try? c.decodeIfPresent(ListingLoads.self, forKey: .loads)) ?? ListingLoads.none
-        quantity = try c.decode(Int.self, forKey: .quantity)
-        notes = try c.decodeIfPresent(String.self, forKey: .notes)
-        brand = try c.decodeIfPresent(String.self, forKey: .brand)
-        model = try c.decodeIfPresent(String.self, forKey: .model)
+        photoPath = GymCatalogRows.photoName(try c.decodeIfPresent(String.self, forKey: .photoPath))
+        loads = ((try? c.decodeIfPresent(ListingLoads.self, forKey: .loads)) ?? nil).flatMap(GymCatalogRows.inLimits)
+        quantity = min(max(try c.decode(Int.self, forKey: .quantity), DomainLimits.listingQuantity.lowerBound),
+                       DomainLimits.listingQuantity.upperBound)
+        notes = GymCatalogRows.clip(try c.decodeIfPresent(String.self, forKey: .notes), to: DomainLimits.listingNotesMax)
+        brand = GymCatalogRows.clip(try c.decodeIfPresent(String.self, forKey: .brand), to: DomainLimits.itemBrandMax)
+        model = GymCatalogRows.clip(try c.decodeIfPresent(String.self, forKey: .model), to: DomainLimits.itemModelMax)
         clientUpdatedAt = try c.decode(Date.self, forKey: .clientUpdatedAt)
         deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
@@ -81,7 +83,8 @@ public struct GymListingDTO: Codable, Sendable, Equatable, ServerStamped {
         try c.encode(GymRepository.genericItemId(forKind: kindId ?? ""), forKey: .itemId)
         try c.encode("private", forKey: .visibility)
         try c.encode(photoPath, forKey: .photoPath)
-        try c.encode(loads, forKey: .loads)
+        // A row with unreadable loads is never pushed; its deletion is, and the loads don't matter then.
+        try c.encode(loads ?? ListingLoads.none, forKey: .loads)
         try c.encode(quantity, forKey: .quantity)
         try c.encode(notes, forKey: .notes)
         try c.encode(brand, forKey: .brand)

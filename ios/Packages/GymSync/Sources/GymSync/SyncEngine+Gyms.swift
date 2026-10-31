@@ -102,7 +102,11 @@ extension SyncEngine {
                 try ensureLive()
                 let file = "\(UUID().uuidString).jpg"
                 try photos.save(data, file: file)
-                try store.setPhotoFile(listingId: fetch.listingId, file: file)
+                // The user may have attached a picture while this downloaded; theirs stays.
+                guard try store.setPhotoFile(listingId: fetch.listingId, file: file) else {
+                    try photos.delete(file: file)
+                    continue
+                }
                 noteRemoteChanges()
             } catch is CancellationError {
                 throw CancellationError()
