@@ -52,6 +52,10 @@ final class AccessibilityAuditUITests: XCTestCase {
     /// glass capsule over the logging hero).
     static let measuredContrastLabels: Set<String> = ["How-To"]
 
+    /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
+    /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first.
+    static let measuredContrastIdentifiers: Set<String> = ["addEquipment.save"]
+
     /// Why an issue is a false positive, or nil when it's a real issue. Each exclusion is narrow and justified.
     static func exclusionReason(_ issue: XCUIAccessibilityAuditIssue, windowHeight: CGFloat) -> String? {
         guard let element = issue.element else {
@@ -67,6 +71,7 @@ final class AccessibilityAuditUITests: XCTestCase {
             // (white on #C22F3B) from screenshots.
             if frame.maxY > windowHeight - bottomEdgeBand { return "under bottom scroll-edge effect" }
             if measuredContrastLabels.contains(element.label) { return "measured on glass" }
+            if measuredContrastIdentifiers.contains(element.identifier) { return "measured on glass" }
             // `.searchable`'s placeholder is system-styled.
             if type == .searchField { return "system search field" }
             return nil
