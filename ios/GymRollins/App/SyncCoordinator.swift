@@ -26,14 +26,14 @@ final class SyncCoordinator {
     private(set) var syncFailures: [SyncFailure] = []
     /// Signed in to an account other than the one that owns this iPhone's data; nothing syncs until the owner
     /// confirms removing the local copy (`confirmAccountSwitch()`) or backs out (`cancelAccountSwitch()`).
-    private(set) var accountSwitchPending = false
+    var accountSwitchPending = false
     /// The account is being deleted: nothing may upload meanwhile, or a new photo would make the server refuse.
-    private(set) var deletingAccount = false
+    var deletingAccount = false
 
     @ObservationIgnored let store: SyncStore
     @ObservationIgnored private let makeTransport: @MainActor (AuthService?) -> (any SyncTransport)?
     @ObservationIgnored private let now: () -> Date
-    @ObservationIgnored private let debouncer = SyncDebouncer(delay: SyncCoordinator.debounce)
+    @ObservationIgnored let debouncer = SyncDebouncer(delay: SyncCoordinator.debounce)
     @ObservationIgnored private var periodic: Task<Void, Never>?
     @ObservationIgnored private var seenRemoteChanges = 0
     /// Called after a sync or conflict resolution wrote remote rows locally (the app reloads what it shows).
@@ -225,43 +225,6 @@ final class SyncCoordinator {
         try await wipeLocal()
     }
 
-    /// Deletes the account on the server. Nothing on the phone is wiped until it says yes, so a refusal keeps the
-    /// account, the session and the phone's data, and the user can try again. Photos are detached first (the server and
-    /// then the phone forget the names), so a refusal after that leaves no listing naming a deleted object: the next
-    /// sync uploads the pictures again. Syncing stops meanwhile so it can't do that too soon. The one call site of
-    /// `AuthService.deleteAccount`: it hands over the photo steps, without which the server refuses anyone who has a photo.
-    func deleteAccount() async throws {
-        deletingAccount = true
-        defer { deletingAccount = false }
-        onSessionEnding()
-        debouncer.cancel()
-        await dropEngine()
-        do {
-            try await deleteOnServer(removePhotos.map(forgettingNamesOnDetach))
-        } catch {
-            refreshEngine()
-            onDeletionRefused()
-            throw error
-        }
-        accountSwitchPending = false
-        try await wipeLocal(erasingGyms: true)
-    }
-
-    /// After the server detached the photos, the phone drops their names too.
-    private func forgettingNamesOnDetach(_ photos: AccountPhotoSteps) -> AccountPhotoSteps {
-        AccountPhotoSteps(detach: { [weak self] in
-            try await photos.detach()
-            try await self?.forgetRemotePhotos()
-        }, remove: photos.remove)
-    }
-
-    private func forgetRemotePhotos() throws {
-        do { try store.forgetRemotePhotos() } catch {
-            Self.log.error("Forgetting photo names failed: \(error.localizedDescription, privacy: .public)")
-            throw error
-        }
-    }
-
     // MARK: Private
 
     /// After sign-in or session restore: checks who owns the local data, then starts syncing (idempotent).
@@ -325,7 +288,7 @@ final class SyncCoordinator {
     }
 
     /// Stops syncing (and waits for a running round to stop) without touching local data.
-    private func dropEngine() async {
+    func dropEngine() async {
         debouncer.cancel()
         let stopping = engine
         engine = nil
@@ -334,7 +297,7 @@ final class SyncCoordinator {
 
     /// Stops any running round first, so a late response can't write the old account's rows back.
     /// "This phone only" gyms and anything not yet on the server survive; the rest of the gym data goes (decision 9).
-    private func wipeLocal(erasingGyms: Bool = false) async throws {
+    func wipeLocal(erasingGyms: Bool = false) async throws {
         onSessionEnding()
         onSessionEnded()
         await dropEngine()
@@ -360,7 +323,7 @@ final class SyncCoordinator {
     }
 
     /// Creates the engine once signed in (or immediately for a backend without auth) and drops it when signed out.
-    private func refreshEngine() {
+    func refreshEngine() {
         let signedIn = auth.map { $0.state != .signedOut } ?? true
         if signedIn, !accountSwitchPending, engine == nil, let transport = makeTransport(auth) {
             engine = SyncEngine(store: store, transport: transport, photos: gymPhotoFiles, now: now,

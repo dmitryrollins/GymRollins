@@ -18,8 +18,7 @@ struct SettingsView: View {
     @State private var confirmDelete = false
     @State private var showDeleteSheet = false
     @State private var exportError: String?
-    @State private var deleting: String?
-    @State private var deleteError: String?
+    @State private var deletion = DeletionRun()
     @State private var sharing: ExportShare?
     @State private var claudeLastUse: Date?
     @State private var claudeChecked = false
@@ -71,13 +70,13 @@ struct SettingsView: View {
         .sheet(isPresented: $showDeleteSheet) {
             if isSignedIn {
                 DeleteAccountSheet(identifierPrefix: "settings.delete") {
-                    runDelete(progress: "Deleting your account...") { try await env.sync.deleteAccount() }
+                    deletion.run(progress: "Deleting your account...") { try await env.sync.deleteAccount() }
                 }
             } else {
                 DeleteAccountSheet(message: "Every workout, plan, weigh-in, custom exercise, gym and equipment photo on "
                                     + "this iPhone will be erased. This can't be undone.", confirmTitle: "Erase All Data",
                                    navigationTitle: "Erase Data", identifierPrefix: "settings.delete") {
-                    runDelete(progress: "Erasing this iPhone...") { try env.eraseAllLocalData() }
+                    deletion.run(progress: "Erasing this iPhone...") { try env.eraseAllLocalData() }
                 }
             }
         }
@@ -264,19 +263,9 @@ struct SettingsView: View {
             Button(isSignedIn ? "Delete Account and Data" : "Erase All Data on This iPhone", role: .destructive) {
                 confirmDelete = true
             }
-            .disabled(deleting != nil)
+            .disabled(deletion.progress != nil)
             .accessibilityIdentifier("settings.delete")
-            if let deleting {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text(deleting).foregroundStyle(Theme.textSecondary)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("settings.delete.progress")
-            }
-            if let deleteError {
-                Text(deleteError).foregroundStyle(Theme.destructive).accessibilityIdentifier("settings.delete.error")
-            }
+            DeletionStatusRows(run: deletion)
         }
     }
 
@@ -346,22 +335,6 @@ struct SettingsView: View {
             env.planChanged()
         } catch {
             AppEnvironment.log.error("Save settings failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    /// The sheet has closed by the time this runs, and the photo step can take a while: the row shows that something is
-    /// happening and can't be tapped again. A refusal says what happened next to the row, and a retry clears it.
-    private func runDelete(progress: String, _ action: @escaping () async throws -> Void) {
-        guard deleting == nil else { return }
-        deleting = progress
-        deleteError = nil
-        Task {
-            do { try await action() } catch {
-                AppEnvironment.log.error("Delete/erase failed: \(error.localizedDescription, privacy: .public)")
-                // A refusal says whether the photos are already gone; anything else is the plain message.
-                deleteError = (error as? AuthFailure)?.message ?? "Something went wrong. Please try again."
-            }
-            deleting = nil
         }
     }
 }

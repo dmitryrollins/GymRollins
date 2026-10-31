@@ -25,6 +25,15 @@ final class GymSharingUITests: XCTestCase {
                       file: file, line: line)
     }
 
+    /// A swipe only scrolls; the refresh control needs a slow drag that starts near the top of the content and goes well
+    /// past it.
+    private func pullToRefresh(_ app: XCUIApplication) {
+        let window = app.windows.firstMatch
+        let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+        let end = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        start.press(forDuration: 0.1, thenDragTo: end, withVelocity: 300, thenHoldForDuration: 0.3)
+    }
+
     private func text(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id] }
 
     private func waitForLabel(_ element: XCUIElement, contains part: String, timeout: TimeInterval = 15) -> Bool {
@@ -279,7 +288,7 @@ final class GymSharingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["gymEquipment.listing.cable-station"].exists, "the others stay")
         // The server still returns it; a refresh must not bring it back. The row machine only appears once the refresh
         // has run and been applied, so waiting for it is what makes the check below mean something.
-        app.swipeDown()
+        pullToRefresh(app)
         XCTAssertTrue(canary.waitForExistence(timeout: 15), "the refresh ran")
         XCTAssertFalse(app.buttons["gymEquipment.listing.lat-pulldown"].exists)
     }
