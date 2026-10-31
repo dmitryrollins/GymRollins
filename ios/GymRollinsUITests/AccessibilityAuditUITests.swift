@@ -34,6 +34,12 @@ final class AccessibilityAuditUITests: XCTestCase {
         } catch {
             XCTFail("[\(screen)] accessibility audit: \(error)", file: file, line: line)
         }
+        if !reported.isEmpty {
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "audit-issue-\(screen)"
+            shot.lifetime = .keepAlways
+            add(shot)
+        }
         XCTAssertTrue(reported.isEmpty, "[\(screen)] accessibility issues:\n" + reported.joined(separator: "\n"),
                       file: file, line: line)
     }
