@@ -13,6 +13,8 @@ public final class GymRecord {
     public var mapsPlaceId: String?
     public var visibilityRaw: String
     public var remoteId: UUID?
+    /// When the gym's public listings were last downloaded; nil until the first refresh.
+    public var catalogRefreshedAt: Date?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -60,6 +62,11 @@ public final class GymListingRecord {
     public var quantity: Int
     public var notes: String?
     public var photoFile: String?
+    /// Name of the picture in the `gym-photos` bucket, set as soon as the upload succeeds.
+    public var remotePhotoPath: String?
+    public var confirmedByMe: Bool = false
+    /// The duplicates `share_listing` returned, as JSON, while the upload is `.waitingForChoice`.
+    public var duplicatesData: Data?
     public var visibilityRaw: String
     public var uploadStateRaw: String
     public var uploadError: String?

@@ -18,8 +18,8 @@ public final class GymRepository {
     /// Namespace for the generic item of each kind, so every install derives the same id.
     static let genericItemNamespace = UUID(uuidString: "6b1f3c2e-8d4a-5e17-9a60-2f4c7d9b1e35")!
 
-    private let context: ModelContext
-    private let now: () -> Date
+    let context: ModelContext
+    let now: () -> Date
 
     public init(context: ModelContext, now: @escaping () -> Date = Date.init) {
         self.context = context
@@ -188,11 +188,11 @@ public final class GymRepository {
 
     // MARK: - Helpers
 
-    private func gymRecord(_ id: UUID) throws -> GymRecord? {
+    func gymRecord(_ id: UUID) throws -> GymRecord? {
         try context.fetch(FetchDescriptor<GymRecord>(predicate: #Predicate { $0.id == id })).first
     }
 
-    private func listingRecord(_ id: UUID) throws -> GymListingRecord? {
+    func listingRecord(_ id: UUID) throws -> GymListingRecord? {
         try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first
     }
 
@@ -251,6 +251,8 @@ public final class GymRepository {
 
     // MARK: - Validation
 
+    private static func kg(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...2))) }
+
     private static func validGym(name: String, address: String?) throws -> (String, String?) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (1...maxNameLength).contains(name.count) else {
@@ -281,15 +283,16 @@ public final class GymRepository {
         }
         switch loads {
         case let .stack(maxKg, stepKg):
-            guard maxKg > 0, maxKg <= maxStackKg else {
-                throw GymDataError.invalidInput("The stack's top weight must be between 0 and \(Int(maxStackKg)) kg.")
+            guard DomainLimits.listingStackKg.contains(maxKg) else {
+                throw GymDataError.invalidInput("The stack's top weight must be between \(Self.kg(DomainLimits.listingStackKg.lowerBound)) and \(Int(maxStackKg)) kg.")
             }
-            if let stepKg, stepKg <= 0 || stepKg > maxKg {
-                throw GymDataError.invalidInput("The step must be above 0 and no more than the top weight.")
+            if let stepKg, !DomainLimits.listingStepKg.contains(stepKg) || stepKg > maxKg {
+                let range = DomainLimits.listingStepKg
+                throw GymDataError.invalidInput("The step must be between \(Self.kg(range.lowerBound)) and \(Self.kg(range.upperBound)) kg, and no more than the top weight.")
             }
         case let .fixed(kg):
-            guard (1...maxFixedWeights).contains(kg.count), kg.allSatisfy({ $0 > 0 && $0 <= maxFixedKg }) else {
-                throw GymDataError.invalidInput("List between 1 and \(maxFixedWeights) weights, each up to \(Int(maxFixedKg)) kg.")
+            guard (1...maxFixedWeights).contains(kg.count), kg.allSatisfy(DomainLimits.listingFixedKg.contains) else {
+                throw GymDataError.invalidInput("List between 1 and \(maxFixedWeights) weights, each between \(Self.kg(DomainLimits.listingFixedKg.lowerBound)) and \(Int(maxFixedKg)) kg.")
             }
         case .plates, .none: break
         }

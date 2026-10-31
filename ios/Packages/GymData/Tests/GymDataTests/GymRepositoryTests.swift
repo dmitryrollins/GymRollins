@@ -132,10 +132,27 @@ import Testing
         bad(new(loads: .fixed(kg: [501])))
         bad(new(gymId: UUID()))
         _ = try repo.addListing(new(brand: String(repeating: "b", count: 60), model: String(repeating: "m", count: 80),
-                                    loads: .stack(maxKg: 1000, stepKg: 1000), quantity: 50,
+                                    loads: .stack(maxKg: 1000, stepKg: 50), quantity: 50,
                                     notes: String(repeating: "n", count: 280)))
         _ = try repo.addListing(new(loads: .fixed(kg: Array(repeating: 500, count: 60))))
         #expect(try repo.listings(gymId: gym.id).count == 2)
+    }
+
+    @Test func loadsBelowWhatTheServerAcceptsAreRefusedLocally() throws {
+        defer { f.tearDown() }
+        let gym = try makeGym()
+        func bad(_ loads: ListingLoads) {
+            expectInvalid { _ = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack", loads: loads)) }
+        }
+        bad(.stack(maxKg: 0.1, stepKg: nil))
+        bad(.stack(maxKg: 100, stepKg: 0.1))
+        bad(.stack(maxKg: 100, stepKg: 51))
+        bad(.fixed(kg: [0.1]))
+        bad(.fixed(kg: [10, 0.2]))
+        _ = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack", loads: .stack(maxKg: 0.25, stepKg: 0.25)))
+        _ = try repo.addListing(NewListing(gymId: gym.id, kindId: "kettlebell", loads: .fixed(kg: [0.25])))
+        let listing = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack", loads: .plates))
+        expectInvalid { _ = try repo.updateListing(listing.id, loads: .stack(maxKg: 0.1, stepKg: nil), quantity: 1, notes: nil) }
     }
 
     @Test func genericItemIsStablePerKind() throws {

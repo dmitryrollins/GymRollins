@@ -3,8 +3,8 @@ import GymCore
 
 /// Who a gym or listing is visible to (spec §5). Only `device` exists until plan 21.
 public enum GymVisibility: String, Codable, Sendable, CaseIterable { case device, synced, shared }
-public enum UploadState: String, Codable, Sendable { case local, queued, uploaded, failed }
-public enum ListingStatus: String, Codable, Sendable { case active, flagged, removed }
+public enum UploadState: String, Codable, Sendable { case local, queued, uploaded, failed, waitingForChoice }
+public enum ListingStatus: String, Codable, Sendable { case active, flagged, removed, unsupported }
 
 public struct Gym: Sendable, Hashable, Identifiable {
     public let id: UUID
