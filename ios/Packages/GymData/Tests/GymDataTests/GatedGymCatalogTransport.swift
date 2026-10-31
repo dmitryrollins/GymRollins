@@ -95,6 +95,11 @@ final class GatedGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try await inner.deleteAllPhotos()
     }
 
+    func detachAllPhotos() async throws {
+        await gate("detachAllPhotos")
+        try await inner.detachAllPhotos()
+    }
+
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         await gate("report")
         try await inner.report(targetType: targetType, targetId: targetId, reason: reason, note: note)
@@ -116,5 +121,6 @@ final class GatedGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try await inner.moderate(targetType: targetType, targetId: targetId, action: action)
     }
 
+    func moderationPhotoDeleted(path: String) async throws { try await inner.moderationPhotoDeleted(path: path) }
     func publicPhotoURL(path: String) -> URL? { inner.publicPhotoURL(path: path) }
 }

@@ -197,4 +197,62 @@ import Testing
         transport.stalledCalls = ["report"]
         #expect(await box.sendModeration(userId: user, limit: .milliseconds(50)) == 1)
     }
+
+    // MARK: Limits and the refresh request
+
+    @Test func aBlockRefusedForTheDailyLimitSaysSoInItsOwnWords() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        transport.failure = .dailyLimit
+        try box.enqueueBlock(listingId: a.id, ownerId: user)
+        await box.run(userId: user)
+        #expect(box.reportNotice == "You've hidden a lot of people today. Try again tomorrow.")
+        #expect(try shown(gym) == [a.id], "a block the server refused hides nothing")
+    }
+
+    @Test func aReportRefusedForTheDailyLimitKeepsItsOwnWords() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        transport.failure = .dailyLimit
+        try box.enqueueReport(listingId: a.id, reason: .spam, note: nil, ownerId: user)
+        await box.run(userId: user)
+        #expect(box.reportNotice == "You've sent a lot of reports today. Try again tomorrow.")
+    }
+
+    @Test func aSentBlockAsksTheScreenToReadTheServerOnce() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let box = outbox
+        #expect(!box.takeRefreshRequest())
+        try box.enqueueBlock(listingId: a.id, ownerId: user)
+        await box.run(userId: user)
+        #expect(box.takeRefreshRequest())
+        #expect(!box.takeRefreshRequest(), "once")
+    }
+
+    @Test func signOutWaitsForARunAlreadyGoingBeforeCountingWhatIsLost() async throws {
+        defer { f.tearDown() }
+        let gym = try mapsGym()
+        let a = remote()
+        try await cache(gym, [a])
+        let gated = GatedGymCatalogTransport()
+        let box = ShareOutbox(repository: repo, transport: gated, photoData: { _ in nil },
+                              now: { [clock = f.clock] in clock.now })
+        try box.enqueueReport(listingId: a.id, reason: .spam, note: nil, ownerId: user)
+        gated.hold("report")
+        let running = Task { await box.run(userId: user) }
+        await gated.waitUntilSuspended("report")
+        let sign = Task { await box.sendModeration(userId: user) }
+        gated.release()
+        await running.value
+        #expect(await sign.value == 0, "the report went out in the run that was already going")
+    }
 }

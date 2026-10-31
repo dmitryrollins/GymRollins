@@ -80,8 +80,9 @@ import Testing
         #expect(try shown(gym) == [sameAuthor.id, other.id], "the phone doesn't know the author")
         await box.run(userId: user)
         #expect(transport.blocks == [.init(type: .listing, id: a.id)])
-        // The server now leaves out everything the blocked author wrote.
-        try await cache(gym, [other])
+        // The server now leaves out everything the blocked author wrote. The next open is not forced: the sent block
+        // alone makes it read.
+        try await cache(gym, [other], force: false)
         #expect(try shown(gym) == [other.id])
         #expect(try repo.listingRecord(sameAuthor.id) == nil, "the refresh deletes rows the server no longer returns")
     }

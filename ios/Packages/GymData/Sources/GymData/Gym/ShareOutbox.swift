@@ -16,13 +16,14 @@ public final class ShareOutbox {
     static let reportDailyLimit = "You've sent a lot of reports today. Try again tomorrow."
     static let couldNotReport = "Couldn't send that report. Try again later."
     static let couldNotBlock = "Couldn't hide that user's equipment. Try again later."
+    static let blockDailyLimit = "You've hidden a lot of people today. Try again tomorrow."
     static let log = Logger(subsystem: "com.rollins.gymrollins", category: "share-outbox")
 
     let repository: GymRepository
     let transport: GymCatalogTransport
     private let photoData: (String) -> Data?
     let now: () -> Date
-    private var running = false
+    var running = false
     private var runAgainFor: UUID?
     private(set) var generation = 0
     /// An unblock is on the wire: a queued block must not go out meanwhile, or it would undo the unblock.
@@ -35,6 +36,10 @@ public final class ShareOutbox {
     /// Why the last report or block the server refused was dropped, for the screen to show once. Cleared by
     /// `takeReportNotice()`.
     public internal(set) var reportNotice: String?
+
+    /// A block went out, or an unblock was done: what the server returns for the gyms has changed, and the one on
+    /// screen should read it again. Cleared by `takeRefreshRequest()`.
+    var refreshRequested = false
 
     public init(repository: GymRepository, transport: GymCatalogTransport, photoData: @escaping (String) -> Data?,
                 now: @escaping () -> Date) {

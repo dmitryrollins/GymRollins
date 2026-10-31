@@ -155,6 +155,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         lock.withLock { _deleted.append(path) }
     }
     func deleteAllPhotos() async throws { try record("deleteAllPhotos") }
+    func detachAllPhotos() async throws { try record("detachAllPhotos") }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         try record("report")
         if lock.withLock({ _stalledCalls.contains("report") }) { try await Task.sleep(for: .seconds(60)) }
@@ -182,5 +183,6 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try record("moderate")
         return nil
     }
+    func moderationPhotoDeleted(path: String) async throws { try record("moderationPhotoDeleted") }
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://example.test/gym-photos/\(path)") }
 }

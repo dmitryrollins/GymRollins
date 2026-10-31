@@ -84,6 +84,12 @@ extension ShareOutbox {
         return cleared
     }
 
+    /// Whether the gym on screen should read the server again now: a block went out, or an unblock was done. Once.
+    public func takeRefreshRequest() -> Bool {
+        defer { refreshRequested = false }
+        return refreshRequested
+    }
+
     /// The notice for a refused report, once.
     public func takeReportNotice() -> String? {
         defer { reportNotice = nil }
@@ -96,7 +102,12 @@ extension ShareOutbox {
     /// queued (they fall back to "This phone only" rows). Returns how many of the user's reports and blocks are still
     /// waiting, which the sign-out would lose.
     public func sendModeration(userId: UUID, limit: Duration = .seconds(5)) async -> Int {
-        let work = Task { await run(userId: userId, only: [.report, .block]) }
+        let work = Task {
+            await run(userId: userId, only: [.report, .block])
+            // A run that was already going took the call and returned at once; its rows are not counted as lost until
+            // it has finished with them.
+            while running, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(20)) }
+        }
         let timer = Task {
             try? await Task.sleep(for: limit)
             work.cancel()
@@ -155,7 +166,7 @@ extension ShareOutbox {
         }
         let block = Kind(rawValue: row.kindRaw) == .block
         switch error as? GymCatalogError {
-        case .dailyLimit: reportNotice = Self.reportDailyLimit
+        case .dailyLimit: reportNotice = block ? Self.blockDailyLimit : Self.reportDailyLimit
         default: reportNotice = block ? Self.couldNotBlock : Self.couldNotReport
         }
         try drop(row)
@@ -171,6 +182,7 @@ extension ShareOutbox {
     /// Makes every gym read the server at its next open, whatever its stamp says.
     private func refreshEverywhere() throws {
         for gym in try context.fetch(FetchDescriptor<GymRecord>()) { gym.catalogRefreshedAt = nil }
+        refreshRequested = true
     }
 
     /// The user chose this listing as the same machine as theirs, so a report or block of it no longer hides it. The

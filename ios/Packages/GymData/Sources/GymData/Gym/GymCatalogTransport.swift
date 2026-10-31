@@ -17,6 +17,9 @@ public protocol GymCatalogTransport: Sendable {
     /// Removes every photo the caller owns in both gym buckets, listed or not, for account deletion. Stops at the first
     /// failure and throws it; an object that is already gone is not one.
     func deleteAllPhotos() async throws
+    /// Clears the photo names from the caller's own listings, private and shared, so account deletion can remove the
+    /// objects without leaving listings that name dead ones. Nothing is lost if it fails, and the account is untouched.
+    func detachAllPhotos() async throws
     /// Reports a public gym or listing. The server also answers `own` (the reporter wrote it) and `already`; both
     /// count as sent. A target that is gone raises `GymCatalogError.unknownTarget`.
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws
@@ -30,6 +33,9 @@ public protocol GymCatalogTransport: Sendable {
     func moderationQueue() async throws -> [ModerationEntry]
     /// Restores or removes a flagged gym or listing. Returns the photo the app must now delete through Storage.
     func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String?
+    /// Tells the server the photo `moderate` returned is gone from Storage, so a removed listing's name can go. Only
+    /// then does the listing leave the queue.
+    func moderationPhotoDeleted(path: String) async throws
     func publicPhotoURL(path: String) -> URL?
 }
 
