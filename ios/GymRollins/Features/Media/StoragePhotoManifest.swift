@@ -34,8 +34,30 @@ struct StoragePhotoManifest: Sendable, Equatable {
     private struct Wire: Decodable {
         let version: Int
         let photos: [String: Int]
-        let rev: [String: String]?
-        let kinds: [String: String]?
+        let rev: [String: String]
+        let kinds: [String: String]
+
+        private enum CodingKeys: String, CodingKey { case version, photos, rev, kinds }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            version = try container.decode(Int.self, forKey: .version)
+            photos = try container.decode([String: Int].self, forKey: .photos)
+            rev = Self.lenient(container, .rev)
+            kinds = Self.lenient(container, .kinds)
+        }
+
+        /// A wrong shape is empty and a bad value drops only its entry: a bad `kinds` or `rev` must not lose the photos.
+        private static func lenient(_ container: KeyedDecodingContainer<CodingKeys>,
+                                    _ key: CodingKeys) -> [String: String] {
+            let entries = (try? container.decodeIfPresent([String: Entry].self, forKey: key)) ?? nil
+            return (entries ?? [:]).compactMapValues(\.value)
+        }
+
+        private struct Entry: Decodable {
+            let value: String?
+            init(from decoder: Decoder) throws { value = try? decoder.singleValueContainer().decode(String.self) }
+        }
     }
 
     /// Validates the JSON; entries with a malformed id, frame count or rev are dropped (not the whole manifest).
@@ -44,10 +66,10 @@ struct StoragePhotoManifest: Sendable, Equatable {
         let wire = try JSONDecoder().decode(Wire.self, from: data)
         guard wire.version == Self.supportedVersion else { throw ParseError.unsupportedVersion(wire.version) }
         photos = wire.photos.filter { id, frames in Self.isValidID(id) && (1...Self.maxFrames).contains(frames) }
-        rev = (wire.rev ?? [:]).filter { id, value in
+        rev = wire.rev.filter { id, value in
             Self.isValidID(id) && Self.isValidRev(value)
         }
-        kinds = (wire.kinds ?? [:]).filter { id, value in Self.isValidKindID(id) && Self.isValidRev(value) }
+        kinds = wire.kinds.filter { id, value in Self.isValidKindID(id) && Self.isValidRev(value) }
     }
 
     static func isValidRev(_ rev: String) -> Bool {

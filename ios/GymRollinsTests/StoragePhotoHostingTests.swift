@@ -178,6 +178,26 @@ enum PhotoTestData {
         #expect(manifest.rev == ["0001": "abc"])
     }
 
+    /// A wrong-shaped `kinds` or `rev` loses only itself: the exercise photos next to it still show.
+    @Test func aWrongShapedKindsOrRevKeepsTheExercisePhotos() throws {
+        func parse(_ extra: String) throws -> StoragePhotoManifest {
+            try StoragePhotoManifest(data: Data(#"{"version":1,"photos":{"0453":2},\#(extra)}"#.utf8))
+        }
+        for extra in [#""kinds":{"dumbbells":5}"#, #""kinds":[]"#, #""kinds":"x""#, #""rev":[]"#, #""rev":{"0453":7}"#] {
+            let manifest = try parse(extra)
+            #expect(manifest.photos == ["0453": 2], "\(extra)")
+            #expect(manifest.kinds.isEmpty && manifest.rev.isEmpty, "\(extra)")
+        }
+    }
+
+    @Test func aBadKindOrRevValueDropsOnlyThatEntry() throws {
+        let data = Data(#"{"version":1,"photos":{"0453":2},"kinds":{"dumbbells":"ab12","skierg":5,"bad id":"ab12"},"rev":{"0453":"cd34","0227":9}}"#.utf8)
+        let manifest = try StoragePhotoManifest(data: data)
+        #expect(manifest.kinds == ["dumbbells": "ab12"])
+        #expect(manifest.rev == ["0453": "cd34"])
+        #expect(manifest.photos == ["0453": 2])
+    }
+
     @Test func rejectsUnknownVersionsGarbageAndOversizedFiles() {
         #expect(throws: StoragePhotoManifest.ParseError.unsupportedVersion(2)) {
             try StoragePhotoManifest(data: PhotoTestData.manifest(["0453": 2], version: 2))
