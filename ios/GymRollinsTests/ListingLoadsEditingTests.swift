@@ -68,6 +68,16 @@ import Testing
         #expect(try #require(metric.options.first { $0.label == "24 kg" }).kg == 24)
     }
 
+    /// UI tests and VoiceOver users find a chip by its nominal kilograms, whatever unit it stores.
+    @Test func aChipKeepsItsNominalTag() throws {
+        let lb = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .none)
+        #expect(lb.options.map(\.tag) == [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40])
+        let metric = ListingLoadsEditing(kind: kettlebells, unit: .kg, loads: .none)
+        #expect(metric.options.map(\.tag) == metric.options.map(\.kg))
+        let odd = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .fixed(kg: [15]))
+        #expect(odd.options.first { $0.kg == 15 }?.tag == 15)
+    }
+
     @Test func aChipIsSelectedByEitherSpellingOfTheBell() throws {
         let lb = ListingLoadsEditing(kind: kettlebells, unit: .lb, loads: .fixed(kg: [24]))
         let chip = try #require(lb.options.first { $0.label == "53 lb (24 kg)" })

@@ -4,10 +4,12 @@ import GymCore
 /// What a listing's loads control offers for one kind of equipment, in the user's unit (spec §5, step 4): a stepper
 /// for a weight stack's top, chips for a fixed set, nothing for plates and bodyweight. Everything is stored in kg.
 struct ListingLoadsEditing: Equatable {
-    /// One chip of a fixed set: the weight it stores and how it reads.
+    /// One chip of a fixed set: the weight it stores and how it reads. `tag` is the kg the chip is named by (its
+    /// accessibility identifier), which stays "16" for the 35 lb chip whose stored weight is 15.88 kg.
     struct Option: Equatable, Identifiable {
         let kg: Double
         let label: String
+        let tag: Double
         var id: Double { kg }
     }
 
@@ -76,9 +78,10 @@ struct ListingLoadsEditing: Equatable {
 
     /// The chips: the kind's usual weights plus any the listing already has that are not among them.
     var options: [Option] {
-        let usual = kind.id == "kettlebells" ? kettlebellChipKg : dumbbellKg
-        let extra = selectedKg.filter { chosen in !usual.contains { Self.same($0, chosen) } }
-        return (usual + extra).sorted().map { Option(kg: $0, label: label(for: $0)) }
+        let usual = kind.id == "kettlebells" ? kettlebellChips : dumbbellKg.map { (kg: $0, tag: $0) }
+        let extra = selectedKg.filter { chosen in !usual.contains { Self.same($0.kg, chosen) } }
+        return (usual + extra.map { (kg: $0, tag: $0) }).sorted { $0.kg < $1.kg }
+            .map { Option(kg: $0.kg, label: label(for: $0.kg), tag: $0.tag) }
     }
 
     var selectedKg: [Double] { if case let .fixed(kg) = loads { kg } else { [] } }
@@ -96,9 +99,10 @@ struct ListingLoadsEditing: Equatable {
     func togglingAll() -> ListingLoads { allSelected ? .fixed(kg: []) : .fixed(kg: options.map(\.kg)) }
 
     /// The usual bells. An lb user's chip reads in pounds ("53 lb (24 kg)"), so it stores that label's own weight.
-    private var kettlebellChipKg: [Double] {
-        guard unit == .lb else { return Self.kettlebellKg }
-        return Self.kettlebellKg.map { UnitConverter.toKg(Self.labelledLb($0), from: .lb) }
+    private var kettlebellChips: [(kg: Double, tag: Double)] {
+        Self.kettlebellKg.map { nominal in
+            (kg: unit == .lb ? UnitConverter.toKg(Self.labelledLb(nominal), from: .lb) : nominal, tag: nominal)
+        }
     }
 
     /// The pounds a chip's label shows: whole from 10 lb up, else one decimal.

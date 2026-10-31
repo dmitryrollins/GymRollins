@@ -47,7 +47,7 @@ struct ListingLoadsEditor: View {
                 }
                 ForEach(editing.options) { option in
                     chip(option.label, selected: editing.isSelected(option.kg),
-                         identifier: "\(idPrefix).weight.\(WeightFormatter.number(option.kg))") {
+                         identifier: "\(idPrefix).weight.\(WeightFormatter.number(option.tag))") {
                         loads = editing.toggled(option.kg)
                     }
                 }
