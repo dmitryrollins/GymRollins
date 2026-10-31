@@ -16,6 +16,11 @@ struct AddEquipmentDuplicateStep: View {
             if let error = model.errorText {
                 Text(error).foregroundStyle(Theme.destructive).accessibilityIdentifier("addEquipment.error")
             }
+            if model.canConfirmWithoutPhoto {
+                SecondaryGlassButton(title: "Keep it without the photo", identifier: "addEquipment.confirmWithoutPhoto") {
+                    model.confirmWithoutPhoto()
+                }
+            }
             if !model.known.isEmpty { knownModels }
             SecondaryGlassButton(title: "Generic \(model.kind?.name.lowercased() ?? "item")",
                                  identifier: "addEquipment.generic") { model.chooseGeneric() }
