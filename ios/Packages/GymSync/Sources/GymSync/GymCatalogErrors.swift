@@ -8,6 +8,12 @@ enum GymCatalogErrors {
     private static let authCodes: Set<String> = ["PGRST301", "PGRST302", "PGRST303"]
     /// PostgREST's own "the database isn't reachable or is busy" answers, and Postgres classes 08 (connection) and
     /// 53 (resources, e.g. too many connections).
+    /// What the bucket trigger raises (`guard_gym_photo`): the daily photo limit, a name a listing already uses, and
+    /// names, types and owners that aren't allowed. A Storage version may show the message or only "row-level security".
+    private static let photoRefusals: Set<String> = [
+        "photo_daily_limit", "photo_name_in_use", "photo_bad_name", "photo_not_jpeg", "photo_immutable",
+        "photo_owner_missing",
+    ]
     private static let busyCodes: Set<String> = ["PGRST000", "PGRST001", "PGRST002", "PGRST003"]
 
     /// `hasSession` matters for 42501: with no session the caller is signed out; with one, the server refused this
@@ -44,6 +50,7 @@ enum GymCatalogErrors {
         case "photo_missing": return .photoMissing
         case "gym_full": return .gymFull
         case "photo_in_use": return .photoInUse
+        case _ where photoRefusals.contains(message): return .photoRefused
         default: break
         }
         if let code {
@@ -60,7 +67,8 @@ enum GymCatalogErrors {
     private static func mapStorage(_ error: StorageError) -> GymCatalogError {
         if error.statusCode == "401" { return .signedOut }
         if let status = error.statusCode.flatMap(Int.init), isTemporary(status: status) { return .offline }
-        if error.error == "AccessDenied" || error.message.localizedCaseInsensitiveContains("row-level security") {
+        if error.error == "AccessDenied" || photoRefusals.contains(error.message)
+            || error.message.localizedCaseInsensitiveContains("row-level security") {
             return .photoRefused
         }
         return .rejected(error.message)

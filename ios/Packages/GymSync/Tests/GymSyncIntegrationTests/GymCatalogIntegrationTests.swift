@@ -132,7 +132,9 @@ struct GymCatalogIntegrationTests {
 
     private func isServed(_ transport: SupabaseGymCatalogTransport, _ name: String) async throws -> Bool {
         let url = try #require(transport.publicPhotoURL(path: name))
-        let (_, response) = try await URLSession.shared.data(from: url)
+        // The system's own cache would keep answering 200 for the hour the object was told to be cached.
+        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+        let (_, response) = try await URLSession.shared.data(for: request)
         return (response as? HTTPURLResponse)?.statusCode == 200
     }
 

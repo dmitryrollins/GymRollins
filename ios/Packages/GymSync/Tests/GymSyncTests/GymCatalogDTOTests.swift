@@ -256,6 +256,11 @@ struct GymCatalogDTOTests {
         let policy = StorageError(statusCode: "403", message: "new row violates row-level security policy",
                                   error: "Unauthorized")
         #expect(GymCatalogErrors.map(policy) == .photoRefused)
+        // The local stack shows the trigger's own message instead.
+        for message in ["photo_name_in_use", "photo_daily_limit"] {
+            #expect(GymCatalogErrors.map(StorageError(statusCode: "400", message: message, error: "Bad Request"))
+                    == .photoRefused, "\(message)")
+        }
         #expect(GymCatalogErrors.map(StorageError(statusCode: "401", message: "bad jwt", error: "Unauthorized"))
                 == .signedOut)
         #expect(GymCatalogErrors.map(StorageError(statusCode: "413", message: "too big", error: "Payload"))
