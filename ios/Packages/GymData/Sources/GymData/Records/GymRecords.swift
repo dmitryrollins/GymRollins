@@ -21,6 +21,11 @@ public final class GymRecord {
     public var serverUpdatedAt: Date?
     public var dirty: Bool = false
     public var deletedAt: Date?
+    /// Set when a sign-out turned this synced gym into a "This phone only" one: the account whose server row this
+    /// id still names. Signing back in as that account gives the row back; any other account gets a new id.
+    public var demotedOwnerId: UUID?
+    /// Whether the row held an edit the server hadn't seen when it was demoted.
+    public var demotedDirty: Bool = false
 
     public init(id: UUID = UUID(), name: String, address: String?, latitude: Double? = nil, longitude: Double? = nil,
                 mapsPlaceId: String? = nil, now: Date) {
@@ -87,6 +92,12 @@ public final class GymListingRecord {
     public var serverUpdatedAt: Date?
     public var dirty: Bool = false
     public var deletedAt: Date?
+    /// Set when a sign-out turned this synced or queued listing into a "This phone only" one: the account whose
+    /// server row this id may still name. The same account signing back in gets a synced listing's edit pushed;
+    /// any other account gets a new id.
+    public var demotedOwnerId: UUID?
+    /// Whether the row held an edit the server hadn't seen when it was demoted.
+    public var demotedDirty: Bool = false
 
     public init(id: UUID = UUID(), gymId: UUID, itemId: UUID, kindId: String, loadsData: Data, quantity: Int,
                 notes: String?, photoFile: String?, now: Date) {

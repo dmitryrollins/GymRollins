@@ -33,6 +33,15 @@ extension SyncStore {
         }
     }
 
+    /// A listing the server refused only because its gym was refused stays blocked until it is edited, though the
+    /// gym is fine now. Called once the gym is acknowledged, so the listings are tried again.
+    public func unblockListings(ofGym gymId: UUID) throws {
+        let id = gymId
+        for row in try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.gymId == id })) {
+            clearSyncFailure(.gymListings, id: row.id.uuidString)
+        }
+    }
+
     /// Remembers the private-bucket name as soon as the upload succeeded, so a retry skips the upload.
     public func setRemotePhotoPath(listingId: UUID, path: String?) throws {
         guard let record = try anyListingRecord(listingId) else { return }
@@ -183,7 +192,16 @@ extension SyncStore {
                 kept = true
             }
         }
-        if kept { demote(gym) } else { context.delete(gym) }
+        if kept {
+            // The old id names a deleted server row, which must never be written to again: the gym that stays gets
+            // an id of its own, and the app is told so it can move its pointer.
+            demote(gym, owner: nil)
+            let newId = UUID()
+            try moveGym(gym, to: newId)
+            recordGymMove(from: id, to: newId)
+        } else {
+            context.delete(gym)
+        }
         return files
     }
 
@@ -194,13 +212,14 @@ extension SyncStore {
     /// pushed, and a share that hasn't happened, become "This phone only" rows.
     func resetGymData() throws -> [String] {
         var files: [String] = []
+        let owner = ownerUserId
         for row in try context.fetch(FetchDescriptor<ShareOutboxRecord>()) {
             if row.kindRaw == ShareOutboxRecord.Kind.share.rawValue,
-               let listing = try anyListingRecord(row.targetId) { demote(listing) }
+               let listing = try anyListingRecord(row.targetId) { demote(listing, owner: row.ownerId) }
             context.delete(row)
         }
         for listing in try context.fetch(FetchDescriptor<GymListingRecord>()) {
-            files += resetListing(listing)
+            files += resetListing(listing, owner: owner)
         }
         let remaining = Set(try context.fetch(FetchDescriptor<GymListingRecord>()).map(\.gymId))
         for gym in try context.fetch(FetchDescriptor<GymRecord>()) {
@@ -209,36 +228,39 @@ extension SyncStore {
             if gym.deletedAt != nil || (!gym.dirty && !remaining.contains(gym.id)) {
                 context.delete(gym)
             } else {
-                demote(gym)
+                demote(gym, owner: owner)
             }
         }
         try context.save()
         return files
     }
 
-    private func resetListing(_ listing: GymListingRecord) -> [String] {
+    private func resetListing(_ listing: GymListingRecord, owner: UUID?) -> [String] {
         let file = listing.photoFile.map { [$0] } ?? []
         switch GymVisibility(rawValue: listing.visibilityRaw) {
         case .shared where listing.uploadStateRaw == UploadState.uploaded.rawValue:
             context.delete(listing)
             return file
         case .shared:
-            demote(listing)
+            demote(listing, owner: owner)
         case .synced where listing.deletedAt != nil:
             context.delete(listing)
         case .synced where !listing.dirty:
             context.delete(listing)
             return file
         case .synced:
-            demote(listing)
+            demote(listing, owner: owner)
         default:
             break
         }
         return []
     }
 
-    /// Back to "This phone only", forgetting everything that tied the row to a server or an account.
-    private func demote(_ listing: GymListingRecord) {
+    /// Back to "This phone only", forgetting everything that tied the row to a server or an account except whose
+    /// row the id still names (`demotedOwnerId`), so the next sign-in can tell whose rows these were.
+    private func demote(_ listing: GymListingRecord, owner: UUID?) {
+        listing.demotedOwnerId = owner
+        listing.demotedDirty = owner != nil && listing.dirty
         listing.visibilityRaw = GymVisibility.device.rawValue
         listing.uploadStateRaw = UploadState.local.rawValue
         listing.uploadError = nil
@@ -250,7 +272,9 @@ extension SyncStore {
         listing.deletedAt = nil
     }
 
-    private func demote(_ gym: GymRecord) {
+    private func demote(_ gym: GymRecord, owner: UUID?) {
+        gym.demotedOwnerId = owner
+        gym.demotedDirty = owner != nil && gym.dirty
         gym.visibilityRaw = GymVisibility.device.rawValue
         gym.serverUpdatedAt = nil
         gym.dirty = false

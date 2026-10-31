@@ -69,6 +69,7 @@ extension AppEnvironment {
 
     /// Called once from `init`: a sign-in lets the queued shares go.
     func wireGymSharing() {
+        sync.onGymIdsMoved = { [weak self] moves in self?.gymIdsMoved(moves) }
         sync.onSignedIn = { [weak self] in
             guard let self else { return }
             Task { await self.runShareOutbox() }

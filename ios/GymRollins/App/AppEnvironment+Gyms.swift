@@ -47,6 +47,16 @@ extension AppEnvironment {
         return true
     }
 
+    /// Gyms changed ids (see `SyncCoordinator.onGymIdsMoved`): the current gym follows its gym. The other places that
+    /// hold a gym or listing id are fixed where the rows are (workouts), or fall back on their own (today's built
+    /// workout looks its listings up and uses the gym's first choice for one it can't find).
+    func gymIdsMoved(_ moves: [UUID: UUID]) {
+        if let current = storedGymId, let new = moves[current] {
+            defaults.set(new.uuidString, forKey: Self.currentGymKey)
+        }
+        gymsChanged()
+    }
+
     /// Deletes the gym, its listings and their photo files; if it was the current gym, none is current any more.
     func deleteGym(_ id: UUID) throws {
         let photos = try gyms.deleteGym(id)

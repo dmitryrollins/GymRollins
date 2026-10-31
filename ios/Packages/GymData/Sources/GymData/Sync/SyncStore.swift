@@ -79,6 +79,11 @@ public final class SyncStore {
         defaults.set(date, forKey: Self.cursorKey(entity))
     }
 
+    /// Forgets the cursor, so the next pull reads the entity from the start.
+    public func clearCursor(for entity: SyncEntity) {
+        defaults.removeObject(forKey: Self.cursorKey(entity))
+    }
+
     private static func cursorKey(_ entity: SyncEntity) -> String { "gymrollins.sync.cursor.\(entity.rawValue)" }
 
     // MARK: - Reset

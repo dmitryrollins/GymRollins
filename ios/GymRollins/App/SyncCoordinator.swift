@@ -48,6 +48,9 @@ final class SyncCoordinator {
     /// Called once a sign-in or a restored session has settled and the account owns this phone's data: queued shares
     /// can go.
     @ObservationIgnored var onSignedIn: @MainActor () -> Void = {}
+    /// Called when gyms got new ids (their old and new id): a sign-in as another account gave the phone's "This phone
+    /// only" gyms ids of their own, or a pull found a gym deleted elsewhere that still held equipment kept here.
+    @ObservationIgnored var onGymIdsMoved: @MainActor ([UUID: UUID]) -> Void = { _ in }
     /// The phone's gym photo files. The engine reads and downloads through it, and a sign-out deletes the files of
     /// the gym rows it removed through it (`wipeLocal`).
     @ObservationIgnored var gymPhotoFiles: (any GymPhotoFiles)?
@@ -118,6 +121,7 @@ final class SyncCoordinator {
         try await wipeLocal()
         store.ownerUserId = userId
         accountSwitchPending = false
+        settleGymRows(for: userId)
         refreshEngine()
         await syncNow()
     }
@@ -223,10 +227,23 @@ final class SyncCoordinator {
                 }
             }
             accountSwitchPending = false
+            settleGymRows(for: userId)
         }
         refreshEngine()
         await syncNow()
         if auth?.state.userId != nil, !accountSwitchPending { onSignedIn() }
+    }
+
+    /// Gives the gyms and listings a sign-out left on the phone back to the account they came from, or new ids if
+    /// another account signed in. Runs before the first sync, so the pull and the push see settled rows. A failure
+    /// is logged: the rows are still "This phone only", so nothing is sent under the wrong account meanwhile.
+    private func settleGymRows(for userId: UUID) {
+        do {
+            let moves = try store.settleDemotedRows(for: userId)
+            if !moves.isEmpty { onGymIdsMoved(moves) }
+        } catch {
+            Self.log.error("Settle gym rows failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// An auth change the app didn't ask for (the SDK's refresh found the session revoked, or refreshed it).
@@ -292,6 +309,8 @@ final class SyncCoordinator {
         guard engine === self.engine else { return } // stopped mid-round (sign-out, account switch)
         refreshPending()
         onRoundFinished()
+        let moves = store.takeGymMoves()
+        if !moves.isEmpty { onGymIdsMoved(moves) }
         guard engine.remoteChangeCount != seenRemoteChanges else { return }
         seenRemoteChanges = engine.remoteChangeCount
         onRemoteChanges()
