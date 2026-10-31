@@ -142,6 +142,22 @@ import Testing
         #expect(stub.calls.isEmpty)
     }
 
+    @Test func deletingAShareThatIsStillWaitingTakesItOutOfTheQueueWithItsPhoto() throws {
+        let (rig, _) = try rig()
+        let gym = try mapsGym(rig)
+        let file = try rig.photos.save(ProcessedGymPhoto(jpeg: Data("p".utf8), thumbnail: Data("t".utf8)))
+        let own = try rig.env.gyms.addListing(NewListing(gymId: gym.id, kindId: "flat-bench", photoFile: file))
+        try rig.env.gymSharing.outbox.enqueueShare(listingId: own.id, ownerId: UUID())
+        #expect(rig.env.gymSharing.outbox.pendingCount == 1)
+        #expect(try rig.env.gyms.listing(own.id)?.uploadState == .queued)
+
+        try rig.env.removeListing(own.id)
+
+        #expect(rig.env.gymSharing.outbox.pendingCount == 0, "nothing is left to upload")
+        #expect(try rig.env.gyms.listing(own.id) == nil)
+        #expect(rig.photoCount() == 0, "the photo file goes with it")
+    }
+
     @Test func theFakeCatalogFlagIsParsed() {
         #expect(LaunchOptions(arguments: ["-uiTesting", "-fakeGymCatalog"]).fakeGymCatalog)
         #expect(!LaunchOptions(arguments: ["-uiTesting"]).fakeGymCatalog)

@@ -73,9 +73,15 @@ extension AppEnvironment {
         }
     }
 
-    /// Deletes the listing and its photo files together.
+    /// Deletes the listing and its photo files together. A share still waiting to go up leaves the upload queue too,
+    /// with the photo already uploaded for it.
     func removeListing(_ id: UUID) throws {
-        let photo = try gyms.removeListing(id)
+        let photo: String?
+        if let listing = try gyms.listing(id), listing.isOwn, ShareStatusModel.isUnsent(listing) {
+            photo = try gymSharing.outbox.cancelShare(listingId: id)
+        } else {
+            photo = try gyms.removeListing(id)
+        }
         removeGymPhotos(photo.map { [$0] } ?? [])
         gymsChanged()
     }

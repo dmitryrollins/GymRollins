@@ -5,19 +5,24 @@ import SwiftUI
 /// What a listing's detail says about sharing, worked out from its state: the words, the failure reason, and which
 /// actions make sense. Plain data, so the rules are tested without a screen.
 struct ShareStatusModel: Equatable {
-    enum Action: Equatable { case share, retry, confirm, shareAnyway }
+    enum Action: Equatable { case share, retry, confirm, shareAnyway, sync }
 
     let text: String
     let reason: String?
     let actions: [Action]
-    /// Someone else's listing, and my own once it is shared, are not removed from here (plan 22 adds the report path).
+    /// Someone else's listing, and my own once it is on the server, are not removed from here (plan 22 adds the report
+    /// path). A share still waiting, stuck or undecided can be taken back.
     let canRemove: Bool
+    /// What the confirmation before Delete says will happen.
+    let deleteMessage: String
     /// Loads, quantity, note and photo are mine to change only while the listing isn't the shared catalogue's.
     let canEdit: Bool
 
     init(listing: GymListing, gym: Gym) {
         let isShared = listing.visibility == .shared
-        canRemove = listing.isOwn && !isShared
+        let unsent = Self.isUnsent(listing)
+        canRemove = listing.isOwn && (!isShared || unsent)
+        deleteMessage = Self.deleteMessage(listing, unsent: unsent)
         canEdit = !isShared && listing.status != .unsupported
         switch listing.uploadState {
         case .failed:
@@ -38,9 +43,22 @@ struct ShareStatusModel: Equatable {
             case .shared:
                 (text, actions) = ("Shared at this gym", [])
             case .device:
-                (text, actions) = ("Only me", gym.isPrivate ? [] : [.share])
+                (text, actions) = ("Only me", gym.isPrivate ? [.sync] : [.share])
             }
         }
+    }
+
+    /// A share that has not reached the server: deleting it also takes it out of the upload queue.
+    static func isUnsent(_ listing: GymListing) -> Bool {
+        [.queued, .failed, .waitingForChoice].contains(listing.uploadState)
+    }
+
+    private static func deleteMessage(_ listing: GymListing, unsent: Bool) -> String {
+        if unsent { return "It and its photo will be deleted from this phone and won't be shared." }
+        if listing.visibility == .synced {
+            return "It and its photo will be deleted from this phone and your account. This can't be undone."
+        }
+        return "It and its photo will be deleted from this phone. This can't be undone."
     }
 
     static func title(_ action: Action) -> String {
@@ -49,6 +67,7 @@ struct ShareStatusModel: Equatable {
         case .retry: "Retry"
         case .confirm: "+1 confirm"
         case .shareAnyway: "No, it's a different one"
+        case .sync: "Sync to my account"
         }
     }
 
@@ -58,6 +77,7 @@ struct ShareStatusModel: Equatable {
         case .retry: "listing.retry"
         case .confirm: "listing.confirm"
         case .shareAnyway: "listing.shareAnyway"
+        case .sync: "listing.sync"
         }
     }
 }
@@ -90,7 +110,7 @@ struct ShareStatusRow: View {
     @ViewBuilder
     private func button(_ action: ShareStatusModel.Action) -> some View {
         let id = ShareStatusModel.identifier(action)
-        if action == .retry || action == .share {
+        if action == .retry || action == .share || action == .sync {
             PrimaryGlassButton(title: ShareStatusModel.title(action), identifier: id) { onAction(action) }
         } else {
             SecondaryGlassButton(title: ShareStatusModel.title(action), identifier: id) { onAction(action) }

@@ -67,6 +67,20 @@ import Testing
         #expect(tile.loadsText == nil && tile.brandAndModel == nil)
     }
 
+    @Test func myOwnFlaggedListingStaysOnTheScreenWithItsBadgeButOutOfTheRules() throws {
+        let rig = try GymTestRig.make()
+        let gym = try mapsGym(rig)
+        let flagged = try listing(rig, gym: gym, visibility: .shared, upload: .uploaded, status: .flagged)
+        _ = try listing(rig, gym: gym, kind: "lat-pulldown", visibility: .shared, upload: .uploaded, own: false,
+                        status: .flagged)
+        let shown = try rig.env.gyms.listings(gymId: gym.id, includingUnsupported: true)
+        #expect(shown.map(\.id) == [flagged.id], "only my own flagged row is listed")
+        let model = GymEquipmentModel(gym: gym, listings: shown, catalog: rig.env.gymCatalog, unit: .lb, coverage: [])
+        #expect(model.sections.first?.tiles.first?.badge?.text == "Flagged")
+        #expect(try rig.env.gyms.listings(gymId: gym.id).isEmpty, "the default list is what the rules use")
+        #expect(try rig.env.gyms.inventory(gymId: gym.id).listings.isEmpty)
+    }
+
     // MARK: Status row
 
     @Test func aPhoneOnlyListingAtAMapsGymOffersSharing() throws {
@@ -76,12 +90,29 @@ import Testing
         #expect(status.actions == [.share])
     }
 
-    @Test func aPhoneOnlyListingAtAPrivateGymOffersNothing() throws {
+    @Test func aPhoneOnlyListingAtAPrivateGymOffersToSyncIt() throws {
         let rig = try GymTestRig.make()
         let gym = try rig.gym("Home")
         let status = ShareStatusModel(listing: try listing(rig, gym: gym), gym: gym)
         #expect(status.text == "Only me")
-        #expect(status.actions.isEmpty)
+        #expect(status.actions == [.sync])
+        #expect(ShareStatusModel.title(.sync) == "Sync to my account")
+        #expect(ShareStatusModel.identifier(.sync) == "listing.sync")
+    }
+
+    @Test func aPhoneOnlyListingAtAnAlreadySyncedGymCanStillBeSynced() throws {
+        let rig = try GymTestRig.make()
+        let gym = try rig.gym("Home")
+        try rig.env.gyms.makeSynced(gym: gym.id)
+        let synced = try #require(try rig.env.gyms.gym(gym.id))
+        let status = ShareStatusModel(listing: try listing(rig, gym: synced), gym: synced)
+        #expect(status.actions == [.sync], "the gym is synced but this one never left the phone")
+    }
+
+    @Test func aSyncedListingOffersNoSync() throws {
+        let rig = try GymTestRig.make()
+        let gym = try rig.gym("Home")
+        #expect(ShareStatusModel(listing: try listing(rig, gym: gym, visibility: .synced), gym: gym).actions.isEmpty)
     }
 
     @Test func aFailedShareGivesTheReasonAndRetry() throws {
@@ -137,6 +168,31 @@ import Testing
         let gym = try rig.gym("Home")
         let status = ShareStatusModel(listing: try listing(rig, gym: gym, visibility: .synced), gym: gym)
         #expect(status.text == "Synced to your account")
+    }
+
+    @Test func removingIsOfferedForAShareThatHasNotReachedTheServer() throws {
+        let rig = try GymTestRig.make()
+        let gym = try mapsGym(rig)
+        for state in [UploadState.queued, .failed, .waitingForChoice] {
+            let waiting = try listing(rig, gym: gym, visibility: .shared, upload: state)
+            #expect(ShareStatusModel(listing: waiting, gym: gym).canRemove, "\(state) can be taken back")
+        }
+        let someoneElses = try listing(rig, gym: gym, visibility: .shared, upload: .queued, own: false)
+        #expect(!ShareStatusModel(listing: someoneElses, gym: gym).canRemove)
+    }
+
+    @Test func theDeleteCopySaysWhatReallyHappens() throws {
+        let rig = try GymTestRig.make()
+        let gym = try mapsGym(rig)
+        func message(_ l: GymListing) -> String { ShareStatusModel(listing: l, gym: gym).deleteMessage }
+        #expect(message(try listing(rig, gym: gym)) == "It and its photo will be deleted from this phone. This can't be undone.")
+        #expect(message(try listing(rig, gym: gym, visibility: .synced))
+                == "It and its photo will be deleted from this phone and your account. This can't be undone.")
+        let notShared = "It and its photo will be deleted from this phone and won't be shared."
+        #expect(message(try listing(rig, gym: gym, visibility: .shared, upload: .queued)) == notShared)
+        #expect(message(try listing(rig, gym: gym, visibility: .shared, upload: .failed)) == notShared)
+        #expect(message(try listing(rig, gym: gym, visibility: .shared, upload: .waitingForChoice)) == notShared)
+        #expect(message(try listing(rig, gym: gym, visibility: .device, upload: .failed)) == notShared)
     }
 
     @Test func removingIsOfferedOnlyForListingsThatStayOnTheAccountOrPhone() throws {
