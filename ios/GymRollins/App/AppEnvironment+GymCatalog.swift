@@ -45,6 +45,7 @@ struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { throw GymCatalogError.signedOut }
     func deleteSharedPhoto(path: String) async throws { throw GymCatalogError.signedOut }
     func deleteAllPhotos() async throws { throw GymCatalogError.signedOut }
+    func detachAllPhotos() async throws { throw GymCatalogError.signedOut }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         throw GymCatalogError.signedOut
     }
@@ -55,6 +56,7 @@ struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
         throw GymCatalogError.signedOut
     }
+    func moderationPhotoDeleted(path: String) async throws { throw GymCatalogError.signedOut }
     func publicPhotoURL(path: String) -> URL? { nil }
 }
 
@@ -66,7 +68,7 @@ extension AppEnvironment {
         let photoData: (String) -> Data? = { photoStore.data(file: $0) }
         #if DEBUG
         if options.fakeGymCatalog {
-            return GymSharing(repository: gyms, transport: FakeGymCatalogTransport(admin: options.fakeGymAdmin), knownKinds: known,
+            return GymSharing(repository: gyms, transport: FakeGymCatalogTransport(admin: options.fakeGymAdmin, grows: options.fakeGymCatalogGrows), knownKinds: known,
                               photos: GymPhotoCache(store: photoStore) { _, _ in GymPhotoFixture.jpegData() },
                               photoData: photoData, now: now)
         }
@@ -91,16 +93,26 @@ extension AppEnvironment {
     /// Called once from `init`: a sign-in lets the queued shares go.
     func wireGymSharing() {
         sync.onGymIdsMoved = { [weak self] moves in self?.gymIdsMoved(moves) }
-        sync.onSessionEnding = { [weak self] in
-            self?.gymSharing.invalidate()
-            self?.gymAdmin.reset()
+        sync.onSessionEnding = { [weak self] in self?.gymSharing.invalidate() }
+        sync.onSessionEnded = { [weak self] in self?.gymAdmin.reset() }
+        sync.onDeletionRefused = { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.refreshGymAdmin()
+                await self.runShareOutbox()
+            }
         }
-        sync.removePhotos = { [weak self] _ in
+        sync.removePhotos = AccountPhotoSteps(detach: { [weak self] in
+            guard let transport = await self?.gymSharing.transport else { return }
+            try await transport.detachAllPhotos()
+        }, remove: { [weak self] in
             guard let transport = await self?.gymSharing.transport else { return }
             try await transport.deleteAllPhotos()
-        }
+        })
         sync.onWillSignOut = { [weak self] in
             guard let self, let userId = self.sharingUserId else { return }
+            // A last try for reports and blocks the person made offline, then the photos queued shares uploaded.
+            _ = await self.gymSharing.outbox.sendModeration(userId: userId)
             await self.gymSharing.outbox.discardQueuedPhotos(userId: userId)
         }
         sync.onSignedIn = { [weak self] in
@@ -251,12 +263,15 @@ extension AppEnvironment {
 
     func runShareOutbox() async {
         let outbox = gymSharing.outbox
-        guard outbox.pendingCount > 0, let userId = sharingUserId else { return }
+        // While the account is being deleted a share would upload a photo and make the server refuse.
+        guard outbox.pendingCount > 0, !sync.deletingAccount, let userId = sharingUserId else { return }
         await outbox.run(userId: userId)
         if let notice = outbox.takeReportNotice() { gymReportNotice = notice }
         if let error = outbox.storageError {
             Self.log.error("Share queue failed: \(error.localizedDescription, privacy: .public)")
         }
         gymsChanged()
+        // A block that went out changes what the server returns for the gym on screen.
+        if outbox.takeRefreshRequest() { await refreshCurrentGym() }
     }
 }

@@ -65,7 +65,7 @@ struct ReportContentSheet: View {
             .background(Theme.cardInner, in: .rect(cornerRadius: 12))
             .onChange(of: reason) { errorText = nil }
             .onChange(of: note) { _, text in
-                if text.count > DomainLimits.reportNoteMax { note = String(text.prefix(DomainLimits.reportNoteMax)) }
+                if text.unicodeScalars.count > DomainLimits.reportNoteMax { note = ReportContentModel.cut(text) }
             }
             .accessibilityIdentifier("report.note")
         if let problem = noteProblem ?? errorText {

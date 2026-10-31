@@ -52,6 +52,7 @@ private final class GatedTransport: GymCatalogTransport, @unchecked Sendable {
     }
     func deleteSharedPhoto(path: String) async throws { try await inner.deleteSharedPhoto(path: path) }
     func deleteAllPhotos() async throws { try await inner.deleteAllPhotos() }
+    func detachAllPhotos() async throws { try await inner.detachAllPhotos() }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         try await inner.report(targetType: targetType, targetId: targetId, reason: reason, note: note)
     }
@@ -64,6 +65,7 @@ private final class GatedTransport: GymCatalogTransport, @unchecked Sendable {
     func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
         try await inner.moderate(targetType: targetType, targetId: targetId, action: action)
     }
+    func moderationPhotoDeleted(path: String) async throws { try await inner.moderationPhotoDeleted(path: path) }
     func publicPhotoURL(path: String) -> URL? { inner.publicPhotoURL(path: path) }
 }
 

@@ -17,6 +17,8 @@ final class StubCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     var moderateFailure: GymCatalogError?
     var deleteFailure: GymCatalogError?
     var queueFailure: GymCatalogError?
+    var photoDeletedFailure: GymCatalogError?
+    var detachFailure: GymCatalogError?
 
     var calls: [String] { lock.withLock { _calls } }
 
@@ -55,6 +57,10 @@ final class StubCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         try record("deleteAllPhotos")
         if let deleteFailure { throw deleteFailure }
     }
+    func detachAllPhotos() async throws {
+        try record("detachAllPhotos")
+        if let detachFailure { throw detachFailure }
+    }
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         try record("report")
     }
@@ -69,8 +75,25 @@ final class StubCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
         try record("moderate:\(action.rawValue)")
         if let moderateFailure { throw moderateFailure }
-        lock.withLock { queue.removeAll { $0.targetId == targetId } }
+        // As the server does: a removed listing with a photo stays in the queue until the photo is confirmed gone.
+        lock.withLock {
+            guard let index = queue.firstIndex(where: { $0.targetId == targetId }) else { return }
+            let entry = queue[index]
+            if action == .remove, photoOnRemove != nil, entry.targetType == .listing {
+                queue[index] = ModerationEntry(targetType: entry.targetType, targetId: entry.targetId,
+                                               title: entry.title, photoPath: entry.photoPath ?? photoOnRemove,
+                                               reportCount: entry.reportCount, reasons: entry.reasons,
+                                               notes: entry.notes, status: .removed)
+            } else {
+                queue.remove(at: index)
+            }
+        }
         return action == .remove ? photoOnRemove : nil
+    }
+    func moderationPhotoDeleted(path: String) async throws {
+        try record("moderationPhotoDeleted:\(path)")
+        if let photoDeletedFailure { throw photoDeletedFailure }
+        lock.withLock { queue.removeAll { $0.status == .removed && $0.photoPath == path } }
     }
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://photos.uitest.invalid/gym-photos/\(path)") }
 }

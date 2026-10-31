@@ -20,17 +20,34 @@ extension SupabaseGymCatalogTransport {
     /// first real failure. An object that is already gone isn't one: Storage just leaves it out of its answer.
     public func deleteAllPhotos() async throws {
         guard client.auth.currentSession != nil else { throw GymCatalogError.signedOut }
-        var previous: Set<OwnedPhoto> = []
-        for _ in 0..<Self.maxPhotoPasses {
+        try await Self.removeEverything(list: {
             let data = try await call { try await client.rpc("my_gym_photos").execute().data }
-            let photos = try Self.ownedPhotos(from: data)
+            return try Self.ownedPhotos(from: data)
+        }, remove: { bucket, names in
+            _ = try await call { try await client.storage.from(bucket).remove(paths: names) }
+        })
+    }
+
+    /// Clears the photo names from the caller's own listings, so they don't name objects `deleteAllPhotos` is about to
+    /// remove. Nothing else changes.
+    public func detachAllPhotos() async throws {
+        guard client.auth.currentSession != nil else { throw GymCatalogError.signedOut }
+        _ = try await call { try await client.rpc("detach_my_gym_photos").execute().data }
+    }
+
+    /// Lists, removes, and lists again until nothing is left. The same objects twice in a row mean Storage is not
+    /// removing them, and `maxPasses` bounds a user whose photos keep appearing; either ends in a refusal instead of
+    /// a loop.
+    static func removeEverything(maxPasses: Int = maxPhotoPasses, batchSize: Int = removeBatch,
+                                 list: () async throws -> [OwnedPhoto],
+                                 remove: (_ bucket: String, _ names: [String]) async throws -> Void) async throws {
+        var previous: Set<OwnedPhoto> = []
+        for _ in 0..<maxPasses {
+            let photos = try await list()
             if photos.isEmpty { return }
-            // The same objects again means Storage is not removing them; looping would only repeat the refusal.
             guard Set(photos) != previous else { throw GymCatalogError.rejected("photos remain") }
             previous = Set(photos)
-            try await Self.removeAll(photos) { bucket, names in
-                _ = try await call { try await client.storage.from(bucket).remove(paths: names) }
-            }
+            try await removeAll(photos, batchSize: batchSize, remove: remove)
         }
         throw GymCatalogError.rejected("photos remain")
     }

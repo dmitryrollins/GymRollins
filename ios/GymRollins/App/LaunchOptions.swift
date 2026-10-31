@@ -99,6 +99,9 @@ struct LaunchOptions {
     let fakeSignedIn: Bool
     /// DEBUG/UI-test only (`-fakeGymAdmin`): the fake catalogue says the user moderates, and holds two flagged listings.
     let fakeGymAdmin: Bool
+    /// DEBUG/UI-test only (`-fakeGymCatalogGrows`): from its second read of a gym on, the fake catalogue also lists a
+    /// row machine, so a test can tell that a refresh has run and applied.
+    let fakeGymCatalogGrows: Bool
     /// DEBUG/UI-test only (`-fakeHealth`): Apple Health is an in-memory `FakeHealthStore` seeded with three Withings
     /// weigh-ins, so the Health flows can be tested on the simulator without HealthKit.
     let fakeHealth: Bool
@@ -156,6 +159,7 @@ struct LaunchOptions {
         fakeGymCatalog = arguments.contains("-fakeGymCatalog")
         fakeSignedIn = arguments.contains("-fakeSignedIn")
         fakeGymAdmin = arguments.contains("-fakeGymAdmin")
+        fakeGymCatalogGrows = arguments.contains("-fakeGymCatalogGrows")
         seedHistory = arguments.contains("-seedHistory")
         seedBodyweight = arguments.contains("-seedBodyweight")
         seedPlank = arguments.contains("-seedPlank")
@@ -178,6 +182,7 @@ struct LaunchOptions {
         fakeGymCatalog = false
         fakeSignedIn = false
         fakeGymAdmin = false
+        fakeGymCatalogGrows = false
         seedHistory = false
         seedBodyweight = false
         seedPlank = false

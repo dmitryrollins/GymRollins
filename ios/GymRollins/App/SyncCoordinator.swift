@@ -27,6 +27,8 @@ final class SyncCoordinator {
     /// Signed in to an account other than the one that owns this iPhone's data; nothing syncs until the owner
     /// confirms removing the local copy (`confirmAccountSwitch()`) or backs out (`cancelAccountSwitch()`).
     private(set) var accountSwitchPending = false
+    /// The account is being deleted: nothing may upload meanwhile, or a new photo would make the server refuse.
+    private(set) var deletingAccount = false
 
     @ObservationIgnored let store: SyncStore
     @ObservationIgnored private let makeTransport: @MainActor (AuthService?) -> (any SyncTransport)?
@@ -53,13 +55,19 @@ final class SyncCoordinator {
     @ObservationIgnored var onWillSignOut: @MainActor () async -> Void = {}
     /// Called when the session is about to end or change (sign-out, account deletion or switch, a revoked session), before
     /// anything is wiped: work waiting on the server for the old session must not touch the rows when it comes back.
+    /// Deletion calls it too, and the server may still say no; `onSessionEnded` is for what only a real end undoes.
     @ObservationIgnored var onSessionEnding: @MainActor () -> Void = {}
-    /// Removes the signed-in user's photos from Storage. Account deletion runs it before the server deletes the account,
-    /// and the server refuses (`photos_remain`) while any are left.
-    @ObservationIgnored var removePhotos: (@Sendable (UUID) async throws -> Void)?
-    /// What account deletion asks of the server, given the photo port. Tests replace it to see what is passed.
-    @ObservationIgnored lazy var deleteOnServer: @MainActor ((@Sendable (UUID) async throws -> Void)?) async throws -> Void = {
-        [weak self] port in try await self?.auth?.deleteAccount(removePhotos: port)
+    /// Called once the session really is over: the sign-out wiped, the account deleted, or the session revoked.
+    @ObservationIgnored var onSessionEnded: @MainActor () -> Void = {}
+    /// Called when the server refused to delete the account: the session goes on, so what `onSessionEnding` stopped
+    /// has to start again.
+    @ObservationIgnored var onDeletionRefused: @MainActor () -> Void = {}
+    /// The two photo steps of account deletion: detach the names (the phone then forgets them too), then remove the
+    /// objects from Storage. The server refuses (`photos_remain`) while any are left.
+    @ObservationIgnored var removePhotos: AccountPhotoSteps?
+    /// What account deletion asks of the server, given the photo steps. Tests replace it to see what is passed.
+    @ObservationIgnored lazy var deleteOnServer: @MainActor (AccountPhotoSteps?) async throws -> Void = {
+        [weak self] photos in try await self?.auth?.deleteAccount(photos: photos)
     }
     /// Called when gyms got new ids (their old and new id): a sign-in as another account gave the phone's "This phone
     /// only" gyms ids of their own, or a pull found a gym deleted elsewhere that still held equipment kept here.
@@ -217,14 +225,41 @@ final class SyncCoordinator {
         try await wipeLocal()
     }
 
-    /// Deletes the account on the server. Nothing on the phone is wiped until it says yes, so a refusal (the photos
-    /// couldn't be removed, no connection) leaves the phone as it was and the user can try again. The one call site of
-    /// `AuthService.deleteAccount`: it hands over the photo port, without which the server refuses anyone who has a photo.
+    /// Deletes the account on the server. Nothing on the phone is wiped until it says yes, so a refusal keeps the
+    /// account, the session and the phone's data, and the user can try again. Photos are detached first (the server and
+    /// then the phone forget the names), so a refusal after that leaves no listing naming a deleted object: the next
+    /// sync uploads the pictures again. Syncing stops meanwhile so it can't do that too soon. The one call site of
+    /// `AuthService.deleteAccount`: it hands over the photo steps, without which the server refuses anyone who has a photo.
     func deleteAccount() async throws {
+        deletingAccount = true
+        defer { deletingAccount = false }
         onSessionEnding()
-        try await deleteOnServer(removePhotos)
+        debouncer.cancel()
+        await dropEngine()
+        do {
+            try await deleteOnServer(removePhotos.map(forgettingNamesOnDetach))
+        } catch {
+            refreshEngine()
+            onDeletionRefused()
+            throw error
+        }
         accountSwitchPending = false
         try await wipeLocal(erasingGyms: true)
+    }
+
+    /// After the server detached the photos, the phone drops their names too.
+    private func forgettingNamesOnDetach(_ photos: AccountPhotoSteps) -> AccountPhotoSteps {
+        AccountPhotoSteps(detach: { [weak self] in
+            try await photos.detach()
+            try await self?.forgetRemotePhotos()
+        }, remove: photos.remove)
+    }
+
+    private func forgetRemotePhotos() throws {
+        do { try store.forgetRemotePhotos() } catch {
+            Self.log.error("Forgetting photo names failed: \(error.localizedDescription, privacy: .public)")
+            throw error
+        }
     }
 
     // MARK: Private
@@ -280,6 +315,7 @@ final class SyncCoordinator {
         Task {
             if state == .signedOut {
                 onSessionEnding()
+                onSessionEnded()
                 accountSwitchPending = false
                 await dropEngine()
             } else if engine == nil, !accountSwitchPending {
@@ -300,6 +336,7 @@ final class SyncCoordinator {
     /// "This phone only" gyms and anything not yet on the server survive; the rest of the gym data goes (decision 9).
     private func wipeLocal(erasingGyms: Bool = false) async throws {
         onSessionEnding()
+        onSessionEnded()
         await dropEngine()
         if erasingGyms {
             try store.resetAll()

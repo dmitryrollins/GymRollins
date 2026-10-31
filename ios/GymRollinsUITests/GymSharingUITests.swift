@@ -262,8 +262,11 @@ final class GymSharingUITests: XCTestCase {
     }
 
     func testReportingHidesTheListing() {
-        let app = launch(["-fakeSignedIn"])
+        let app = launch(["-fakeSignedIn", "-fakeGymCatalogGrows"])
         openEquipment(app)
+        let canary = app.buttons["gymEquipment.listing.seated-row-machine"]
+        XCTAssertTrue(app.buttons["gymEquipment.listing.cable-station"].waitForExistence(timeout: 15))
+        XCTAssertFalse(canary.exists, "the fake adds a row machine from its second read on")
         openTile(app, "lat-pulldown")
         openReportSheet(app)
         app.buttons["report.reason.wrong-info"].tap()
@@ -274,9 +277,24 @@ final class GymSharingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForNonExistence(timeout: 5),
                       "the reported listing is gone")
         XCTAssertTrue(app.buttons["gymEquipment.listing.cable-station"].exists, "the others stay")
-        // The server still returns it; a refresh must not bring it back.
+        // The server still returns it; a refresh must not bring it back. The row machine only appears once the refresh
+        // has run and been applied, so waiting for it is what makes the check below mean something.
         app.swipeDown()
-        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(canary.waitForExistence(timeout: 15), "the refresh ran")
+        XCTAssertFalse(app.buttons["gymEquipment.listing.lat-pulldown"].exists)
+    }
+
+    func testBlockingSignedOutAsksForSignInInItsOwnWords() {
+        let app = launch()
+        openEquipment(app)
+        openTile(app, "lat-pulldown")
+        app.buttons["listing.menu"].tap()
+        app.buttons["listing.block"].tap()
+        app.buttons["listing.block.confirm"].tap()
+        cancelSignIn(app, title: "Sign in to hide", intro: "Hide what this person shares. ")
+        XCTAssertTrue(text(app, "listing.shareStatus").waitForExistence(timeout: 5), "the listing is still there")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForExistence(timeout: 5))
     }
 
     func testBlockingAnAuthorAsksFirstAndHidesTheListing() {

@@ -38,11 +38,13 @@ public struct AuthFailure: LocalizedError, Equatable, Sendable {
         }
     }
 
-    /// The photo step of account deletion failed, so the account is still there. Says so, and whether it is worth
-    /// retrying at once.
-    static func photosNotRemoved(_ error: Error) -> AuthFailure {
-        let offline = isNetwork(error) || (error as? GymCatalogError) == .offline
-        return AuthFailure(message: Messages.photosNotRemoved + (offline ? Messages.checkConnection : Messages.tryAgain))
+    /// Detaching the photos failed: nothing was changed, and the account is still there.
+    static let detachFailed = AuthFailure(message: Messages.detachFailed)
+
+    /// The photos were detached (and perhaps removed) but the account is still there. A new upload that slipped in
+    /// meanwhile gets its own words, since trying again is all it takes.
+    static func afterPhotos(_ error: Error) -> AuthFailure {
+        AuthFailure(message: isPhotosRemain(error) ? Messages.photoStillUploading : Messages.photosGoneAccountStays)
     }
 
     private static func isPhotosRemain(_ error: Error) -> Bool {
@@ -83,9 +85,11 @@ public struct AuthFailure: LocalizedError, Equatable, Sendable {
         static let rateLimited = "Too many attempts. Wait a minute and try again."
         static let sessionExpired = "Your session has expired. Please sign in again."
         static let photosRemain = "Couldn't delete your account because some photos are still being removed. Please try again."
-        static let photosNotRemoved = "Couldn't remove your photos, so your account hasn't been deleted."
-        static let checkConnection = " Check your connection and try again."
-        static let tryAgain = " Please try again."
+        static let detachFailed = "Couldn't delete your account. Check your connection and try again."
+        static let photosGoneAccountStays = "Your photos were removed, but your account wasn't deleted. "
+            + "Check your connection and try again."
+        static let photoStillUploading = "Your photos were removed, but a new one was still uploading, so your account "
+            + "wasn't deleted. Please try again."
         static let methodUnavailable = "This sign-in method isn't available right now."
     }
 }

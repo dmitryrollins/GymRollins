@@ -201,4 +201,60 @@ struct GymPrivateIntegrationTests {
         try await first.deleteAccount()
         try await second.deleteAccount()
     }
+
+    /// Account deletion that fails after the photos went: no row names a deleted object, the phone uploads its pictures
+    /// again at the next sync, and a retry deletes the account.
+    @Test func aDeletionRefusedAfterThePhotosWentLeavesNoRowNamingThemAndTheNextSyncUploadsAgain() async throws {
+        let user = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let jpeg = Data(repeating: 0xFF, count: 600)
+        let phone = try Phone(user, clock: clock, photos: MemoryPhotoFiles(["mine.jpg": jpeg]))
+        let catalog = SupabaseGymCatalogTransport(client: user.auth.client)
+
+        let gym = try phone.repo.addPrivateGym(name: "Garage", address: nil)
+        let listing = try phone.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station",
+                                                           loads: .stack(maxKg: 90, stepKg: 5), photoFile: "mine.jpg"))
+        try phone.repo.makeSynced(listing: listing.id)
+        await phone.engine.sync()
+        let record = try #require(try phone.container.mainContext.fetch(FetchDescriptor<GymListingRecord>()).first)
+        let oldPath = try #require(record.remotePhotoPath)
+
+        let place = "it-\(UUID().uuidString.lowercased())"
+        let sharedGym = try await catalog.findOrCreateGym(mapsPlaceId: place, name: "Iron Works", address: nil,
+                                                          latitude: 52.5, longitude: 13.4)
+        let sharedName = "\(UUID().uuidString.lowercased()).jpg"
+        _ = try await catalog.uploadSharedPhoto(jpeg, name: sharedName)
+        let sharedId = UUID()
+        _ = try await catalog.share(ShareRequest(
+            listingId: sharedId, gymId: sharedGym, kindId: "leg-press", brand: nil, model: nil,
+            loads: .stack(maxKg: 90, stepKg: 5), quantity: 1, notes: nil, photoPath: sharedName, forceNew: false))
+
+        // The server stamps the detach with its real clock, and the phone's edit has to be newer than that, as a real
+        // phone's is a moment later; the fixed clock the other tests use is a day behind.
+        clock.now = Date().addingTimeInterval(60)
+        struct Refused: Error {}
+        nonisolated(unsafe) let store = phone.store
+        let steps = AccountPhotoSteps(
+            detach: { try await catalog.detachAllPhotos(); try await MainActor.run { try store.forgetRemotePhotos() } },
+            remove: { try await catalog.deleteAllPhotos() })
+        // The server step fails after the photos are gone, as a lost connection or a refusal would.
+        await #expect(throws: AuthFailure.self) {
+            try await user.auth.deleteAccount(photos: steps) { throw Refused() }
+        }
+
+        let rows = try await user.transport.pullGymListings(since: nil)
+        #expect(rows.count == 1 && rows.first.map { $0.photoPath } == .some(nil), "the server's row holds no path")
+        let shared = try #require(try await catalog.publicListings(gymId: sharedGym).listings.first { $0.id == sharedId })
+        #expect(shared.photoPath == nil, "the shared listing stays, without its photo")
+        #expect(record.remotePhotoPath == nil && record.photoFile == "mine.jpg" && record.dirty)
+
+        clock.advance(60)
+        await phone.engine.sync()
+        let newPath = try #require(record.remotePhotoPath)
+        #expect(newPath != oldPath, "the picture went up again under a new name")
+        #expect(try await user.transport.pullGymListings(since: nil).first?.photoPath == newPath)
+        #expect(try await user.transport.downloadPrivatePhoto(path: newPath) == jpeg)
+
+        try await user.deleteAccount() // the retry
+    }
 }

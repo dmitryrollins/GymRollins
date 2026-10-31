@@ -25,6 +25,7 @@ struct UnblockEveryoneRow: View {
         switch error as? GymCatalogError {
         case .offline: "Couldn't unblock. Check your connection and try again."
         case .signedOut: "Sign in to unblock people."
+        case .dailyLimit: "You've unblocked people a few times today. Try again tomorrow."
         default: "Couldn't unblock right now. Please try again."
         }
     }

@@ -65,7 +65,7 @@ struct AccountSection: View {
     /// warning comes back with what's still not uploaded.
     private func syncThenSignOut() async throws {
         let report = await env.prepareSignOut()
-        if report.unsynced == 0 && report.failed == 0 {
+        if report.unsynced == 0 && report.failed == 0 && report.unsentReports == 0 {
             try await env.sync.signOutAndRemoveLocalData()
         } else {
             signOutRisk = report

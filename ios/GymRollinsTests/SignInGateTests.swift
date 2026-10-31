@@ -44,7 +44,28 @@ import Testing
         #expect(SignInPurpose.confirm.body == "Confirm that this equipment is at the gym, for everyone who trains there. " + backup)
         #expect(SignInPurpose.sync.body == "Sync this to your account so it is there on your other devices. Only you can see it. " + backup)
         #expect(SignInPurpose.report.body == "Report this so it can be checked. " + backup)
+        #expect(SignInPurpose.block.body == "Hide what this person shares. " + backup)
         #expect(SignInPurpose.report.title == "Sign in to report")
+        #expect(SignInPurpose.block.title == "Sign in to hide")
         #expect(SignInPurpose.sync.title == "Sign in to sync" && SignInPurpose.share.title == "Sign in to share")
+    }
+
+    @Test func blockingWaitsBehindItsOwnSignInAndRunsOnlyAfterIt() {
+        let gate = SignInGate()
+        var blocked = 0
+        gate.ask(.block) { blocked += 1 }
+        #expect(gate.isPresented && gate.purpose == .block)
+        #expect(blocked == 0, "nothing is sent while the sheet is open")
+        gate.signedIn()
+        #expect(blocked == 1)
+    }
+
+    @Test func closingTheSheetOnABlockDropsIt() {
+        let gate = SignInGate()
+        var blocked = 0
+        gate.ask(.block) { blocked += 1 }
+        gate.cancelled()
+        gate.signedIn()
+        #expect(blocked == 0)
     }
 }

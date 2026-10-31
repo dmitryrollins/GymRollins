@@ -4,12 +4,13 @@ import SwiftUI
 /// Why the sign-in sheet is open. The words must be true for each: syncing goes to the user's own account only,
 /// sharing and confirming are seen by the gym, and a report goes to the people who check them.
 enum SignInPurpose: Equatable {
-    case share, confirm, sync, report
+    case share, confirm, sync, report, block
 
     var title: String {
         switch self {
         case .sync: "Sign in to sync"
         case .report: "Sign in to report"
+        case .block: "Sign in to hide"
         case .share, .confirm: "Sign in to share"
         }
     }
@@ -21,6 +22,7 @@ enum SignInPurpose: Equatable {
         case .share: "Share this gym's equipment with other people."
         case .confirm: "Confirm that this equipment is at the gym, for everyone who trains there."
         case .report: "Report this so it can be checked."
+        case .block: "Hide what this person shares."
         case .sync: "Sync this to your account so it is there on your other devices. Only you can see it."
         }
     }

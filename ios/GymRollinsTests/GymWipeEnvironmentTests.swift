@@ -8,7 +8,7 @@ import Testing
 /// A rig whose sync backend is signed in (a real `AuthService` fed by `events`, no transport), so sign-out and the
 /// account switch run their real paths instead of the disabled backend's no-ops.
 @MainActor
-private struct SignedInGymRig {
+struct SignedInGymRig {
     let rig: GymTestRig
     let events: AsyncStream<AuthEvent>.Continuation
     let userA = UUID()

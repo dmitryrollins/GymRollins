@@ -13,6 +13,7 @@ enum FakeGymCatalog {
     static let latPulldownId = UUID(uuidString: "00000000-0000-4000-8000-0000000000B1")!
     static let cableId = UUID(uuidString: "00000000-0000-4000-8000-0000000000B2")!
     static let newerAppId = UUID(uuidString: "00000000-0000-4000-8000-0000000000B3")!
+    static let rowId = UUID(uuidString: "00000000-0000-4000-8000-0000000000B4")!
     static let lifeFitnessItemId = UUID(uuidString: "00000000-0000-4000-8000-0000000000C1")!
 
     static let latPulldown = listing(id: latPulldownId, itemId: lifeFitnessItemId, kind: "lat-pulldown",
@@ -21,6 +22,10 @@ enum FakeGymCatalog {
     static let cable = listing(id: cableId, itemId: GymRepository.genericItemId(forKind: "cable-station"),
                                kind: "cable-station", brand: nil, model: nil, photo: nil, loads: ListingLoads.none,
                                confirms: 2)
+    /// What `-fakeGymCatalogGrows` adds from the second read on.
+    static let row = listing(id: rowId, itemId: GymRepository.genericItemId(forKind: "seated-row-machine"),
+                             kind: "seated-row-machine", brand: nil, model: nil, photo: nil,
+                             loads: .stack(maxKg: 90, stepKg: 5), confirms: 1)
     /// Loads this app can't read: it comes back unsupported.
     static let newerApp = listing(id: newerAppId, itemId: GymRepository.genericItemId(forKind: "leg-press"),
                                   kind: "leg-press", brand: nil, model: nil, photo: nil, loads: nil, confirms: 1)
@@ -33,33 +38,44 @@ enum FakeGymCatalog {
     }
 }
 
-/// Two flagged listings and a flagged gym for `-fakeGymAdmin`: the first is restored by the UI test, the others removed.
+/// What `-fakeGymAdmin` shows: a flagged listing with a photo, an unflagged one with a single report, a flagged gym, and
+/// a listing removed earlier whose photo is still to delete. The first is restored by the UI test, the others removed.
 enum FakeModeration {
     static let pulldownId = UUID(uuidString: "00000000-0000-4000-8000-0000000000D1")!
     static let cableId = UUID(uuidString: "00000000-0000-4000-8000-0000000000D2")!
     static let gymId = UUID(uuidString: "00000000-0000-4000-8000-0000000000D3")!
+    /// Removed by an admin earlier, its photo never deleted.
+    static let staleId = UUID(uuidString: "00000000-0000-4000-8000-0000000000D4")!
 
     static let queue = [
         ModerationEntry(targetType: .listing, targetId: pulldownId, title: "Life Fitness Pulldown",
                         photoPath: "5b0f1c1e-5a37-4b8e-9d1f-0a3c6e7f2b11.jpg", reportCount: 3,
                         reasons: [.init(reason: "person-in-photo", count: 2), .init(reason: "spam", count: 1)],
-                        notes: ["There is a face in it", "Looks like an advert"]),
+                        notes: ["There is a face in it", "Looks like an advert"], status: .flagged,
+                        listingNotes: "Bring your own towel"),
         ModerationEntry(targetType: .listing, targetId: cableId, title: "Cable Station", photoPath: nil,
-                        reportCount: 3, reasons: [.init(reason: "wrong-info", count: 3)], notes: []),
+                        reportCount: 1, reasons: [.init(reason: "wrong-info", count: 1)], notes: [], status: .active),
         ModerationEntry(targetType: .gym, targetId: gymId, title: "Iron Works Annex", photoPath: nil, reportCount: 3,
-                        reasons: [.init(reason: "duplicate", count: 3)], notes: ["Same place as Iron Works"]),
+                        reasons: [.init(reason: "duplicate", count: 3)], notes: ["Same place as Iron Works"],
+                        status: .flagged, address: "14 Side Street"),
+        ModerationEntry(targetType: .listing, targetId: staleId, title: "Old Rack",
+                        photoPath: "7c1d9a52-3e0b-4f3a-8c52-9a1e4d6b7f20.jpg", reportCount: 0, reasons: [], notes: [],
+                        status: .removed),
     ]
 }
 
 final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     private let admin: Bool
+    private let grows: Bool
     private let lock = NSLock()
+    private var reads = 0
     private var flagged: [ModerationEntry]
     /// People this signed-in test user has blocked: two to start, so "Unblock everyone" has something to clear.
     private var blocked = 2
 
-    init(admin: Bool = false) {
+    init(admin: Bool = false, grows: Bool = false) {
         self.admin = admin
+        self.grows = grows
         flagged = admin ? FakeModeration.queue : []
     }
 
@@ -71,8 +87,10 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     }
 
     func publicListings(gymId: UUID) async throws -> PublicListings {
-        PublicListings(listings: gymId == FakeGymCatalog.serverGymId
-            ? [FakeGymCatalog.latPulldown, FakeGymCatalog.cable, FakeGymCatalog.newerApp] : [])
+        let read = lock.withLock { () -> Int in reads += 1; return reads }
+        guard gymId == FakeGymCatalog.serverGymId else { return PublicListings(listings: []) }
+        let fixed = [FakeGymCatalog.latPulldown, FakeGymCatalog.cable, FakeGymCatalog.newerApp]
+        return PublicListings(listings: grows && read >= 2 ? fixed + [FakeGymCatalog.row] : fixed)
     }
 
     /// The flat bench has a picture another gym took; the pulldown's model is listed at four gyms.
@@ -96,6 +114,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { name }
     func deleteSharedPhoto(path: String) async throws {}
     func deleteAllPhotos() async throws {}
+    func detachAllPhotos() async throws {}
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {}
     func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws { lock.withLock { blocked += 1 } }
     func unblockAll() async throws -> Int {
@@ -114,6 +133,7 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         }
         return action == .remove ? decided?.photoPath : nil
     }
+    func moderationPhotoDeleted(path: String) async throws {}
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://photos.uitest.invalid/gym-photos/\(path)") }
 }
 

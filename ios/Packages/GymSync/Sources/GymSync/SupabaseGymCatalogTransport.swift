@@ -155,6 +155,11 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
         return try GymCatalogRows.moderatedPhoto(from: data)
     }
 
+    public func moderationPhotoDeleted(path: String) async throws {
+        let params: [String: AnyJSON] = ["p_path": .string(path.lowercased())]
+        _ = try await call { try await client.rpc("moderation_photo_deleted", params: params).execute().data }
+    }
+
     public func uploadSharedPhoto(_ data: Data, name: String) async throws -> String {
         guard client.auth.currentSession != nil else { throw GymCatalogError.signedOut }
         let stored = name.lowercased()

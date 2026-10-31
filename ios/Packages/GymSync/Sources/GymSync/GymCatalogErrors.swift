@@ -59,6 +59,9 @@ enum GymCatalogErrors {
             if authCodes.contains(code) { return .signedOut }
             // `reports.note` failed its check: control or invisible characters.
             if code == "23514" { return .noteRefused }
+            // The item a share named was deleted a moment before (its only other user closed their account). The next
+            // try finds or creates the item again, so this is a retry, not a verdict on the row.
+            if code == "23503" { return .offline }
             if code == "42501" { return hasSession ? .notAllowed : .signedOut }
             if busyCodes.contains(code) || code.hasPrefix("08") || code.hasPrefix("53") { return .offline }
         }

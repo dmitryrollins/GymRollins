@@ -3,16 +3,18 @@ import GymData
 import Observation
 
 /// The admin list: what is flagged, and Restore or Remove for each. A removal also deletes the listing's photo through
-/// Storage, which SQL can't do.
+/// Storage, which SQL can't do, and then tells the server it is gone. Until then the row stays, so a failed delete can
+/// be tried again.
 @MainActor
 @Observable
 final class ModerationModel {
-    static let photoNotice = "Removed, but the photo couldn't be deleted. Try again from Storage."
+    static let photoNotice = "Removed, but the photo couldn't be deleted. Tap Remove to try again."
+    static let photoPending = "Photo still to delete"
 
     private(set) var entries: [ModerationEntry] = []
     private(set) var loaded = false
     private(set) var error: String?
-    /// Shown beside the list when a removal went through but its photo did not.
+    /// Shown beside the list when a removal went through but its photo did not; the row stays so Remove can try again.
     private(set) var notice: String?
     private(set) var busy: Set<UUID> = []
     private let transport: any GymCatalogTransport
@@ -22,6 +24,16 @@ final class ModerationModel {
     static func reasonLine(_ item: ModerationEntry.ReasonCount) -> String {
         let name = ReportReason(rawValue: item.reason).map(ReportContentModel.title) ?? item.reason
         return "\(name) x\(item.count)"
+    }
+
+    /// The status line of a row: whether the listing is hidden from everyone, and how many reports it has.
+    static func statusLine(_ entry: ModerationEntry) -> String {
+        let reports = entry.reportCount == 1 ? "1 report" : "\(entry.reportCount) reports"
+        switch entry.status {
+        case .removed: return photoPending
+        case .flagged: return "Hidden, \(reports)"
+        case .active: return reports
+        }
     }
 
     func load() async {
@@ -52,18 +64,25 @@ final class ModerationModel {
             AppEnvironment.log.error("Moderation failed: \(error.localizedDescription, privacy: .public)")
             return
         }
-        // The listing is already hidden and has no path any more, so the row goes even when the photo doesn't.
+        // The server keeps the photo's name until it hears the object is gone, so the row stays until then.
+        if let photo, !(await delete(photo)) {
+            await reload()
+            return
+        }
         entries.removeAll { $0.id == entry.id }
-        if let photo { await delete(photo) }
         await reload()
     }
 
-    private func delete(_ photo: String) async {
+    /// Deletes the object through Storage, then tells the server. False (with the notice) when either step failed.
+    private func delete(_ photo: String) async -> Bool {
         do {
             try await transport.deleteSharedPhoto(path: photo)
+            try await transport.moderationPhotoDeleted(path: photo)
+            return true
         } catch {
             notice = Self.photoNotice
             AppEnvironment.log.error("Deleting a removed photo failed: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

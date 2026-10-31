@@ -19,6 +19,19 @@ public enum AuthEvent: Sendable, Equatable {
     case signedOut
 }
 
+/// The photo steps of account deletion, kept apart so a failure can say which one broke. `detach` clears the photo
+/// names on the server and on the phone, and changes nothing else; once it has succeeded the photos are as good as gone
+/// for the user, so `remove` (deleting the objects) and the server step that follows say so when they fail.
+public struct AccountPhotoSteps: Sendable {
+    public let detach: @Sendable () async throws -> Void
+    public let remove: @Sendable () async throws -> Void
+
+    public init(detach: @escaping @Sendable () async throws -> Void, remove: @escaping @Sendable () async throws -> Void) {
+        self.detach = detach
+        self.remove = remove
+    }
+}
+
 /// Supabase Auth for the app: Sign in with Apple (plus email/password in DEBUG builds for tests), sign-out,
 /// account deletion and session restore. Every failure is thrown as an `AuthFailure` with a user-facing message.
 /// The session lives in the client's storage (the Keychain on device), so `restore()` works offline. The SDK's auth
@@ -132,30 +145,29 @@ public final class AuthService {
         state = .signedOut
     }
 
-    /// Removes the user's photos through `removePhotos`, then deletes the account and all its data on the server
-    /// (`delete_my_account`, which refuses while photos remain), then signs out locally. If the photo step fails the
-    /// account stays and the user stays signed in, so they can try again.
-    public func deleteAccount(removePhotos: (@Sendable (UUID) async throws -> Void)? = nil) async throws {
-        try await deleteAccount(removePhotos: removePhotos) { _ = try await self.client.rpc("delete_my_account").execute() }
+    /// Detaches and removes the user's photos through `photos`, then deletes the account and all its data on the
+    /// server (`delete_my_account`, which refuses while photos remain), then signs out locally. A failure leaves the
+    /// account and the session, so the user can try again; the message says whether the photos are already gone.
+    public func deleteAccount(photos: AccountPhotoSteps? = nil) async throws {
+        try await deleteAccount(photos: photos) { _ = try await self.client.rpc("delete_my_account").execute() }
     }
 
-    func deleteAccount(removePhotos: (@Sendable (UUID) async throws -> Void)?,
-                       onServer: () async throws -> Void) async throws {
+    func deleteAccount(photos: AccountPhotoSteps?, onServer: () async throws -> Void) async throws {
         guard client.auth.currentSession != nil else {
             throw AuthFailure(AuthError.sessionMissing, during: .deleteAccount)
         }
         do {
-            let session = try await client.auth.session // refreshes an expired access token first
-            if let removePhotos {
-                do { try await removePhotos(session.user.id) } catch let cancelled as CancellationError {
-                    throw cancelled
-                } catch {
-                    throw AuthFailure.photosNotRemoved(error)
-                }
-            }
-            try await onServer()
+            _ = try await client.auth.session // refreshes an expired access token first
         } catch {
             throw AuthFailure(error, during: .deleteAccount)
+        }
+        if let photos { try await removePhotos(photos) }
+        do {
+            try await onServer()
+        } catch let cancelled as CancellationError {
+            throw cancelled
+        } catch {
+            throw photos == nil ? AuthFailure(error, during: .deleteAccount) : AuthFailure.afterPhotos(error)
         }
         // The user no longer exists, so only the local session needs clearing (the SDK ignores the server's 404/403).
         do {
@@ -164,6 +176,21 @@ public final class AuthService {
             // Local session was removed before the request; nothing left to undo.
         }
         state = .signedOut
+    }
+
+    /// Detach, then remove. A failed detach changed nothing; a failed remove has already detached, which the message
+    /// owns up to.
+    private func removePhotos(_ photos: AccountPhotoSteps) async throws {
+        do { try await photos.detach() } catch let cancelled as CancellationError {
+            throw cancelled
+        } catch {
+            throw AuthFailure.detachFailed
+        }
+        do { try await photos.remove() } catch let cancelled as CancellationError {
+            throw cancelled
+        } catch {
+            throw AuthFailure.afterPhotos(error)
+        }
     }
 
     private func authenticate(_ action: AuthAction, _ call: @escaping () async throws -> Session) async throws {

@@ -285,7 +285,7 @@ struct ListingDetailView: View {
     }
 
     private func blockAuthor() {
-        gated(.report) {
+        gated(.block) {
             attempt {
                 try env.blockAuthor(ofListing: listing.id)
                 dismiss()

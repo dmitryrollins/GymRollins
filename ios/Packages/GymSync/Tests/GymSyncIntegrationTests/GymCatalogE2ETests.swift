@@ -228,6 +228,7 @@ struct GymCatalogE2ETests {
         }
         func deleteSharedPhoto(path: String) async throws { try await base.deleteSharedPhoto(path: path) }
         func deleteAllPhotos() async throws { try await base.deleteAllPhotos() }
+        func detachAllPhotos() async throws { try await base.detachAllPhotos() }
         func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
             try await base.report(targetType: targetType, targetId: targetId, reason: reason, note: note)
         }
@@ -240,6 +241,7 @@ struct GymCatalogE2ETests {
         func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
             try await base.moderate(targetType: targetType, targetId: targetId, action: action)
         }
+        func moderationPhotoDeleted(path: String) async throws { try await base.moderationPhotoDeleted(path: path) }
         func publicPhotoURL(path: String) -> URL? { base.publicPhotoURL(path: path) }
     }
 

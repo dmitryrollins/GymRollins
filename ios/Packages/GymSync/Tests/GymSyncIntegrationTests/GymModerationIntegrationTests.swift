@@ -9,6 +9,9 @@ import Testing
 @MainActor
 @Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
 struct GymModerationIntegrationTests {
+    /// This test's own brand: parallel tests that share one would delete each other's item with their accounts.
+    private let brand = "Hammer \(UUID().uuidString.prefix(8))"
+
     private func catalog(_ account: Account) -> SupabaseGymCatalogTransport {
         SupabaseGymCatalogTransport(client: account.auth.client)
     }
@@ -39,7 +42,7 @@ struct GymModerationIntegrationTests {
         let name = "\(UUID().uuidString.lowercased()).jpg"
         _ = try await catalog(author).uploadSharedPhoto(Data(repeating: 0xFF, count: 600), name: name)
         let listingId = UUID()
-        let request = ShareRequest(listingId: listingId, gymId: gymId, kindId: "cable-station", brand: "Hammer",
+        let request = ShareRequest(listingId: listingId, gymId: gymId, kindId: "cable-station", brand: brand,
                                    model: nil, loads: .stack(maxKg: 90, stepKg: 5), quantity: 1, notes: nil,
                                    photoPath: name, forceNew: false)
         _ = try await catalog(author).share(request)
@@ -57,7 +60,8 @@ struct GymModerationIntegrationTests {
 
         let queued = try #require(try await catalog(admin).moderationQueue().first { $0.targetId == listingId })
         #expect(queued.targetType == .listing)
-        #expect(queued.title == "Hammer")
+        #expect(queued.title == brand)
+        #expect(queued.status == .flagged)
         #expect(queued.reportCount == 3)
         #expect(queued.reasons == [.init(reason: "person-in-photo", count: 3)])
         #expect(queued.photoPath == name)
@@ -68,8 +72,14 @@ struct GymModerationIntegrationTests {
         try await catalog(admin).deleteSharedPhoto(path: name)
         #expect(try await !isServed(catalog(admin), name), "an admin's delete reaches another user's photo")
         // The name stays on a removed listing until the app confirms the object is gone (moderation_photo_deleted), so
-        // a failed delete can be retried: the queue still shows it.
-        #expect(try await catalog(admin).moderationQueue().contains { $0.targetId == listingId })
+        // a failed delete can be retried: the queue still shows it, as removed and still naming the photo.
+        let waiting = try #require(try await catalog(admin).moderationQueue().first { $0.targetId == listingId })
+        #expect(waiting.status == .removed && waiting.photoPath == name)
+        #expect(try await catalog(admin).moderate(targetType: .listing, targetId: listingId, action: .remove) == name,
+                "removing again hands the same path out")
+        try await catalog(admin).moderationPhotoDeleted(path: name)
+        #expect(try await !catalog(admin).moderationQueue().contains { $0.targetId == listingId },
+                "once the server hears the object is gone, the listing leaves the queue")
 
         for account in [author, admin, plain] + reporters { try await account.deleteAccount() }
     }

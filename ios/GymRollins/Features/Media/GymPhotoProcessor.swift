@@ -62,6 +62,11 @@ struct GymPhotoProcessor: Sendable {
 
     /// A thumbnail for a picture that was already cleaned (one downloaded from the account's own bucket).
     static func thumbnail(ofCleaned jpeg: Data) throws -> Data {
+        // A header that claims more pixels than any photo of ours has is refused before anything decodes it.
+        if let size = GymPhotoCache.pixelSize(of: jpeg),
+           max(size.width, size.height) > CGFloat(GymPhotoCache.maxPixelsPerSide) {
+            throw GymPhotoError.notAnImage
+        }
         let image = try decode(jpeg)
         guard let data = Self.jpeg(resized(image, longEdge: thumbnailLongEdge), quality: quality) else {
             throw GymPhotoError.notAnImage

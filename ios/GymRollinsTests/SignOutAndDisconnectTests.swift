@@ -152,6 +152,16 @@ private func makeEnv(_ transport: SwitchableTransport) async throws -> AppEnviro
         #expect(!SignOutReport(unsynced: 0, failed: 0, workoutInProgress: true).isSafe)
     }
 
+    @Test func unsentReportsAreCountedInTheirOwnSentence() {
+        #expect(SignOutReport(unsynced: 0, failed: 0, workoutInProgress: false, unsentReports: 1).warning
+                == "1 report hasn't been sent and will be lost.")
+        #expect(SignOutReport(unsynced: 0, failed: 0, workoutInProgress: false, unsentReports: 3).warning
+                == "3 reports haven't been sent and will be lost.")
+        #expect(SignOutReport(unsynced: 1, failed: 0, workoutInProgress: false, unsentReports: 2).warning
+                == "1 change not uploaded will be deleted from this iPhone. 2 reports haven't been sent and will be lost.")
+        #expect(!SignOutReport(unsynced: 0, failed: 0, workoutInProgress: false, unsentReports: 1).isSafe)
+    }
+
     @Test func everythingUploadedIsSafe() async throws {
         let env = try await makeEnv(SwitchableTransport())
         try env.body.add(BodyweightEntry(date: env.now(), weightKg: 80))

@@ -82,8 +82,15 @@ private struct ModerationRow: View {
                 Text(entry.title).font(.headline).foregroundStyle(Theme.textPrimary)
                 Text(entry.targetType == .gym ? "Gym" : "Equipment").font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
-                Text(entry.reportCount == 1 ? "1 report" : "\(entry.reportCount) reports").font(.footnote.weight(.semibold))
+                Text(ModerationModel.statusLine(entry)).font(.footnote.weight(.semibold))
                     .foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("moderation.status.\(entry.id.uuidString)")
+                if let address = entry.address {
+                    Text(address).font(.footnote).foregroundStyle(Theme.textSecondary)
+                }
+                if let words = entry.listingNotes {
+                    Text("Notes: \(words)").font(.footnote).foregroundStyle(Theme.textSecondary)
+                }
             }
         }
     }
@@ -96,13 +103,17 @@ private struct ModerationRow: View {
         .disabled(busy)
     }
 
+    /// A removed listing is only waiting for its photo to go: Restore would bring back a listing whose picture is
+    /// about to be deleted, so the only thing left to do is Remove again.
     @ViewBuilder
     private var buttons: some View {
-        SecondaryGlassButton(title: "Restore", identifier: "moderation.restore.\(entry.id.uuidString)") {
-            Task { await model.restore(entry) }
+        if !entry.photoStillToDelete {
+            SecondaryGlassButton(title: "Restore", identifier: "moderation.restore.\(entry.id.uuidString)") {
+                Task { await model.restore(entry) }
+            }
         }
         SecondaryGlassButton(title: "Remove", identifier: "moderation.remove.\(entry.id.uuidString)") {
-            confirming = entry.id
+            if entry.photoStillToDelete { Task { await model.remove(entry) } } else { confirming = entry.id }
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import GymCore
 import GymData
 import Supabase
 import Testing
@@ -65,5 +66,51 @@ struct ModerationRowsTests {
         #expect(GymCatalogErrors.map(notAdmin, hasSession: false) == .signedOut)
         let taken = PostgrestError(detail: nil, hint: nil, code: "P0001", message: "place_taken")
         #expect(GymCatalogErrors.map(taken, hasSession: true) == .placeTaken)
+    }
+
+    @Test func theNewColumnsGiveStatusAddressAndTheListingsOwnNotes() throws {
+        let json = """
+        [{"target_type":"listing","target_id":"\(listing)","title":"Acme X1","photo_path":"\(photo)","report_count":1,
+          "reasons":{"spam":1},"notes":[],"status":"active","address":null,"listing_notes":"bring a towel"},
+         {"target_type":"gym","target_id":"\(gym)","title":"Iron Works","photo_path":null,"report_count":3,
+          "reasons":{},"notes":[],"status":"flagged","address":"12 Main St","listing_notes":null},
+         {"target_type":"listing","target_id":"\(listing)","title":"Gone","photo_path":"\(photo)","report_count":0,
+          "reasons":{},"notes":[],"status":"removed","address":null,"listing_notes":null}]
+        """
+        let rows = try entries(json).rows
+        #expect(rows.map(\.status) == [.active, .flagged, .removed])
+        #expect(rows[0].listingNotes == "bring a towel")
+        #expect(rows[1].address == "12 Main St")
+        #expect(rows[1].isHidden && !rows[0].isHidden)
+        #expect(rows[2].photoStillToDelete && rows[2].photoPath == photo, "a removed row still names its photo")
+    }
+
+    @Test func aStrangersLongWordsAreClippedAndAnUnknownStatusIsShownAsFlagged() throws {
+        let long = String(repeating: "a", count: 2000)
+        let json = """
+        [{"target_type":"listing","target_id":"\(listing)","title":"X","photo_path":null,"report_count":1,
+          "reasons":{},"notes":[],"status":"from-the-future","address":"\(long)","listing_notes":"\(long)"}]
+        """
+        let row = try #require(try entries(json).rows.first)
+        #expect(row.status == .flagged)
+        #expect(row.address?.count == DomainLimits.gymAddressMax)
+        #expect(row.listingNotes?.count == DomainLimits.listingNotesMax)
+    }
+
+    @Test func aRowFromAnOlderServerWithoutTheColumnsStillReads() throws {
+        let json = """
+        [{"target_type":"gym","target_id":"\(gym)","title":"Y","photo_path":null,"report_count":1,"reasons":{},"notes":[]}]
+        """
+        let row = try #require(try entries(json).rows.first)
+        #expect(row.address == nil && row.listingNotes == nil)
+    }
+
+    @Test func aForeignKeyRefusalOnAShareReadsAsARetry() {
+        // `share_listing` found an item another test's (or user's) account deletion removed a moment before.
+        let gone = PostgrestError(detail: nil, hint: nil, code: "23503",
+                                  message: #"insert or update on table "gym_equipment" violates foreign key constraint "gym_equipment_item_id_fkey""#)
+        #expect(GymCatalogErrors.map(gone, hasSession: true) == .offline)
+        let other = PostgrestError(detail: nil, hint: nil, code: "23505", message: "duplicate key")
+        #expect(GymCatalogErrors.map(other, hasSession: true) == .rejected("duplicate key"))
     }
 }

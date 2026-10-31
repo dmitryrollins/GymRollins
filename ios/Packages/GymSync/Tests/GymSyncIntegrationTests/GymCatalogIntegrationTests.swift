@@ -24,9 +24,15 @@ struct GymCatalogIntegrationTests {
 
     private func photoName() -> String { "\(UUID().uuidString.lowercased()).jpg" }
 
-    private func request(_ id: UUID = UUID(), gym: UUID, kind: String = "cable-station", brand: String? = "Hammer",
-                         photo: String? = nil, forceNew: Bool = false) -> ShareRequest {
-        ShareRequest(listingId: id, gymId: gym, kindId: kind, brand: brand, model: nil,
+    /// Every test has a brand of its own. Suites run in parallel and share the server, and an item with a brand only
+    /// the test's account used is deleted with that account: two tests sharing "Hammer" could delete each other's
+    /// item between `share_listing` finding it and inserting the listing.
+    private let ownBrand = "Hammer \(UUID().uuidString.prefix(8))"
+
+    private func request(_ id: UUID = UUID(), gym: UUID, kind: String = "cable-station", brand: String? = nil,
+                         brandless: Bool = false, photo: String? = nil, forceNew: Bool = false) -> ShareRequest {
+        ShareRequest(listingId: id, gymId: gym, kindId: kind, brand: brandless ? nil : (brand ?? ownBrand),
+                     model: nil,
                      loads: .stack(maxKg: 90, stepKg: 5), quantity: 2, notes: "by the door", photoPath: photo,
                      forceNew: forceNew)
     }
@@ -57,7 +63,7 @@ struct GymCatalogIntegrationTests {
         let listing = try #require(listings.first)
         #expect(listing.id == listingId)
         #expect(listing.kindId == "cable-station")
-        #expect(listing.brand == "Hammer")
+        #expect(listing.brand == ownBrand)
         #expect(listing.loads == .stack(maxKg: 90, stepKg: 5))
         #expect(listing.quantity == 2)
         #expect(listing.photoPath == name)
@@ -194,8 +200,8 @@ struct GymCatalogIntegrationTests {
         let reader = try await Account.signUp()
         let gymId = try await gym(catalog(author), place: freshPlace())
         let kept = UUID(), reported = UUID()
-        _ = try await catalog(author).share(request(kept, gym: gymId, kind: "cable-station", brand: nil))
-        _ = try await catalog(author).share(request(reported, gym: gymId, kind: "leg-press", brand: nil))
+        _ = try await catalog(author).share(request(kept, gym: gymId, kind: "cable-station", brandless: true))
+        _ = try await catalog(author).share(request(reported, gym: gymId, kind: "leg-press", brandless: true))
 
         // Nothing to say about the author's own listing: the server answers `own`, which is not an error.
         try await catalog(author).report(targetType: .listing, targetId: reported, reason: .spam, note: nil)

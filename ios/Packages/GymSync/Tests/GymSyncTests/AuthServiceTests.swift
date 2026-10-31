@@ -156,41 +156,65 @@ private actor CallLog {
         }
     }
 
-    @Test func deleteAccountRemovesPhotosFirst() async throws {
+    private func steps(_ calls: CallLog, detach: (@Sendable () async throws -> Void)? = nil,
+                        remove: (@Sendable () async throws -> Void)? = nil) -> AccountPhotoSteps {
+        AccountPhotoSteps(detach: { try await detach?(); await calls.add("detach") },
+                          remove: { try await remove?(); await calls.add("remove") })
+    }
+
+    @Test func deleteAccountDetachesThenRemovesPhotosThenCallsTheServer() async throws {
         let auth = try signedInService()
         let calls = CallLog()
-        try await auth.deleteAccount(removePhotos: { _ in await calls.add("photos") }) { await calls.add("rpc") }
-        #expect(await calls.items == ["photos", "rpc"])
+        try await auth.deleteAccount(photos: steps(calls)) { await calls.add("rpc") }
+        #expect(await calls.items == ["detach", "remove", "rpc"])
         #expect(auth.state == .signedOut)
     }
 
-    @Test func deleteAccountStopsWhenThePhotosCannotGo() async throws {
+    @Test func aFailedDetachChangesNothingAndSaysSo() async throws {
         let auth = try signedInService()
         let calls = CallLog()
-        struct NoPhotos: Error {}
+        struct Refused: Error {}
         let before = auth.state
-        await #expect(throws: AuthFailure.self) {
-            try await auth.deleteAccount(removePhotos: { _ in throw NoPhotos() }) { await calls.add("rpc") }
+        let failure = await #expect(throws: AuthFailure.self) {
+            try await auth.deleteAccount(photos: steps(calls, detach: { throw Refused() })) { await calls.add("rpc") }
         }
-        #expect(await calls.items.isEmpty, "the account is not deleted")
+        #expect(await calls.items.isEmpty, "no photo is removed and the account is not deleted")
         #expect(auth.state == before, "and the user stays signed in")
+        #expect(failure?.message == "Couldn't delete your account. Check your connection and try again.")
     }
 
-    @Test func aPhotoFailureDoesNotSayTheAccountIsGone() async throws {
+    @Test func photosGoneButTheAccountStaysIsToldPlainly() async throws {
         let auth = try signedInService()
-        var messages: [String] = []
-        for failure in [URLError(.notConnectedToInternet) as Error, GymCatalogError.offline, GymCatalogError.rejected("x")] {
-            do {
-                try await auth.deleteAccount(removePhotos: { _ in throw failure }) {}
-            } catch let error as AuthFailure { messages.append(error.message) }
+        let before = auth.state
+        let expected = "Your photos were removed, but your account wasn't deleted. Check your connection and try again."
+        struct NoPhotos: Error {}
+        for failure in [URLError(.notConnectedToInternet) as Error, GymCatalogError.offline, NoPhotos()] {
+            let calls = CallLog()
+            let thrown = await #expect(throws: AuthFailure.self) {
+                try await auth.deleteAccount(photos: steps(calls, remove: { throw failure })) { await calls.add("rpc") }
+            }
+            #expect(thrown?.message == expected)
+            #expect(await calls.items == ["detach"], "the server step never ran")
         }
-        #expect(messages.count == 3)
-        #expect(messages.allSatisfy { $0.contains("account hasn't been deleted") })
-        #expect(messages[0] == messages[1] && messages[0].contains("Check your connection"))
-        #expect(messages[2].hasSuffix("Please try again."))
+        let calls = CallLog()
+        let thrown = await #expect(throws: AuthFailure.self) {
+            try await auth.deleteAccount(photos: steps(calls)) { throw URLError(.timedOut) }
+        }
+        #expect(thrown?.message == expected, "the same words when the server step fails after the photos")
+        #expect(auth.state == before, "the user stays signed in")
     }
 
-    @Test func aRefusalForRemainingPhotosReadsAsRetryable() {
+    @Test func aPhotoStillUploadingReadsAsRetryable() async throws {
+        let auth = try signedInService()
+        let calls = CallLog()
+        let thrown = await #expect(throws: AuthFailure.self) {
+            try await auth.deleteAccount(photos: steps(calls)) { throw PostgrestError(message: "photos_remain") }
+        }
+        #expect(thrown?.message == "Your photos were removed, but a new one was still uploading, so your account "
+            + "wasn't deleted. Please try again.")
+    }
+
+    @Test func aRefusalForRemainingPhotosWithoutThePhotoStepKeepsTheOlderWords() {
         let refused = PostgrestError(message: "photos_remain")
         #expect(AuthFailure(refused, during: .deleteAccount).message
             == "Couldn't delete your account because some photos are still being removed. Please try again.")

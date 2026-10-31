@@ -55,6 +55,27 @@ import Testing
     }
 }
 
+/// A small JPEG whose header claims another size: nothing in the file is that big, but a decoder would believe the header
+/// and allocate for it.
+enum ClaimedSizeJPEG {
+    static func make(width: Int, height: Int) -> Data {
+        var bytes = [UInt8](GymPhotoFixture.jpegData())
+        var index = 2
+        while index + 9 < bytes.count {
+            guard bytes[index] == 0xFF else { index += 1; continue }
+            let marker = bytes[index + 1]
+            let length = Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
+            if marker == 0xC0 || marker == 0xC2 { // start of frame: precision, height, width
+                bytes[index + 5] = UInt8(height >> 8); bytes[index + 6] = UInt8(height & 0xFF)
+                bytes[index + 7] = UInt8(width >> 8); bytes[index + 8] = UInt8(width & 0xFF)
+                return Data(bytes)
+            }
+            index += 2 + length
+        }
+        return Data(bytes)
+    }
+}
+
 /// The borrowed picture and the saved one share one limited downloader.
 @Suite struct GymPhotoDownloadLimitsTests {
     private let url = URL(string: "https://photos.uitest.invalid/gym-photos/a.jpg")!
@@ -98,6 +119,66 @@ import Testing
         let configuration = GymPhotoCache.liveConfiguration
         #expect(configuration.timeoutIntervalForResource > 0 && configuration.timeoutIntervalForResource <= 30)
         #expect(configuration.timeoutIntervalForRequest <= 15)
+    }
+}
+
+/// A JPEG header can claim 30000 x 30000 pixels in a few hundred bytes. Decoding that takes gigabytes, for everyone who
+/// opens the gym, so the header is read (never decoded) before the bytes are kept or shown.
+@Suite struct GymPhotoPixelLimitTests {
+    private let url = URL(string: "https://photos.uitest.invalid/gym-photos/a.jpg")!
+
+    private func cache(_ data: Data) -> (GymPhotoCache, URL) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("gym-cache-\(UUID())")
+        return (GymPhotoCache(store: GymPhotoStore(directory: dir)) { _, _ in data }, dir)
+    }
+
+    @Test func theFixtureReallyClaimsTheSizeItWasGiven() {
+        let size = GymPhotoCache.pixelSize(of: ClaimedSizeJPEG.make(width: 30_000, height: 30_000))
+        #expect(size == CGSize(width: 30_000, height: 30_000), "the test below tests what it says")
+        #expect(ClaimedSizeJPEG.make(width: 30_000, height: 30_000).count < GymPhotoCache.maxBytes)
+    }
+
+    @Test func aHeaderClaimingHugeDimensionsIsRefusedAndNothingIsSaved() async throws {
+        let (cache, dir) = cache(ClaimedSizeJPEG.make(width: 30_000, height: 30_000))
+        await #expect(throws: GymPhotoCacheError.tooManyPixels) { _ = try await cache.fetch(from: url) }
+        #expect(((try? FileManager.default.contentsOfDirectory(atPath: dir.path())) ?? []).isEmpty)
+    }
+
+    @Test func aBorrowedPictureIsRefusedBeforeItIsDecoded() async {
+        let (cache, _) = cache(ClaimedSizeJPEG.make(width: 4_097, height: 100))
+        await #expect(throws: GymPhotoCacheError.tooManyPixels) { _ = try await cache.image(from: url) }
+        let (tall, _) = self.cache(ClaimedSizeJPEG.make(width: 100, height: 4_097))
+        await #expect(throws: GymPhotoCacheError.tooManyPixels) { _ = try await tall.image(from: url) }
+    }
+
+    @Test func theSavePathRefusesTooWhenGivenBytesDirectly() {
+        let (cache, _) = cache(Data())
+        #expect(throws: GymPhotoCacheError.tooManyPixels) {
+            _ = try cache.save(ClaimedSizeJPEG.make(width: 30_000, height: 30_000))
+        }
+    }
+
+    @Test func theFilesOfAnAccountsOwnBucketAreRefusedAtTheThumbnailStepToo() {
+        #expect(throws: GymPhotoError.self) {
+            _ = try GymPhotoProcessor.thumbnail(ofCleaned: ClaimedSizeJPEG.make(width: 30_000, height: 30_000))
+        }
+    }
+
+    @Test func aPictureAtTheEdgeIsNotTooLarge() {
+        let (cache, _) = cache(Data())
+        do {
+            _ = try cache.save(ClaimedSizeJPEG.make(width: 4_096, height: 4_096))
+        } catch GymPhotoCacheError.tooManyPixels {
+            Issue.record("4096 a side is allowed")
+        } catch {
+            // The pixels aren't really there, so the thumbnail step may fail: only the size check is under test.
+        }
+    }
+
+    @Test func aRealPictureShownIsDecodedAtADownsampledSize() async throws {
+        let (cache, _) = cache(GymPhotoFixture.jpegData())
+        let image = try await cache.image(from: url)
+        #expect(max(image.size.width * image.scale, image.size.height * image.scale) <= CGFloat(GymPhotoCache.shownLongEdge))
     }
 }
 

@@ -75,9 +75,11 @@ import Testing
         await rig.env.gymAdmin.refresh(userId: userA) { true }
         #expect(rig.env.gymAdmin.isAdmin)
         rig.env.sync.onSessionEnding()
-        #expect(!rig.env.gymAdmin.isAdmin)
+        #expect(rig.env.gymAdmin.isAdmin, "a refused deletion goes on as the same session, so nothing is forgotten yet")
         await rig.env.sync.onWillSignOut()
-        #expect(!rig.env.gymAdmin.isAdmin)
+        #expect(rig.env.gymAdmin.isAdmin)
+        rig.env.sync.onSessionEnded()
+        #expect(!rig.env.gymAdmin.isAdmin, "the session really ended")
     }
 }
 

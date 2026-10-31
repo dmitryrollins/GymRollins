@@ -187,10 +187,11 @@ private struct ListingRow: Codable {
 private struct ModerationRow: Decodable {
     let targetType: GymTargetType, targetId: UUID, title: String, photoPath: String?, reportCount: Int
     let reasons: [String: Int], notes: [String]
+    let status: String?, address: String?, listingNotes: String?
 
     enum CodingKeys: String, CodingKey {
-        case title, reasons, notes, targetType = "target_type", targetId = "target_id", photoPath = "photo_path",
-             reportCount = "report_count"
+        case title, reasons, notes, status, address, targetType = "target_type", targetId = "target_id",
+             photoPath = "photo_path", reportCount = "report_count", listingNotes = "listing_notes"
     }
 
     var entry: ModerationEntry {
@@ -200,7 +201,11 @@ private struct ModerationRow: Decodable {
                                title: GymCatalogRows.clip(title, to: DomainLimits.gymNameMax) ?? "",
                                photoPath: GymCatalogRows.photoName(photoPath), reportCount: max(reportCount, 0),
                                reasons: counted,
-                               notes: notes.compactMap { GymCatalogRows.clip($0, to: DomainLimits.reportNoteMax) })
+                               notes: notes.compactMap { GymCatalogRows.clip($0, to: DomainLimits.reportNoteMax) },
+                               // A status this version doesn't know is treated as flagged: shown, with both buttons.
+                               status: status.flatMap(ModerationEntry.Status.init) ?? .flagged,
+                               address: GymCatalogRows.clip(address, to: DomainLimits.gymAddressMax),
+                               listingNotes: GymCatalogRows.clip(listingNotes, to: DomainLimits.listingNotesMax))
     }
 }
 
