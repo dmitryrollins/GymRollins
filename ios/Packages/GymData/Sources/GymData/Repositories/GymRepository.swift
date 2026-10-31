@@ -5,15 +5,15 @@ import SwiftData
 /// Gyms, the equipment items they list and each gym's listings. Everything stays on the phone until plan 21.
 @MainActor
 public final class GymRepository {
-    public static let maxNameLength = 120
-    public static let maxAddressLength = 300
-    public static let maxQuantity = 50
-    public static let maxNotesLength = 280
-    public static let maxBrandLength = 60
-    public static let maxModelLength = 80
-    public static let maxStackKg = 1000.0
-    public static let maxFixedWeights = 60
-    public static let maxFixedKg = 500.0
+    public static let maxNameLength = DomainLimits.gymNameMax
+    public static let maxAddressLength = DomainLimits.gymAddressMax
+    public static let maxQuantity = DomainLimits.listingQuantity.upperBound
+    public static let maxNotesLength = DomainLimits.listingNotesMax
+    public static let maxBrandLength = DomainLimits.itemBrandMax
+    public static let maxModelLength = DomainLimits.itemModelMax
+    public static let maxStackKg = DomainLimits.listingStackKg.upperBound
+    public static let maxFixedWeights = DomainLimits.listingFixedWeightsMax
+    public static let maxFixedKg = DomainLimits.listingFixedKg.upperBound
 
     /// Namespace for the generic item of each kind, so every install derives the same id.
     static let genericItemNamespace = UUID(uuidString: "6b1f3c2e-8d4a-5e17-9a60-2f4c7d9b1e35")!

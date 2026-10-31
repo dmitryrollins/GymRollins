@@ -152,6 +152,12 @@ import Testing
         #expect(try add(other, kind: "leg-press").item.id == a.item.id)
     }
 
+    @Test func genericItemIdMatchesTheServerSeed() throws {
+        defer { f.tearDown() }
+        let listing = try add(try makeGym(), kind: "dumbbells")
+        #expect(listing.item.id == UUID(uuidString: "cdd9d434-9eca-5d33-8406-2bdea6b4c561"))
+    }
+
     @Test func sameBrandAndModelReuseTheItem() throws {
         defer { f.tearDown() }
         let gym = try makeGym()

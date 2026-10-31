@@ -30,4 +30,22 @@ export const DomainLimits = {
   birthYear: { min: 1900, max: 2100 },
   // Weekly hard-set targets per muscle group (muscle_targets.min_sets / max_sets)
   weeklySetTarget: { min: 0, max: 50 },
+  // Gyms and equipment
+  gymNameMax: 120,
+  gymAddressMax: 300,
+  listingQuantity: { min: 1, max: 50 },
+  listingNotesMax: 280,
+  itemBrandMax: 60,
+  itemModelMax: 80,
+  listingStackKg: { min: 0.25, max: 1_000 },
+  listingStepKg: { min: 0.25, max: 50 },
+  listingFixedWeightsMax: 60,
+  listingFixedKg: { min: 0.25, max: 500 },
+  privateGymsMax: 100,
+  privateListingsMax: 1_000,
+  // Daily limits per user, enforced by the server functions
+  dailyGymCreations: 10,
+  dailyShares: 30,
+  dailyConfirmations: 100,
+  dailyPhotoUploads: 60,
 } as const

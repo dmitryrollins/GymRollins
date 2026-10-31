@@ -3,7 +3,7 @@
 -- script, scripts/upload-photos.mjs), which bypasses RLS.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(14);
 
 select is((select public from storage.buckets where id = 'exercise-photos'), true, 'exercise-photos bucket is public');
 select is((select allowed_mime_types from storage.buckets where id = 'exercise-photos'),
@@ -43,9 +43,15 @@ select is((select count(*) from changed)::int, 0, 'a signed-in user cannot chang
 reset role;
 -- Deletes can't be probed with SQL (Supabase blocks direct deletes from storage tables), so assert that no policy
 -- gives anon/authenticated/public any access to storage objects (delete included); only the service role writes.
+-- The gym photo buckets have their own policies (gyms.test.sql), which must stay inside those buckets.
 select is((select count(*) from pg_policies where schemaname = 'storage' and tablename in ('objects', 'buckets')
-           and roles && array['anon', 'authenticated', 'public']::name[])::int, 0,
+           and roles && array['anon', 'authenticated', 'public']::name[]
+           and policyname not like 'gym\_photos\_%')::int, 0,
   'no storage policy grants anon or signed-in users anything (no insert, update, delete or list)');
+select is((select count(*) from pg_policies where schemaname = 'storage' and policyname like 'gym\_photos\_%'
+           and (coalesce(qual, '') || coalesce(with_check, '') not like '%gym-photos%'
+                or coalesce(qual, '') || coalesce(with_check, '') like '%exercise-photos%'))::int, 0,
+  'the gym photo policies stay inside the gym photo buckets');
 select is((select name from storage.objects where bucket_id = 'exercise-photos'), 'own-9999-0.jpg',
   'the service-role object is untouched');
 

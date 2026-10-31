@@ -2,7 +2,7 @@
 -- pgcrypto outside public, value checks for cardio/volume, and upsert_workout's stale path leaving children alone.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(31);
 
 insert into auth.users (id, email, aud, role) values
   ('a0000000-0000-0000-0000-00000000000a', 'sec-a@test.local', 'authenticated', 'authenticated'),
@@ -133,10 +133,25 @@ select ok(has_function_privilege('authenticated', 'public.upsert_workout(jsonb)'
   'authenticated can execute upsert_workout');
 select ok(has_function_privilege('authenticated', 'public.mcp_flag(text)', 'execute'),
   'authenticated can execute mcp_flag');
+-- Browsing gyms needs no account (spec §5), so the public catalogue is the one exception, and it's read only.
 select is(
-  (select count(*) from information_schema.role_table_grants
-    where table_schema = 'public' and grantee in ('anon', 'PUBLIC'))::int,
-  0, 'anon (and PUBLIC) hold no privileges on any public table');
+  (select array_agg(table_name::text || ':' || privilege_type::text order by table_name::text)
+     from information_schema.role_table_grants where table_schema = 'public' and grantee in ('anon', 'PUBLIC')),
+  array['equipment_kinds:SELECT', 'exercise_requirements:SELECT', 'public_equipment_items:SELECT',
+        'public_gym_equipment:SELECT', 'public_gyms:SELECT'],
+  'anon (and PUBLIC) hold no privileges on public tables except reading the gym catalogue');
+select is(
+  (select array_agg(distinct table_name::text order by table_name::text) from information_schema.column_privileges
+    where table_schema = 'public' and grantee in ('anon', 'PUBLIC')
+      and table_name not in ('equipment_kinds', 'exercise_requirements', 'public_equipment_items',
+                             'public_gym_equipment', 'public_gyms')),
+  array['equipment_items', 'gym_equipment', 'gyms'],
+  'anon column reads stop at the three tables behind the catalogue views');
+select is(
+  (select array_agg(p.proname::text order by p.proname::text) from pg_proc p
+    where p.pronamespace = 'public'::regnamespace and has_function_privilege('anon', p.oid, 'execute')),
+  array['did_i_confirm', 'is_app_admin', 'is_my_gym', 'is_my_item', 'is_my_listing'],
+  'anon runs only the functions the catalogue views and policies call');
 select ok(
   not exists (select 1 from pg_default_acl d, aclexplode(d.defaclacl) a
               where d.defaclnamespace = 'public'::regnamespace and d.defaclrole = 'postgres'::regrole

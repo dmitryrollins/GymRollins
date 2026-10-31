@@ -30,6 +30,24 @@ public enum DomainLimits {
     public static let birthYear: ClosedRange<Int> = 1900...2100
     // Weekly hard-set targets per muscle group (muscle_targets.min_sets / max_sets)
     public static let weeklySetTarget: ClosedRange<Int> = 0...50
+    // Gyms and equipment
+    public static let gymNameMax = 120
+    public static let gymAddressMax = 300
+    public static let listingQuantity: ClosedRange<Int> = 1...50
+    public static let listingNotesMax = 280
+    public static let itemBrandMax = 60
+    public static let itemModelMax = 80
+    public static let listingStackKg: ClosedRange<Double> = 0.25...1_000
+    public static let listingStepKg: ClosedRange<Double> = 0.25...50
+    public static let listingFixedWeightsMax = 60
+    public static let listingFixedKg: ClosedRange<Double> = 0.25...500
+    public static let privateGymsMax = 100
+    public static let privateListingsMax = 1_000
+    // Daily limits per user, enforced by the server functions
+    public static let dailyGymCreations = 10
+    public static let dailyShares = 30
+    public static let dailyConfirmations = 100
+    public static let dailyPhotoUploads = 60
 
     /// User-facing reason the routine can't be saved, or nil when it fits.
     public static func routineViolation(_ routine: Routine) -> String? {

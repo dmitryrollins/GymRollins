@@ -43,6 +43,10 @@ node --test "$ROOT/scripts/build-photo-prompts.test.mjs" "$ROOT/scripts/generate
 echo "==> Exercise photo uploader (node test, mocked Storage API)"
 node --test "$ROOT/scripts/upload-photos.test.mjs"
 
+echo "==> Equipment seed generator (node test, drift against the migration)"
+node --test "$ROOT/scripts/gen-equipment-seed.test.mjs"
+node "$ROOT/scripts/gen-equipment-seed.mjs" --check
+
 # E2E sync against the local Supabase stack (needs Docker): opt in with SYNC_E2E=1.
 if [[ "${SYNC_E2E:-0}" == "1" ]]; then
   echo "==> iOS sync E2E (local Supabase)"
