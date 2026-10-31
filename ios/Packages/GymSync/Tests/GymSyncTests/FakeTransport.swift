@@ -26,6 +26,7 @@ actor FakeTransport: SyncTransport {
     private(set) var privatePhotos: [String: Data] = [:]
     var failUploads = false
     var failDownloads = false
+    var failDeletes = false
     /// Names of the push and pull calls that touch gyms and workouts, in order.
     private(set) var callLog: [String] = []
 
@@ -44,6 +45,7 @@ actor FakeTransport: SyncTransport {
     func fail(with error: URLError?) { failure = error }
     func setFailUploads(_ value: Bool) { failUploads = value }
     func setFailDownloads(_ value: Bool) { failDownloads = value }
+    func setFailDeletes(_ value: Bool) { failDeletes = value }
     func reject(ids: [String]) { rejected = Set(ids.map { $0.lowercased() }) }
 
     /// The next pull suspends until `releasePull()` (to overlap a round with sign-out).
@@ -175,6 +177,11 @@ actor FakeTransport: SyncTransport {
         if failUploads { throw URLError(.networkConnectionLost) }
         privatePhotos[name] = data
         return name
+    }
+
+    func deletePrivatePhoto(path: String) throws {
+        if failDeletes { throw URLError(.networkConnectionLost) }
+        privatePhotos[path] = nil
     }
 
     func downloadPrivatePhoto(path: String) throws -> Data {

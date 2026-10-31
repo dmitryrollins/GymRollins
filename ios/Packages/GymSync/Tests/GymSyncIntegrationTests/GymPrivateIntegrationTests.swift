@@ -60,11 +60,15 @@ struct GymPrivateIntegrationTests {
                 "\(first.store.syncFailures().map(\.message)) \(first.engine.status)")
         let path = try #require(try first.container.mainContext.fetch(FetchDescriptor<GymListingRecord>()).first?.remotePhotoPath)
 
-        // Asked before the owner's second device downloads the file: URLSession would otherwise answer from its
-        // cache, which is keyed by URL alone.
         let other = try Phone(stranger, clock: clock)
         await other.engine.sync()
         #expect(try other.repo.gyms().isEmpty)
+
+        let second = try Phone(try await owner.onAnotherDevice(), clock: clock)
+        await second.engine.sync()
+        #expect(second.engine.status == .idle)
+
+        // The owner has now downloaded the picture; no client may be served it from a cache afterwards.
         let anon = try anonTransport()
         // Refused outright or empty: either way a signed-out client reads nothing.
         #expect((try? await anon.pullGyms(since: nil))?.isEmpty ?? true)
@@ -72,9 +76,6 @@ struct GymPrivateIntegrationTests {
         await #expect(throws: (any Error).self) { _ = try await anon.downloadPrivatePhoto(path: path) }
         await #expect(throws: (any Error).self) { _ = try await stranger.transport.downloadPrivatePhoto(path: path) }
 
-        let second = try Phone(try await owner.onAnotherDevice(), clock: clock)
-        await second.engine.sync()
-        #expect(second.engine.status == .idle)
         let copy = try #require(try second.repo.listings(gymId: gym.id).first)
         #expect(copy.id == listing.id && copy.item.brand == "Hammer" && copy.notes == "garage")
         #expect(copy.loads == .stack(maxKg: 90, stepKg: 5))
@@ -88,6 +89,7 @@ struct GymPrivateIntegrationTests {
         clock.advance(60)
         await second.engine.sync()
         #expect(try second.repo.listings(gymId: gym.id).isEmpty)
+        await #expect(throws: (any Error).self) { _ = try await owner.transport.downloadPrivatePhoto(path: path) }
 
         try await owner.deleteAccount()
         try await stranger.deleteAccount()

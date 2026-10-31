@@ -44,6 +44,10 @@ extension SupabaseTransport {
     public func downloadPrivatePhoto(path: String) async throws -> Data {
         try await client.storage.from(Self.privatePhotoBucket).download(path: path.lowercased())
     }
+
+    public func deletePrivatePhoto(path: String) async throws {
+        _ = try await client.storage.from(Self.privatePhotoBucket).remove(paths: [path.lowercased()])
+    }
 }
 
 private struct AckRow: Decodable {

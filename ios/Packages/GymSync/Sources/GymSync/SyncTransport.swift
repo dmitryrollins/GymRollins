@@ -37,6 +37,8 @@ public protocol SyncTransport: Sendable {
     /// Uploads to `gym-photos-private/<name>`; a name the caller already uploaded counts as uploaded.
     func uploadPrivatePhoto(_ data: Data, name: String) async throws -> String
     func downloadPrivatePhoto(path: String) async throws -> Data
+    /// Removes a picture from the private bucket, after the listing that used it was deleted.
+    func deletePrivatePhoto(path: String) async throws
 
     /// Pending proposals, decoded per row: a row the app can't read comes back `.malformed`.
     func pendingProposals() async throws -> [PulledProposal]
@@ -59,6 +61,7 @@ extension SyncTransport {
     public func pullGymListings(since: Date?) async throws -> [GymListingDTO] { [] }
     public func uploadPrivatePhoto(_ data: Data, name: String) async throws -> String { throw URLError(.unsupportedURL) }
     public func downloadPrivatePhoto(path: String) async throws -> Data { throw URLError(.unsupportedURL) }
+    public func deletePrivatePhoto(path: String) async throws {}
 
     /// When Claude last called the MCP server for this user (newest `mcp_audit` row), nil if never.
     public func lastMcpUse() async throws -> Date? { nil }

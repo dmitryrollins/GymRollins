@@ -107,9 +107,12 @@ extension SyncStore {
                 r.photoFile.map { files.append($0) }
                 r.photoFile = nil
             }
+            // A picture only this phone has still has to reach the server, though the rest of the row lost.
+            let photoStillToUpload = existing?.dirty == true && r.photoFile != nil && value.remotePhotoPath == nil
             r.remotePhotoPath = value.remotePhotoPath
             r.deletedAt = nil
             markClean(r, clientUpdatedAt: row.clientUpdatedAt, serverUpdatedAt: row.serverUpdatedAt)
+            if photoStillToUpload { r.dirty = true }
         }
         try context.save()
         return files

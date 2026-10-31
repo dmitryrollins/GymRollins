@@ -44,7 +44,14 @@ public struct SupabaseConfig: Sendable, Equatable {
         let auth = SupabaseClientOptions.AuthOptions(
             storage: storage ?? AuthClient.Configuration.defaultLocalStorage,
             emitLocalSessionAsInitialSession: true)
-        return SupabaseClient(supabaseURL: url, supabaseKey: anonKey, options: SupabaseClientOptions(auth: auth))
+        // No URL cache: URLSession keys it by URL alone, so a private photo fetched by one account could be served to
+        // a signed-out client or another account on this phone without any auth check.
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        let global = SupabaseClientOptions.GlobalOptions(session: URLSession(configuration: configuration))
+        return SupabaseClient(supabaseURL: url, supabaseKey: anonKey,
+                              options: SupabaseClientOptions(auth: auth, global: global))
     }
 
     private static func value(_ key: String, in info: [String: Any]) throws -> String {

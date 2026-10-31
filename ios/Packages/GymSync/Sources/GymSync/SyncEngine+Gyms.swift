@@ -25,6 +25,7 @@ extension SyncEngine {
                 if let ack = acks.first {
                     try store.markSynced(.gymListings, id: id, clientUpdatedAt: row.clientUpdatedAt,
                                          serverUpdatedAt: ack.updatedAt)
+                    if row.deletedAt != nil { try await deleteServerPhoto(row.value.remotePhotoPath) }
                 }
             } catch let rejected as SyncRecordRejected {
                 try ensureLive()
@@ -34,6 +35,19 @@ extension SyncEngine {
                 try ensureLive()
                 try store.setRemotePhotoPath(listingId: row.value.id, path: nil)
             }
+        }
+    }
+
+    /// Best effort: a picture left in the bucket is logged, and neither blocks the round nor keeps the deleted row.
+    private func deleteServerPhoto(_ path: String?) async throws {
+        guard let path else { return }
+        do {
+            try await transport.deletePrivatePhoto(path: path)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            try ensureLive()
+            Self.log.error("Delete of a listing photo on the server failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

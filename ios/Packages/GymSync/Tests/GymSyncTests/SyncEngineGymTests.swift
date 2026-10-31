@@ -87,6 +87,34 @@ final class FakePhotoFiles: GymPhotoFiles, @unchecked Sendable {
         #expect(await f.server.gymListings[listing.id]?.photoPath != nil)
     }
 
+    @Test func deletingASyncedListingRemovesItsPhotoFromTheBucketOnceTheTombstoneIsAcknowledged() async throws {
+        defer { f.tearDown() }
+        let (_, listing) = try syncedListing(photo: "mine.jpg")
+        await engine.sync()
+        let name = try #require(try record(listing.id)?.remotePhotoPath)
+        #expect(await f.server.privatePhotos[name] != nil)
+
+        f.clock.advance(60)
+        _ = try gyms.removeListing(listing.id)
+        await engine.sync()
+        #expect(await f.server.privatePhotos[name] == nil)
+        #expect(try record(listing.id) == nil)
+    }
+
+    @Test func aFailedPhotoDeletionIsLoggedAndDoesNotKeepTheRowOrBlockTheRound() async throws {
+        defer { f.tearDown() }
+        let (_, listing) = try syncedListing(photo: "mine.jpg")
+        await engine.sync()
+        try f.routines.upsert(Routine(name: "Push", exercises: []))
+        await f.server.setFailDeletes(true)
+        f.clock.advance(60)
+        _ = try gyms.removeListing(listing.id)
+        await engine.sync()
+        #expect(try record(listing.id) == nil)
+        #expect(await f.server.routines.count == 1)
+        #expect(f.store.syncFailures().isEmpty)
+    }
+
     @Test func aBrandedListingSendsTheGenericItemAndComesBackWithItsBrand() async throws {
         defer { f.tearDown() }
         let (_, listing) = try syncedListing(brand: "Hammer")

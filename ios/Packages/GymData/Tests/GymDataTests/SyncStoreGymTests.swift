@@ -246,6 +246,26 @@ import Testing
         #expect(try f.store.listingsMissingPhoto() == [PhotoFetch(listingId: id, path: "two.jpg")])
     }
 
+    @Test func aPhotoThatLostToTheRemoteCopyStaysDirtySoItUploads() async throws {
+        defer { f.tearDown() }
+        let (gym, listing) = try syncedGym(photo: "mine.jpg")
+        f.clock.advance(1_000)
+        let files = try f.store.applyRemote(gymListings: [remoteListing(listing.id, gym: gym.id, at: 5_000)])
+        #expect(files.isEmpty)
+        let row = try #require(try f.store.dirtyGymListings().first)
+        #expect(row.value.id == listing.id && row.value.photoFile == "mine.jpg" && row.value.remotePhotoPath == nil)
+    }
+
+    @Test func aCleanListingWithoutAPhotoPathIsNotMadeDirtyByAPull() throws {
+        defer { f.tearDown() }
+        let gym = UUID(), id = UUID()
+        try f.store.applyRemote(gyms: [remoteGym(gym)])
+        try f.store.applyRemote(gymListings: [remoteListing(id, gym: gym)])
+        try f.store.setPhotoFile(listingId: id, file: "local.jpg")
+        try f.store.applyRemote(gymListings: [remoteListing(id, gym: gym, at: 900)])
+        #expect(try f.store.dirtyGymListings().isEmpty)
+    }
+
     @Test func remoteRowsNeverTouchDeviceOrSharedRows() throws {
         defer { f.tearDown() }
         let device = try repo.addPrivateGym(name: "Mine", address: nil)
