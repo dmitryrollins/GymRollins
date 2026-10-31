@@ -13,6 +13,10 @@ enum Theme {
     /// Prominent-button fill. Darker than the mockup's 0xD63A46 so white labels on the (slightly lightened) glass
     /// tint stay above 4.5:1 (accessibility audit: contrast).
     static let primaryFill = Color(hex: 0xC22F3B)
+    /// `PrimaryGlassButton`'s tint. Glass lightens a tint by an amount that depends on what is behind it: over the
+    /// Add equipment form 0xC22F3B (5.6:1 with white) dipped just under 4.5:1. This keeps white above 5:1 even with
+    /// 15% white mixed in.
+    static let primaryButtonFill = Color(hex: 0xA82431)
     static let success = Color(hex: 0x4FD1A5)
     static let successFill = Color(hex: 0x14342A)
     static let record = Color(hex: 0xF5B75A)

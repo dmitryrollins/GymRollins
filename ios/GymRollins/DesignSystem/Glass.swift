@@ -47,7 +47,7 @@ struct PrimaryGlassButton: View {
             Text(title).font(.headline).multilineTextAlignment(.center).frame(maxWidth: .infinity, minHeight: 56)
         }
         .buttonStyle(.glassProminent)
-        .tint(Theme.primaryFill)
+        .tint(Theme.primaryButtonFill)
         .accessibilityIdentifier(identifier ?? title)
     }
 }
