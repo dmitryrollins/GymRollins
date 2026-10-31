@@ -48,7 +48,7 @@ struct GymChipRow: View {
                 .foregroundStyle(Theme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("Train here") { accept(nearby) }
-                .buttonStyle(.glassProminent).tint(Theme.primaryFill)
+                .buttonStyle(.glassProminent).tint(Theme.primaryButtonFill)
                 .accessibilityIdentifier("today.gymSuggestion.accept")
             Button { suggestion = nil } label: { Image(systemName: "xmark") }
                 .buttonStyle(.glass)

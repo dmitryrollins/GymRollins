@@ -71,7 +71,7 @@ struct WorkoutOverviewView: View {
 
             Button(action: finish) { Text("Finish").fixedSize() }
                 .buttonStyle(.glassProminent)
-                .tint(Theme.primaryFill)
+                .tint(Theme.primaryButtonFill)
                 .accessibilityIdentifier("workout.finish")
         }
         .padding(.horizontal, 8)

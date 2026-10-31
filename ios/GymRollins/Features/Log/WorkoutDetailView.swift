@@ -51,7 +51,7 @@ struct WorkoutDetailView: View {
                     .accessibilityIdentifier("detail.cancel")
                 Button("Save", action: save)
                     .buttonStyle(.glassProminent)
-                    .tint(Theme.primaryFill)
+                    .tint(Theme.primaryButtonFill)
                     .accessibilityIdentifier("detail.save")
             } else {
                 Button { showMenu = true } label: { Image(systemName: "ellipsis") }

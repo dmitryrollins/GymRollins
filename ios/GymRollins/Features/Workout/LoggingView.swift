@@ -70,7 +70,7 @@ struct LoggingView: View {
                         Spacer()
                         // iOS 26's confirm role draws the system's round, tinted checkmark above the keyboard.
                         Button("Done", systemImage: "checkmark", role: .confirm) { focus = nil }
-                            .tint(Theme.primaryFill)
+                            .tint(Theme.primaryButtonFill)
                             .accessibilityIdentifier("keyboard.done")
                     }
                 }

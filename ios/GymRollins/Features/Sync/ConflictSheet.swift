@@ -68,7 +68,7 @@ struct ConflictSheet: View {
                 }
                 HStack(spacing: 10) {
                     Button("Keep this iPhone's") { resolve(id, keepLocal: true) }
-                        .buttonStyle(.glassProminent).tint(Theme.primaryFill)
+                        .buttonStyle(.glassProminent).tint(Theme.primaryButtonFill)
                         .accessibilityIdentifier("conflict.keepLocal")
                     Button("Keep other") { resolve(id, keepLocal: false) }
                         .buttonStyle(.glass)
