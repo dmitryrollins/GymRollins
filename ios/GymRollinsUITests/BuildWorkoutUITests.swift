@@ -60,11 +60,19 @@ final class BuildWorkoutUITests: XCTestCase {
                        "Only 1 Back item catalogued at Home so far. Add a photo to unlock more variety.")
         XCTAssertTrue(app.buttons["build.addEquipment"].exists)
         XCTAssertTrue(element(app, "build.row.1352").label.contains("no equipment"), "the fill says so")
-        XCTAssertGreaterThan(buildRows(app).count, 3)
+        let built = buildRows(app).map { String($0.dropFirst("build.row.".count)) }
+        XCTAssertGreaterThan(built.count, 3)
 
         app.buttons["build.start"].tapCenter()
         XCTAssertTrue(app.staticTexts["workout.clock"].waitForExistence(timeout: 10), "the workout opened")
         XCTAssertFalse(app.buttons["build.go"].exists, "the sheet is gone")
+        XCTAssertTrue(app.staticTexts["Back"].exists, "the started workout carries the built name")
+        for id in built {
+            XCTAssertTrue(element(app, "workout.entry.\(id)").exists, "the started workout has \(id), as built")
+        }
+        let started = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier MATCHES 'workout\\.entry\\.[^.]+'")).allElementsBoundByIndex
+        XCTAssertEqual(started.count, built.count, "and nothing else: \(started.map { $0.identifier })")
     }
 
     func testBuildWithNoGymOpensThePickerFirst() {

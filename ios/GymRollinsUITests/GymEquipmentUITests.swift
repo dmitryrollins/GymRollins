@@ -104,6 +104,14 @@ final class GymEquipmentUITests: XCTestCase {
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
         XCTAssertTrue(add.waitForNonExistence(timeout: 30), "the photo was cleaned and attached")
+        XCTAssertTrue(app.descendants(matching: .any)["listing.addPhoto.processing"].waitForNonExistence(timeout: 30),
+                      "the photo finished processing")
         XCTAssertFalse(app.staticTexts["listing.error"].exists)
+        // The tile can disappear while processing, or when the attach fails and the error shows: reopen to be sure.
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["gymEquipment.listing.flat-bench"].waitForExistence(timeout: 5))
+        app.buttons["gymEquipment.listing.flat-bench"].tap()
+        XCTAssertTrue(app.buttons["listing.save"].waitForExistence(timeout: 5), "the listing reopened")
+        XCTAssertFalse(app.buttons["listing.addPhoto"].exists, "the photo was saved: there is nothing left to add")
     }
 }
