@@ -14,10 +14,9 @@ TEST_ID="9990"
 "$ROOT/scripts/supabase-up.sh"
 API_URL="$(grep -E '^API_URL=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')"
 SERVICE_ROLE_KEY="$(grep -E '^SERVICE_ROLE_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')"
-case "$API_URL" in
-  http://127.0.0.1:*|http://localhost:*) ;;
-  *) echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1 ;;
-esac
+# A prefix match would accept http://127.0.0.1:1@evil.example/, whose host is evil.example.
+[[ "$API_URL" =~ ^http://(127\.0\.0\.1|localhost):[0-9]+/?$ ]] || {
+  echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1; }
 
 WORK="$(mktemp -d -t photo-hosting-e2e)"
 cleanup() {

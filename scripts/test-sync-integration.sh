@@ -10,10 +10,9 @@ DB_CONTAINER="supabase_db_gymrollins"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE — run scripts/supabase-up.sh first" >&2; exit 1; }
 # shellcheck disable=SC1090
 source "$ENV_FILE"
-case "$API_URL" in
-  http://127.0.0.1:*|http://localhost:*) ;;
-  *) echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1 ;;
-esac
+# A prefix match would accept http://127.0.0.1:1@evil.example/, whose host is evil.example.
+[[ "$API_URL" =~ ^http://(127\.0\.0\.1|localhost):[0-9]+/?$ ]] || {
+  echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1; }
 
 psql_local() { docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -tA "$@"; }
 

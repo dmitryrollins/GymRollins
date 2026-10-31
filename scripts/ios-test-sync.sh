@@ -13,10 +13,9 @@ DEST="${DEST:-platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2}"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE" >&2; exit 1; }
 API_URL="$(grep -E '^API_URL=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')"
 ANON_KEY="$(grep -E '^ANON_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')"
-case "$API_URL" in
-  http://127.0.0.1:*|http://localhost:*) ;;
-  *) echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1 ;;
-esac
+# A prefix match would accept http://127.0.0.1:1@evil.example/, whose host is evil.example.
+[[ "$API_URL" =~ ^http://(127\.0\.0\.1|localhost):[0-9]+/?$ ]] || {
+  echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1; }
 [[ -n "$ANON_KEY" ]] || { echo "ANON_KEY missing from $ENV_FILE" >&2; exit 1; }
 
 cleanup() {
