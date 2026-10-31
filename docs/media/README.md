@@ -83,7 +83,7 @@ app → free-exercise-db → wger.de (Creative Commons, credited on the detail p
 
 ### Upload
 
-`scripts/upload-photos.mjs` uploads every `own-*.jpg` in `media/photos/` and `ios/GymRollins/Resources/OwnPhotos/`
+`scripts/upload-photos.mjs` uploads every `own-*.jpg` and `kind-*.jpg` in `media/photos/` and `ios/GymRollins/Resources/OwnPhotos/`
 (`content-type: image/jpeg`, `cache-control: max-age=31536000`), then rebuilds `manifest.json` from the bucket
 listing (`max-age=60`). Idempotent: objects with the same size and MD5 (Storage's eTag) are skipped, and an unchanged
 manifest isn't rewritten. Nothing local is moved or deleted; nothing in the bucket is deleted.
@@ -124,8 +124,9 @@ the build settings. UI tests (`-uiTesting`) never touch Storage.
 2. Upload: `node scripts/upload-photos.mjs --target remote` (see above), then open
    `https://<ref>.supabase.co/storage/v1/object/public/exercise-photos/manifest.json` to check it.
 3. App: cloud `SUPABASE_URL` / `SUPABASE_ANON_KEY` and `PHOTO_HOSTING = storage` in `Local.xcconfig`.
-4. Once Storage is live, the bundled photos can be removed from `Resources/OwnPhotos/` (keep `own-0453-*`: it is the
-   generator's style reference) — the bundle stays a fallback only for what's left in it.
+4. Once Storage is live, the bundled `own-*` photos can be removed from `Resources/OwnPhotos/` (keep `own-0453-*`: it is the
+   generator's style reference) — the bundle stays a fallback only for what's left in it. Keep every `kind-*.jpg`: they are
+   the offline fallback for the equipment stock photos, and a test needs them.
 
 ### Tests
 

@@ -10,7 +10,7 @@
   `https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5/exercises/<path>` (jsDelivr's GitHub
   mirror, pinned to the commit so the files can't change underneath us) and caches it on the device.
 - Bundled: the 43 equipment **kind photos** in `ios/GymRollins/Resources/OwnPhotos/kind-<kindId>.jpg`. Each is a copy of
-  `exercises/<path>/0.jpg` at the pinned commit, resized to 800 px on the long edge. A gym listing with no photo of
+  `exercises/<path>/0.jpg` at the pinned commit, resized to at most 800 px on the long edge. A gym listing with no photo of
   its own shows one, marked "Sample". The same files can be hosted in the `exercise-photos` bucket
   (`scripts/upload-photos.mjs`), which the app prefers. Three kinds have none: `lateral-raise-machine`, `skierg` and
   `upper-body-ergometer`.

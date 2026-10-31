@@ -6,7 +6,7 @@ struct PrivacyPolicyView: View {
         "Your workouts, plan, weigh-ins and profile are stored on this iPhone, and in your account if you sign in.",
         "Claude can only read what you allow in the Claude section of Settings, and only proposes plan changes "
             + "you review (or explicitly allow it to apply automatically).",
-        "There are no ads and no third-party trackers. Your data is never sold or shared.",
+        "There are no ads and no third-party trackers. Your data is never sold or shared with advertisers.",
         "Location is asked for only to suggest the gym you're at. It is sent to Apple Maps for that search and "
             + "isn't stored by GymRollins.",
         "Gym photos are cleaned on your iPhone (faces blurred, location data removed) and kept on this iPhone.",
