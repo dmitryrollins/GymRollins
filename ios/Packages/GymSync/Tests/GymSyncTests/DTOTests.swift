@@ -68,6 +68,22 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(dto.toDomain() == row)
     }
 
+    @Test func profileGymsFlagRoundTripsAndAnOldRowReadsAsOn() throws {
+        var p = ProfileSnapshot()
+        p.mcpReadGyms = false
+        let row = SyncRow(value: p, clientUpdatedAt: t0)
+        #expect(try wire(ProfileDTO(row)).toDomain().value.mcpReadGyms == false)
+
+        // A row written before the flag existed has no key: Claude's gym access reads as on, like the column's default.
+        var json = try #require(JSONSerialization.jsonObject(
+            with: SyncJSON.encoder.encode(ProfileDTO(SyncRow(value: ProfileSnapshot(), clientUpdatedAt: t0)))
+        ) as? [String: Any])
+        json.removeValue(forKey: "mcp_read_gyms")
+        let old = try SyncJSON.decoder.decode(ProfileDTO.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(old.mcpReadGyms)
+        #expect(old.toDomain().value.mcpReadGyms)
+    }
+
     @Test func profileEncodesSnakeCaseAndExplicitNulls() throws {
         let json = try JSONSerialization.jsonObject(
             with: SyncJSON.encoder.encode(ProfileDTO(SyncRow(value: ProfileSnapshot(), clientUpdatedAt: t0)))

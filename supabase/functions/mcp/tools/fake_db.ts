@@ -4,9 +4,12 @@ import type {
   BodyweightRow,
   Db,
   ExercisePrefRow,
+  ExerciseRequirementRow,
   ExerciseRow,
   ExerciseSearch,
   ExerciseSession,
+  GymListingRow,
+  GymRow,
   MuscleTargetRow,
   Profile,
   ProposalRow,
@@ -15,6 +18,29 @@ import type {
   WorkoutQuery,
   WorkoutRow,
 } from '../db.ts'
+
+/**
+ * Rows as the tables hold them: author columns and notes included, so a tool that spread a row instead of picking
+ * keys would leak them in the tests.
+ */
+export type FakeGym = GymRow & {
+  status?: string
+  owner_id?: string | null
+  created_by?: string | null
+  /** Public gyms: the owner has a workout there (readable only while mcp_read_workouts is on). */
+  trained?: boolean
+  /** Public gyms: the owner shared a listing there. */
+  shared?: boolean
+}
+export type FakeListing = GymListingRow & {
+  gym_id: string
+  status?: string
+  notes?: string | null
+  added_by?: string | null
+  owner_id?: string | null
+  /** The author is blocked by the owner: RLS hides the row. */
+  blocked?: boolean
+}
 
 export interface FakeData {
   profile: Profile | null
@@ -27,6 +53,9 @@ export interface FakeData {
   proposals?: ProposalRow[]
   prefs?: ExercisePrefRow[]
   targets?: MuscleTargetRow[]
+  gyms?: FakeGym[]
+  listings?: FakeListing[]
+  requirements?: ExerciseRequirementRow[]
 }
 
 const ownerUrl = new URL('../testdata/owner.json', import.meta.url)
@@ -105,13 +134,47 @@ export class FakeDb implements Db {
   }
 
   /** Like public.mcp_flag: the stored flag, true when no profile was saved. */
-  readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean }> {
+  readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }> {
     const p = this.data.profile
     return Promise.resolve({
       plan: p?.mcp_read_plan ?? true,
       workouts: p?.mcp_read_workouts ?? true,
       body: p?.mcp_read_body ?? true,
+      gyms: p?.mcp_read_gyms ?? true,
     })
+  }
+
+  privateGyms(limit: number): Promise<GymRow[]> {
+    if (this.data.profile?.mcp_read_gyms === false) return Promise.resolve([])
+    const rows = (this.data.gyms ?? []).filter((g) => g.visibility === 'private' && g.status !== 'removed')
+    return Promise.resolve(rows.sort((a, b) => a.name.localeCompare(b.name)).slice(0, limit))
+  }
+
+  myPublicGyms(limit: number): Promise<GymRow[]> {
+    const p = this.data.profile
+    const workoutsOn = p?.mcp_read_workouts ?? true
+    const gymsOn = p?.mcp_read_gyms ?? true
+    const rows = (this.data.gyms ?? []).filter((g) =>
+      g.visibility === 'public' && (g.status ?? 'active') === 'active' &&
+      ((g.trained && workoutsOn) || (g.shared && gymsOn))
+    )
+    return Promise.resolve(rows.sort((a, b) => a.name.localeCompare(b.name)).slice(0, limit))
+  }
+
+  readonly listingQueries: string[] = []
+
+  gymListings(gymId: string, limit: number): Promise<GymListingRow[]> {
+    this.listingQueries.push(gymId)
+    const gymsOn = this.data.profile?.mcp_read_gyms ?? true
+    const rows = (this.data.listings ?? []).filter((l) =>
+      l.gym_id === gymId && (l.status ?? 'active') === 'active' && !l.blocked &&
+      (gymsOn || l.visibility === 'public')
+    )
+    return Promise.resolve(rows.slice(0, limit))
+  }
+
+  exerciseRequirements(): Promise<ExerciseRequirementRow[]> {
+    return Promise.resolve(this.data.requirements ?? [])
   }
 
   workoutDates(): Promise<string[]> {

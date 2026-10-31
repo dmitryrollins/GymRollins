@@ -152,7 +152,7 @@ final class ProposalUITests: XCTestCase {
         disconnect.tap()
         app.buttons["claude.disconnect.confirm"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["claude.disconnected"].waitForExistence(timeout: 5))
-        for id in ["readWorkouts", "readBody", "readPlan", "propose", "autoApply"] {
+        for id in ["readWorkouts", "readBody", "readPlan", "readGyms", "propose", "autoApply"] {
             let toggle = app.switches["claude.perm.\(id)"]
             scrollTo(toggle)
             XCTAssertEqual(toggle.value as? String, "0", id)

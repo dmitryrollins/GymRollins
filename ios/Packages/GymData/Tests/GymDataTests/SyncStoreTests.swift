@@ -165,6 +165,7 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         profile.unit = .kg
         profile.platesKg = [25, 20]
         profile.mcpReadPlan = false
+        profile.mcpReadGyms = false
         try f.store.applyRemote(profile: SyncRow(value: profile, clientUpdatedAt: t, serverUpdatedAt: t))
         let ex = Exercise(id: "custom-x", name: "Sled", bodyPart: "legs", equipment: "sled", target: "quads",
                           isCustom: true, mode: .reps, bilateral: true)
@@ -184,6 +185,7 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         #expect(try f.store.dirtyBodyweight().isEmpty)
         #expect(try f.profiles.load().unit == .kg)
         #expect(try f.profiles.load().mcpReadPlan == false)
+        #expect(try f.profiles.load().mcpReadGyms == false)
         #expect(try f.custom.all() == [ex])
         #expect(try f.routines.schedule().days == [1: r.id])
         #expect(try f.body.entries(since: nil) == [bw])

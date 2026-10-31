@@ -454,6 +454,19 @@ language sql stable security definer set search_path = public as $$
   select gym_private.my_gym_data_visible()
     and exists (select 1 from public.gyms where id = gym and created_by = auth.uid())
 $$;
+-- The public gyms the caller shared a listing to, for Claude's list_gyms: added_by can't be selected, and the view's
+-- is_mine would call a function per catalogue row. False for Claude while the gyms flag is off, like the rest.
+create function public.my_shared_gym_ids() returns setof uuid
+language sql stable security definer set search_path = public as $$
+  select distinct e.gym_id
+  from public.gym_equipment e join public.gyms g on g.id = e.gym_id
+  where gym_private.my_gym_data_visible() and e.added_by = auth.uid() and e.visibility = 'public'
+    and e.status = 'active' and g.visibility = 'public' and g.status = 'active'
+  limit 200
+$$;
+revoke execute on function public.my_shared_gym_ids() from public, anon;
+grant execute on function public.my_shared_gym_ids() to authenticated;
+
 revoke execute on function public.is_my_listing(uuid), public.did_i_confirm(uuid), public.is_my_item(uuid),
   public.is_my_gym(uuid) from public;
 grant execute on function public.is_my_listing(uuid), public.did_i_confirm(uuid), public.is_my_item(uuid),

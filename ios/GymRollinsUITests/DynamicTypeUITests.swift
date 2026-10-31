@@ -200,6 +200,22 @@ final class DynamicTypeUITests: XCTestCase {
         screenshot("add-equipment-who-sees-it-ax-xl")
     }
 
+    func testClaudeGymsToggleAtAccessibilityXL() {
+        let app = launch()
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.claude"]
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        row.tapCenter()
+        let gyms = app.switches["claude.perm.readGyms"]
+        XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
+        for _ in 0..<12 where !gyms.isHittable { app.swipeUp() } // rows below the fold aren't built until scrolled to
+        XCTAssertTrue(gyms.isHittable)
+        XCTAssertGreaterThanOrEqual(gyms.frame.height, 44)
+        XCTAssertTrue(app.staticTexts["claude.gymsNote"].exists)
+        screenshot("claude-gyms-ax-xl")
+    }
+
     func testModerationAtAccessibilityXL() {
         let app = launch(extra: ["-fakeGymCatalog", "-fakeSignedIn", "-fakeGymAdmin"])
         app.tabBars.buttons["Log"].tap()

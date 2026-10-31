@@ -48,6 +48,7 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
       read_plan: p.mcp_read_plan,
       read_workouts: p.mcp_read_workouts,
       read_body: p.mcp_read_body,
+      read_gyms: p.mcp_read_gyms,
       propose: p.mcp_propose,
       auto_apply: p.mcp_auto_apply,
     },

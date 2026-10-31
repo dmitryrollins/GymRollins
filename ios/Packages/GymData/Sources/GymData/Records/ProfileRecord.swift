@@ -23,6 +23,7 @@ public final class ProfileRecord {
     public var mcpReadWorkouts: Bool
     public var mcpReadBody: Bool
     public var mcpReadPlan: Bool = true
+    public var mcpReadGyms: Bool = true
     public var mcpPropose: Bool
     public var mcpAutoApply: Bool
     /// `ProfileSex` raw value; nil until the owner sets it (strength levels only).

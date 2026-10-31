@@ -99,7 +99,7 @@ import Testing
     }
 
     @Test func autoApplyDoesTheSame() throws {
-        try env.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, propose: true,
+        try env.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
                                            autoApply: true)
         let pull = try routine("Pull + Shoulders + Triceps")
         try propose([todayChange(ref(pull), on: today)])

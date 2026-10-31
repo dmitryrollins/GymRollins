@@ -15,7 +15,7 @@ import Testing
     /// before `onRemoteChanges` reloads the library, so it must reload it itself.
     @Test func autoApplyAfterPullSeesCustomExercisesPulledInTheSameRound() throws {
         let env = try makeEnv()
-        try env.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, propose: true,
+        try env.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
                                            autoApply: true)
         let routine = try #require(try env.routines.all().first)
         // Written straight to the store, as a pull does: the cached library doesn't know it yet.
@@ -34,16 +34,26 @@ import Testing
 
     @Test func disconnectTurnsEveryPermissionOffEvenWithoutASession() async throws {
         let env = try makeEnv()
-        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, propose: true, autoApply: true)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true, autoApply: true)
         #expect(try await env.disconnectClaude() == 0) // hermetic build: no session, nothing to revoke
         let p = env.profile
-        #expect(!p.mcpReadWorkouts && !p.mcpReadBody && !p.mcpReadPlan && !p.mcpPropose && !p.mcpAutoApply)
+        #expect(!p.mcpReadWorkouts && !p.mcpReadBody && !p.mcpReadPlan && !p.mcpReadGyms && !p.mcpPropose && !p.mcpAutoApply)
     }
 
     @Test func readPlanPermissionIsSavedAndReloaded() throws {
         let env = try makeEnv()
         #expect(env.profile.mcpReadPlan)
-        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: false, propose: true, autoApply: false)
-        #expect(!env.profile.mcpReadPlan && env.profile.mcpReadWorkouts)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: false, readGyms: true, propose: true, autoApply: false)
+        #expect(!env.profile.mcpReadPlan && env.profile.mcpReadWorkouts && env.profile.mcpReadGyms)
+    }
+
+    @Test func gymsPermissionDefaultsOnIsSavedAndReloaded() throws {
+        let env = try makeEnv()
+        #expect(env.profile.mcpReadGyms)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: false, propose: true,
+                                   autoApply: false)
+        #expect(!env.profile.mcpReadGyms && env.profile.mcpReadPlan)
+        env.reloadProfile()
+        #expect(!env.profile.mcpReadGyms)
     }
 }

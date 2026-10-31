@@ -17,6 +17,7 @@ export interface Profile {
   mcp_read_plan: boolean
   mcp_read_workouts: boolean
   mcp_read_body: boolean
+  mcp_read_gyms: boolean
   mcp_propose: boolean
   mcp_auto_apply: boolean
   /** Strength levels only; never returned by get_profile. */
@@ -156,6 +157,36 @@ export interface ExerciseSearch {
   limit: number
 }
 
+/** A gym Claude may see: the owner's private gyms, and public gyms they trained at or shared to. */
+export interface GymRow {
+  id: string
+  visibility: 'public' | 'private'
+  name: string
+  /** Free text: the owner's for a private gym, the first sharer's for a public one (see `is_mine`). */
+  address: string | null
+  /** A public gym the owner created (public.is_my_gym); always false for private gyms. */
+  is_mine: boolean
+}
+
+/** One active listing at a gym. brand/model/notes of other people's listings must never reach the client. */
+export interface GymListingRow {
+  visibility: 'public' | 'private'
+  kind_id: string
+  /** jsonb straight from the table; the tool rebuilds it from known keys. */
+  loads: unknown
+  quantity: number
+  confirm_count: number
+  is_mine: boolean
+  brand: string | null
+  model: string | null
+}
+
+/** `public.exercise_requirements`: groups of kind ids; every group needs a listing of one of its kinds. */
+export interface ExerciseRequirementRow {
+  exercise_id: string
+  groups: unknown
+}
+
 export interface Db {
   profile(): Promise<Profile | null>
   /** Not deleted, ordered by position. */
@@ -171,7 +202,7 @@ export interface Db {
   /** The newest non-deleted weigh-in measured at or before `until`, or null. */
   latestBodyweight(until: string): Promise<BodyweightRow | null>
   /** The owner's MCP read flags (public.mcp_flag), readable even while RLS hides the profile. */
-  readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean }>
+  readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }>
   /** `started_at` of every non-deleted workout, newest first (all of them, paged). */
   workoutDates(): Promise<string[]>
   /** The owner's stored weekly targets (groups without a row use the defaults). */
@@ -193,6 +224,17 @@ export interface Db {
   neverExerciseIds(ids: string[]): Promise<Set<string>>
   /** The subset of `ids` that appear in the owner's logged workouts. */
   performedExerciseIds(ids: string[]): Promise<Set<string>>
+  /** The owner's private gyms (at most `limit`), by name. RLS hides them while mcp_read_gyms is off. */
+  privateGyms(limit: number): Promise<GymRow[]>
+  /**
+   * Public gyms the owner trained at (workouts.gym_id; hidden while mcp_read_workouts is off) or shared a listing to,
+   * at most `limit`, by name. Reveals nothing about the workouts beyond that they happened there.
+   */
+  myPublicGyms(limit: number): Promise<GymRow[]>
+  /** Active listings at one gym visible to the owner (RLS: blocked authors and flagged rows are already out), at most `limit`. */
+  gymListings(gymId: string, limit: number): Promise<GymListingRow[]>
+  /** All of them, paged past PostgREST's response cap. */
+  exerciseRequirements(): Promise<ExerciseRequirementRow[]>
   insertProposal(p: { summary: string; changes: unknown[] }): Promise<{ id: string; created_at: string }>
   proposal(id: string): Promise<ProposalRow | null>
   insertBodyweight(r: { id: string; measured_at: string; w_kg: number; bf_pct?: number }): Promise<void>

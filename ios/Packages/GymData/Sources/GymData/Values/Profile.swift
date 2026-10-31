@@ -19,6 +19,8 @@ public struct Profile: Codable, Sendable, Equatable {
     public let mcpReadBody: Bool
     /// Claude may read the plan (routines, schedule, custom exercises) and this profile.
     public let mcpReadPlan: Bool
+    /// Claude may read the gyms that are synced or shared (never the "This phone only" ones).
+    public let mcpReadGyms: Bool
     public let mcpPropose: Bool
     public let mcpAutoApply: Bool
     /// Optional; only picks the strength-level comparison table. `ProfileRepository.save` never writes it (see
@@ -32,8 +34,8 @@ public struct Profile: Codable, Sendable, Equatable {
                 experience: String = "intermediate", limits: String = "", deloadPct: Double = 0.05,
                 barKg: Double = 20.411656, plateInventory: PlateInventory = .standardLb,
                 dumbbellStepKg: Double = 1.133981, mcpReadWorkouts: Bool = true, mcpReadBody: Bool = true,
-                mcpReadPlan: Bool = true, mcpPropose: Bool = true, mcpAutoApply: Bool = false,
-                sex: ProfileSex? = nil, birthYear: Int? = nil) {
+                mcpReadPlan: Bool = true, mcpReadGyms: Bool = true, mcpPropose: Bool = true,
+                mcpAutoApply: Bool = false, sex: ProfileSex? = nil, birthYear: Int? = nil) {
         self.unit = unit
         self.restSec = restSec
         self.warmupRestSec = warmupRestSec
@@ -50,6 +52,7 @@ public struct Profile: Codable, Sendable, Equatable {
         self.mcpReadWorkouts = mcpReadWorkouts
         self.mcpReadBody = mcpReadBody
         self.mcpReadPlan = mcpReadPlan
+        self.mcpReadGyms = mcpReadGyms
         self.mcpPropose = mcpPropose
         self.mcpAutoApply = mcpAutoApply
         self.sex = sex

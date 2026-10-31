@@ -6,9 +6,12 @@ import type {
   BodyweightRow,
   Db,
   ExercisePrefRow,
+  ExerciseRequirementRow,
   ExerciseRow,
   ExerciseSearch,
   ExerciseSession,
+  GymListingRow,
+  GymRow,
   MuscleTargetRow,
   Profile,
   ProposalRow,
@@ -21,7 +24,7 @@ import { ToolError } from './tools/result.ts'
 
 const PROFILE_COLS =
   'unit, height_cm, goal_weight_kg, goal_date, training_days, experience, limits, deload_pct, ' +
-  'rest_sec, mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_propose, mcp_auto_apply, sex, birth_year'
+  'rest_sec, mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, mcp_propose, mcp_auto_apply, sex, birth_year'
 const SET_COLS = 'position, w_kg, r, sec, min, dist_m, done, warmup, rir, rpe, multiplier'
 const WORKOUT_COLS = `id, started_at, ended_at, paused_sec, routine_id, name, note, ` +
   `workout_entries(exercise_id, position, note, superset_group, workout_sets(${SET_COLS}))`
@@ -32,6 +35,9 @@ const MAX_SESSIONS = 60
 const MAX_ROWS = 1000
 const MAX_QUERY_WORDS = 6
 const PREF_PAGE = 500
+/** Distinct public gyms looked up at once (keeps the request URL short). */
+const MAX_GYM_IDS = 200
+const MAX_REQUIREMENT_ROWS = 5000
 /** Upper bound on workout dates read for streaks (~40 years of daily training). */
 const MAX_DATE_ROWS = 15_000
 
@@ -140,13 +146,19 @@ export class SupabaseDb implements Db {
     return (unwrap(await q) as BodyweightRow[])[0] ?? null
   }
 
-  async readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean }> {
-    const [plan, workouts, body] = await Promise.all([
+  async readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }> {
+    const [plan, workouts, body, gyms] = await Promise.all([
       this.client.rpc('mcp_flag', { flag: 'plan' }),
       this.client.rpc('mcp_flag', { flag: 'workouts' }),
       this.client.rpc('mcp_flag', { flag: 'body' }),
+      this.client.rpc('mcp_flag', { flag: 'gyms' }),
     ])
-    return { plan: unwrap(plan) === true, workouts: unwrap(workouts) === true, body: unwrap(body) === true }
+    return {
+      plan: unwrap(plan) === true,
+      workouts: unwrap(workouts) === true,
+      body: unwrap(body) === true,
+      gyms: unwrap(gyms) === true,
+    }
   }
 
   async workoutDates(): Promise<string[]> {
@@ -219,6 +231,87 @@ export class SupabaseDb implements Db {
     if (ids.length === 0) return new Set()
     const q = this.client.from('workout_entries').select('exercise_id').in('exercise_id', ids).limit(MAX_ROWS)
     return new Set((unwrap(await q) as { exercise_id: string }[]).map((r) => r.exercise_id))
+  }
+
+  async privateGyms(limit: number): Promise<GymRow[]> {
+    const q = this.client.from('gyms').select('id, visibility, name, address').eq('visibility', 'private')
+      .is('deleted_at', null).eq('status', 'active').order('name').order('id').limit(limit)
+    return (unwrap(await q) as Omit<GymRow, 'is_mine'>[]).map((g) => ({ ...g, is_mine: false }))
+  }
+
+  async myPublicGyms(limit: number): Promise<GymRow[]> {
+    const [shared, trained] = await Promise.all([
+      this.client.rpc('my_shared_gym_ids'),
+      this.trainedGymIds(),
+    ])
+    const ids = [...new Set([...(unwrap(shared) as string[] | null ?? []), ...trained])].slice(0, MAX_GYM_IDS)
+    if (ids.length === 0) return []
+    const q = this.client.from('public_gyms').select('id, name, address, is_mine').in('id', ids)
+      .eq('status', 'active').order('name').order('id').limit(limit)
+    return (unwrap(await q) as Omit<GymRow, 'visibility'>[]).map((g) => ({
+      ...g,
+      visibility: 'public' as const,
+    }))
+  }
+
+  /** Newest first, so the cap keeps the gyms trained at lately. Only the gym id leaves the workouts table. */
+  private async trainedGymIds(): Promise<string[]> {
+    const rows = await collectPages(MAX_ROWS, MAX_DATE_ROWS, async (from, to) => {
+      const q = this.client.from('workouts').select('gym_id').not('gym_id', 'is', null).is('deleted_at', null)
+        .order('started_at', { ascending: false }).order('id').range(from, to)
+      return unwrap(await q) as { gym_id: string }[]
+    })
+    return [...new Set(rows.map((r) => r.gym_id))]
+  }
+
+  async gymListings(gymId: string, limit: number): Promise<GymListingRow[]> {
+    // Public listings through the view (RLS drops blocked authors and flagged rows for Claude; notes aren't selected),
+    // private ones from the table (RLS: the owner's own, only while the gyms flag is on).
+    const [pub, priv] = await Promise.all([
+      this.client.from('public_gym_equipment').select(
+        'kind_id, brand, model, loads, quantity, confirm_count, is_mine',
+      )
+        .eq('gym_id', gymId).eq('status', 'active').order('confirm_count', { ascending: false }).order('id')
+        .limit(limit),
+      this.client.from('gym_equipment')
+        .select('loads, quantity, confirm_count, private_brand, private_model, equipment_items(kind_id)')
+        .eq('gym_id', gymId).eq('visibility', 'private').eq('status', 'active').is('deleted_at', null)
+        .order('id').limit(limit),
+    ])
+    const publicRows = (unwrap(pub) as Omit<GymListingRow, 'visibility'>[]).map((r) => ({
+      ...r,
+      visibility: 'public' as const,
+    }))
+    const privateRows = (unwrap(priv) as unknown as {
+      loads: unknown
+      quantity: number
+      confirm_count: number
+      private_brand: string | null
+      private_model: string | null
+      equipment_items: { kind_id: string } | null
+    }[]).flatMap((r) =>
+      r.equipment_items
+        ? [{
+          visibility: 'private' as const,
+          kind_id: r.equipment_items.kind_id,
+          loads: r.loads,
+          quantity: r.quantity,
+          confirm_count: r.confirm_count,
+          is_mine: true,
+          brand: r.private_brand,
+          model: r.private_model,
+        }]
+        : []
+    )
+    return [...privateRows, ...publicRows].slice(0, limit)
+  }
+
+  async exerciseRequirements(): Promise<ExerciseRequirementRow[]> {
+    return await collectPages(MAX_ROWS, MAX_REQUIREMENT_ROWS, async (from, to) => {
+      const q = this.client.from('exercise_requirements').select('exercise_id, groups').order('exercise_id')
+        .range(from, to)
+      return unwrap(await q) as ExerciseRequirementRow[]
+    })
   }
 
   async insertProposal(

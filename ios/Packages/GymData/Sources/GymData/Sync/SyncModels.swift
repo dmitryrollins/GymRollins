@@ -81,6 +81,7 @@ public struct ProfileSnapshot: Sendable, Equatable {
     public var mcpReadWorkouts = true
     public var mcpReadBody = true
     public var mcpReadPlan = true
+    public var mcpReadGyms = true
     public var mcpPropose = true
     public var mcpAutoApply = false
     public var sex: ProfileSex?

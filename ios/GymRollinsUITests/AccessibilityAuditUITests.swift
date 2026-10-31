@@ -62,6 +62,11 @@ final class AccessibilityAuditUITests: XCTestCase {
             // Raised against system chrome with no element (status bar, scroll-edge effect views).
             return "system chrome"
         }
+        // The connector URL is read out literally on purpose: it is what the user pastes into Claude, and the screenshot
+        // shows the whole address in a monospaced line above its "Copy URL" button.
+        if element.identifier == "claude.url", issue.compactDescription.contains("human-readable") {
+            return "a URL read literally"
+        }
         let type = element.elementType
         let frame = element.frame
         switch issue.auditType {
@@ -169,6 +174,20 @@ final class AccessibilityAuditUITests: XCTestCase {
         app.buttons["log.settings"].tap()
         XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 5))
         audit(app, "Settings")
+    }
+
+    func testClaudeConnectionAudit() {
+        let app = launch()
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.claude"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        let gyms = app.switches["claude.perm.readGyms"]
+        for _ in 0..<6 where !gyms.isHittable { app.swipeUp() }
+        XCTAssertTrue(gyms.isHittable)
+        XCTAssertEqual(gyms.value as? String, "1")
+        audit(app, "Claude connection")
     }
 
     func testModerationAudit() {

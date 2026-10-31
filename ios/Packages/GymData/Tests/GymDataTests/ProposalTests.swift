@@ -131,10 +131,11 @@ struct ProposalFixture {
     @Test func mcpPermissionsUpdateOnlyThoseFields() throws {
         try f.profiles.save(Profile(unit: .kg, restSec: 90))
         #expect(try f.profiles.load().mcpReadPlan) // default on
-        try f.profiles.setMcpPermissions(readWorkouts: false, readBody: true, readPlan: false, propose: false,
+        #expect(try f.profiles.load().mcpReadGyms) // default on
+        try f.profiles.setMcpPermissions(readWorkouts: false, readBody: true, readPlan: false, readGyms: false, propose: false,
                                          autoApply: true)
         let p = try f.profiles.load()
-        #expect(!p.mcpReadWorkouts && p.mcpReadBody && !p.mcpReadPlan && !p.mcpPropose && p.mcpAutoApply)
+        #expect(!p.mcpReadWorkouts && p.mcpReadBody && !p.mcpReadPlan && !p.mcpReadGyms && !p.mcpPropose && p.mcpAutoApply)
         #expect(p.unit == .kg && p.restSec == 90)
     }
 

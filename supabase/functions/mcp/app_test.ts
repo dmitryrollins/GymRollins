@@ -57,7 +57,7 @@ Deno.test('POST without or with a bad token → 401 with the metadata pointer', 
   }
 })
 
-Deno.test('initialize and tools/list: 13 tools with titles and annotations', async () => {
+Deno.test('initialize and tools/list: 15 tools with titles and annotations', async () => {
   const { app, clientIds } = await setup()
   const init = await readRpc(await app(rpcRequest(URL_MCP, initializeBody(), TOKEN)))
   assertEquals(init.result.serverInfo.name, 'gymrollins')
@@ -70,7 +70,7 @@ Deno.test('initialize and tools/list: 13 tools with titles and annotations', asy
     description: string
     annotations: Record<string, boolean>
   }[]
-  assertEquals(tools.length, 13)
+  assertEquals(tools.length, 15)
   const writes = ['propose_plan_changes', 'log_bodyweight']
   for (const t of tools) {
     assert(t.title && t.description.length > 20, t.name)

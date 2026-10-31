@@ -21,6 +21,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
     public let mcpReadWorkouts: Bool
     public let mcpReadBody: Bool
     public let mcpReadPlan: Bool
+    public let mcpReadGyms: Bool
     public let mcpPropose: Bool
     public let mcpAutoApply: Bool
     /// `male` / `female` or null (strength levels only).
@@ -35,9 +36,37 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         case goalWeightKg = "goal_weight_kg", goalDate = "goal_date", trainingDays = "training_days"
         case deloadPct = "deload_pct", barKg = "bar_kg", platesKg = "plates_kg", dumbbellStepKg = "dumbbell_step_kg"
         case mcpReadWorkouts = "mcp_read_workouts", mcpReadBody = "mcp_read_body", mcpPropose = "mcp_propose"
-        case mcpReadPlan = "mcp_read_plan"
+        case mcpReadPlan = "mcp_read_plan", mcpReadGyms = "mcp_read_gyms"
         case sex, birthYear = "birth_year"
         case mcpAutoApply = "mcp_auto_apply", clientUpdatedAt = "client_updated_at", updatedAt = "updated_at"
+    }
+
+    /// Synthesized decoding, except that a row without `mcp_read_gyms` reads as on, the column's default.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        unit = try c.decode(String.self, forKey: .unit)
+        restSec = try c.decode(Int.self, forKey: .restSec)
+        warmupRestSec = try c.decode(Int.self, forKey: .warmupRestSec)
+        heightCm = try c.decodeIfPresent(Double.self, forKey: .heightCm)
+        goalWeightKg = try c.decodeIfPresent(Double.self, forKey: .goalWeightKg)
+        goalDate = try c.decodeIfPresent(String.self, forKey: .goalDate)
+        trainingDays = try c.decode(Int.self, forKey: .trainingDays)
+        experience = try c.decode(String.self, forKey: .experience)
+        limits = try c.decode(String.self, forKey: .limits)
+        deloadPct = try c.decode(Double.self, forKey: .deloadPct)
+        barKg = try c.decode(Double.self, forKey: .barKg)
+        platesKg = try c.decode([Double].self, forKey: .platesKg)
+        dumbbellStepKg = try c.decode(Double.self, forKey: .dumbbellStepKg)
+        mcpReadWorkouts = try c.decode(Bool.self, forKey: .mcpReadWorkouts)
+        mcpReadBody = try c.decode(Bool.self, forKey: .mcpReadBody)
+        mcpReadPlan = try c.decode(Bool.self, forKey: .mcpReadPlan)
+        mcpReadGyms = try c.decodeIfPresent(Bool.self, forKey: .mcpReadGyms) ?? true
+        mcpPropose = try c.decode(Bool.self, forKey: .mcpPropose)
+        mcpAutoApply = try c.decode(Bool.self, forKey: .mcpAutoApply)
+        sex = try c.decodeIfPresent(String.self, forKey: .sex)
+        birthYear = try c.decodeIfPresent(Int.self, forKey: .birthYear)
+        clientUpdatedAt = try c.decode(Date.self, forKey: .clientUpdatedAt)
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 
     public init(_ row: SyncRow<ProfileSnapshot>) {
@@ -58,6 +87,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         mcpReadWorkouts = p.mcpReadWorkouts
         mcpReadBody = p.mcpReadBody
         mcpReadPlan = p.mcpReadPlan
+        mcpReadGyms = p.mcpReadGyms
         mcpPropose = p.mcpPropose
         mcpAutoApply = p.mcpAutoApply
         sex = p.sex?.rawValue
@@ -84,6 +114,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         p.mcpReadWorkouts = mcpReadWorkouts
         p.mcpReadBody = mcpReadBody
         p.mcpReadPlan = mcpReadPlan
+        p.mcpReadGyms = mcpReadGyms
         p.mcpPropose = mcpPropose
         p.mcpAutoApply = mcpAutoApply
         p.sex = sex.flatMap(ProfileSex.init(rawValue:))
@@ -111,6 +142,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         try c.encode(mcpReadWorkouts, forKey: .mcpReadWorkouts)
         try c.encode(mcpReadBody, forKey: .mcpReadBody)
         try c.encode(mcpReadPlan, forKey: .mcpReadPlan)
+        try c.encode(mcpReadGyms, forKey: .mcpReadGyms)
         try c.encode(mcpPropose, forKey: .mcpPropose)
         try c.encode(mcpAutoApply, forKey: .mcpAutoApply)
         try c.encode(sex, forKey: .sex)

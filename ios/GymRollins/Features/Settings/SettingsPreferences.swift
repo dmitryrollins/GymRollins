@@ -28,7 +28,7 @@ extension Profile {
     func with(unit: WeightUnit? = nil, restSec: Int? = nil, warmupRestSec: Int? = nil, deloadPct: Double? = nil,
              barKg: Double? = nil, plateInventory: PlateInventory? = nil, dumbbellStepKg: Double? = nil,
              mcpReadWorkouts: Bool? = nil, mcpReadBody: Bool? = nil, mcpReadPlan: Bool? = nil,
-             mcpPropose: Bool? = nil, mcpAutoApply: Bool? = nil) -> Profile {
+             mcpReadGyms: Bool? = nil, mcpPropose: Bool? = nil, mcpAutoApply: Bool? = nil) -> Profile {
         Profile(unit: unit ?? self.unit, restSec: restSec ?? self.restSec,
                warmupRestSec: warmupRestSec ?? self.warmupRestSec, heightCm: heightCm, goalWeightKg: goalWeightKg,
                goalDate: goalDate, trainingDays: trainingDays, experience: experience, limits: limits,
@@ -36,7 +36,8 @@ extension Profile {
                plateInventory: plateInventory ?? self.plateInventory,
                dumbbellStepKg: dumbbellStepKg ?? self.dumbbellStepKg,
                mcpReadWorkouts: mcpReadWorkouts ?? self.mcpReadWorkouts, mcpReadBody: mcpReadBody ?? self.mcpReadBody,
-               mcpReadPlan: mcpReadPlan ?? self.mcpReadPlan, mcpPropose: mcpPropose ?? self.mcpPropose,
+               mcpReadPlan: mcpReadPlan ?? self.mcpReadPlan,
+               mcpReadGyms: mcpReadGyms ?? self.mcpReadGyms, mcpPropose: mcpPropose ?? self.mcpPropose,
                mcpAutoApply: mcpAutoApply ?? self.mcpAutoApply)
     }
 }

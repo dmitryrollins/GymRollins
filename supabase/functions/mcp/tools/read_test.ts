@@ -38,6 +38,7 @@ Deno.test('get_profile: unit, goal with display, limits, permissions', async () 
     read_plan: true,
     read_workouts: true,
     read_body: true,
+    read_gyms: true,
     propose: true,
     auto_apply: false,
   })

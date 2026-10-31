@@ -162,7 +162,7 @@ struct ProfileSetupView: View {
                               deloadPct: current.deloadPct, barKg: current.barKg, plateInventory: current.plateInventory,
                               dumbbellStepKg: current.dumbbellStepKg, mcpReadWorkouts: current.mcpReadWorkouts,
                               mcpReadBody: current.mcpReadBody, mcpReadPlan: current.mcpReadPlan,
-                              mcpPropose: current.mcpPropose, mcpAutoApply: current.mcpAutoApply)
+                              mcpReadGyms: current.mcpReadGyms, mcpPropose: current.mcpPropose, mcpAutoApply: current.mcpAutoApply)
         do {
             try env.profiles.save(profile)
             weighInId = try OnboardingWeighIn.save(weightKg: input.bodyweightKg, date: env.now(), reusing: weighInId,

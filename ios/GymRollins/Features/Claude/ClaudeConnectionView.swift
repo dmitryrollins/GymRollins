@@ -9,11 +9,12 @@ struct ClaudeConnectionView: View {
         var readWorkouts = true
         var readBody = true
         var readPlan = true
+        var readGyms = true
         var propose = true
         var autoApply = false
 
-        static let none = Permissions(readWorkouts: false, readBody: false, readPlan: false, propose: false,
-                                      autoApply: false)
+        static let none = Permissions(readWorkouts: false, readBody: false, readPlan: false, readGyms: false,
+                                      propose: false, autoApply: false)
     }
 
     @Environment(AppEnvironment.self) private var env
@@ -113,13 +114,19 @@ struct ClaudeConnectionView: View {
             Toggle("Read bodyweight", isOn: $permissions.readBody).accessibilityIdentifier("claude.perm.readBody")
             Toggle("Read your plan and profile", isOn: $permissions.readPlan)
                 .accessibilityIdentifier("claude.perm.readPlan")
+            Toggle("Gyms", isOn: $permissions.readGyms).accessibilityIdentifier("claude.perm.readGyms")
             Toggle("Propose plan changes", isOn: $permissions.propose).accessibilityIdentifier("claude.perm.propose")
             Toggle("Apply changes without asking", isOn: $permissions.autoApply)
                 .accessibilityIdentifier("claude.perm.autoApply")
         } header: {
             Text("What Claude can do")
         } footer: {
-            Text("Applied changes can be undone for 7 days.")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Claude can read gyms you've synced or shared. \"This phone only\" gyms stay on your phone, so "
+                     + "Claude can't see them.")
+                    .accessibilityIdentifier("claude.gymsNote")
+                Text("Applied changes can be undone for 7 days.")
+            }
         }
         .tint(Theme.primaryFill)
     }
@@ -158,14 +165,14 @@ struct ClaudeConnectionView: View {
 
     private static func permissions(_ p: Profile) -> Permissions {
         Permissions(readWorkouts: p.mcpReadWorkouts, readBody: p.mcpReadBody, readPlan: p.mcpReadPlan,
-                    propose: p.mcpPropose, autoApply: p.mcpAutoApply)
+                    readGyms: p.mcpReadGyms, propose: p.mcpPropose, autoApply: p.mcpAutoApply)
     }
 
     private func save(_ new: Permissions) {
         guard loaded, new != Self.permissions(env.profile) else { return }
         do {
             try env.saveMcpPermissions(readWorkouts: new.readWorkouts, readBody: new.readBody, readPlan: new.readPlan,
-                                       propose: new.propose, autoApply: new.autoApply)
+                                       readGyms: new.readGyms, propose: new.propose, autoApply: new.autoApply)
             error = nil
         } catch {
             AppEnvironment.log.error("Save Claude permissions failed: \(error.localizedDescription, privacy: .public)")

@@ -12,6 +12,7 @@
     "mcp_read_plan": true,
     "mcp_read_workouts": true,
     "mcp_read_body": true,
+    "mcp_read_gyms": true,
     "mcp_propose": true,
     "mcp_auto_apply": false
   },

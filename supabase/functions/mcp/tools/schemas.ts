@@ -88,6 +88,7 @@ export const schemas = {
     ),
   }),
   strengthLevels: z.object({}),
+  gymEquipment: z.object({ gym_id: uuid.describe('A gym id from list_gyms') }),
   searchExercises: z.object({
     query: z.string().max(100).optional().describe('Words that must all appear in the name'),
     body_part: z.string().max(40).optional().describe(

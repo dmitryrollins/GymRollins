@@ -23,7 +23,8 @@ public final class ProfileRepository {
                                                       bar: UnitConverter.fromKg(r.barKg, to: unit).rounded(toPlaces: 2),
                                                       plates: r.platesKg.map { UnitConverter.fromKg($0, to: unit).rounded(toPlaces: 2) }),
                        dumbbellStepKg: r.dumbbellStepKg, mcpReadWorkouts: r.mcpReadWorkouts, mcpReadBody: r.mcpReadBody,
-                       mcpReadPlan: r.mcpReadPlan, mcpPropose: r.mcpPropose, mcpAutoApply: r.mcpAutoApply,
+                       mcpReadPlan: r.mcpReadPlan, mcpReadGyms: r.mcpReadGyms, mcpPropose: r.mcpPropose,
+                       mcpAutoApply: r.mcpAutoApply,
                        sex: r.sexRaw.flatMap(ProfileSex.init(rawValue:)), birthYear: r.birthYear)
     }
 
@@ -56,6 +57,7 @@ public final class ProfileRepository {
         r.mcpReadWorkouts = p.mcpReadWorkouts
         r.mcpReadBody = p.mcpReadBody
         r.mcpReadPlan = p.mcpReadPlan
+        r.mcpReadGyms = p.mcpReadGyms
         r.mcpPropose = p.mcpPropose
         r.mcpAutoApply = p.mcpAutoApply
         r.updatedAt = now()
@@ -83,8 +85,8 @@ public final class ProfileRepository {
     }
 
     /// Updates only Claude's permissions (no other field is rewritten), creating the profile if needed.
-    public func setMcpPermissions(readWorkouts: Bool, readBody: Bool, readPlan: Bool, propose: Bool,
-                                  autoApply: Bool) throws {
+    public func setMcpPermissions(readWorkouts: Bool, readBody: Bool, readPlan: Bool, readGyms: Bool,
+                                  propose: Bool, autoApply: Bool) throws {
         let r = try record() ?? {
             let new = ProfileRecord(now: now())
             context.insert(new)
@@ -93,6 +95,7 @@ public final class ProfileRepository {
         r.mcpReadWorkouts = readWorkouts
         r.mcpReadBody = readBody
         r.mcpReadPlan = readPlan
+        r.mcpReadGyms = readGyms
         r.mcpPropose = propose
         r.mcpAutoApply = autoApply
         r.updatedAt = now()
