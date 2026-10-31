@@ -87,19 +87,53 @@ import Testing
         #expect(try record(listing.id).uploadStateRaw == UploadState.uploaded.rawValue)
     }
 
-    @Test func aMissingPhotoOnTheServerIsUploadedAgain() async throws {
+    @Test func aMissingPhotoOnTheServerIsUploadedAgainInTheSameRun() async throws {
         defer { f.tearDown() }
         let listing = try newListing(try mapsGym())
         let box = outbox
         try box.enqueueShare(listingId: listing.id, ownerId: user)
         transport.shareScript = [.failure(.photoMissing)]
         await box.run(userId: user)
-        #expect(try record(listing.id).remotePhotoPath == nil)
-        #expect(box.pendingCount == 1)
-        await box.run(userId: user)
         #expect(transport.uploads.count == 2)
         #expect(transport.uploads[0] != transport.uploads[1])
         #expect(try record(listing.id).remotePhotoPath == transport.uploads[1])
+        #expect(try record(listing.id).uploadStateRaw == UploadState.uploaded.rawValue)
+        #expect(box.pendingCount == 0)
+    }
+
+    @Test func aPhotoTheServerKeepsLosingIsTriedTwiceAndThenLeftForTheNextRun() async throws {
+        defer { f.tearDown() }
+        let listing = try newListing(try mapsGym())
+        let box = outbox
+        try box.enqueueShare(listingId: listing.id, ownerId: user)
+        transport.shareScript = Array(repeating: .failure(.photoMissing), count: 4)
+        await box.run(userId: user)
+        #expect(transport.requests.count == 2, "it must not spin on a row it can't send")
+        #expect(box.pendingCount == 1)
+        #expect(try record(listing.id).uploadStateRaw == UploadState.queued.rawValue)
+        await box.run(userId: user)
+        #expect(box.pendingCount == 1, "the next run tries again, twice")
+        #expect(transport.requests.count == 4)
+    }
+
+    @Test func aShareQueuedWhileARunIsGoingIsSentByThatRun() async throws {
+        defer { f.tearDown() }
+        let gated = GatedGymCatalogTransport()
+        gated.inner.gym = RemoteGym(id: serverGymId, name: "S", address: nil, latitude: nil, longitude: nil,
+                                    mapsPlaceId: "P1")
+        let gym = try repo.addMapsGym(placeId: "P1", name: "G", address: nil, latitude: 1, longitude: 2)
+        let first = try newListing(gym), second = try repo.addListing(NewListing(gymId: gym.id, kindId: "dumbbells"))
+        let box = ShareOutbox(repository: repo, transport: gated, photoData: { _ in Data("j".utf8) },
+                              now: { [clock = f.clock] in clock.now })
+        try box.enqueueShare(listingId: first.id, ownerId: user)
+        gated.hold("share")
+        let run = Task { await box.run(userId: user) }
+        await gated.waitUntilSuspended("share")
+        f.clock.advance()
+        try box.enqueueShare(listingId: second.id, ownerId: user)
+        gated.release()
+        await run.value
+        #expect(gated.inner.requests.map(\.listingId) == [first.id, second.id])
         #expect(box.pendingCount == 0)
     }
 

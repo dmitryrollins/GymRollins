@@ -22,6 +22,12 @@ final class GymSharing {
         self.client = GymCatalogClient(repository: repository, transport: transport, knownKinds: knownKinds, now: now)
         self.outbox = ShareOutbox(repository: repository, transport: transport, photoData: photoData, now: now)
     }
+
+    /// The session is ending or changing: requests still on the wire must not touch the rows when they come back.
+    func invalidate() {
+        client.invalidate()
+        outbox.invalidate()
+    }
 }
 
 /// Stands in when the build has no Supabase config: reads find nothing, writes need an account.
@@ -70,6 +76,7 @@ extension AppEnvironment {
     /// Called once from `init`: a sign-in lets the queued shares go.
     func wireGymSharing() {
         sync.onGymIdsMoved = { [weak self] moves in self?.gymIdsMoved(moves) }
+        sync.onSessionEnding = { [weak self] in self?.gymSharing.invalidate() }
         sync.onSignedIn = { [weak self] in
             guard let self else { return }
             Task { await self.runShareOutbox() }

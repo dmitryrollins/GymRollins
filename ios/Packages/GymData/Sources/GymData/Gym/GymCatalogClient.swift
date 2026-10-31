@@ -22,6 +22,7 @@ public final class GymCatalogClient {
     private let transport: GymCatalogTransport
     private let knownKinds: Set<String>
     private let now: () -> Date
+    private var generation = 0
 
     public init(repository: GymRepository, transport: GymCatalogTransport, knownKinds: Set<String>,
                 now: @escaping () -> Date) {
@@ -31,6 +32,10 @@ public final class GymCatalogClient {
         self.now = now
     }
 
+    /// Called when the session ends or changes, before the rows are wiped. A refresh waiting on the server returns
+    /// without touching any row: what it was told is about a session that is gone.
+    public func invalidate() { generation += 1 }
+
     /// Returns the photo paths to download and the local files to delete. Offline leaves the cache as it is.
     public func refresh(gymId: UUID, force: Bool) async throws -> CatalogRefresh {
         guard let gym = try repository.gymRecord(gymId) else { throw GymDataError.invalidInput("Unknown gym.") }
@@ -38,14 +43,18 @@ public final class GymCatalogClient {
         if !force, let last = gym.catalogRefreshedAt, now().timeIntervalSince(last) < Self.refreshInterval {
             return .empty
         }
+        let token = generation
         do {
-            guard let serverId = try await serverGymId(gym, placeId: placeId) else {
+            let known = try await serverGymId(gym, placeId: placeId, token: token)
+            guard token == generation else { return .empty }
+            guard let serverId = known else {
                 try stamp(gym)
                 return .empty
             }
             let remote = try await transport.publicListings(gymId: serverId)
+            guard token == generation else { return .empty }
             let result = try apply(remote.listings, to: gym, complete: remote.isComplete && !knownKinds.isEmpty)
-            try await refreshCataloguePhotos(gymId: gym.id)
+            try await refreshCataloguePhotos(gymId: gym.id, token: token)
             return result
         } catch GymCatalogError.offline {
             return .empty
@@ -88,12 +97,13 @@ public final class GymCatalogClient {
 
     /// One `publicItems` call per kind that has a listing here without its own picture. A failed call keeps the
     /// pictures already cached: the next refresh asks again.
-    private func refreshCataloguePhotos(gymId: UUID) async throws {
+    private func refreshCataloguePhotos(gymId: UUID, token: Int) async throws {
         let context = repository.context
         let rows = (try? context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.gymId == gymId }))) ?? []
         let kinds = Set(rows.filter { $0.photoFile == nil }.map(\.kindId))
         for kind in kinds.sorted() {
             guard let items = try? await transport.publicItems(kindId: kind) else { continue }
+            guard token == generation else { return }
             for remote in items {
                 let id = remote.id
                 guard let record = try? context.fetch(
@@ -105,9 +115,9 @@ public final class GymCatalogClient {
         try context.save()
     }
 
-    private func serverGymId(_ gym: GymRecord, placeId: String) async throws -> UUID? {
+    private func serverGymId(_ gym: GymRecord, placeId: String, token: Int) async throws -> UUID? {
         if let known = gym.remoteId { return known }
-        guard let found = try await transport.publicGym(mapsPlaceId: placeId) else { return nil }
+        guard let found = try await transport.publicGym(mapsPlaceId: placeId), token == generation else { return nil }
         // Only the id comes from the server: the first sharer set its name, and Apple Maps' name is the one shown here.
         gym.remoteId = found.id
         return found.id

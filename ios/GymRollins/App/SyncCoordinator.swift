@@ -48,6 +48,9 @@ final class SyncCoordinator {
     /// Called once a sign-in or a restored session has settled and the account owns this phone's data: queued shares
     /// can go.
     @ObservationIgnored var onSignedIn: @MainActor () -> Void = {}
+    /// Called when the session is about to end or change (sign-out, account deletion or switch, a revoked session), before
+    /// anything is wiped: work waiting on the server for the old session must not touch the rows when it comes back.
+    @ObservationIgnored var onSessionEnding: @MainActor () -> Void = {}
     /// Called when gyms got new ids (their old and new id): a sign-in as another account gave the phone's "This phone
     /// only" gyms ids of their own, or a pull found a gym deleted elsewhere that still held equipment kept here.
     @ObservationIgnored var onGymIdsMoved: @MainActor ([UUID: UUID]) -> Void = { _ in }
@@ -195,12 +198,14 @@ final class SyncCoordinator {
     /// Signs out and removes this iPhone's copy of the data (the caller confirms first; the data stays in the
     /// account).
     func signOutAndRemoveLocalData() async throws {
+        onSessionEnding()
         try await auth?.signOut()
         accountSwitchPending = false
         try await wipeLocal()
     }
 
     func deleteAccount() async throws {
+        onSessionEnding()
         try await auth?.deleteAccount()
         accountSwitchPending = false
         try await wipeLocal(erasingGyms: true)
@@ -250,6 +255,7 @@ final class SyncCoordinator {
     private func authChangedElsewhere(_ state: AuthState) {
         Task {
             if state == .signedOut {
+                onSessionEnding()
                 accountSwitchPending = false
                 await dropEngine()
             } else if engine == nil, !accountSwitchPending {
@@ -269,6 +275,7 @@ final class SyncCoordinator {
     /// Stops any running round first, so a late response can't write the old account's rows back.
     /// "This phone only" gyms and anything not yet on the server survive; the rest of the gym data goes (decision 9).
     private func wipeLocal(erasingGyms: Bool = false) async throws {
+        onSessionEnding()
         await dropEngine()
         if erasingGyms {
             try store.resetAll()

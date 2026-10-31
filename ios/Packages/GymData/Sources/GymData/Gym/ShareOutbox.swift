@@ -15,6 +15,8 @@ public final class ShareOutbox {
     private let photoData: (String) -> Data?
     private let now: () -> Date
     private var running = false
+    private var runAgainFor: UUID?
+    private var generation = 0
 
     /// The last error from reading or saving the queue itself, for the caller to log.
     public private(set) var storageError: Error?
@@ -90,53 +92,99 @@ public final class ShareOutbox {
 
     // MARK: - Running
 
-    /// Runs the signed-in user's rows oldest first. Stops at the first offline error; other errors are per row.
+    /// Called when the session ends or changes (sign-out, account switch, Erase All), before the rows are wiped.
+    /// A run that is waiting on the server stops when the answer comes back, without touching any row: the answer
+    /// belongs to a session that is gone. For the same account that is safe, because the server's side of a share
+    /// or a confirmation is idempotent (the listing id is the phone's own), so the share just happens again later.
+    public func invalidate() { generation += 1 }
+
+    /// Runs the signed-in user's rows, oldest first, until a pass finds nothing left to send: a share queued while
+    /// the run was going is sent by it too. Stops at the first offline or signed-out answer; other errors settle
+    /// their row. A call made while a run is going returns at once, and the run makes sure it was heard.
     public func run(userId: UUID?) async {
-        guard let userId, !running else { return }
+        guard let userId else { return }
+        guard !running else {
+            runAgainFor = userId
+            return
+        }
         running = true
         defer { running = false }
+        var next: UUID? = userId
+        while let user = next {
+            runAgainFor = nil
+            await drain(userId: user)
+            next = runAgainFor
+        }
+    }
+
+    private enum Outcome { case next, stop }
+
+    /// A row that stays queued after being tried (a photo the server lost) is tried twice in a run, then left for
+    /// the next one, so a row that can't go through never keeps the run spinning.
+    private static let attemptsPerRun = 2
+
+    private func drain(userId: UUID) async {
+        let token = generation
+        var attempts: [UUID: Int] = [:]
         do {
-            for row in try rows() where row.ownerId == userId {
-                if try await process(row) == .stop { return }
+            while token == generation, let row = try nextRow(for: userId, attempts: attempts) {
+                attempts[row.id, default: 0] += 1
+                if try await process(row, token: token) == .stop { return }
             }
         } catch {
             storageError = error
         }
     }
 
-    private enum Outcome { case next, stop }
+    private func nextRow(for userId: UUID, attempts: [UUID: Int]) throws -> ShareOutboxRecord? {
+        try rows().first { $0.ownerId == userId && attempts[$0.id, default: 0] < Self.attemptsPerRun }
+    }
 
-    private func process(_ row: ShareOutboxRecord) async throws -> Outcome {
+    /// Thrown after an await when the session changed meanwhile: the run ends without touching anything.
+    private struct SessionChanged: Error {}
+
+    private func ensureCurrent(_ token: Int) throws {
+        if token != generation { throw SessionChanged() }
+    }
+
+    private func process(_ row: ShareOutboxRecord, token: Int) async throws -> Outcome {
         do {
             switch Kind(rawValue: row.kindRaw) {
-            case .share: try await share(row)
-            case .confirm: try await confirm(row)
+            case .share: try await share(row, token: token)
+            case .confirm: try await confirm(row, token: token)
             case nil: context.delete(row); try context.save()
             }
             return .next
+        } catch is SessionChanged {
+            return .stop
+        } catch is CancellationError {
+            return .stop
         } catch GymCatalogError.offline, GymCatalogError.signedOut {
             return .stop
         } catch {
+            guard token == generation else { return .stop }
             try settle(row, error)
             return .next
         }
     }
 
-    private func share(_ row: ShareOutboxRecord) async throws {
+    private func share(_ row: ShareOutboxRecord, token: Int) async throws {
         guard let listing = try repository.listingRecord(row.targetId),
               let gym = try repository.gymRecord(listing.gymId) else {
             context.delete(row)
             try context.save()
             return
         }
-        let gymId = try await serverId(of: gym)
-        let photo = try await uploadedPhoto(of: listing)
+        let gymId = try await serverId(of: gym, token: token)
+        let photo = try await uploadedPhoto(of: listing, token: token)
         let item = try itemRecord(listing.itemId)
         let loads = try JSONDecoder().decode(ListingLoads.self, from: listing.loadsData)
         let request = ShareRequest(listingId: listing.id, gymId: gymId, kindId: listing.kindId, brand: item?.brand,
                                    model: item?.model, loads: loads, quantity: listing.quantity,
                                    notes: listing.notes, photoPath: photo, forceNew: row.forceNew)
-        switch try await transport.share(request) {
+        let result = try await transport.share(request)
+        try ensureCurrent(token)
+        switch result {
         case let .created(id):
             listing.visibilityRaw = GymVisibility.shared.rawValue
             listing.uploadStateRaw = UploadState.uploaded.rawValue
@@ -152,8 +200,9 @@ public final class ShareOutbox {
         try context.save()
     }
 
-    private func confirm(_ row: ShareOutboxRecord) async throws {
+    private func confirm(_ row: ShareOutboxRecord, token: Int) async throws {
         let count = try await transport.confirm(listingId: row.targetId)
+        try ensureCurrent(token)
         if let listing = try repository.listingRecord(row.targetId) {
             listing.confirmCount = count
             listing.confirmedByMe = true
@@ -163,22 +212,24 @@ public final class ShareOutbox {
     }
 
     /// The server's id for the gym, asking the server to create the gym the first time.
-    private func serverId(of gym: GymRecord) async throws -> UUID {
+    private func serverId(of gym: GymRecord, token: Int) async throws -> UUID {
         if let known = gym.remoteId { return known }
         let id = try await transport.findOrCreateGym(mapsPlaceId: gym.mapsPlaceId ?? "", name: gym.name,
                                                      address: gym.address, latitude: gym.latitude,
                                                      longitude: gym.longitude)
+        try ensureCurrent(token)
         gym.remoteId = id
         try context.save()
         return id
     }
 
     /// The name of the photo on the server. A name already stored means the upload happened: the retry skips it.
-    private func uploadedPhoto(of listing: GymListingRecord) async throws -> String? {
+    private func uploadedPhoto(of listing: GymListingRecord, token: Int) async throws -> String? {
         if let known = listing.remotePhotoPath { return known }
         guard let file = listing.photoFile, let data = photoData(file) else { return nil }
         let name = "\(UUID().uuidString.lowercased()).jpg"
         let stored = try await transport.uploadSharedPhoto(data, name: name)
+        try ensureCurrent(token)
         listing.remotePhotoPath = stored
         try context.save()
         return stored

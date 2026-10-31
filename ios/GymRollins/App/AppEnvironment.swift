@@ -220,7 +220,7 @@ final class AppEnvironment {
     /// `SyncCoordinator.deleteAccount()` instead, which also deletes the account's data on the server.
     func eraseAllLocalData() throws {
         ExportService.removeExportFiles()
-        abandonSession()
+        abandonSession(); gymSharing.invalidate() // before the wipe: requests still out must not write back
         try syncStore.resetAll()
         health.reset()
         todayPlanStore.clear()
