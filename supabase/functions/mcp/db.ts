@@ -177,6 +177,8 @@ export interface GymListingRow {
   quantity: number
   confirm_count: number
   is_mine: boolean
+  /** The owner wrote the shared item behind a public listing (public.is_my_item); true for private listings. */
+  item_is_mine: boolean
   brand: string | null
   model: string | null
 }

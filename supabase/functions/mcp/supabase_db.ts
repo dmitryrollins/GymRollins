@@ -269,7 +269,7 @@ export class SupabaseDb implements Db {
     // private ones from the table (RLS: the owner's own, only while the gyms flag is on).
     const [pub, priv] = await Promise.all([
       this.client.from('public_gym_equipment').select(
-        'kind_id, brand, model, loads, quantity, confirm_count, is_mine',
+        'kind_id, brand, model, loads, quantity, confirm_count, is_mine, item_is_mine',
       )
         .eq('gym_id', gymId).eq('status', 'active').order('confirm_count', { ascending: false }).order('id')
         .limit(limit),
@@ -298,6 +298,7 @@ export class SupabaseDb implements Db {
           quantity: r.quantity,
           confirm_count: r.confirm_count,
           is_mine: true,
+          item_is_mine: true,
           brand: r.private_brand,
           model: r.private_model,
         }]

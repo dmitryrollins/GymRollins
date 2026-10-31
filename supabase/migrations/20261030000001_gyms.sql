@@ -503,7 +503,9 @@ create view public.public_equipment_items with (security_invoker = true) as
 create view public.public_gym_equipment with (security_invoker = true) as
   select e.id, e.gym_id, e.item_id, i.kind_id, i.brand, i.model, e.photo_path, e.loads, e.quantity, e.notes, e.status,
          e.confirm_count, e.created_at, e.updated_at,
-         public.is_my_listing(e.id) as is_mine, public.did_i_confirm(e.id) as confirmed_by_me
+         public.is_my_listing(e.id) as is_mine, public.did_i_confirm(e.id) as confirmed_by_me,
+         -- Whether the caller wrote the brand and model, since a listing of theirs can use someone else's item.
+         public.is_my_item(e.item_id) as item_is_mine
   from public.gym_equipment e
   join public.equipment_items i on i.id = e.item_id
   join public.gyms g on g.id = e.gym_id

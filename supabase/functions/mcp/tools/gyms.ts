@@ -1,7 +1,7 @@
 // list_gyms and get_gym_equipment: read-only views of the owner's gyms for Claude, behind mcp_flag('gyms').
 // Strangers' free text is a path for prompt injection, so every result is built from an allow-list of keys (never by
-// spreading a row): no user ids, no notes, brand and model only on the owner's own listings, `loads` rebuilt from known
-// keys, and a public gym's name labelled unverified. Which exercises work at a gym follows GymCore's InventoryMatcher:
+// spreading a row): no user ids, no notes, brand and model only where the owner wrote the words, `loads` rebuilt from
+// known keys, and a public gym's name labelled unverified and cut down to visible characters. Which exercises work at a gym follows GymCore's InventoryMatcher:
 // every requirement group needs a listing of one of its kinds, read from public.exercise_requirements (the table the
 // app's bundled JSON seeds, with a drift check), so there is no copy to keep in step.
 import type { Db, GymListingRow, GymRow } from '../db.ts'
@@ -31,12 +31,30 @@ async function visibleGyms(db: Db): Promise<GymRow[]> {
   return [...mine, ...shared]
 }
 
+export const GYM_NAME_MAX = 60
+
+// Letters, marks, numbers, punctuation and symbols are kept; spaces, format characters, private use and the rest are
+// not. Some invisible characters are letters or marks (the Hangul fillers, the variation selectors, the combining
+// grapheme joiner), so those are listed too. The database refuses them in names; this is for rows older than that rule.
+const KEPT = /[\p{L}\p{M}\p{N}\p{P}\p{S}]/u
+const INVISIBLE = /[\u034F\u115F\u1160\u17B4\u17B5\u180B-\u180F\u3164\uFE00-\uFE0F\uFFA0\u{E0100}-\u{E01EF}]/u
+
+/** A stranger's gym name as Claude may read it: visible characters only, single spaces, at most 60 characters. */
+export function normalizeGymName(name: string): string {
+  let out = ''
+  for (const ch of name) {
+    if (/\s/u.test(ch)) out += ' '
+    else if (KEPT.test(ch) && !INVISIBLE.test(ch)) out += ch
+  }
+  return Array.from(out.replace(/ {2,}/g, ' ').trim()).slice(0, GYM_NAME_MAX).join('').trim()
+}
+
 function gymSummary(g: GymRow) {
   const isPrivate = g.visibility === 'private'
   return compact({
     id: g.id,
     visibility: isPrivate ? 'private' : 'public',
-    ...(isPrivate ? { name: g.name } : { name_unverified: g.name }),
+    ...(isPrivate ? { name: g.name } : { name_unverified: normalizeGymName(g.name) }),
     // The first sharer wrote a public gym's address; it is the owner's own text only for a gym they created.
     address: isPrivate || g.is_mine ? g.address : null,
   })
@@ -71,7 +89,10 @@ export function rebuildLoads(loads: unknown): Record<string, unknown> | undefine
 }
 
 function listingSummary(l: GymListingRow) {
-  const own = l.is_mine === true
+  // A private listing's brand and model are the owner's own words (private_brand, private_model). A public listing's come
+  // from the shared item, which may be a stranger's even when the listing is the owner's, so they show only if the owner
+  // also wrote the item.
+  const own = l.is_mine === true && (l.visibility === 'private' || l.item_is_mine === true)
   return compact({
     kind_id: typeof l.kind_id === 'string' ? l.kind_id : null,
     quantity: isNum(l.quantity) ? l.quantity : null,
