@@ -2,7 +2,8 @@
 // Uploads GymRollins' own exercise photos (own-<id>-<frame>.jpg from the gitignored media/photos/, where the generator
 // writes, and from ios/GymRollins/Resources/OwnPhotos/, the bundled ones) to the public `exercise-photos` Supabase
 // Storage bucket, then writes `manifest.json` into the bucket so the app knows which exercises have hosted photos
-// without listing the bucket. See docs/media/README.md ("Hosting"). Nothing is moved or deleted locally.
+// without listing the bucket. Equipment kind photos (kind-<kindId>.jpg, shown for a gym listing that has no photo of
+// its own) travel the same way: drop one into either folder and run this, no app release needed. See docs/media/README.md ("Hosting"). Nothing is moved or deleted locally.
 //
 // Usage: node scripts/upload-photos.mjs [--dry-run] [--target local|remote] [--dir <photo folder>]...
 //   --dir (repeatable) replaces the two default folders. A name present in several folders uses the first folder
@@ -16,9 +17,10 @@
 // single-part uploads). Photos get `cache-control: max-age=31536000`; the manifest `max-age=60`. The manifest is built
 // from the bucket listing after the uploads (so it only lists objects that really landed), and is only rewritten when
 // its content changed:
-//   { "version": 1, "updatedAt": "<ISO>", "photos": { "<id>": <frame count> }, "rev": { "<id>": "<12 hex>" } }
+//   { "version": 1, "updatedAt": "<ISO>", "photos": { "<id>": <frame count> }, "rev": { "<id>": "<12 hex>" },
+//     "kinds": { "<kindId>": "<12 hex>" } }
 // `rev` changes whenever any frame of that exercise changes; the app appends it as `?v=<rev>` so a regenerated photo
-// isn't served from the long-lived caches.
+// isn't served from the long-lived caches. `kinds` does the same for kind photos (an older app ignores the key).
 //
 // Storage API (checked 2026-09-29 against the local stack, supabase CLI 2.118.0):
 //   POST /storage/v1/object/<bucket>/<name>       upload (x-upsert: true overwrites; cache-control stored as sent)
@@ -33,6 +35,9 @@ const ROOT = resolve(import.meta.dirname, '..')
 export const BUCKET = 'exercise-photos'
 export const MANIFEST_NAME = 'manifest.json'
 const PHOTO_NAME = /^own-(\d+)-(\d+)\.jpg$/
+const KIND_PHOTO_NAME = /^kind-([a-z0-9-]{1,40})\.jpg$/
+const isPhotoName = name => PHOTO_NAME.test(name) || KIND_PHOTO_NAME.test(name)
+const shortHash = text => createHash('sha256').update(text).digest('hex').slice(0, 12)
 const PHOTO_CACHE = 'max-age=31536000'
 const MANIFEST_CACHE = 'max-age=60'
 const LIST_PAGE = 1000
@@ -109,13 +114,13 @@ export function resolveTarget({ target, env = process.env, envFile = PATHS.envFi
 // ---------- pure planning ----------
 
 /**
- * Local photos named own-<digits>-<digits>.jpg from `dirs` (missing folders are skipped), sorted by name, with size
+ * Local photos named own-<digits>-<digits>.jpg or kind-<kindId>.jpg from `dirs` (missing folders are skipped), sorted by name, with size
  * and MD5. A name found in several folders comes from the first one; a differing copy is reported via `log`.
  */
 export function scanPhotos(dirs, log = () => {}) {
   const byName = new Map()
   for (const dir of dirs.filter(d => existsSync(d))) {
-    for (const name of readdirSync(dir).filter(n => PHOTO_NAME.test(n))) {
+    for (const name of readdirSync(dir).filter(isPhotoName)) {
       const path = join(dir, name)
       const photo = { name, path, size: statSync(path).size, md5: createHash('md5').update(readFileSync(path)).digest('hex') }
       const first = byName.get(name)
@@ -145,7 +150,10 @@ export function planUploads(local, remote) {
 /** The manifest for the objects in the bucket (`[{ name, etag }]`). Frames count contiguously from 0. */
 export function buildManifest(objects, now = new Date()) {
   const byId = new Map()
+  const kinds = {}
   for (const { name, etag } of objects) {
+    const kind = name.match(KIND_PHOTO_NAME)
+    if (kind) kinds[kind[1]] = shortHash(etag ?? '')
     const match = name.match(PHOTO_NAME)
     if (!match) continue
     const frames = byId.get(match[1]) ?? new Map()
@@ -161,13 +169,14 @@ export function buildManifest(objects, now = new Date()) {
     if (count === 0) continue
     photos[id] = count
     const tags = Array.from({ length: count }, (_, frame) => frames.get(frame)).join('|')
-    rev[id] = createHash('sha256').update(tags).digest('hex').slice(0, 12)
+    rev[id] = shortHash(tags)
   }
-  return { version: 1, updatedAt: now.toISOString(), photos, rev }
+  const sortedKinds = Object.fromEntries(Object.entries(kinds).sort(([a], [b]) => a.localeCompare(b)))
+  return { version: 1, updatedAt: now.toISOString(), photos, rev, kinds: sortedKinds }
 }
 
 const sameContent = (a, b) => !!a && !!b && JSON.stringify(a.photos) === JSON.stringify(b.photos) &&
-  JSON.stringify(a.rev) === JSON.stringify(b.rev)
+  JSON.stringify(a.rev) === JSON.stringify(b.rev) && JSON.stringify(a.kinds ?? {}) === JSON.stringify(b.kinds ?? {})
 
 // ---------- Storage API ----------
 

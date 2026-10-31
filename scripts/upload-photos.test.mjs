@@ -135,6 +135,45 @@ test('scanPhotos: several folders (media/photos + the bundle), first folder wins
   assert.equal(lines.filter(l => l.includes('differs')).length, 1, 'only the differing duplicate is reported')
 })
 
+test('scanPhotos: also picks up kind-<kindId>.jpg, and only well-formed ids', () => {
+  const dir = photoDir({
+    'own-0453-0.jpg': 'a0', 'kind-dumbbells.jpg': 'k1', 'kind-ab-wheel.jpg': 'k2',
+    'kind-Bad.jpg': 'x', 'kind-.jpg': 'x', [`kind-${'a'.repeat(41)}.jpg`]: 'x', 'kind-x.png': 'x', 'kind-a_b.jpg': 'x',
+  })
+  const photos = scanPhotos([dir])
+  assert.deepEqual(photos.map(p => p.name), ['kind-ab-wheel.jpg', 'kind-dumbbells.jpg', 'own-0453-0.jpg'])
+})
+
+test('buildManifest: kinds maps each kind photo to a rev hashed from its etag', () => {
+  const now = new Date('2026-09-29T10:00:00Z')
+  const objects = [
+    { name: 'own-0453-0.jpg', etag: 'e0' }, { name: 'kind-dumbbells.jpg', etag: 'k1' },
+    { name: 'kind-ab-wheel.jpg', etag: 'k2' }, { name: 'kind-Bad.jpg', etag: 'x' },
+  ]
+  const manifest = buildManifest(objects, now)
+  assert.deepEqual(Object.keys(manifest.kinds), ['ab-wheel', 'dumbbells'])
+  assert.equal(manifest.kinds.dumbbells, createHash('sha256').update('k1').digest('hex').slice(0, 12))
+  assert.equal(manifest.version, 1)
+  assert.deepEqual(buildManifest([], now).kinds, {}, 'always present, so an old app and a new one read the same shape')
+  const changed = buildManifest(objects.map(o => o.name === 'kind-dumbbells.jpg' ? { ...o, etag: 'new' } : o), now)
+  assert.notEqual(changed.kinds.dumbbells, manifest.kinds.dumbbells)
+  assert.equal(changed.kinds['ab-wheel'], manifest.kinds['ab-wheel'])
+})
+
+test('uploadPhotos: a run that only adds a kind photo rewrites the manifest', async () => {
+  const dir = photoDir()
+  const { fetch, store } = fakeStorage()
+  await uploadPhotos({ url: URL_LOCAL, key: KEY, dirs: [dir], fetch, ...quiet() })
+  writeFileSync(join(dir, 'kind-dumbbells.jpg'), 'k1')
+  const second = await uploadPhotos({ url: URL_LOCAL, key: KEY, dirs: [dir], fetch, ...quiet() })
+  assert.equal(second.manifest, 'uploaded')
+  assert.equal(second.uploaded, 1)
+  const manifest = JSON.parse(store.get('manifest.json').body.toString())
+  assert.deepEqual(Object.keys(manifest.kinds), ['dumbbells'])
+  const third = await uploadPhotos({ url: URL_LOCAL, key: KEY, dirs: [dir], fetch, ...quiet() })
+  assert.equal(third.manifest, 'unchanged')
+})
+
 test('planUploads: skips objects whose size and md5 match, uploads new or changed ones', () => {
   const local = [
     { name: 'own-0001-0.jpg', size: 2, md5: 'aaa' },
