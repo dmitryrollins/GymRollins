@@ -105,5 +105,11 @@ final class GatedGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
         return try await inner.unblockAll()
     }
 
+    func isAdmin() async throws -> Bool { try await inner.isAdmin() }
+    func moderationQueue() async throws -> [ModerationEntry] { try await inner.moderationQueue() }
+    func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
+        try await inner.moderate(targetType: targetType, targetId: targetId, action: action)
+    }
+
     func publicPhotoURL(path: String) -> URL? { inner.publicPhotoURL(path: path) }
 }

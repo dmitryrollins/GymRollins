@@ -199,4 +199,31 @@ final class DynamicTypeUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(shared.frame.height, 44)
         screenshot("add-equipment-who-sees-it-ax-xl")
     }
+
+    func testModerationAtAccessibilityXL() {
+        let app = launch(extra: ["-fakeGymCatalog", "-fakeSignedIn", "-fakeGymAdmin"])
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.moderation"]
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() } // rows below the fold aren't built until scrolled to
+        XCTAssertTrue(row.isHittable)
+        row.tapCenter()
+        let id = "00000000-0000-4000-8000-0000000000D1"
+        let restore = app.buttons["moderation.restore.\(id)"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 10))
+        for _ in 0..<4 where !restore.isHittable { app.swipeUp() }
+        XCTAssertTrue(restore.isHittable)
+        XCTAssertGreaterThanOrEqual(restore.frame.height, 44)
+        screenshot("moderation-ax-xl")
+        let remove = app.buttons["moderation.remove.\(id)"]
+        for _ in 0..<4 where !remove.isHittable { app.swipeUp() }
+        XCTAssertGreaterThanOrEqual(remove.frame.height, 44)
+        remove.tapCenter()
+        let confirm = app.buttons["moderation.removeConfirm.\(id)"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        for _ in 0..<4 where !confirm.isHittable { app.swipeUp() }
+        XCTAssertTrue(confirm.isHittable)
+        XCTAssertGreaterThanOrEqual(confirm.frame.height, 44)
+        screenshot("moderation-confirm-ax-xl")
+    }
 }

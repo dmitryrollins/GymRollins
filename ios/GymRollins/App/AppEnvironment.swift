@@ -31,6 +31,8 @@ final class AppEnvironment {
     let gymPlaces: any GymPlaceSearch
     /// The shared catalogue: server, cache of other people's listings, share queue (tests replace it).
     @ObservationIgnored var gymSharing: GymSharing
+    /// Whether the signed-in user moderates the shared catalogue, for Settings' Moderation row.
+    let gymAdmin = GymAdminStatus()
     /// The owner's "recommend more / less / never" choices (normal ones left out); change them with `setPreference`.
     var exercisePreferences: [String: ExercisePreference] = [:]
     /// Exercise photos (own media -> free-exercise-db -> wger -> illustration) and their on-demand loader.

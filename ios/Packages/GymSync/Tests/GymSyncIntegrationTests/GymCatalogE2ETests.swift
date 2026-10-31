@@ -234,6 +234,11 @@ struct GymCatalogE2ETests {
             try await base.blockAuthor(targetType: targetType, targetId: targetId)
         }
         func unblockAll() async throws -> Int { try await base.unblockAll() }
+        func isAdmin() async throws -> Bool { try await base.isAdmin() }
+        func moderationQueue() async throws -> [ModerationEntry] { try await base.moderationQueue() }
+        func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
+            try await base.moderate(targetType: targetType, targetId: targetId, action: action)
+        }
         func publicPhotoURL(path: String) -> URL? { base.publicPhotoURL(path: path) }
     }
 

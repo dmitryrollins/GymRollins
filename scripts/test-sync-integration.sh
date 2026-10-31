@@ -19,8 +19,25 @@ psql_local() { docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON
 # Leftovers from an interrupted earlier run (test accounts only).
 psql_local -c "delete from auth.users where email like 'sync-%@test.local'" >/dev/null
 
+# The moderation test signs up an account named sync-admin-*@test.local; this makes it an admin the moment it exists
+# (the app has no way to become one). The trigger and its function are dropped on exit, and the admin row goes with its
+# account (on delete cascade), like every other sync-* test user.
+psql_local -c "
+  create or replace function public.it_make_admin() returns trigger language plpgsql security definer
+    set search_path = public as \$\$
+  begin insert into public.app_admins (user_id) values (new.id) on conflict do nothing; return new; end \$\$;
+  drop trigger if exists it_make_admin on auth.users;
+  create trigger it_make_admin after insert on auth.users for each row
+    when (new.email like 'sync-admin-%@test.local') execute function public.it_make_admin()" >/dev/null
+
 DELETED_FILE="$(mktemp -t gymsync-deleted-users)"
-trap 'rm -f "$DELETED_FILE"' EXIT
+cleanup() {
+  rm -f "$DELETED_FILE"
+  psql_local -c "drop trigger if exists it_make_admin on auth.users;
+                 drop function if exists public.it_make_admin();
+                 delete from auth.users where email like 'sync-admin-%@test.local'" >/dev/null || true
+}
+trap cleanup EXIT
 
 export SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SYNC_DELETED_USERS_FILE="$DELETED_FILE"
 (cd "$ROOT/ios/Packages/GymSync" && swift test --filter GymSyncIntegrationTests)

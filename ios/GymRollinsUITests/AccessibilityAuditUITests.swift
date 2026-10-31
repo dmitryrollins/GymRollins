@@ -171,6 +171,22 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Settings")
     }
 
+    func testModerationAudit() {
+        let app = launch(["-fakeGymCatalog", "-fakeSignedIn", "-fakeGymAdmin"])
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.moderation"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        let remove = app.buttons["moderation.remove.00000000-0000-4000-8000-0000000000D1"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 10))
+        audit(app, "Moderation")
+        remove.tap()
+        XCTAssertTrue(app.buttons["moderation.removeConfirm.00000000-0000-4000-8000-0000000000D1"]
+            .waitForExistence(timeout: 5))
+        audit(app, "Moderation: confirm a removal")
+    }
+
     func testProposalReviewAudit() {
         let app = launch(["-seedProposal"])
         let chip = app.buttons["today.proposal"]

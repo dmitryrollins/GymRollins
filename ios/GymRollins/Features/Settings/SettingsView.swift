@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var sharing: ExportShare?
     @State private var claudeLastUse: Date?
     @State private var claudeChecked = false
+    @State private var showModeration = false
 
     private var isSignedIn: Bool {
         if case .signedIn = env.sync.authState { return true }
@@ -35,6 +36,7 @@ struct SettingsView: View {
             Section("Account") { AccountSection() }
             trainingSection
             claudeSection
+            moderationSection
             healthSection
             dataSection
             privacySection
@@ -46,6 +48,7 @@ struct SettingsView: View {
         .tint(Theme.accent)
         .task { unit = env.profile.unit }
         .task(id: isSignedIn) { await loadClaudeLastUse() }
+        .task(id: env.sharingUserId) { await env.refreshGymAdmin() }
         .sheet(item: $sharing, onDismiss: ExportService.removeExportFiles) { share in
             ExportShareSheet(url: share.url) { sharing = nil }
                 .presentationDetents([.medium, .large])
@@ -56,6 +59,7 @@ struct SettingsView: View {
         }
         .navigationDestination(isPresented: $showPrivacy) { PrivacyPolicyView() }
         .navigationDestination(isPresented: $showCredits) { CreditsView() }
+        .navigationDestination(isPresented: $showModeration) { ModerationView() }
         .confirmationDialog("Delete your account and all its data? This can't be undone.",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Continue", role: .destructive) { showDeleteSheet = true }
@@ -159,6 +163,25 @@ struct SettingsView: View {
                 }
             }
             .accessibilityIdentifier("settings.claude")
+        }
+    }
+
+    // MARK: Moderation
+
+    /// Only for admins. The server refuses everyone else, so a wrong guess here shows a message, never data.
+    @ViewBuilder
+    private var moderationSection: some View {
+        if env.gymAdmin.isAdmin {
+            Section("Moderation") {
+                Button { showModeration = true } label: {
+                    HStack {
+                        Text("Moderation").foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(Theme.textTertiary)
+                    }
+                }
+                .accessibilityIdentifier("settings.moderation")
+            }
         }
     }
 

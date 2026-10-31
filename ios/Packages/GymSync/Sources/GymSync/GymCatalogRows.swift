@@ -29,6 +29,19 @@ enum GymCatalogRows {
         return Decoded(rows: page.rows.map(\.item), skipped: page.skipped)
     }
 
+    static func moderation(from data: Data) throws -> Decoded<ModerationEntry> {
+        let page = try rows(ModerationRow.self, from: data)
+        return Decoded(rows: page.rows.map(\.entry), skipped: page.skipped)
+    }
+
+    /// The photo `moderate_content` hands back for the app to delete; nil when the target had none.
+    static func moderatedPhoto(from data: Data) throws -> String? {
+        guard let answer = try? JSONDecoder().decode(ModerateAnswer.self, from: data) else {
+            throw GymCatalogError.rejected("unreadable moderation answer")
+        }
+        return photoName(answer.photoPath)
+    }
+
     /// How many rows the server sent, readable or not (a page is full when this reaches the page size).
     static func rawCount(of data: Data) -> Int {
         ((try? JSONSerialization.jsonObject(with: data)) as? [Any])?.count ?? 0
@@ -169,6 +182,32 @@ private struct ListingRow: Codable {
                       status: status ?? "active", confirmCount: max(confirmCount, 0), isMine: isMine ?? false,
                       confirmedByMe: confirmedByMe ?? false)
     }
+}
+
+private struct ModerationRow: Decodable {
+    let targetType: GymTargetType, targetId: UUID, title: String, photoPath: String?, reportCount: Int
+    let reasons: [String: Int], notes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case title, reasons, notes, targetType = "target_type", targetId = "target_id", photoPath = "photo_path",
+             reportCount = "report_count"
+    }
+
+    var entry: ModerationEntry {
+        let counted = reasons.map { ModerationEntry.ReasonCount(reason: $0.key, count: $0.value) }
+            .sorted { ($0.count, $1.reason) > ($1.count, $0.reason) }
+        return ModerationEntry(targetType: targetType, targetId: targetId,
+                               title: GymCatalogRows.clip(title, to: DomainLimits.gymNameMax) ?? "",
+                               photoPath: GymCatalogRows.photoName(photoPath), reportCount: max(reportCount, 0),
+                               reasons: counted,
+                               notes: notes.compactMap { GymCatalogRows.clip($0, to: DomainLimits.reportNoteMax) })
+    }
+}
+
+private struct ModerateAnswer: Decodable {
+    let photoPath: String?
+
+    enum CodingKeys: String, CodingKey { case photoPath = "photo_path" }
 }
 
 private struct ShareAnswer: Decodable {

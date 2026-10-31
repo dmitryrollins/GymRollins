@@ -21,6 +21,12 @@ public protocol GymCatalogTransport: Sendable {
     func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws
     /// Clears every block of the signed-in user and returns how many there were.
     func unblockAll() async throws -> Int
+    /// Whether the signed-in user is a moderator. The server decides; this only spares non-admins a screen.
+    func isAdmin() async throws -> Bool
+    /// Everything flagged, most reported first. A non-admin gets `GymCatalogError.notAllowed`.
+    func moderationQueue() async throws -> [ModerationEntry]
+    /// Restores or removes a flagged gym or listing. Returns the photo the app must now delete through Storage.
+    func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String?
     func publicPhotoURL(path: String) -> URL?
 }
 
@@ -140,4 +146,6 @@ public enum GymCatalogError: Error, Equatable {
     case noteRefused
     /// The gym or listing is gone, or was removed: there is nothing left to report or block.
     case unknownTarget
+    /// Someone created a new gym for this place after the removal, so the old one can't come back.
+    case placeTaken
 }

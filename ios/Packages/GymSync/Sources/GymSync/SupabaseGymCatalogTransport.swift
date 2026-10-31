@@ -132,6 +132,29 @@ public struct SupabaseGymCatalogTransport: GymCatalogTransport {
         return cleared
     }
 
+    public func isAdmin() async throws -> Bool {
+        guard client.auth.currentSession != nil else { return false }
+        let data = try await call { try await client.rpc("is_app_admin").execute().data }
+        guard let admin = try? JSONDecoder().decode(Bool.self, from: data) else {
+            throw GymCatalogError.rejected("unreadable admin answer")
+        }
+        return admin
+    }
+
+    public func moderationQueue() async throws -> [ModerationEntry] {
+        let data = try await call { try await client.rpc("moderation_queue").execute().data }
+        return try GymCatalogRows.moderation(from: data).rows
+    }
+
+    public func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
+        let params: [String: AnyJSON] = [
+            "p_target_type": .string(targetType.rawValue), "p_target_id": .string(Self.text(targetId)),
+            "p_action": .string(action.rawValue),
+        ]
+        let data = try await call { try await client.rpc("moderate_content", params: params).execute().data }
+        return try GymCatalogRows.moderatedPhoto(from: data)
+    }
+
     public func uploadSharedPhoto(_ data: Data, name: String) async throws -> String {
         guard client.auth.currentSession != nil else { throw GymCatalogError.signedOut }
         let stored = name.lowercased()

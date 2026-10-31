@@ -33,7 +33,34 @@ enum FakeGymCatalog {
     }
 }
 
-struct FakeGymCatalogTransport: GymCatalogTransport {
+/// Two flagged listings and a flagged gym for `-fakeGymAdmin`: the first is restored by the UI test, the others removed.
+enum FakeModeration {
+    static let pulldownId = UUID(uuidString: "00000000-0000-4000-8000-0000000000D1")!
+    static let cableId = UUID(uuidString: "00000000-0000-4000-8000-0000000000D2")!
+    static let gymId = UUID(uuidString: "00000000-0000-4000-8000-0000000000D3")!
+
+    static let queue = [
+        ModerationEntry(targetType: .listing, targetId: pulldownId, title: "Life Fitness Pulldown",
+                        photoPath: "5b0f1c1e-5a37-4b8e-9d1f-0a3c6e7f2b11.jpg", reportCount: 3,
+                        reasons: [.init(reason: "person-in-photo", count: 2), .init(reason: "spam", count: 1)],
+                        notes: ["There is a face in it", "Looks like an advert"]),
+        ModerationEntry(targetType: .listing, targetId: cableId, title: "Cable Station", photoPath: nil,
+                        reportCount: 3, reasons: [.init(reason: "wrong-info", count: 3)], notes: []),
+        ModerationEntry(targetType: .gym, targetId: gymId, title: "Iron Works Annex", photoPath: nil, reportCount: 3,
+                        reasons: [.init(reason: "duplicate", count: 3)], notes: ["Same place as Iron Works"]),
+    ]
+}
+
+final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
+    private let admin: Bool
+    private let lock = NSLock()
+    private var flagged: [ModerationEntry]
+
+    init(admin: Bool = false) {
+        self.admin = admin
+        flagged = admin ? FakeModeration.queue : []
+    }
+
     func publicGym(mapsPlaceId: String) async throws -> RemoteGym? {
         mapsPlaceId == FakeGymCatalog.placeId
             ? RemoteGym(id: FakeGymCatalog.serverGymId, name: "Iron Works Gym", address: nil, latitude: nil,
@@ -69,6 +96,16 @@ struct FakeGymCatalogTransport: GymCatalogTransport {
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {}
     func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws {}
     func unblockAll() async throws -> Int { 0 }
+    func isAdmin() async throws -> Bool { admin }
+    func moderationQueue() async throws -> [ModerationEntry] { lock.withLock { flagged } }
+    func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
+        let decided = lock.withLock { () -> ModerationEntry? in
+            let found = flagged.first { $0.targetId == targetId }
+            flagged.removeAll { $0.targetId == targetId }
+            return found
+        }
+        return action == .remove ? decided?.photoPath : nil
+    }
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://photos.uitest.invalid/gym-photos/\(path)") }
 }
 

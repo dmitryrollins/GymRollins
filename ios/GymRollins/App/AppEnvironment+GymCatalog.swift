@@ -49,6 +49,11 @@ struct UnavailableGymCatalogTransport: GymCatalogTransport {
     }
     func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws { throw GymCatalogError.signedOut }
     func unblockAll() async throws -> Int { throw GymCatalogError.signedOut }
+    func isAdmin() async throws -> Bool { false }
+    func moderationQueue() async throws -> [ModerationEntry] { throw GymCatalogError.signedOut }
+    func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
+        throw GymCatalogError.signedOut
+    }
     func publicPhotoURL(path: String) -> URL? { nil }
 }
 
@@ -60,7 +65,7 @@ extension AppEnvironment {
         let photoData: (String) -> Data? = { photoStore.data(file: $0) }
         #if DEBUG
         if options.fakeGymCatalog {
-            return GymSharing(repository: gyms, transport: FakeGymCatalogTransport(), knownKinds: known,
+            return GymSharing(repository: gyms, transport: FakeGymCatalogTransport(admin: options.fakeGymAdmin), knownKinds: known,
                               photos: GymPhotoCache(store: photoStore) { _, _ in GymPhotoFixture.jpegData() },
                               photoData: photoData, now: now)
         }
@@ -85,7 +90,10 @@ extension AppEnvironment {
     /// Called once from `init`: a sign-in lets the queued shares go.
     func wireGymSharing() {
         sync.onGymIdsMoved = { [weak self] moves in self?.gymIdsMoved(moves) }
-        sync.onSessionEnding = { [weak self] in self?.gymSharing.invalidate() }
+        sync.onSessionEnding = { [weak self] in
+            self?.gymSharing.invalidate()
+            self?.gymAdmin.reset()
+        }
         sync.onWillSignOut = { [weak self] in
             guard let self, let userId = self.sharingUserId else { return }
             await self.gymSharing.outbox.discardQueuedPhotos(userId: userId)

@@ -164,5 +164,11 @@ final class FakeGymCatalogTransport: GymCatalogTransport, @unchecked Sendable {
             return _unblockResult
         }
     }
+    func isAdmin() async throws -> Bool { try record("isAdmin"); return true }
+    func moderationQueue() async throws -> [ModerationEntry] { try record("moderationQueue"); return [] }
+    func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
+        try record("moderate")
+        return nil
+    }
     func publicPhotoURL(path: String) -> URL? { URL(string: "https://example.test/gym-photos/\(path)") }
 }

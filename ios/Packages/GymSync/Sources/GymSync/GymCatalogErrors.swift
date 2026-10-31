@@ -51,6 +51,7 @@ enum GymCatalogErrors {
         case "gym_full": return .gymFull
         case "photo_in_use": return .photoInUse
         case "unknown target": return .unknownTarget
+        case "place_taken": return .placeTaken
         case _ where photoRefusals.contains(message): return .photoRefused
         default: break
         }
