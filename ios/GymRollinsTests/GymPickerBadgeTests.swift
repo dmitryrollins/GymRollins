@@ -32,6 +32,25 @@ import Testing
         let context = rig.env.container.mainContext
         try #require(try context.fetch(FetchDescriptor<GymRecord>(predicate: #Predicate { $0.id == id })).first).remoteId = UUID()
         try context.save()
-        #expect(GymPickerView.badgeText(for: try #require(try rig.env.gyms.gym(id))) == "Shared")
+        #expect(GymPickerView.badgeText(for: try #require(try rig.env.gyms.gym(id))) == "Public gym",
+                "looking at a place doesn't mean I shared it")
+    }
+
+    @Test func theSyncQuestionNamesTheGymAndWhatGoes() {
+        #expect(GymPickerView.syncPrompt(gymName: "Garage", itemCount: 3).title == "Sync Garage?")
+        #expect(GymPickerView.syncPrompt(gymName: "Garage", itemCount: 3).body
+                == "The gym and its 3 items, with their photos, go to your account. Only you can see them.")
+        #expect(GymPickerView.syncPrompt(gymName: "Garage", itemCount: 1).body
+                == "The gym and its 1 item, with its photo, go to your account. Only you can see it.")
+        #expect(GymPickerView.syncPrompt(gymName: "Garage", itemCount: 0).body
+                == "The gym goes to your account. Only you can see it.")
+    }
+
+    @Test func onlyThePhoneOnlyItemsAreCountedForTheSyncQuestion() throws {
+        let rig = try GymTestRig.make()
+        let home = try rig.gym("Home", ["flat-bench": .none, "dumbbells": .none])
+        let other = try #require(try rig.env.gyms.listings(gymId: home.id).last)
+        try rig.env.gyms.makeSynced(listing: other.id)
+        #expect(GymPickerView.itemsToSync(in: home.id, repository: rig.env.gyms) == 1)
     }
 }

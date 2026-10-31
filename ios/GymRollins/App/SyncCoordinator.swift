@@ -193,9 +193,11 @@ final class SyncCoordinator {
     }
     #endif
 
-    func signInWithApple(idToken: String, nonce: String) async throws {
+    /// With `waitingForSync` false it returns once the account owns the phone's data, and the first full sync runs
+    /// on its own: a sheet asking to share doesn't sit busy through a long first sync of a big history.
+    func signInWithApple(idToken: String, nonce: String, waitingForSync: Bool = true) async throws {
         try await auth?.signInWithApple(idToken: idToken, nonce: nonce)
-        await didSignIn()
+        await didSignIn(waitingForSync: waitingForSync)
     }
 
     /// Signs out and removes this iPhone's copy of the data (the caller confirms first; the data stays in the
@@ -218,7 +220,7 @@ final class SyncCoordinator {
     // MARK: Private
 
     /// After sign-in or session restore: checks who owns the local data, then starts syncing (idempotent).
-    private func didSignIn() async {
+    func didSignIn(waitingForSync: Bool = true) async {
         if let userId = auth?.state.userId {
             switch store.ownerUserId {
             case nil:
@@ -239,6 +241,14 @@ final class SyncCoordinator {
             settleGymRows(for: userId)
         }
         refreshEngine()
+        if waitingForSync {
+            await firstSync()
+        } else {
+            Task { await firstSync() }
+        }
+    }
+
+    private func firstSync() async {
         await syncNow()
         if auth?.state.userId != nil, !accountSwitchPending { onSignedIn() }
     }

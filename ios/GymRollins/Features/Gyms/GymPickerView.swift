@@ -19,13 +19,14 @@ struct GymPickerView: View {
     @State private var pendingDelete: Gym?
     @State private var equipmentGym: Gym?
     @State private var errorText: String?
-    @State private var syncing: Gym?
-    @State private var askingSignIn = false
+    @State private var confirmingSync: Gym?
+    @State private var signIn = SignInGate()
 
     var body: some View {
         NavigationStack {
             List {
                 if let pendingDelete { deleteConfirmation(pendingDelete) }
+                if let confirmingSync { syncConfirmation(confirmingSync) }
                 if let current { currentRow(current) }
                 if let nearby { nearbySection(nearby) }
                 searchSection
@@ -42,10 +43,7 @@ struct GymPickerView: View {
                 }
             }
             .navigationDestination(item: $equipmentGym) { equipmentDestination($0) }
-            .signInForSharing(isPresented: $askingSignIn) {
-                if let gym = syncing { sync(gym) }
-                syncing = nil
-            }
+            .signInForSharing(gate: signIn)
         }
         .presentationDetents([.large])
         .sheet(isPresented: $showAdd) { AddPrivateGymSheet { _ in reload() } }
@@ -67,6 +65,23 @@ struct GymPickerView: View {
             HStack(spacing: 10) {
                 SecondaryGlassButton(title: "Cancel", identifier: "gymPicker.delete.cancel") { pendingDelete = nil }
                 PrimaryGlassButton(title: "Delete", identifier: "gymPicker.delete.confirm") { deletePending() }
+            }
+        }
+        .listRowBackground(Theme.card)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Asks first, saying what goes up: one tap uploads the gym and everything on it that is still on this phone only.
+    private func syncConfirmation(_ gym: Gym) -> some View {
+        let prompt = Self.syncPrompt(gymName: gym.name, itemCount: Self.itemsToSync(in: gym.id, repository: env.gyms))
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(prompt.title).font(.headline).foregroundStyle(Theme.textPrimary)
+                .accessibilityIdentifier("picker.sync.title")
+            Text(prompt.body).font(.footnote).foregroundStyle(Theme.textSecondary)
+                .accessibilityIdentifier("picker.sync.body")
+            HStack(spacing: 10) {
+                SecondaryGlassButton(title: "Cancel", identifier: "picker.sync.cancel") { confirmingSync = nil }
+                PrimaryGlassButton(title: "Sync", identifier: "picker.sync.confirm") { confirmSync(gym) }
             }
         }
         .listRowBackground(Theme.card)
@@ -213,17 +228,6 @@ struct GymPickerView: View {
 
     // MARK: Text
 
-    /// Where the gym's equipment lives: only here, in the account, or in the shared catalogue.
-    static func badgeText(for gym: Gym) -> String {
-        if gym.visibility == .synced { return "Synced" }
-        return !gym.isPrivate && gym.remoteId != nil ? "Shared" : "Only me"
-    }
-
-    static let syncTitle = "Sync to my account"
-
-    /// A private gym that only this phone has. A Maps gym is shared, not synced.
-    static func canSync(_ gym: Gym) -> Bool { gym.isPrivate && gym.visibility == .device }
-
     private func itemsText(_ count: Int) -> String { count == 1 ? "1 item" : "\(count) items" }
 
     private var deleteTitle: String { pendingDelete.map { "Delete \($0.name)?" } ?? "Delete gym?" }
@@ -312,14 +316,21 @@ struct GymPickerView: View {
     }
 
     private func askToDelete(_ gym: Gym) {
+        confirmingSync = nil
         pendingDelete = gym
     }
 
-    /// Needs an account: signed out, the sign-in sheet comes first and cancelling it uploads nothing.
+    /// Asks first. Needs an account: signed out, the sign-in sheet comes after the question, and cancelling either
+    /// uploads nothing.
     private func askToSync(_ gym: Gym) {
+        pendingDelete = nil
+        confirmingSync = gym
+    }
+
+    private func confirmSync(_ gym: Gym) {
+        confirmingSync = nil
         guard env.sharingUserId != nil else {
-            syncing = gym
-            askingSignIn = true
+            signIn.ask(.sync) { sync(gym) }
             return
         }
         sync(gym)

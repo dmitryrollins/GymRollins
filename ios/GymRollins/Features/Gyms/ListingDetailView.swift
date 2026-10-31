@@ -13,8 +13,7 @@ struct ListingDetailView: View {
     /// The listing as it is now: sharing changes it from outside this screen (the queue, a refresh).
     @State private var current: GymListing
     @State private var duplicates: [RemoteListing] = []
-    @State private var askingSignIn = false
-    @State private var afterSignIn: (() -> Void)?
+    @State private var signIn = SignInGate()
     @State private var photoFile: String?
     @State private var loads: ListingLoads
     @State private var quantity: Int
@@ -52,8 +51,9 @@ struct ListingDetailView: View {
                     Text("This item came from a newer version of the app. Update the app to use it.")
                         .foregroundStyle(Theme.textSecondary).accessibilityIdentifier("listing.unknown")
                 } else {
-                    ShareStatusRow(status: status, duplicates: duplicates, onAction: { action in gated { perform(action) } },
-                                   onKeepExisting: { id in gated { keepExisting(id) } })
+                    ShareStatusRow(status: status, duplicates: duplicates,
+                                   onAction: { action in gated(Self.purpose(of: action)) { perform(action) } },
+                                   onKeepExisting: { id in gated(.confirm) { keepExisting(id) } })
                     if status.canEdit { fields } else { readOnlyFields }
                 }
                 if let errorText { Text(errorText).foregroundStyle(Theme.destructive).accessibilityIdentifier("listing.error") }
@@ -68,10 +68,7 @@ struct ListingDetailView: View {
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { photoWidth = $0 - 2 * Theme.gutter }
         .background(Theme.background)
         .navigationBarTitleDisplayMode(.inline)
-        .signInForSharing(isPresented: $askingSignIn) {
-            afterSignIn?()
-            afterSignIn = nil
-        }
+        .signInForSharing(gate: signIn)
         .task(id: env.gymRevision) { reload() }
     }
 
@@ -154,8 +151,8 @@ struct ListingDetailView: View {
         if confirmingDelete {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Delete \(title)?").font(.headline).foregroundStyle(Theme.textPrimary)
-                Text("It and its photo will be deleted from this phone. This can't be undone.")
-                    .font(.footnote).foregroundStyle(Theme.textSecondary)
+                Text(status.deleteMessage).font(.footnote).foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("listing.delete.message")
                 HStack(spacing: 10) {
                     SecondaryGlassButton(title: "Cancel", identifier: "listing.delete.cancel") { confirmingDelete = false }
                     PrimaryGlassButton(title: "Delete", identifier: "listing.delete.confirm", action: delete)
@@ -172,14 +169,21 @@ struct ListingDetailView: View {
     // MARK: Sharing
 
     /// Runs the work now when signed in; otherwise asks for a sign-in first and runs it only after one. Cancelling the
-    /// sheet runs nothing.
-    private func gated(_ work: @escaping () -> Void) {
+    /// sheet runs nothing, even if the sign-in finishes afterwards.
+    private func gated(_ purpose: SignInPurpose, _ work: @escaping () -> Void) {
         guard env.sharingUserId != nil else {
-            afterSignIn = work
-            askingSignIn = true
+            signIn.ask(purpose, then: work)
             return
         }
         work()
+    }
+
+    private static func purpose(of action: ShareStatusModel.Action) -> SignInPurpose {
+        switch action {
+        case .share, .retry, .shareAnyway: .share
+        case .confirm: .confirm
+        case .sync: .sync
+        }
     }
 
     private func perform(_ action: ShareStatusModel.Action) {
@@ -189,6 +193,7 @@ struct ListingDetailView: View {
             case .retry: try env.retryShare(listing.id)
             case .confirm: try env.confirmListing(listing.id)
             case .shareAnyway: try env.shareListing(listing.id, forceNew: true)
+            case .sync: try env.syncListing(listing.id)
             }
         }
     }
