@@ -2,8 +2,9 @@ import CryptoKit
 import Foundation
 
 /// `manifest.json` in the `exercise-photos` bucket, written by `scripts/upload-photos.mjs`:
-/// `{ "version": 1, "updatedAt": "<ISO>", "photos": { "<id>": <frames> }, "rev": { "<id>": "<hex>" } }`.
-/// It tells the app which exercises have hosted photos, so it never lists the bucket.
+/// `{ "version": 1, "updatedAt": "<ISO>", "photos": { "<id>": <frames> }, "rev": { "<id>": "<hex>" },
+/// "kinds": { "<kindId>": "<hex>" } }`.
+/// It tells the app which exercises and equipment kinds have hosted photos, so it never lists the bucket.
 struct StoragePhotoManifest: Sendable, Equatable {
     static let supportedVersion = 1
     /// No exercise has more frames than this (start/end today; room for a few more).
@@ -21,15 +22,20 @@ struct StoragePhotoManifest: Sendable, Equatable {
     /// Exercise id -> content revision, appended as `?v=` so a regenerated photo bypasses long-lived caches.
     let rev: [String: String]
 
-    init(photos: [String: Int], rev: [String: String] = [:]) {
+    /// Equipment kind id -> content revision of `kind-<kindId>.jpg`. A kind is listed only when its photo is hosted.
+    let kinds: [String: String]
+
+    init(photos: [String: Int], rev: [String: String] = [:], kinds: [String: String] = [:]) {
         self.photos = photos
         self.rev = rev
+        self.kinds = kinds
     }
 
     private struct Wire: Decodable {
         let version: Int
         let photos: [String: Int]
         let rev: [String: String]?
+        let kinds: [String: String]?
     }
 
     /// Validates the JSON; entries with a malformed id, frame count or rev are dropped (not the whole manifest).
@@ -39,8 +45,18 @@ struct StoragePhotoManifest: Sendable, Equatable {
         guard wire.version == Self.supportedVersion else { throw ParseError.unsupportedVersion(wire.version) }
         photos = wire.photos.filter { id, frames in Self.isValidID(id) && (1...Self.maxFrames).contains(frames) }
         rev = (wire.rev ?? [:]).filter { id, value in
-            Self.isValidID(id) && (1...64).contains(value.count) && value.allSatisfy(\.isHexDigit)
+            Self.isValidID(id) && Self.isValidRev(value)
         }
+        kinds = (wire.kinds ?? [:]).filter { id, value in Self.isValidKindID(id) && Self.isValidRev(value) }
+    }
+
+    static func isValidRev(_ rev: String) -> Bool {
+        (1...64).contains(rev.count) && rev.allSatisfy(\.isHexDigit)
+    }
+
+    /// `^[a-z0-9-]{1,40}$`: the ids in `equipment-kinds.json`.
+    static func isValidKindID(_ id: String) -> Bool {
+        (1...40).contains(id.count) && id.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "-") }
     }
 
     static func isValidID(_ id: String) -> Bool {

@@ -53,6 +53,14 @@ final class SupabaseStoragePhotoProvider: ExerciseMediaProvider, Sendable {
         return url.appending(queryItems: [URLQueryItem(name: "v", value: rev)])
     }
 
+    /// The hosted stock photo of an equipment kind, `kind-<kindId>.jpg?v=<rev>`; nil when the manifest doesn't list it.
+    func kindPhotoURL(kindId: String) -> URL? {
+        guard StoragePhotoManifest.isValidKindID(kindId),
+              let rev = manifest.withLock({ $0?.kinds[kindId] }) else { return nil }
+        return publicBaseURL.appending(path: "kind-\(kindId).jpg", directoryHint: .notDirectory)
+            .appending(queryItems: [URLQueryItem(name: "v", value: rev)])
+    }
+
     /// The provider with the cached manifest (usable right away), plus a one-off refresh for this launch that swaps
     /// in the fresh manifest when it arrives and then calls `onChange` (the app bumps `MediaRevision`, so photo views
     /// already on screen reload). The returned task is only awaited by tests.

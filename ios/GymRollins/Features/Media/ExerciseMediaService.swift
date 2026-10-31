@@ -11,6 +11,8 @@ struct ExerciseMediaService: Sendable {
     var autoCrossfade = true
     /// Bumped when the provider's answers change after launch (a fresh Storage manifest); photo views reload on it.
     var revision = MediaRevision()
+    /// Stock photos of equipment kinds, for gym listings that have none of their own.
+    var kindPhotos = EquipmentKindPhotos.none
 
     /// Real launches: own media (record URLs, then — with `PHOTO_HOSTING = storage` — photos in the Supabase
     /// `exercise-photos` bucket, then photos bundled in the app) -> free-exercise-db photos -> wger photos (only fill
@@ -23,7 +25,8 @@ struct ExerciseMediaService: Sendable {
         if options.uiTesting {
             // No auto crossfade: photos flip only on tap, so UI assertions on the label are deterministic.
             return options.uiTestingPhotos
-                ? ExerciseMediaService(provider: StubPhotoProvider(), loader: StubPhotoLoader(), autoCrossfade: false)
+                ? ExerciseMediaService(provider: StubPhotoProvider(), loader: StubPhotoLoader(), autoCrossfade: false,
+                                       kindPhotos: StubPhotoProvider.kindPhotos)
                 : ExerciseMediaService(provider: ChainedMediaProvider([]), loader: StubPhotoLoader(), autoCrossfade: false)
         }
         #endif
@@ -31,14 +34,15 @@ struct ExerciseMediaService: Sendable {
         let policy = PhotoURLPolicy.forBuild(supabaseURL: config.supabaseURL)
         let revision = MediaRevision()
         var providers: [any ExerciseMediaProvider] = [ExerciseRecordMediaProvider()]
-        if let storage = storageProvider(config: config, policy: policy, onChange: { revision.bump() }) {
-            providers.append(storage.provider)
-        }
+        let storage = storageProvider(config: config, policy: policy, onChange: { revision.bump() })
+        if let storage { providers.append(storage.provider) }
         providers.append(BundledOwnPhotoProvider.bundled())
         if let photos = FreeExerciseDBPhotoProvider.bundled() { providers.append(photos) }
         if let wger = WgerPhotoProvider.bundled() { providers.append(wger) }
         return ExerciseMediaService(provider: ChainedMediaProvider(providers),
-                                    loader: ExercisePhotoStore.standard(policy: policy), revision: revision)
+                                    loader: ExercisePhotoStore.standard(policy: policy), revision: revision,
+                                    kindPhotos: EquipmentKindPhotos(storage: storage?.provider,
+                                                                    bundled: EquipmentKindPhotos.bundled(.main)))
     }
 
     /// The Storage provider when this build hosts photos in Supabase Storage and the project URL may be fetched
@@ -90,6 +94,11 @@ struct StubPhotoProvider: ExerciseMediaProvider {
         title: "Butterfly", author: "Everkinetic", license: "CC-BY-SA 3",
         licenseURL: URL(string: "https://creativecommons.org/licenses/by-sa/3.0/deed.en"),
         sourceURL: URL(string: "https://wger.de/exercise/135/view-base"), modified: true)
+
+    /// Every kind but `skierg` has a stock photo, so UI tests see both the photo and the placeholder path.
+    static let kindPhotos = EquipmentKindPhotos(
+        hosted: { $0 == "skierg" ? nil : URL(string: "https://photos.uitest.invalid/kind/\($0).jpg") },
+        bundled: { _ in nil })
 
     func media(for exercise: Exercise) -> ExerciseMedia? {
         guard !exercise.isCustom else { return nil }
