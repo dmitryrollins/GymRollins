@@ -1,6 +1,11 @@
 -- upsert_workout carries the workout's gym and each entry's listing. A link the caller can't see becomes null (the
 -- triggers in 20261030000001), so it never blocks a workout. "This phone only" gyms are never sent. Only those columns
 -- differ from 20260928000001.
+--
+-- A push without a link keeps the stored one: a second phone that can't resolve the gym (it hasn't downloaded it yet)
+-- sends null, and the app has no way to unset a workout's gym, so null means "unknown here", not "none". The kept link
+-- is read again through the caller's policies, so one to a gym or listing they have since lost becomes null instead of
+-- being kept. Entries are deleted and inserted again, so their old links are read by entry id first.
 create or replace function public.upsert_workout(payload jsonb) returns jsonb
 language plpgsql security invoker set search_path = public as $$
 declare
@@ -11,6 +16,7 @@ declare
   stored_edit timestamptz;
   existing public.workouts;
   applied uuid;
+  old_links jsonb;
   e jsonb; s jsonb;
 begin
   if auth.uid() is null or public.is_mcp_client() then raise exception 'not allowed' using errcode = '42501'; end if;
@@ -36,7 +42,9 @@ begin
   on conflict (id) do update set started_at = excluded.started_at, ended_at = excluded.ended_at,
       paused_sec = excluded.paused_sec, routine_id = excluded.routine_id, name = excluded.name,
       source = excluded.source, note = excluded.note, vol_kg = excluded.vol_kg, records = excluded.records,
-      client_updated_at = excluded.client_updated_at, deleted_at = excluded.deleted_at, gym_id = excluded.gym_id
+      client_updated_at = excluded.client_updated_at, deleted_at = excluded.deleted_at,
+      gym_id = case when (payload ->> 'gym_id') is not null then excluded.gym_id
+                    else (select g.id from public.gyms g where g.id = public.workouts.gym_id) end
     where force or public.workouts.client_updated_at <= excluded.client_updated_at
   returning id into applied;
 
@@ -45,11 +53,13 @@ begin
                               'updated_at', (select updated_at from public.workouts where id = wid));
   end if;
 
+  select coalesce(jsonb_object_agg(id::text, gym_equipment_id), '{}') into old_links
+    from public.workout_entries where workout_id = wid and gym_equipment_id is not null;
   delete from public.workout_entries where workout_id = wid;
   for e in select * from jsonb_array_elements(coalesce(payload->'entries', '[]')) loop
     insert into public.workout_entries (id, workout_id, exercise_id, position, note, superset_group, gym_equipment_id)
     values ((e->>'id')::uuid, wid, e->>'exercise_id', (e->>'position')::int, e->>'note', e->>'superset_group',
-            (e->>'gym_equipment_id')::uuid);
+            coalesce((e->>'gym_equipment_id')::uuid, (old_links ->> (e->>'id'))::uuid));
     for s in select * from jsonb_array_elements(coalesce(e->'sets', '[]')) loop
       insert into public.workout_sets (id, entry_id, position, w_kg, r, sec, min, dist_m, done, warmup, rir, rpe,
                                        multiplier, completed_at)
