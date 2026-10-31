@@ -25,7 +25,9 @@ struct PlannedTarget: Equatable {
             ? " \u{00B7} " + WeightFormatter.format(kg: suggestion.weightKg, unit: profile.unit)
             : ""
         let delta = history.first.map { suggestion.weightKg - $0.weightKg } ?? 0
-        let badge = delta > 0.01
+        // At a gym a weight within the bell's own rounding (44 lb vs a 20 kg bell) hasn't risen; with none, any
+        // real rise, even a 0.2 kg micro-plate, shows.
+        let badge = delta > (loads != nil ? AvailableLoads.toleranceKg : 0.01)
             ? "+\(WeightFormatter.format(kg: delta, unit: profile.unit, includeSecondary: false))"
             : nil
         return PlannedTarget(subtitle: "\(item.sets) \u{00D7} \(reps)\(load)", suggestedKg: suggestion.weightKg > 0 ? suggestion.weightKg : nil,
