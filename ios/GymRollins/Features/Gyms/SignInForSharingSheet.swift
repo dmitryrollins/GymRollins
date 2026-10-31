@@ -33,7 +33,6 @@ struct SignInForSharingSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
     }
 
     private func signIn(_ token: String, _ nonce: String) {

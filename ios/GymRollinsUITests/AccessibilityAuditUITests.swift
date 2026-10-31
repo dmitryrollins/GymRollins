@@ -237,6 +237,79 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Add equipment: details")
     }
 
+    // MARK: Shared gyms (-fakeGymCatalog)
+
+    private func openSharedEquipment(_ app: XCUIApplication) {
+        openPicker(app)
+        app.buttons["gymPicker.currentEquipment"].tap()
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["gymEquipment.coverage.chest"].waitForExistence(timeout: 10))
+    }
+
+    private func openListing(_ app: XCUIApplication, _ tile: XCUIElement) {
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        tile.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["listing.shareStatus"].waitForExistence(timeout: 5))
+    }
+
+    func testGymPickerWithSharedGymAudit() {
+        let app = launch(["-fakeGymCatalog"])
+        openPicker(app)
+        audit(app, "Gym picker with a shared gym")
+    }
+
+    func testSharedGymEquipmentAudit() {
+        let app = launch(["-fakeGymCatalog"])
+        openSharedEquipment(app)
+        audit(app, "Shared gym equipment")
+    }
+
+    func testSharedListingDetailsAudit() {
+        let app = launch(["-fakeGymCatalog"])
+        openSharedEquipment(app)
+        openListing(app, app.buttons["gymEquipment.listing.lat-pulldown"])
+        audit(app, "Listing detail: someone else's")
+        app.navigationBars.buttons.firstMatch.tap()
+        openListing(app, app.buttons["gymEquipment.listing.flat-bench"])
+        XCTAssertTrue(app.descendants(matching: .any)["listing.catalogPhoto"].waitForExistence(timeout: 10))
+        audit(app, "Listing detail: only me, with a borrowed photo")
+        app.navigationBars.buttons.firstMatch.tap()
+        openListing(app, app.buttons["gymEquipment.listing.barbell"])
+        audit(app, "Listing detail: couldn't upload")
+        app.navigationBars.buttons.firstMatch.tap()
+        let waiting = app.buttons.matching(identifier: "gymEquipment.listing.cable-station")
+            .matching(NSPredicate(format: "label CONTAINS 'Needs a choice'")).firstMatch
+        openListing(app, waiting)
+        XCTAssertTrue(app.buttons["listing.shareAnyway"].exists)
+        audit(app, "Listing detail: may already be there")
+    }
+
+    func testAddEquipmentSharingAudit() {
+        let app = launch(["-fakeGymCatalog", "-gymPhotoFixture"])
+        openSharedEquipment(app)
+        app.buttons["gymEquipment.add"].tap()
+        app.buttons["addEquipment.skip"].tapWhenHittable()
+        let search = app.textFields["addEquipment.kindSearch"]
+        XCTAssertTrue(search.waitForExistence(timeout: 30))
+        search.tap()
+        search.typeText("lat")
+        app.buttons["addEquipment.kind.lat-pulldown"].tapCenter()
+        XCTAssertTrue(app.buttons["add.confirm.00000000-0000-4000-8000-0000000000B1"].waitForExistence(timeout: 5))
+        audit(app, "Add equipment: already here, with someone else's")
+        app.buttons["addEquipment.different"].tapCenter()
+        XCTAssertTrue(app.buttons["add.visibility.shared"].waitForExistence(timeout: 5))
+        audit(app, "Add equipment: who sees it")
+    }
+
+    func testSignInForSharingAudit() {
+        let app = launch(["-fakeGymCatalog"])
+        openSharedEquipment(app)
+        openListing(app, app.buttons["gymEquipment.listing.lat-pulldown"])
+        app.buttons["listing.confirm"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["signInForSharing.title"].waitForExistence(timeout: 5))
+        audit(app, "Sign in to share")
+    }
+
     /// The Build sheet remembers its last chips, so leave only `chip` selected.
     private func selectOnly(_ app: XCUIApplication, _ chip: String) {
         for name in ["chest", "back", "shoulders", "arms", "legs", "core"] {

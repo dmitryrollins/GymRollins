@@ -76,3 +76,15 @@ extension XCUIApplication {
         chip.tap()
     }
 }
+
+extension XCUIElement {
+    /// Waits until the element can take a touch (a sheet that is still sliding in reports buttons that aren't hittable
+    /// yet), then taps it.
+    func tapWhenHittable(timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(waitForExistence(timeout: timeout), "missing \(self)", file: file, line: line)
+        let hittable = NSPredicate(format: "isHittable == true")
+        let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: hittable, object: self)], timeout: timeout)
+        XCTAssertEqual(result, .completed, "\(self) never became hittable", file: file, line: line)
+        tap()
+    }
+}

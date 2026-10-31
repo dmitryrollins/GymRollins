@@ -129,4 +129,46 @@ final class DynamicTypeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["addEquipment.skip"].isHittable)
         screenshot("add-equipment-ax-xl")
     }
+
+    func testSharingScreensAtAccessibilityXL() {
+        let app = launch(extra: ["-fakeGymCatalog", "-gymPhotoFixture"])
+        app.buttons["today.gymChip"].tap()
+        XCTAssertTrue(app.buttons["gymPicker.currentEquipment"].waitForExistence(timeout: 5))
+        app.buttons["gymPicker.currentEquipment"].tap()
+        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForExistence(timeout: 15))
+        screenshot("shared-gym-equipment-ax-xl")
+        app.buttons["gymEquipment.listing.barbell"].tap()
+        let retry = app.buttons["listing.retry"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 5))
+        for _ in 0..<4 where !retry.isHittable { app.swipeUp() }
+        XCTAssertTrue(retry.isHittable)
+        XCTAssertGreaterThanOrEqual(retry.frame.height, 44)
+        screenshot("listing-couldnt-upload-ax-xl")
+        retry.tapCenter()
+        XCTAssertTrue(element(app, "signInForSharing.title").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["signInForSharing.cancel"].isHittable)
+        screenshot("sign-in-to-share-ax-xl")
+        app.buttons["signInForSharing.cancel"].tap()
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["gymEquipment.add"].tap()
+        app.buttons["addEquipment.skip"].tapWhenHittable()
+        let search = app.textFields["addEquipment.kindSearch"]
+        XCTAssertTrue(search.waitForExistence(timeout: 30))
+        search.tap()
+        search.typeText("lat")
+        app.buttons["addEquipment.kind.lat-pulldown"].tapCenter()
+        let confirm = app.buttons["add.confirm.00000000-0000-4000-8000-0000000000B1"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        for _ in 0..<4 where !confirm.isHittable { app.swipeUp() }
+        XCTAssertTrue(confirm.isHittable)
+        screenshot("add-equipment-already-here-ax-xl")
+        for _ in 0..<4 where !app.buttons["addEquipment.different"].isHittable { app.swipeUp() }
+        app.buttons["addEquipment.different"].tapCenter()
+        let shared = app.buttons["add.visibility.shared"]
+        XCTAssertTrue(shared.waitForExistence(timeout: 5))
+        for _ in 0..<4 where !shared.isHittable { app.swipeUp() }
+        XCTAssertTrue(shared.isHittable)
+        XCTAssertGreaterThanOrEqual(shared.frame.height, 44)
+        screenshot("add-equipment-who-sees-it-ax-xl")
+    }
 }
