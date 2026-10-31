@@ -17,6 +17,10 @@ public final class GymRecord {
     public var catalogRefreshedAt: Date?
     public var createdAt: Date
     public var updatedAt: Date
+    /// Sync bookkeeping, used only while `visibilityRaw` is `synced`.
+    public var serverUpdatedAt: Date?
+    public var dirty: Bool = false
+    public var deletedAt: Date?
 
     public init(id: UUID = UUID(), name: String, address: String?, latitude: Double? = nil, longitude: Double? = nil,
                 mapsPlaceId: String? = nil, now: Date) {
@@ -79,6 +83,10 @@ public final class GymListingRecord {
     public var remoteId: UUID?
     public var createdAt: Date
     public var updatedAt: Date
+    /// Sync bookkeeping, used only while `visibilityRaw` is `synced`.
+    public var serverUpdatedAt: Date?
+    public var dirty: Bool = false
+    public var deletedAt: Date?
 
     public init(id: UUID = UUID(), gymId: UUID, itemId: UUID, kindId: String, loadsData: Data, quantity: Int,
                 notes: String?, photoFile: String?, now: Date) {

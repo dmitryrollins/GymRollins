@@ -65,6 +65,8 @@ enum SyncStatusText {
         case .routines: "Routine"
         case .weekSchedule: "Week schedule"
         case .muscleTargets: "Weekly target"
+        case .gyms: "Gym"
+        case .gymListings: "Equipment"
         case .bodyweight: "Weigh-in"
         case .workouts: "Workout"
         case .proposals: "Claude proposal"

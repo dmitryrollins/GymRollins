@@ -41,7 +41,9 @@ left=$(psql_local -c "
        + (select count(*) from public.workout_entries where user_id in ($ids))
        + (select count(*) from public.workout_sets where user_id in ($ids))
        + (select count(*) from public.bodyweight where user_id in ($ids))
-       + (select count(*) from public.proposals where user_id in ($ids))")
+       + (select count(*) from public.proposals where user_id in ($ids))
+       + (select count(*) from public.gyms where owner_id in ($ids))
+       + (select count(*) from public.gym_equipment where owner_id in ($ids))")
 if [[ "$left" != "0" ]]; then
   echo "Account deletion left $left user/data rows behind" >&2
   exit 1

@@ -60,6 +60,15 @@ struct GymPhotoProcessor: Sendable {
         return ProcessedGymPhoto(jpeg: jpeg, thumbnail: thumbData)
     }
 
+    /// A thumbnail for a picture that was already cleaned (one downloaded from the account's own bucket).
+    static func thumbnail(ofCleaned jpeg: Data) throws -> Data {
+        let image = try decode(jpeg)
+        guard let data = Self.jpeg(resized(image, longEdge: thumbnailLongEdge), quality: quality) else {
+            throw GymPhotoError.notAnImage
+        }
+        return data
+    }
+
     // MARK: Steps
 
     /// Upright (EXIF orientation applied) and at most `maxLongEdge` on its long side, never enlarged.

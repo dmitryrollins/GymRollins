@@ -11,7 +11,7 @@ public struct SupabaseTransport: SyncTransport {
     static let pushBatchSize = 200
     static let workoutSelect = "*,workout_entries(*,workout_sets(*))"
 
-    private let client: SupabaseClient
+    let client: SupabaseClient
     private let pageSize: Int
 
     /// `pageSize` is the pull page size (tests use a small one to exercise paging).
@@ -150,7 +150,7 @@ public struct SupabaseTransport: SyncTransport {
         return stamped.compactMap { row in row.id.map { RowAck(id: $0, updatedAt: row.updatedAt) } }
     }
 
-    private func upsert<T: Encodable, R: Decodable>(_ rows: [T], into table: String, onConflict: String,
+    func upsert<T: Encodable, R: Decodable>(_ rows: [T], into table: String, onConflict: String,
                                                     returning columns: String) async throws -> [R] {
         var acks: [R] = []
         for start in stride(from: 0, to: rows.count, by: Self.pushBatchSize) {
@@ -166,10 +166,11 @@ public struct SupabaseTransport: SyncTransport {
 
     /// All rows with `updated_at > since`, keyset-paged by `(updated_at, tiebreak)` (see `KeysetPager`). Rows
     /// written in one statement share `updated_at`, which is why the tiebreak is part of the key.
-    private func pull<T: Decodable>(_ table: String, select: String = "*", since: Date?,
-                                    tiebreak: String = "id") async throws -> [T] {
+    func pull<T: Decodable>(_ table: String, select: String = "*", only: (column: String, value: String)? = nil,
+                            since: Date?, tiebreak: String = "id") async throws -> [T] {
         try await KeysetPager.collect(pageSize: pageSize, since: since) { after, since, limit in
             var query = client.from(table).select(select)
+            if let only { query = query.eq(only.column, value: only.value) }
             if let after {
                 query = query.or(Self.afterFilter(after, tiebreak: tiebreak))
             } else if let since {
@@ -193,7 +194,7 @@ public struct SupabaseTransport: SyncTransport {
     }
 
     /// Rethrows a PostgREST error about the row's data (SQLSTATE 22xxx/23xxx) as `SyncRecordRejected`.
-    private static func mappingRejections<R>(_ call: () async throws -> R) async throws -> R {
+    static func mappingRejections<R>(_ call: () async throws -> R) async throws -> R {
         do {
             return try await call()
         } catch let error as PostgrestError where SyncRecordRejected.isRowRejection(code: error.code) {

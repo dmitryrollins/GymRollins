@@ -2,7 +2,8 @@ import Foundation
 import GymCore
 import SwiftData
 
-/// Gyms, the equipment items they list and each gym's listings. Everything stays on the phone until plan 21.
+/// Gyms, the equipment items they list and each gym's listings. Rows marked `synced` carry sync bookkeeping: an edit
+/// marks them dirty and a delete leaves a tombstone until it is pushed (`SyncStore+Gyms`).
 @MainActor
 public final class GymRepository {
     public static let maxNameLength = DomainLimits.gymNameMax
@@ -16,7 +17,12 @@ public final class GymRepository {
     public static let maxFixedKg = DomainLimits.listingFixedKg.upperBound
 
     /// Namespace for the generic item of each kind, so every install derives the same id.
-    static let genericItemNamespace = UUID(uuidString: "6b1f3c2e-8d4a-5e17-9a60-2f4c7d9b1e35")!
+    nonisolated static let genericItemNamespace = UUID(uuidString: "6b1f3c2e-8d4a-5e17-9a60-2f4c7d9b1e35")!
+
+    /// The id every install and the server's seed give a kind's generic item.
+    public nonisolated static func genericItemId(forKind kindId: String) -> UUID {
+        StableUUID.make(namespace: genericItemNamespace, name: kindId)
+    }
 
     let context: ModelContext
     let now: () -> Date
@@ -29,7 +35,7 @@ public final class GymRepository {
     // MARK: - Gyms
 
     public func gyms() throws -> [Gym] {
-        try context.fetch(FetchDescriptor<GymRecord>()).map(Self.gym)
+        try context.fetch(FetchDescriptor<GymRecord>()).filter { $0.deletedAt == nil }.map(Self.gym)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -73,17 +79,25 @@ public final class GymRepository {
         let (name, address) = try Self.validGym(name: name, address: address)
         record.name = name
         record.address = address
-        record.updatedAt = now()
+        touch(record)
         try context.save()
         return Self.gym(record)
     }
 
-    /// Removes the gym and its listings (the items stay for other gyms) and returns the photo files to delete.
+    /// Removes the gym and its listings (the items stay for other gyms) and returns the photo files to delete. A
+    /// synced gym and its synced listings stay as tombstones until the delete is pushed.
     public func deleteGym(_ id: UUID) throws -> [String] {
         let rows = try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.gymId == id }))
+            .filter { $0.deletedAt == nil }
         let photos = rows.compactMap(\.photoFile)
-        rows.forEach(context.delete)
-        if let record = try gymRecord(id) { context.delete(record) }
+        for row in rows { remove(row) }
+        if let record = try gymRecord(id) {
+            if record.visibilityRaw == GymVisibility.synced.rawValue {
+                tombstone(record)
+            } else {
+                context.delete(record)
+            }
+        }
         try context.save()
         return photos
     }
@@ -98,7 +112,7 @@ public final class GymRepository {
     public func listings(gymId: UUID) throws -> [GymListing] {
         let rows = try context.fetch(FetchDescriptor<GymListingRecord>(
             predicate: #Predicate { $0.gymId == gymId }, sortBy: [SortDescriptor(\.createdAt)]))
-        return try rows.filter { $0.statusRaw == ListingStatus.active.rawValue }.map(listing)
+        return try rows.filter { $0.deletedAt == nil && $0.statusRaw == ListingStatus.active.rawValue }.map(listing)
     }
 
     public func listing(_ id: UUID) throws -> GymListing? { try listingRecord(id).map(listing) }
@@ -130,7 +144,7 @@ public final class GymRepository {
         record.loadsData = try JSONEncoder().encode(loads)
         record.quantity = quantity
         record.notes = notes
-        record.updatedAt = now()
+        touch(record)
         try context.save()
         return try listing(record)
     }
@@ -144,7 +158,8 @@ public final class GymRepository {
         }
         let previous = record.photoFile
         record.photoFile = file
-        record.updatedAt = now()
+        if record.visibilityRaw == GymVisibility.synced.rawValue { record.remotePhotoPath = nil }
+        touch(record)
         try context.save()
         return previous
     }
@@ -154,7 +169,7 @@ public final class GymRepository {
     public func removeListing(_ id: UUID) throws -> String? {
         guard let record = try listingRecord(id) else { throw GymDataError.invalidInput("Unknown listing.") }
         let photo = record.photoFile
-        context.delete(record)
+        remove(record)
         try context.save()
         return photo
     }
@@ -190,24 +205,53 @@ public final class GymRepository {
 
     func gymRecord(_ id: UUID) throws -> GymRecord? {
         try context.fetch(FetchDescriptor<GymRecord>(predicate: #Predicate { $0.id == id })).first
+            .flatMap { $0.deletedAt == nil ? $0 : nil }
     }
 
     func listingRecord(_ id: UUID) throws -> GymListingRecord? {
         try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first
+            .flatMap { $0.deletedAt == nil ? $0 : nil }
     }
 
     private func activeRecords() throws -> [GymListingRecord] {
-        try context.fetch(FetchDescriptor<GymListingRecord>()).filter { $0.statusRaw == ListingStatus.active.rawValue }
+        try context.fetch(FetchDescriptor<GymListingRecord>())
+            .filter { $0.deletedAt == nil && $0.statusRaw == ListingStatus.active.rawValue }
+    }
+
+    /// An edit to a row: stamps it, and a synced row also waits to be pushed.
+    func touch(_ record: GymRecord) {
+        record.updatedAt = now()
+        if record.visibilityRaw == GymVisibility.synced.rawValue { record.dirty = true }
+    }
+
+    func touch(_ record: GymListingRecord) {
+        record.updatedAt = now()
+        if record.visibilityRaw == GymVisibility.synced.rawValue { record.dirty = true }
+    }
+
+    private func remove(_ record: GymListingRecord) {
+        guard record.visibilityRaw == GymVisibility.synced.rawValue else { return context.delete(record) }
+        record.photoFile = nil
+        tombstone(record)
+    }
+
+    private func tombstone(_ record: GymRecord) {
+        record.deletedAt = now()
+        touch(record)
+    }
+
+    private func tombstone(_ record: GymListingRecord) {
+        record.deletedAt = now()
+        touch(record)
     }
 
     /// The item for a kind, brand and model (matched ignoring case), created on first use.
-    private func itemRecord(kindId: String, brand: String?, model: String?) throws -> EquipmentItemRecord {
+    func itemRecord(kindId: String, brand: String?, model: String?) throws -> EquipmentItemRecord {
         let candidates = try context.fetch(FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.kindId == kindId }))
         if let match = candidates.first(where: {
             Self.same($0.brand, brand) && Self.same($0.model, model)
         }) { return match }
-        let id = brand == nil && model == nil
-            ? StableUUID.make(namespace: Self.genericItemNamespace, name: kindId) : UUID()
+        let id = brand == nil && model == nil ? Self.genericItemId(forKind: kindId) : UUID()
         let record = EquipmentItemRecord(id: id, kindId: kindId, brand: brand, model: model, now: now())
         context.insert(record)
         return record

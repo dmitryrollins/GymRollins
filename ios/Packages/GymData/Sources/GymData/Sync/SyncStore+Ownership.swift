@@ -47,6 +47,7 @@ extension SyncStore {
             || context.fetchCount(FetchDescriptor<MuscleTargetRecord>()) > 0
             || context.fetchCount(FetchDescriptor<BodyweightRecord>()) > 0
             || context.fetchCount(FetchDescriptor<WorkoutRecord>()) > 0
+            || hasSyncedGymData()
     }
 
     // MARK: Sync failures

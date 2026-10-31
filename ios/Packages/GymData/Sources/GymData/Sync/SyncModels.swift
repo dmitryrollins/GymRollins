@@ -3,8 +3,8 @@ import GymCore
 
 /// The synced aggregates, in push order (dependencies first).
 public enum SyncEntity: String, CaseIterable, Sendable {
-    case profile, customExercises, exercisePreferences, routines, weekSchedule, muscleTargets, bodyweight, workouts,
-        proposals
+    case profile, customExercises, exercisePreferences, routines, weekSchedule, muscleTargets, gyms, gymListings,
+        bodyweight, workouts, proposals
 }
 
 /// One aggregate crossing the sync boundary.
@@ -87,4 +87,56 @@ public struct ProfileSnapshot: Sendable, Equatable {
     public var birthYear: Int?
 
     public init() {}
+}
+
+/// A private gym as synced (`visibility = 'private'` on `public.gyms`).
+public struct SyncedGym: Sendable, Equatable {
+    public let id: UUID
+    public let name: String
+    public let address: String?
+    public let latitude: Double?
+    public let longitude: Double?
+
+    public init(id: UUID, name: String, address: String?, latitude: Double?, longitude: Double?) {
+        self.id = id
+        self.name = name
+        self.address = address
+        self.latitude = latitude
+        self.longitude = longitude
+    }
+}
+
+/// A private listing as synced. Brand and model travel as their own text (decision 11), never as a catalogue item.
+/// `photoFile` is the local file; `remotePhotoPath` the name in `gym-photos-private`, set once the upload succeeded.
+public struct SyncedListing: Sendable, Equatable {
+    public let id: UUID
+    public let gymId: UUID
+    public let kindId: String
+    public let brand: String?
+    public let model: String?
+    public let loads: ListingLoads
+    public let quantity: Int
+    public let notes: String?
+    public let photoFile: String?
+    public let remotePhotoPath: String?
+
+    // swiftlint:disable:next function_parameter_count
+    public init(id: UUID, gymId: UUID, kindId: String, brand: String?, model: String?, loads: ListingLoads,
+                quantity: Int, notes: String?, photoFile: String?, remotePhotoPath: String?) {
+        self.id = id
+        self.gymId = gymId
+        self.kindId = kindId
+        self.brand = brand
+        self.model = model
+        self.loads = loads
+        self.quantity = quantity
+        self.notes = notes
+        self.photoFile = photoFile
+        self.remotePhotoPath = remotePhotoPath
+    }
+
+    public func withRemotePhotoPath(_ path: String?) -> SyncedListing {
+        SyncedListing(id: id, gymId: gymId, kindId: kindId, brand: brand, model: model, loads: loads,
+                      quantity: quantity, notes: notes, photoFile: photoFile, remotePhotoPath: path)
+    }
 }

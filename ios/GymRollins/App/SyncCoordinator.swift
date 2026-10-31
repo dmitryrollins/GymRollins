@@ -45,6 +45,9 @@ final class SyncCoordinator {
     /// Called, before `onLocalDataReset`, when the wipe also erased the gyms (account deletion only). Sign-out and
     /// the account switch keep "This phone only" gyms.
     @ObservationIgnored var onGymDataErased: @MainActor () -> Void = {}
+    /// The phone's gym photo files. The engine reads and downloads through it, and a sign-out deletes the files of
+    /// the gym rows it removed through it (`wipeLocal`).
+    @ObservationIgnored var gymPhotoFiles: (any GymPhotoFiles)?
 
     static let log = Logger(subsystem: "com.rollins.gymrollins", category: "sync")
 
@@ -243,21 +246,35 @@ final class SyncCoordinator {
     }
 
     /// Stops any running round first, so a late response can't write the old account's rows back.
-    /// Gyms live only on this phone, so they survive unless the whole account (and this iPhone's data) is deleted.
+    /// "This phone only" gyms and anything not yet on the server survive; the rest of the gym data goes (decision 9).
     private func wipeLocal(erasingGyms: Bool = false) async throws {
         await dropEngine()
-        if erasingGyms { try store.resetAll() } else { try store.resetAccountData() }
+        if erasingGyms {
+            try store.resetAll()
+        } else {
+            deleteGymPhotos(try store.resetAccountData())
+        }
         pendingChanges = 0
         syncFailures = []
         if erasingGyms { onGymDataErased() }
         onLocalDataReset()
     }
 
+    /// Removes the photo files of gym rows a sign-out dropped (synced and cached shared rows). A file that can't be
+    /// removed is logged: the rows are already gone, so it's only wasted space.
+    private func deleteGymPhotos(_ files: [String]) {
+        for file in files {
+            do { try gymPhotoFiles?.delete(file: file) } catch {
+                Self.log.error("Delete gym photo failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     /// Creates the engine once signed in (or immediately for a backend without auth) and drops it when signed out.
     private func refreshEngine() {
         let signedIn = auth.map { $0.state != .signedOut } ?? true
         if signedIn, !accountSwitchPending, engine == nil, let transport = makeTransport(auth) {
-            engine = SyncEngine(store: store, transport: transport, now: now,
+            engine = SyncEngine(store: store, transport: transport, photos: gymPhotoFiles, now: now,
                                 autoApply: { [weak self] in try self?.autoApply() ?? 0 })
             seenRemoteChanges = 0
         } else if !signedIn, let stopping = engine {
@@ -300,6 +317,8 @@ final class SyncCoordinator {
                 + waiting(.routines, try store.dirtyRoutines(), key: { $0.value.routine.id.uuidString })
                 + waiting(.weekSchedule, try store.dirtyWeekdays(), key: { String($0.value.weekday) })
                 + waiting(.muscleTargets, try store.dirtyMuscleTargets(), key: { $0.value.group.rawValue })
+                + waiting(.gyms, try store.dirtyGyms(), key: { $0.value.id.uuidString })
+                + waiting(.gymListings, try store.dirtyGymListings(), key: { $0.value.id.uuidString })
                 + waiting(.bodyweight, try store.dirtyBodyweight(), key: { $0.value.id.uuidString })
                 + waiting(.workouts, try store.dirtyWorkouts(), key: { $0.value.workout.id.uuidString })
             syncFailures = store.syncFailures()

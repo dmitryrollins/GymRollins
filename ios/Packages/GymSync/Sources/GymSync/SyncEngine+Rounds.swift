@@ -26,6 +26,7 @@ extension SyncEngine {
         })
         try await pushBatch(.muscleTargets, rows: try store.dirtyMuscleTargets(), key: { $0.value.group.rawValue },
                             send: { try await self.transport.push(muscleTargets: $0.map(MuscleTargetDTO.init)) })
+        try await pushGyms()
         try await pushProposals()
         try await pushBatch(.bodyweight, rows: try store.dirtyBodyweight(), key: { $0.value.id.uuidString }, send: {
             try await self.transport.push(bodyweight: $0.map(BodyweightDTO.init))
@@ -83,7 +84,7 @@ extension SyncEngine {
     /// last-write-wins guard; they stay dirty and the pull replaces them with the newer server edit. If the server
     /// refuses the batch because of one row's values, the rows are retried one by one and only the refused ones
     /// are recorded as failures.
-    private func pushBatch<Value>(_ entity: SyncEntity, rows allRows: [SyncRow<Value>],
+    func pushBatch<Value>(_ entity: SyncEntity, rows allRows: [SyncRow<Value>],
                                   key: (SyncRow<Value>) -> String,
                                   send: ([SyncRow<Value>]) async throws -> [RowAck]) async throws {
         let rows = allRows.filter { !store.isSyncBlocked(entity, id: key($0), clientUpdatedAt: $0.clientUpdatedAt) }
@@ -135,7 +136,7 @@ extension SyncEngine {
         }
     }
 
-    private func recordRejection(_ rejected: SyncRecordRejected, entity: SyncEntity, id: String,
+    func recordRejection(_ rejected: SyncRecordRejected, entity: SyncEntity, id: String,
                                  clientUpdatedAt: Date) {
         store.recordSyncFailure(SyncFailure(entity: entity, id: id, clientUpdatedAt: clientUpdatedAt,
                                             message: rejected.message))
@@ -163,6 +164,7 @@ extension SyncEngine {
         try await pull(.muscleTargets, fetch: { try await self.transport.pullMuscleTargets(since: $0) }, apply: {
             try self.store.applyRemote(muscleTargets: $0.compactMap { $0.toDomain() })
         })
+        try await pullGyms()
         try await pull(.bodyweight, fetch: { try await self.transport.pullBodyweight(since: $0) }, apply: {
             try self.store.applyRemote(bodyweight: $0.map { $0.toDomain() })
         })
@@ -200,7 +202,7 @@ extension SyncEngine {
 
     /// Fetches rows newer than the entity's cursor, applies them, then advances the cursor to the newest
     /// `updated_at` seen (only after a successful apply, so a failure re-pulls the same rows next time).
-    private func pull<DTO: ServerStamped>(_ entity: SyncEntity, fetch: (Date?) async throws -> [DTO],
+    func pull<DTO: ServerStamped>(_ entity: SyncEntity, fetch: (Date?) async throws -> [DTO],
                                           apply: ([DTO]) throws -> Void) async throws {
         let since = store.cursor(for: entity)
         let dtos = try await fetch(since)

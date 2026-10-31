@@ -18,8 +18,14 @@ struct GymPhotoStore: Sendable {
 
     /// Writes both files and returns the photo's file name (`<uuid>.jpg`).
     func save(_ photo: ProcessedGymPhoto) throws -> String {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let name = "\(UUID().uuidString).jpg"
+        try save(photo, as: name)
+        return name
+    }
+
+    /// Writes both files under a given name (a downloaded picture keeps the name sync chose).
+    func save(_ photo: ProcessedGymPhoto, as name: String) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try photo.jpeg.write(to: url(name), options: .atomic)
         do {
             try photo.thumbnail.write(to: thumbnailURL(name), options: .atomic)
@@ -27,7 +33,6 @@ struct GymPhotoStore: Sendable {
             try? FileManager.default.removeItem(at: url(name))
             throw error
         }
-        return name
     }
 
     func url(_ fileName: String) -> URL { directory.appendingPathComponent(fileName) }
@@ -55,6 +60,8 @@ struct GymPhotoStore: Sendable {
             return
         }
     }
+
+    static func isSafeName(_ fileName: String) -> Bool { isSafe(fileName) }
 
     private static func isSafe(_ fileName: String) -> Bool {
         // Only names `save` produces: a bare "." would address the photo folder itself.

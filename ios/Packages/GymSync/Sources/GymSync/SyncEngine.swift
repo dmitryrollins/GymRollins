@@ -28,6 +28,8 @@ public final class SyncEngine {
 
     @ObservationIgnored let store: SyncStore
     @ObservationIgnored let transport: any SyncTransport
+    /// The phone's gym photos; nil sends synced listings without their picture and downloads none.
+    @ObservationIgnored let photos: (any GymPhotoFiles)?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var running = false
     @ObservationIgnored private var round: Task<Void, Never>?
@@ -37,10 +39,11 @@ public final class SyncEngine {
     /// Runs after each pull (e.g. `ProposalService.autoApplyPending`); returns how many proposals it applied.
     @ObservationIgnored let autoApply: (@MainActor () throws -> Int)?
 
-    public init(store: SyncStore, transport: any SyncTransport, now: @escaping () -> Date = Date.init,
-                autoApply: (@MainActor () throws -> Int)? = nil) {
+    public init(store: SyncStore, transport: any SyncTransport, photos: (any GymPhotoFiles)? = nil,
+                now: @escaping () -> Date = Date.init, autoApply: (@MainActor () throws -> Int)? = nil) {
         self.store = store
         self.transport = transport
+        self.photos = photos
         self.now = now
         self.autoApply = autoApply
     }

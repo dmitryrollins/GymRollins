@@ -53,4 +53,19 @@ import Testing
         await outbox.run(userId: UUID())
         #expect(transport.calls.isEmpty)
     }
+
+    @Test func nothingMarkedThisPhoneOnlyOrSharedIsEverDirtyForSync() async throws {
+        defer { f.tearDown() }
+        let home = try repo.addPrivateGym(name: "Home", address: nil)
+        try fill(home)
+        let maps = try repo.addMapsGym(placeId: "P1", name: "Gym", address: nil, latitude: 1, longitude: 2)
+        try fill(maps)
+        let listing = try #require(try repo.listings(gymId: maps.id).first)
+        transport.gym = RemoteGym(id: UUID(), name: "Gym", address: nil, latitude: nil, longitude: nil,
+                                  mapsPlaceId: "P1")
+        try outbox.enqueueShare(listingId: listing.id, ownerId: UUID())
+        await outbox.run(userId: nil)
+        #expect(try f.store.dirtyGyms().isEmpty)
+        #expect(try f.store.dirtyGymListings().isEmpty)
+    }
 }

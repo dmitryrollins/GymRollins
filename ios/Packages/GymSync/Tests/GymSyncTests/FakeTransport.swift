@@ -19,6 +19,16 @@ actor FakeTransport: SyncTransport {
     private(set) var grants: [UUID] = []
     private(set) var revokedGrants: [UUID] = []
 
+    private(set) var gyms: [UUID: GymDTO] = [:]
+    private(set) var gymListings: [UUID: GymListingDTO] = [:]
+    private var listingKinds: [UUID: String] = [:]
+    /// Private bucket contents by name.
+    private(set) var privatePhotos: [String: Data] = [:]
+    var failUploads = false
+    var failDownloads = false
+    /// Names of the push and pull calls that touch gyms and workouts, in order.
+    private(set) var callLog: [String] = []
+
     private(set) var pushCalls = 0
     /// The `base_updated_at` of the last workout push (`.some(nil)` = sent without a base) and forced pushes.
     private(set) var lastWorkoutBase: Date??
@@ -32,6 +42,8 @@ actor FakeTransport: SyncTransport {
     private var heldPull: CheckedContinuation<Void, Never>?
 
     func fail(with error: URLError?) { failure = error }
+    func setFailUploads(_ value: Bool) { failUploads = value }
+    func setFailDownloads(_ value: Bool) { failDownloads = value }
     func reject(ids: [String]) { rejected = Set(ids.map { $0.lowercased() }) }
 
     /// The next pull suspends until `releasePull()` (to overlap a round with sign-out).
@@ -67,6 +79,12 @@ actor FakeTransport: SyncTransport {
         forced.force = true
         _ = try store(workout: forced)
     }
+    func seed(gym dto: GymDTO) throws { _ = try accept(dto, into: &gyms, key: dto.id) }
+    func seed(gymListing dto: GymListingDTO) throws {
+        listingKinds[dto.id] = dto.kindId
+        _ = try accept(dto, into: &gymListings, key: dto.id)
+    }
+    func seed(privatePhoto data: Data, name: String) { privatePhotos[name] = data }
     func seed(proposal: ProposalDTO) { proposals[proposal.id] = proposal }
     /// OAuth clients the user has granted access (e.g. Claude's connector).
     func seed(grants clientIds: [UUID]) { grants = clientIds }
@@ -135,8 +153,39 @@ actor FakeTransport: SyncTransport {
         }
     }
 
+    func push(gyms dtos: [GymDTO]) throws -> [RowAck] {
+        try gate()
+        callLog.append("push:gyms")
+        return try dtos.compactMap { dto in
+            try accept(dto, into: &gyms, key: dto.id).map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
+        }
+    }
+
+    func push(gymListings dtos: [GymListingDTO]) throws -> [RowAck] {
+        try gate()
+        callLog.append("push:gymListings")
+        return try dtos.compactMap { dto in
+            listingKinds[dto.id] = dto.kindId
+            return try accept(dto, into: &gymListings, key: dto.id)
+                .map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
+        }
+    }
+
+    func uploadPrivatePhoto(_ data: Data, name: String) throws -> String {
+        if failUploads { throw URLError(.networkConnectionLost) }
+        privatePhotos[name] = data
+        return name
+    }
+
+    func downloadPrivatePhoto(path: String) throws -> Data {
+        if failDownloads { throw URLError(.networkConnectionLost) }
+        guard let data = privatePhotos[path] else { throw URLError(.fileDoesNotExist) }
+        return data
+    }
+
     func push(workout dto: WorkoutDTO) throws -> WorkoutPushResult {
         try gate()
+        callLog.append("push:workout")
         try checkRejected([dto.id.uuidString])
         let sent = try wire(dto)
         lastWorkoutBase = .some(sent.baseUpdatedAt)
@@ -190,11 +239,27 @@ actor FakeTransport: SyncTransport {
         await waitIfHeld()
         return try pull(Array(muscleTargets.values), since: since)
     }
+    func pullGyms(since: Date?) async throws -> [GymDTO] {
+        callLog.append("pull:gyms")
+        return try pull(Array(gyms.values), since: since)
+    }
+    /// The embedded `equipment_items(kind_id)` the real select returns is added on the way out.
+    func pullGymListings(since: Date?) async throws -> [GymListingDTO] {
+        callLog.append("pull:gymListings")
+        return try pull(Array(gymListings.values), since: since).map { dto in
+            guard var json = try JSONSerialization.jsonObject(with: SyncJSON.encoder.encode(dto)) as? [String: Any]
+            else { throw CocoaError(.coderInvalidValue) }
+            json["equipment_items"] = ["kind_id": listingKinds[dto.id] ?? ""]
+            json["updated_at"] = dto.updatedAt.map(SyncDate.format)
+            return try SyncJSON.decoder.decode(GymListingDTO.self, from: JSONSerialization.data(withJSONObject: json))
+        }
+    }
     func pullBodyweight(since: Date?) async throws -> [BodyweightDTO] {
         await waitIfHeld()
         return try pull(Array(bodyweight.values), since: since)
     }
     func pullWorkouts(since: Date?) async throws -> [WorkoutDTO] {
+        callLog.append("pull:workouts")
         await waitIfHeld()
         return try pull(Array(workouts.values), since: since)
     }
@@ -283,6 +348,8 @@ extension RoutineDTO: ServerStampedDTO {}
 extension WeekdayDTO: ServerStampedDTO {}
 extension MuscleTargetDTO: ServerStampedDTO {}
 extension BodyweightDTO: ServerStampedDTO {}
+extension GymDTO: ServerStampedDTO {}
+extension GymListingDTO: ServerStampedDTO {}
 extension WorkoutDTO: ServerStampedDTO {
     /// A copy with another `client_updated_at` (the SQL function's `greatest(...)` for forced writes).
     static func restamped(_ dto: WorkoutDTO, clientUpdatedAt: Date) throws -> WorkoutDTO {

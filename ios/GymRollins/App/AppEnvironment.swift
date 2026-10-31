@@ -160,6 +160,7 @@ final class AppEnvironment {
             self?.reloadAll()
         }
         sync.onGymDataErased = { [weak self] in self?.removeGymLocalState() }
+        sync.gymPhotoFiles = self.gymPhotos
         wireHealth()
     }
 
