@@ -184,6 +184,18 @@ final class SharedWorkoutUITests: XCTestCase {
         XCTAssertFalse(element(app, "incoming.row.0313").exists)
     }
 
+    /// Two links hand-over-fist (a QR scan and a message): one sheet, and Not now closes it with nothing left underneath.
+    func testTwoLinksInARowLeaveOneSheetThatCloses() {
+        let app = XCUIApplication.launchReady(["-seedHistory"]) { $0.buttons["today.start"] }
+        XCUIDevice.shared.system.open(benchAndCurl)
+        XCUIDevice.shared.system.open(URL(string: "gymrollins://w#1.0194_3_10")!)
+        XCTAssertTrue(element(app, "incoming.row.0194").waitForExistence(timeout: 15), "the second link didn't show")
+        XCTAssertFalse(element(app, "incoming.row.0313").exists)
+        app.buttons["incoming.notNow"].tapCenter()
+        XCTAssertTrue(app.buttons["incoming.notNow"].waitForNonExistence(timeout: 5), "a sheet was left underneath")
+        XCTAssertFalse(app.buttons["incoming.use"].exists)
+    }
+
     /// A first-time partner finishes onboarding, then sees the workout.
     func testALinkWaitsForOnboarding() {
         let app = XCUIApplication()

@@ -19,36 +19,51 @@ final class IncomingWorkoutCoordinator {
         guard env.onboardingComplete, let url = pending else { return }
         pending = nil
         presenting?.cancel()
-        shown?.dismiss(animated: false)
         presenting = Task { [weak self] in await self?.present(url, env: env, showToday: showToday) }
     }
 
-    /// Waits while the top controller can't present: while it moves, or a system sheet or alert is up.
+    /// Each pass first clears the sheet an earlier link left up, once UIKit has finished moving it, then presents from the
+    /// top controller. It waits while that can't present (it moves, or a system sheet or alert is up) and when UIKit
+    /// refuses the presentation.
     private func present(_ url: URL, env: AppEnvironment, showToday: @escaping @MainActor () -> Void) async {
         while !Task.isCancelled {
-            if let top = Self.topController() {
-                let host = UIHostingController(rootView: sheet(env.incomingWorkoutScreen(url: url), env: env,
-                                                               showToday: showToday))
-                shown = host
+            if clearOldSheet(), let top = Self.topController() {
+                let host = UIHostingController(rootView: AnyView(EmptyView()))
+                // Made first so that each button closes this sheet, never whichever one is newest.
+                host.rootView = AnyView(sheet(env.incomingWorkoutScreen(url: url), env: env, host: host,
+                                              showToday: showToday))
                 top.present(host, animated: true)
-                return
+                if host.presentingViewController != nil {
+                    shown = host
+                    return
+                }
+                AppEnvironment.log.error("Presenting the workout link sheet was refused; trying again")
             }
             try? await Task.sleep(for: .milliseconds(500))
         }
     }
 
-    private func sheet(_ screen: IncomingWorkoutScreen, env: AppEnvironment,
+    /// True when no old sheet is left. An old sheet that is still moving is waited for; one that has settled goes at once.
+    private func clearOldSheet() -> Bool {
+        guard let old = shown else { return true }
+        if old.isBeingPresented || old.isBeingDismissed { return false }
+        if old.presentingViewController != nil { old.dismiss(animated: false) }
+        shown = nil
+        return true
+    }
+
+    private func sheet(_ screen: IncomingWorkoutScreen, env: AppEnvironment, host: UIViewController,
                        showToday: @escaping @MainActor () -> Void) -> some View {
         IncomingWorkoutSheet(
             screen: screen,
-            close: { [weak self] in self?.shown?.dismiss(animated: true) },
-            used: { [weak self] in
+            close: { [weak host] in host?.dismiss(animated: true) },
+            used: { [weak host] in
                 showToday()
-                self?.shown?.dismiss(animated: true)
+                host?.dismiss(animated: true)
             },
-            resume: { [weak self] in
+            resume: { [weak host] in
                 showToday()
-                self?.shown?.dismiss(animated: true) {
+                host?.dismiss(animated: true) {
                     NotificationCenter.default.post(name: .resumeWorkoutRequested, object: nil)
                 }
             })
