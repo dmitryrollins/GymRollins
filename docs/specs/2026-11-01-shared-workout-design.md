@@ -83,13 +83,17 @@ before the change still work.
 | `<target>` | `10`, `8-10` or `s600` | Reps, a rep range (`repsMin-reps`), or seconds. |
 | `g<n>` | `g1` | A superset number, renumbered from 1 in order of appearance. Never the sender's own label. |
 
-Seconds mean a timed exercise, or a cardio one if the library says that exercise is cardio. Reps mean a rep exercise.
+Seconds mean a timed exercise, or a cardio one if the library says that exercise is cardio. Reps mean a rep exercise. Reps on a
+cardio exercise only come from a crafted link: it becomes cardio with the default time.
 
 **Limits.** At most 1024 characters, read before anything else is parsed. At most `DomainLimits.routineExercisesMax` (20)
 exercises. Values use `PlanChangeLimits`: sets 1...10, reps 1...100, seconds 5...3600. `repsMin` is at most `reps`.
 
 **Sending.** Values outside those limits are clamped when the link is made, so a sender can always share. With more than
 20 exercises, the first 20 go.
+
+**Sending and reading repeats.** A running workout can hold an exercise twice, so sending keeps the first of each. Reading a
+repeated id makes the link damaged.
 
 **Reading.** Any broken syntax or value outside the limits makes the whole link damaged. An exercise id that isn't in this
 phone's library is only dropped and counted, because a newer app can have exercises an older one lacks. If no exercise is
@@ -111,8 +115,8 @@ explains why instead of showing a code. The button is hidden when there are no e
 Sharing changes nothing on the sender's phone. The sender starts their own workout as usual.
 
 ### Opening
-1. The app receives the URL through `onOpenURL` (`gymrollins://`) or `onContinueUserActivity` (`https://`). No URL is opened
-   without the person tapping or scanning it.
+1. The app receives the URL through `onOpenURL` (`gymrollins://`) or `onContinueUserActivity` (`https://`). All a link can do
+   by itself is open this sheet: nothing changes until the person taps Use for today.
 2. If onboarding isn't finished, the link waits in memory and the sheet opens when onboarding ends. If the app is quit in
    between, the link is gone and the person taps it again.
 3. The sheet opens over whatever is on screen. If that isn't possible because a system sheet is open, it opens as soon as
@@ -122,25 +126,40 @@ Sharing changes nothing on the sender's phone. The sender starts their own worko
 - Title "Shared workout", the number of exercises, then one row per exercise.
 - The rows are `TodayModel` rows, built by `TodayModel.make` from the plan the button would apply, so they always match what
   Today then shows, in the partner's language and units.
-- A row whose exercise takes weight and has no suggestion also says "Set on first set". A bodyweight exercise shows only its
+- A row whose exercise takes weight and has no weight also says "Set on first set". A bodyweight exercise shows only its
   sets and reps.
-- If today's plan has edits, or isn't the normal scheduled plan, the sheet says "This replaces today's plan."
-- **Use for today** applies the plan and closes the sheet on Today. **Not now** closes it and stores nothing.
+- A row for an exercise this person marked "Don't recommend again" says so. It isn't blocked, because they can see the name and
+  must still tap. A link is the one source that can bring such an exercise back, so it has to say.
+- The person's injury note (`profile.limits`) shows on the sheet, as it does on Today, because this is where they decide.
+- If today's plan has exercises and is edited, switched or built, the sheet says "This replaces today's plan." A plain scheduled
+  plan or rest-day suggestion gets no warning, because it comes back by itself.
+- **Use for today** applies the plan and closes the sheet on Today, closing anything pushed on Today. A sheet left open there
+  stays open. **Not now** closes it and stores nothing.
+
+### Whose weight
+Each exercise's weight is settled on this phone when the link opens, and held for today in the item's `fixedWeightKg`:
+1. If one of this person's routines has the exercise, what that routine would suggest now. So a weight they cut for rehab stays
+   cut, and their own progression setting applies.
+2. Otherwise the weight they last logged.
+3. Otherwise none, and the row says "Set on first set".
+
+The sender's sets and reps never go through progression against this person's history. If they did, a sender's 3x12 would count
+as a miss for someone who does 3x8, and two of those would lower their weight.
 
 ### Today's plan
 `TodayPlan.shared(items:day:)` is a `.built` plan named "Shared workout", with every item in `gymPinned`:
 - `GymAdapter` can't swap a pinned item, so the exercises stay as sent.
 - Editing, Start Workout, Resume and the Watch's "Start today's workout" work as they do for a Build workout.
-- Items carry no `weightKg` and no `weightSetAt`, so `SessionPlanner` takes weights from the partner's history and fits them
-  to the current gym. Warm-ups and rest follow the partner's own settings.
+- Items carry `fixedWeightKg` (see "Whose weight"), and `SessionPlanner` fits it to the current gym. Warm-ups and rest follow the
+  partner's own settings.
 - It lasts until Start is tapped or the day ends, as a Build workout does. After Start, Today goes back to the normal plan.
-- The workout has no `routineId`, so it doesn't count as a routine done. Its sets count towards progression by exercise, in
-  that person's history only.
+- The workout gets a new routine id that matches no routine, as a Build workout does, so it doesn't count as a routine done. Its
+  sets count towards progression by exercise, in that person's history only.
 
 ## 6. UI
 
-**Share screen.** A sheet with the QR code, "Send link" (system share sheet) and one line: "Your partner sees this workout
-with their own weights." Left-out exercises are listed under it, and a line appears if only the first 20 went.
+**Share screen.** A sheet with the QR code, "Send link" (system share sheet) and one line: "Your partner scans this with their iPhone camera,
+or opens the link, and sees this workout with their own weights." Left-out exercises are listed under it, and a line appears if only the first 20 went.
 
 **QR code.** Generated with Core Image's built-in `CIQRCodeGenerator`, correction level M, dark on white with its quiet zone,
 even in dark mode. Its VoiceOver label is "QR code for this workout", and "Send link" is the alternative to it.
@@ -156,7 +175,8 @@ or history."
 **Web page (`web/share/`).** Static: the app's name, "Open in GymRollins" and "Get the app". The App Store button stays hidden
 until `APP_STORE_URL` is set in the page. "Open in GymRollins" is for browsers inside other apps, which don't always hand a
 link to the app. A few lines of script add the address's `#` part to a `gymrollins://w` link and nothing else. The page has no
-analytics, and its content security policy has `connect-src 'none'`, so it can't send anything.
+analytics, its script sends nothing, and its content security policy blocks requests. The policy is a `<meta>` tag, which can't
+stop framing, so the page offers no button inside a frame, and the host should also send `frame-ancestors 'none'` as a header.
 
 ## 7. Error handling
 
@@ -180,8 +200,9 @@ Decoding never throws to the UI as raw text: it returns one of `valid`, `damaged
   can't put a stranger's words in the app, in the workout's name or in front of Claude. Workouts and their names reach Claude
   through MCP once synced, so this matters. It's also why custom exercises are left out.
 - **Nothing personal.** No weights, name, history, gym or account. What a link reveals is a list of exercises.
-- **No server.** The app makes no request for this feature. The part after the `#` isn't sent to the web host, and the page
-  only passes it to the app.
+- **No server.** The feature itself makes no request. The sheet's exercise photos load as they do on any screen, so a photo host
+  can see the phone's address and which photos it asked for, and a stranger picks neither host nor path and learns nothing. The
+  part after the `#` isn't sent to the web host, and the page only passes it to the app.
 - **Temporary scheme.** Another app could register `gymrollins://` and receive such a link. That's accepted, because a link
   holds nothing private.
 - **Moderation.** None is needed: nothing is published, and a link only reaches people it's sent to.
@@ -232,7 +253,8 @@ One implementation plan, plan 23, on branch `feat-shared-workout`:
    in `ios/Config/Local.xcconfig`, and can't go in earlier because it names the domain.
 3. Publish `web/share/` on any static host, with `/.well-known/apple-app-site-association` served as `application/json`, with
    no redirect, naming the team id, bundle id `com.rollins.gymrollins` and the path `/w`.
-4. On a real iPhone, scan a QR code and tap a link from a chat app, with the app installed and without it.
+4. On a real iPhone, scan a QR code and tap a link from a chat app, with the app installed and without it. Check on the share
+   sheet that the system doesn't fetch the page for a preview.
 
 The same host can serve the OAuth consent page, the hosted privacy policy and the contact address the launch list needs.
 

@@ -93,7 +93,7 @@ Use only that destination: on the iOS 26.4 preview runtime, History and Swap she
 - Create: `ios/Packages/GymCore/Sources/GymCore/SharedWorkout/SharedWorkout+Link.swift`
 - Test: `ios/Packages/GymCore/Tests/GymCoreTests/SharedWorkout/SharedWorkoutTests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import Foundation
@@ -321,12 +321,12 @@ private struct SeededGenerator: RandomNumberGenerator {
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `cd ios/Packages/GymCore && swift test --filter SharedWorkoutTests`
 Expected: FAIL to compile, "cannot find 'SharedWorkout' in scope".
 
-- [ ] **Step 3: Write `SharedWorkout.swift`**
+- [x] **Step 3: Write `SharedWorkout.swift`**
 
 ```swift
 import Foundation
@@ -387,7 +387,7 @@ public struct SharedWorkout: Equatable, Sendable {
 }
 ```
 
-- [ ] **Step 4: Write `SharedWorkout+Sending.swift`**
+- [x] **Step 4: Write `SharedWorkout+Sending.swift`**
 
 ```swift
 import Foundation
@@ -477,7 +477,7 @@ public extension SharedWorkout {
 }
 ```
 
-- [ ] **Step 5: Write `SharedWorkout+Link.swift`**
+- [x] **Step 5: Write `SharedWorkout+Link.swift`**
 
 ```swift
 import Foundation
@@ -568,17 +568,17 @@ public extension SharedWorkout {
 }
 ```
 
-- [ ] **Step 6: Run them and see them pass**
+- [x] **Step 6: Run them and see them pass**
 
 Run: `cd ios/Packages/GymCore && swift test --filter SharedWorkoutTests`
 Expected: PASS, all tests. Fix the code, not the tests. If a test looks wrong, say which and why in your report.
 
-- [ ] **Step 7: Check the coverage gate**
+- [x] **Step 7: Check the coverage gate**
 
 Run: `scripts/coverage-gymcore.sh`
 Expected: `Line coverage: ...% (threshold 90%)`, exit 0. All three new files appear near 100%.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/SharedWorkout ios/Packages/GymCore/Tests/GymCoreTests/SharedWorkout
@@ -594,7 +594,7 @@ git commit -m "feat(core): a workout as link text, with no weights or free text"
 - Create: `ios/GymRollins/Features/SharedWorkout/WorkoutLink.swift`
 - Test: `ios/GymRollinsTests/WorkoutLinkTests.swift`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```swift
 import Foundation
@@ -655,7 +655,7 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Add the URL scheme and the setting**
+- [x] **Step 2: Add the URL scheme and the setting**
 
 In `ios/project.yml`, under the `GymRollins` target's `info.properties`, right after `PHOTO_HOSTING: $(PHOTO_HOSTING)`:
 
@@ -675,12 +675,12 @@ In `ios/Config/Base.xcconfig`, right after `PHOTO_HOSTING = bundle`:
 SHARE_LINK_HOST =
 ```
 
-- [ ] **Step 3: Run it and see it fail**
+- [x] **Step 3: Run it and see it fail**
 
 Run the one-class command with `-only-testing:GymRollinsTests/WorkoutLinkTests`.
 Expected: compile error, "cannot find 'WorkoutLink' in scope".
 
-- [ ] **Step 4: Write `WorkoutLink.swift`**
+- [x] **Step 4: Write `WorkoutLink.swift`**
 
 ```swift
 import Foundation
@@ -728,12 +728,12 @@ struct WorkoutLink: Equatable {
 }
 ```
 
-- [ ] **Step 5: Run it and see it pass**
+- [x] **Step 5: Run it and see it pass**
 
 Run the one-class command with `-only-testing:GymRollinsTests/WorkoutLinkTests`.
 Expected: `'result': 'Passed'`, no failures.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ios/project.yml ios/Config/Base.xcconfig ios/GymRollins/Features/SharedWorkout/WorkoutLink.swift ios/GymRollinsTests/WorkoutLinkTests.swift
@@ -748,7 +748,7 @@ git commit -m "feat(workouts): workout links, on an app scheme until the domain 
 - Create: `ios/GymRollins/Features/SharedWorkout/QRCodeImage.swift`, `ShareWorkoutModel.swift`, `ShareWorkoutSheet.swift`
 - Test: `ios/GymRollinsTests/QRCodeImageTests.swift`, `ios/GymRollinsTests/ShareWorkoutModelTests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `QRCodeImageTests.swift`:
 
@@ -857,12 +857,12 @@ import Testing
 
 `DisplayName.of` capitalizes a stored name. Check its output for `"sled push"` against the expected `"Sled Push"` when this runs, and correct the two expected strings if its rule differs. Don't change `DisplayName`.
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run the one-class command with `-only-testing:GymRollinsTests/QRCodeImageTests -only-testing:GymRollinsTests/ShareWorkoutModelTests`.
 Expected: compile error, "cannot find 'QRCodeImage' in scope".
 
-- [ ] **Step 3: Write `QRCodeImage.swift`**
+- [x] **Step 3: Write `QRCodeImage.swift`**
 
 ```swift
 import CoreImage
@@ -888,7 +888,7 @@ enum QRCodeImage {
 }
 ```
 
-- [ ] **Step 4: Write `ShareWorkoutModel.swift`**
+- [x] **Step 4: Write `ShareWorkoutModel.swift`**
 
 ```swift
 import CoreGraphics
@@ -925,7 +925,7 @@ struct ShareWorkoutModel: Identifiable {
 }
 ```
 
-- [ ] **Step 5: Write `ShareWorkoutSheet.swift`**
+- [x] **Step 5: Write `ShareWorkoutSheet.swift`**
 
 ```swift
 import GymCore
@@ -1005,12 +1005,12 @@ struct ShareWorkoutSheet: View {
 }
 ```
 
-- [ ] **Step 6: Run them and see them pass**
+- [x] **Step 6: Run them and see them pass**
 
 Run the one-class command with `-only-testing:GymRollinsTests/QRCodeImageTests -only-testing:GymRollinsTests/ShareWorkoutModelTests`.
 Expected: `'result': 'Passed'`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ios/GymRollins/Features/SharedWorkout ios/GymRollinsTests/QRCodeImageTests.swift ios/GymRollinsTests/ShareWorkoutModelTests.swift
@@ -1026,7 +1026,7 @@ git commit -m "feat(workouts): share screen with a QR code and a link"
 - Modify: `ios/GymRollins/Features/Gyms/BuildResultView.swift`, `ios/GymRollins/Features/Workout/WorkoutOverviewView.swift`
 - Test: `ios/GymRollinsTests/TodayPlanSharedTests.swift`, `ios/GymRollinsUITests/SharedWorkoutUITests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `TodayPlanSharedTests.swift`:
 
@@ -1160,12 +1160,12 @@ final class SharedWorkoutUITests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run the one-class command with `-only-testing:GymRollinsTests/TodayPlanSharedTests`.
 Expected: compile error, "type 'TodayPlan' has no member 'shared'".
 
-- [ ] **Step 3: Add `shared` and `shareSources` to `TodayPlan.swift`**
+- [x] **Step 3: Add `shared` and `shareSources` to `TodayPlan.swift`**
 
 Right after `static func built(...)`:
 
@@ -1186,12 +1186,12 @@ Right after `static func built(...)`:
     }
 ```
 
-- [ ] **Step 4: Run them and see them pass**
+- [x] **Step 4: Run them and see them pass**
 
 Run the one-class command with `-only-testing:GymRollinsTests/TodayPlanSharedTests`.
 Expected: `'result': 'Passed'`.
 
-- [ ] **Step 5: Add the three buttons**
+- [x] **Step 5: Add the three buttons**
 
 `TodayView.swift`, inside `if env.session == nil { ... }` after the save button:
 
@@ -1223,12 +1223,12 @@ Expected: `'result': 'Passed'`.
                 }
 ```
 
-- [ ] **Step 6: Run the UI tests and the screens' existing suites**
+- [x] **Step 6: Run the UI tests and the screens' existing suites**
 
 Run the one-class command with `-only-testing:GymRollinsUITests/SharedWorkoutUITests -only-testing:GymRollinsUITests/BuildWorkoutUITests -only-testing:GymRollinsUITests/TodayFlexUITests -only-testing:GymRollinsUITests/WorkoutFlowUITests`.
 Expected: `'result': 'Passed'`. The new button pushes content down, so an existing test that scrolls to something may need another swipe. Change only that, and say which.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ios/GymRollins/Features/Today ios/GymRollins/Features/Gyms/BuildResultView.swift ios/GymRollins/Features/Workout/WorkoutOverviewView.swift ios/GymRollinsTests/TodayPlanSharedTests.swift ios/GymRollinsUITests/SharedWorkoutUITests.swift
@@ -1245,7 +1245,7 @@ git commit -m "feat(workouts): share from Today, the Build result and the runnin
 - Modify: `ios/GymRollins/App/RootView.swift`, `ios/GymRollins/Features/Today/TodayView.swift`
 - Test: `ios/GymRollinsTests/IncomingWorkoutScreenTests.swift`, `ios/GymRollinsUITests/SharedWorkoutUITests.swift`
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 ```swift
 import Foundation
@@ -1414,12 +1414,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run the one-class command with `-only-testing:GymRollinsTests/IncomingWorkoutScreenTests -only-testing:GymRollinsTests/UseSharedWorkoutTests`.
 Expected: compile error, "cannot find 'IncomingWorkoutScreen' in scope".
 
-- [ ] **Step 3: Write `IncomingWorkoutScreen.swift`**
+- [x] **Step 3: Write `IncomingWorkoutScreen.swift`**
 
 ```swift
 import Foundation
@@ -1499,7 +1499,7 @@ enum IncomingWorkoutScreen: Equatable {
 
 `TodayGymContext` must be usable from a non-`@MainActor` function. If the compiler objects, match how `TodayModel.make` takes it.
 
-- [ ] **Step 4: Write `AppEnvironment+SharedWorkout.swift`**
+- [x] **Step 4: Write `AppEnvironment+SharedWorkout.swift`**
 
 ```swift
 import Foundation
@@ -1538,12 +1538,12 @@ extension AppEnvironment {
 }
 ```
 
-- [ ] **Step 5: Run the unit tests and see them pass**
+- [x] **Step 5: Run the unit tests and see them pass**
 
 Run the one-class command with `-only-testing:GymRollinsTests/IncomingWorkoutScreenTests -only-testing:GymRollinsTests/UseSharedWorkoutTests`.
 Expected: `'result': 'Passed'`.
 
-- [ ] **Step 6: Add the failing UI tests**
+- [x] **Step 6: Add the failing UI tests**
 
 Add to `SharedWorkoutUITests`:
 
@@ -1676,12 +1676,12 @@ Add to `SharedWorkoutUITests`:
 
 Check `testSkipImportFinishesWithNoWorkouts` in `OnboardingUITests.swift` for what follows `import.skip`. If it taps another button before Today, add that tap here.
 
-- [ ] **Step 7: Run them and see them fail**
+- [x] **Step 7: Run them and see them fail**
 
 Run the one-class command with `-only-testing:GymRollinsUITests/SharedWorkoutUITests/testALinkBecomesTodaysPlan`.
 Expected: FAIL, "the sheet didn't open". The URL scheme is registered and nothing handles it.
 
-- [ ] **Step 8: Write `IncomingWorkoutSheet.swift`**
+- [x] **Step 8: Write `IncomingWorkoutSheet.swift`**
 
 ```swift
 import GymCore
@@ -1771,7 +1771,7 @@ struct IncomingWorkoutSheet: View {
 }
 ```
 
-- [ ] **Step 9: Write `IncomingWorkoutCoordinator.swift`**
+- [x] **Step 9: Write `IncomingWorkoutCoordinator.swift`**
 
 ```swift
 import SwiftUI
@@ -1845,7 +1845,7 @@ final class IncomingWorkoutCoordinator {
 }
 ```
 
-- [ ] **Step 10: Receive links in `RootView.swift`**
+- [x] **Step 10: Receive links in `RootView.swift`**
 
 Replace `body` and add the state and helper. `mainTabs` stays as it is.
 
@@ -1880,7 +1880,7 @@ struct RootView: View {
     private func showToday() { tab = .today }
 ```
 
-- [ ] **Step 11: Let Today hear about it, in `TodayView.swift`**
+- [x] **Step 11: Let Today hear about it, in `TodayView.swift`**
 
 Next to the other `.onReceive` lines:
 
@@ -1891,18 +1891,18 @@ Next to the other `.onReceive` lines:
             }
 ```
 
-- [ ] **Step 12: Run the UI tests and see them pass**
+- [x] **Step 12: Run the UI tests and see them pass**
 
 Run the one-class command with `-only-testing:GymRollinsUITests/SharedWorkoutUITests`.
 Expected: `'result': 'Passed'`. If the sheet doesn't appear in one case, read the failure screenshot first
 (`xcrun xcresulttool export attachments --path <bundle> --output-path <dir> --test-id "<id>"`).
 
-- [ ] **Step 13: Run the existing Today and onboarding suites**
+- [x] **Step 13: Run the existing Today and onboarding suites**
 
 Run the one-class command with `-only-testing:GymRollinsUITests/OnboardingUITests -only-testing:GymRollinsUITests/TodayFlexUITests -only-testing:GymRollinsTests/SmokeTests`.
 Expected: `'result': 'Passed'`. `RootView`'s body now has a `Group`, and these prove nothing else moved.
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 git add ios/GymRollins/Features/SharedWorkout ios/GymRollins/App/AppEnvironment+SharedWorkout.swift ios/GymRollins/App/RootView.swift ios/GymRollins/Features/Today/TodayView.swift ios/GymRollinsTests/IncomingWorkoutScreenTests.swift ios/GymRollinsUITests/SharedWorkoutUITests.swift
@@ -1916,7 +1916,7 @@ git commit -m "feat(workouts): open a workout link with your own weights and use
 **Files:**
 - Modify: `ios/GymRollinsUITests/AccessibilityAuditUITests.swift`, `ios/GymRollinsUITests/DynamicTypeUITests.swift`
 
-- [ ] **Step 1: Add the audits**
+- [x] **Step 1: Add the audits**
 
 In `AccessibilityAuditUITests`, after `testBuildResultAudit`:
 
@@ -1946,7 +1946,7 @@ In `AccessibilityAuditUITests`, after `testBuildResultAudit`:
     }
 ```
 
-- [ ] **Step 2: Add the large-text test**
+- [x] **Step 2: Add the large-text test**
 
 In `DynamicTypeUITests`, after `testBuildSheetAndResultAtAccessibilityXL`:
 
@@ -1975,7 +1975,7 @@ In `DynamicTypeUITests`, after `testBuildSheetAndResultAtAccessibilityXL`:
     }
 ```
 
-- [ ] **Step 3: Run them**
+- [x] **Step 3: Run them**
 
 Run the one-class command with `-only-testing:GymRollinsUITests/AccessibilityAuditUITests/testShareWorkoutAudit -only-testing:GymRollinsUITests/AccessibilityAuditUITests/testIncomingWorkoutAudit -only-testing:GymRollinsUITests/AccessibilityAuditUITests/testIncomingWorkoutMessageAudit -only-testing:GymRollinsUITests/DynamicTypeUITests/testSharedWorkoutSheetsAtAccessibilityXL`.
 Expected: `'result': 'Passed'`.
@@ -1984,7 +1984,7 @@ If an audit reports a real issue, fix the sheet. The likely ones are clipped tex
 
 If the two bottom buttons don't fit at large text, make the `VStack` in `IncomingWorkoutSheet.preview` part of the scrolled content at that size, using `ViewThatFits`, as `BuildResultView.actions` does.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add ios/GymRollinsUITests/AccessibilityAuditUITests.swift ios/GymRollinsUITests/DynamicTypeUITests.swift ios/GymRollins/Features/SharedWorkout
@@ -2001,7 +2001,7 @@ git commit -m "test(workouts): accessibility audits and large text for the share
 - Test: `web/share/share.test.mjs`
 - Modify: `ios/GymRollins/Features/Settings/PrivacyPolicyView.swift`, `scripts/test-all.sh`, `README.md`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `web/share/share.test.mjs`:
 
@@ -2059,12 +2059,12 @@ test("Apple's domain file covers only the link's path and this app", () => {
 })
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `node --test web/share/share.test.mjs`
 Expected: FAIL, "Cannot find module .../web/share/w/open.mjs".
 
-- [ ] **Step 3: Write the page**
+- [x] **Step 3: Write the page**
 
 `web/share/w/open.mjs`:
 
@@ -2173,12 +2173,12 @@ The host must serve `.mjs` as JavaScript, or the browser won't run `open.mjs`.
 Test: `node --test web/share/share.test.mjs`
 ```
 
-- [ ] **Step 4: Run it and see it pass**
+- [x] **Step 4: Run it and see it pass**
 
 Run: `node --test web/share/share.test.mjs`
 Expected: `# fail 0`.
 
-- [ ] **Step 5: Add the privacy sentence**
+- [x] **Step 5: Add the privacy sentence**
 
 In `PrivacyPolicyView.swift`, in the list right after the line about reports:
 
@@ -2186,7 +2186,7 @@ In `PrivacyPolicyView.swift`, in the list right after the line about reports:
         "Sharing a workout link sends only its exercises, sets and reps: no weights, name or history.",
 ```
 
-- [ ] **Step 6: Add the test to `scripts/test-all.sh`**
+- [x] **Step 6: Add the test to `scripts/test-all.sh`**
 
 Right after `node --test "$ROOT/web/consent/server.test.mjs"`:
 
@@ -2196,7 +2196,7 @@ echo "==> Workout link page (node test)"
 node --test "$ROOT/web/share/share.test.mjs"
 ```
 
-- [ ] **Step 7: Add to `README.md`**
+- [x] **Step 7: Add to `README.md`**
 
 In the feature list, right after the gym equipment bullet:
 
@@ -2211,7 +2211,7 @@ In the tests table, after the consent row:
 | Workout link page (no requests, content security policy, Apple's domain file) | `node --test web/share/share.test.mjs` |
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add web/share ios/GymRollins/Features/Settings/PrivacyPolicyView.swift scripts/test-all.sh README.md
@@ -2222,7 +2222,7 @@ git commit -m "feat(workouts): the page a workout link opens without the app, an
 
 ### Task 8: Finish
 
-- [ ] **Step 1: Run every suite**
+- [x] **Step 1: Run every suite**
 
 The app suite takes about an hour, and only one `xcodebuild` should run at a time.
 
@@ -2242,7 +2242,7 @@ or `GymSync` did change, stop and say so.
 
 If an audit fails, read its screenshot first. Report every failure with what you found.
 
-- [ ] **Step 2: Walk it on two simulators**
+- [x] **Step 2: Walk it on two simulators**
 
 Use `iPhone 17 Pro Max` and `iPhone 17 Pro`, both iOS 26.2. Leave the booted iPhone 16 Pro on iOS 18.2 alone, because it may not be ours. With both signed out:
 
@@ -2269,7 +2269,7 @@ Launch each phone with `xcrun simctl launch --terminate-running-process <udid> c
 
 Save the screenshots to the scratchpad, not the repo. List anything that looks wrong, including unclear copy and layout problems.
 
-- [ ] **Step 3: Update the docs and finish**
+- [x] **Step 3: Update the docs and finish**
 
 Tick the boxes here and add `## Outcome` with the real numbers and the walk's results, in the form plan 22's uses. State what wasn't tested: the `https://` link opening the app, and a real camera scan. Update the spec if anything changed.
 
@@ -2277,3 +2277,74 @@ Tick the boxes here and add `## Outcome` with the real numbers and the walk's re
 git add README.md docs/plans/2026-11-01-plan-23-shared-workout.md docs/specs/2026-11-01-shared-workout-design.md
 git commit -m "docs: plan 23 outcome"
 ```
+
+## Outcome
+
+Done on 2026-11-01, branch `feat-shared-workout`, stacked on `feat-gym-moderation`, not pushed. Supabase stays local. Final run at `edbe8d0`:
+
+| Suite | Result |
+|---|---|
+| App, unit and UI, iPhone 17 Pro Max, iOS 26.2, `PerformanceUITests` excluded | 1085 tests: 1070 passed, 0 failed, 15 skipped |
+| `scripts/ios-test-sync.sh`, the app against the real local stack | 5 tests, all passed (5 of the 15 skips above) |
+| `scripts/test-photo-hosting.sh` | 1 test, passed (1 of the 15 skips above) |
+| GymCore (`scripts/coverage-gymcore.sh`) | 96.34% line coverage, threshold 90%; 100% on the `SharedWorkout` files when written |
+| GymData | 352 tests in 48 suites |
+| GymHealth | 85 tests in 17 suites |
+| GymWatchLink | 63 tests in 8 suites |
+| GymSync, `--filter GymSyncTests` | 142 tests in 20 suites |
+| `web/share/share.test.mjs` | 17 tests |
+| `web/consent/server.test.mjs` | 17 tests |
+| `node --test scripts/*.test.mjs` | 148 tests |
+| `scripts/watch-build.sh` | watchOS build OK |
+
+Nothing under `supabase/`, `web/consent/` or the GymData, GymSync, GymHealth and GymWatchLink packages changed, so `test-db.sh`, `test-mcp.sh`, the sync integration suite and `test-gym-e2e.sh` weren't run. Plan 22's 18 consent tests are `server.test.mjs`'s 17 plus the one in `e2e.test.mjs`, which only `test-mcp.sh` runs. Plan 22's 181 GymSync tests came from a different way of running them, so don't compare it with the 142 here.
+
+**Skips left:** `ReadmeScreenshotsUITests` (8) only runs when regenerating the README's screenshots. `RealExportImportTests` (1) needs the owner's export file.
+
+**The walk.** The real app on two simulators, signed out, with the local Supabase stopped and without `-uiTesting`, before `edbe8d0`, which only changed the share note's wording. A UI test checks the new wording.
+- The QR code read from a screenshot of phone A gave `gymrollins://w#1.0025_3_8-10.0314_3_8-10.0319_3_10-12_g1.0155_3_10-12_g1.0194_3_8-10.0313_3_8-10.0070_3_8-10`: ids and numbers only.
+- Phone B's sheet showed B's own weights: bench 140 lb from B's routine, where A's plan said 135 lb. An exercise B had never done read "Set on first set".
+- Use for today put "Shared workout · 7 exercises" on Today, with Switch. B logged 100 lb bench and 37.5 lb row, and they appear in B's Log. A's Log and Today didn't change.
+- Opening the link again showed the weights B had just logged.
+- Bad links gave the right messages. A link during a workout said so and offered Resume, and the workout was unchanged.
+- Cardio read "1 × 10 min" with a Minutes box, and plank "3 × 1 min" with a Seconds box.
+- Links from Build and from a running workout matched the screen and held no weights.
+- The Privacy screen has the new sentence.
+
+**The web page in real browsers.** `w/` at `edbe8d0`, Chromium and WebKit, served locally. With a link, "Open in GymRollins" pointed at `gymrollins://w#...`, the stylesheet loaded, and nothing failed or logged an error. With no link there's no button. In a frame there's no button. "Get the app" stays hidden while `APP_STORE_URL` is empty.
+
+**Changed from the decisions above**
+- Decision 1: the coordinator no longer only waits. Each sheet closes itself, an old one is cleared first, and it checks that UIKit really presented the new one, retrying if not.
+- Decision 4: the link carries the first working set not yet done, not the first working set.
+- Task 5's tests and Task 8's walk step 3 expected every exercise to read "Set on first set". The weight rule below replaced that.
+- The UI tests reach the running app with `XCUIDevice.shared.system.open`. `XCUIApplication.open(url)` relaunches the app, which loses the in-memory store and only tests a cold start. `simctl openurl` stops at a dialog a test can't tap.
+
+**Added after this plan's reviews.** The security review found nothing critical or high: 3M mutated links, none out of limits, and no free text reaches the app or Claude. The code review's one high and eight mediums are fixed.
+- **Whose weight.** A weight is settled on the phone when the link opens and kept in `fixedWeightKg`: the person's own routine's suggestion, else what they last logged, else none ("Set on first set"). The sender's sets and reps never go through progression, because that gave a first set of -5 lb, a deload from the sender's targets, and 2.5 lb added to bodyweight moves.
+- Timed and cardio rows read correctly. Seconds items carry no reps, and reps on a cardio exercise fall back to the cardio default of 20 minutes.
+- The sheet shows "You marked this \"Don't recommend\"" and the person's injury note.
+- Today comes back after Use for today, from under a pushed screen too, with no "No plan yet" above the rows and with Switch when the person has no routines.
+- Links past midnight re-date. Duplicates are removed when sending and refused when reading. An empty day says "There's nothing to share yet."
+- The web page uses absolute paths and offers nothing in a frame. The headers a host must send are in `web/share/README.md`.
+
+**Not tested**
+- The `https://` link opening the app, which needs the domain, a signed entitlement, a paid Apple team and a real iPhone.
+- A real camera scan.
+- The system share sheet not fetching the page.
+- `testTwoLinksInARowLeaveOneSheetThatCloses` passes on the old coordinator too, so the animation-window race was never reproduced. That fix rests on reading the code.
+- Task 4's UI tests were never seen failing before the buttons existed.
+- Resume with a SwiftUI sheet up on another tab.
+
+**Known and left**
+- The Summary screen counts as a running workout, so a link there says "Finish your current workout first."
+- A running workout's link carries single reps, not a range.
+- "Set on first set" also shows on bands, balls and rollers. Only body weight is excluded.
+- Log All Sets can still log a weight of 0 on a new exercise.
+- The Watch doesn't carry a dialled weight to the next set.
+- SwiftUI sheets stay up after Use for today, and `NavigationLink` pushes aren't popped.
+- A last-logged weight isn't rounded to the plate grid.
+- The error screens are bare.
+- A superset is carried in the data but has no grouping on the overview, as before this plan.
+- Summary's Volume reads kg or t while the rest of the app reads lb, as before this plan.
+- The plank logging screen shows a Weight box and rest and plate chips. Whether that predates this plan wasn't checked.
+- A link can arrive from any foreground app. All it can do is open the sheet.
