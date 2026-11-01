@@ -76,6 +76,11 @@ targets:
         SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
         # bundle | storage (Config/Base.xcconfig): where GymRollins' own exercise photos come from.
         PHOTO_HOSTING: $(PHOTO_HOSTING)
+        # The domain workout links use (Config/Base.xcconfig). Empty: they use the gymrollins scheme below.
+        SHARE_LINK_HOST: $(SHARE_LINK_HOST)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.rollins.gymrollins.workout-link
+            CFBundleURLSchemes: [gymrollins]
         # Plain http to the local Supabase stack (127.0.0.1) only; ATS stays on for every other host.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

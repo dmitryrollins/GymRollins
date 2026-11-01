@@ -11,6 +11,10 @@ SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1
 // fallback. Override in Local.xcconfig. Release builds only load Storage photos over https.
 PHOTO_HOSTING = bundle
 
+// The domain for workout links (docs/specs/2026-11-01-shared-workout-design.md, section 10). Empty until it's bought: the
+// app makes gymrollins:// links. Set it here once it exists, without a scheme, e.g. gym.example. The app reads both kinds.
+SHARE_LINK_HOST =
+
 CODE_SIGN_STYLE = Automatic
 // Signing team: set it in Local.xcconfig (gitignored), e.g.
 // DEVELOPMENT_TEAM = ABCDE12345
