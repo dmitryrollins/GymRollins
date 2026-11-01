@@ -29,6 +29,7 @@ public extension SharedWorkout {
         let parsed = itemFields.map(item)
         guard parsed.allSatisfy({ $0 != nil }) else { return .damaged }
         let all = parsed.compactMap { $0 }
+        guard Set(all.map(\.exerciseId)).count == all.count else { return .damaged }
         let known = all.filter { isKnown($0.exerciseId) }
         guard !known.isEmpty else { return .damaged }
         return .valid(SharedWorkout(items: known), droppedUnknown: all.count - known.count)

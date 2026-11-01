@@ -25,7 +25,8 @@ public extension SharedWorkout {
         /// Edited or running sets: the number of working sets and the first one's target. Nil with no working sets.
         public init?(exerciseId: String, group: String?, sets: [WorkoutSet]) {
             let working = sets.filter { !$0.warmup }
-            guard let first = working.first else { return nil }
+            // The plan's number, not what was just logged: the first set still to do, or the first when all are done.
+            guard let first = working.first(where: { !$0.done }) ?? working.first else { return nil }
             let target: Target
             if let sec = first.sec {
                 target = .seconds(sec)
@@ -54,7 +55,9 @@ public extension SharedWorkout {
 
     /// Applies the limits (values are clamped, so a sender can always share) and numbers the supersets.
     static func make(from sources: [Source]) -> Draft {
-        let shareable = sources.filter { isShareableId($0.exerciseId) }
+        // A running workout can hold an exercise twice; a link names each once, so the first one goes.
+        var seen = Set<String>()
+        let shareable = sources.filter { isShareableId($0.exerciseId) && seen.insert($0.exerciseId).inserted }
         let kept = Array(shareable.prefix(DomainLimits.routineExercisesMax))
         let numbers = kept.compactMap(\.group).reduce(into: [String: Int]()) { numbers, group in
             if numbers[group] == nil { numbers[group] = numbers.count + 1 }

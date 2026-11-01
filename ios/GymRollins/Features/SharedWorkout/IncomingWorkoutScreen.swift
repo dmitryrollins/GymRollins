@@ -30,7 +30,7 @@ enum IncomingWorkoutScreen: Equatable {
     private static let bodyweightEquipment = "body weight"
 
     static func make(url: URL, link: WorkoutLink, library: ExerciseLibrary, profile: Profile, day: String,
-                     isWorkoutRunning: Bool, currentPlan: TodayPlan?, routines: [Routine],
+                     isWorkoutRunning: Bool, currentPlan: () -> TodayPlan?, routines: [Routine],
                      preference: (String) -> ExercisePreference, history: (String) -> [SessionResult],
                      gym: TodayGymContext?) -> IncomingWorkoutScreen {
         guard let payload = link.payload(in: url) else { return .damaged }
@@ -51,7 +51,7 @@ enum IncomingWorkoutScreen: Equatable {
             let rows = model.rows.map { Row(row: $0, note: note(for: $0, exercise: library.exercise($0.exerciseId),
                                                        preference: preference($0.exerciseId))) }
             return .preview(Preview(plan: plan, countText: count(rows.count), rows: rows,
-                                    droppedNotice: droppedNotice(dropped), replacesToday: replacesSomething(currentPlan),
+                                    droppedNotice: droppedNotice(dropped), replacesToday: replacesSomething(currentPlan()),
                                     limits: profile.limits.isEmpty ? nil : profile.limits))
         }
     }

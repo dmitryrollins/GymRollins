@@ -19,7 +19,7 @@ import Testing
                         avoided: Set<String> = [],
                         history: @escaping (String) -> [SessionResult] = { _ in [] }) -> IncomingWorkoutScreen {
         IncomingWorkoutScreen.make(url: url, link: WorkoutLink(host: nil), library: library, profile: profile, day: day,
-                                   isWorkoutRunning: running, currentPlan: current, routines: routines,
+                                   isWorkoutRunning: running, currentPlan: { current }, routines: routines,
                                    preference: { avoided.contains($0) ? .never : .normal }, history: history, gym: gym)
     }
 
@@ -234,6 +234,31 @@ import Testing
         #expect(try preview(benchLink).limits == nil)
     }
 
+    // MARK: The current plan is read only when it's needed
+
+    private func countingScreen(_ text: String, running: Bool = false) -> (IncomingWorkoutScreen, reads: Int) {
+        var reads = 0
+        let result = IncomingWorkoutScreen.make(url: URL(string: text)!, link: WorkoutLink(host: nil), library: library,
+                                                profile: Profile(), day: day, isWorkoutRunning: running,
+                                                currentPlan: { reads += 1; return nil }, routines: [],
+                                                preference: { _ in .normal }, history: { _ in [] }, gym: nil)
+        return (result, reads)
+    }
+
+    @Test func aDamagedLinkNeverReadsTheCurrentPlan() {
+        for text in ["gymrollins://w#nonsense", "gymrollins://w#2.anything", "gymrollins://w#1.ZZZZ_3_10", "gymrollins://w"] {
+            #expect(countingScreen(text).reads == 0, "\(text)")
+        }
+    }
+
+    @Test func aRunningWorkoutNeverReadsTheCurrentPlan() {
+        #expect(countingScreen("gymrollins://w#1.0025_3_10", running: true).reads == 0)
+    }
+
+    @Test func aValidLinkReadsItOnce() {
+        #expect(countingScreen("gymrollins://w#1.0025_3_10").reads == 1)
+    }
+
     // MARK: "This replaces today's plan"
 
     private let routine = Routine(name: "Push", exercises: [RoutineExercise(exerciseId: "0025", sets: 3, reps: 10)])
@@ -291,6 +316,17 @@ import Testing
         let tomorrow = env.now().addingTimeInterval(24 * 60 * 60)
         #expect(try env.todaysPlan(at: tomorrow).plan.title != "Shared workout")
         #expect(try env.routines.all() == before)
+    }
+
+    /// The sheet was open past midnight: the plan is re-dated, or the store would drop it as yesterday's.
+    @Test func aPlanFromBeforeMidnightStillBecomesTodaysPlan() throws {
+        let env = try environment()
+        let stale = TodayPlan.shared(items: [RoutineExercise(exerciseId: "0025", sets: 3, reps: 10)], day: "2026-09-25")
+        #expect(env.useSharedWorkout(stale))
+        let plan = try env.todaysPlan().plan
+        #expect(plan.title == "Shared workout")
+        #expect(plan.day == TodayPlan.dayKey(env.now()))
+        #expect(plan.exercises == stale.exercises)
     }
 
     /// The sheet was open when a workout started on the watch.

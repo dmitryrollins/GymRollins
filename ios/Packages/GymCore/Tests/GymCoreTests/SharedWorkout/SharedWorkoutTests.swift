@@ -60,12 +60,12 @@ import Testing
         #expect(dropped == 0)
     }
 
-    @Test func refusesTooLongBeforeReadingIt() {
+    @Test func refusesTooLong() {
         #expect(decode("1." + String(repeating: "0", count: SharedWorkout.maxLinkLength)) == .damaged)
     }
 
     @Test func refusesMoreThanARoutinesExercises() {
-        let fields = { (count: Int) in (0..<count).map { _ in "0001_3_10" }.joined(separator: ".") }
+        let fields = { (count: Int) in (0..<count).map { "\(1_000 + $0)_3_10" }.joined(separator: ".") }
         guard case let .valid(workout, _) = decode("1." + fields(DomainLimits.routineExercisesMax)) else {
             Issue.record("20 exercises should be valid")
             return
@@ -100,7 +100,48 @@ import Testing
         }
     }
 
+    /// The random strings above almost never parse, so this starts from valid links and changes one character.
+    @Test func aValidLinkWithOneCharacterChangedStillRoundTripsWhenItIsValid() {
+        var generator = SeededGenerator(seed: 7)
+        let base = "1.0001_3_8-10.1512_3_10_g1.0201_3_12_g1.0300_1_s600"
+        let alphabet = Array("0123456789_-.gsx")
+        var stillValid = 0
+        for _ in 0..<2_000 {
+            var characters = Array(base)
+            characters[Int.random(in: 0..<characters.count, using: &generator)] = alphabet.randomElement(using: &generator)!
+            guard case let .valid(workout, _) = decode(String(characters)) else { continue }
+            stillValid += 1
+            #expect(decode(workout.linkText) == .valid(workout, droppedUnknown: 0))
+        }
+        #expect(stillValid > 50, "only \(stillValid) mutations stayed valid, so the round trip hardly ran")
+    }
+
+    @Test func aRepeatedExerciseIsDamaged() {
+        #expect(decode("1.0001_3_10.0002_3_10.0001_2_8") == .damaged)
+    }
+
     // MARK: Sending
+
+    @Test func aRunningWorkoutWithAnExerciseTwiceSendsTheFirst() {
+        let draft = SharedWorkout.make(from: [
+            SharedWorkout.Source(item: RoutineExercise(exerciseId: "0001", sets: 3, reps: 10)),
+            SharedWorkout.Source(item: RoutineExercise(exerciseId: "0002", sets: 3, reps: 10)),
+            SharedWorkout.Source(item: RoutineExercise(exerciseId: "0001", sets: 5, reps: 5)),
+        ])
+        #expect(draft.workout?.items.map(\.exerciseId) == ["0001", "0002"])
+        #expect(draft.workout?.items.first?.sets == 3)
+        let text = draft.workout?.linkText ?? ""
+        #expect(decode(text) != .damaged)
+    }
+
+    @Test func aRunningWorkoutSendsThePlansNumberNotWhatWasJustLogged() throws {
+        let done = WorkoutSet(weightKg: 60, reps: 12, done: true)
+        let next = WorkoutSet(weightKg: 60, reps: 8)
+        let source = try #require(SharedWorkout.Source(exerciseId: "0001", group: nil, sets: [done, next, next]))
+        #expect(source.target == .reps(min: nil, max: 8))
+        let allDone = try #require(SharedWorkout.Source(exerciseId: "0001", group: nil, sets: [done, done]))
+        #expect(allDone.target == .reps(min: nil, max: 12))
+    }
 
     @Test func clampsValuesSoASenderCanAlwaysShare() {
         let sources = [

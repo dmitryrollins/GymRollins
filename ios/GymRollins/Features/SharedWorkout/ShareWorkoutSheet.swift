@@ -54,7 +54,7 @@ struct ShareWorkoutSheet: View {
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("share.qr")
             }
-            ShareLink(item: url) {
+            ShareLink(item: url, preview: SharePreview("GymRollins workout")) {
                 Label("Send link", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
             }
             .buttonStyle(.glass)
@@ -64,7 +64,7 @@ struct ShareWorkoutSheet: View {
     }
 
     private var nothing: some View {
-        line("These are your own exercises, so they can't go in a link.", identifier: "share.nothing")
+        line(model.nothingMessage, identifier: "share.nothing")
     }
 
     private func line(_ text: String, identifier: String) -> some View {

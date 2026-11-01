@@ -11,12 +11,13 @@ extension Notification.Name {
 /// Workout links (docs/specs/2026-11-01-shared-workout-design.md).
 extension AppEnvironment {
     func incomingWorkoutScreen(url: URL) -> IncomingWorkoutScreen {
-        let currentPlan: TodayPlan?
-        do {
-            currentPlan = try todaysPlan().plan
-        } catch {
-            Self.log.error("Reading today's plan for a workout link failed: \(error.localizedDescription, privacy: .public)")
-            currentPlan = nil
+        let currentPlan = { () -> TodayPlan? in
+            do {
+                return try self.todaysPlan().plan
+            } catch {
+                Self.log.error("Reading today's plan for a workout link failed: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
         }
         let routines: [Routine]
         do {
@@ -36,7 +37,9 @@ extension AppEnvironment {
     /// Makes `plan` today's plan. False, with nothing changed, when a workout started meanwhile (the watch).
     func useSharedWorkout(_ plan: TodayPlan) -> Bool {
         guard session == nil else { return false }
-        todayPlanStore.save(plan)
+        // Past midnight with the sheet open: the store keeps only a plan of today.
+        let today = TodayPlan.dayKey(now())
+        todayPlanStore.save(plan.day == today ? plan : TodayPlan.shared(items: plan.exercises, day: today))
         NotificationCenter.default.post(name: .todayPlanReplaced, object: nil)
         return true
     }

@@ -62,4 +62,16 @@ import Testing
             SharedWorkout.Source(exerciseId: "db", sets: 2, target: .reps(min: nil, max: 6), group: nil),
         ])
     }
+
+    /// Through the store, as Today reads it: a stored shared plan at a gym that doesn't have its exercise is unchanged.
+    @Test func aStoredSharedPlanIsUnchangedAtAGymWithoutItsExercise() throws {
+        let defaults = try #require(UserDefaults(suiteName: "TodayPlanSharedTests.\(UUID())"))
+        let store = TodayPlanStore(defaults: defaults)
+        let plan = TodayPlan.shared(items: [item.with(fixedWeightKg: 40)], day: day)
+        store.save(plan)
+        let loaded = try #require(store.load(day: day, routines: [], scheduled: nil))
+        #expect(loaded == plan)
+        #expect(loaded.adapted(by: dumbbellGym) == loaded)
+        #expect(loaded.exercises.first?.fixedWeightKg == 40)
+    }
 }

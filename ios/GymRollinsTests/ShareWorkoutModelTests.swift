@@ -61,4 +61,11 @@ import Testing
         let draft = SharedWorkout.make(from: real.exercises.map { source($0.id) })
         #expect(draft.leftOutIds.isEmpty)
     }
+
+    @Test func saysWhyThereIsNothingToShare() {
+        let custom = ShareWorkoutModel.make(sources: [source("custom-1")], library: library, link: link)
+        #expect(custom.nothingMessage == "These are your own exercises, so they can't go in a link.")
+        let empty = ShareWorkoutModel.make(sources: [], library: library, link: link)
+        #expect(empty.nothingMessage == "There's nothing to share yet.")
+    }
 }

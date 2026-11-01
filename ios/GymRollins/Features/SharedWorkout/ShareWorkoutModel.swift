@@ -9,6 +9,8 @@ struct ShareWorkoutModel: Identifiable {
     let url: URL?
     let qrCode: CGImage?
     let leftOutNotice: String?
+    /// Why there's no link: your own exercises, or nothing in the workout yet.
+    let nothingMessage: String
     let cutOffNotice: String?
 
     var nothingToSend: Bool { url == nil }
@@ -19,6 +21,8 @@ struct ShareWorkoutModel: Identifiable {
         let names = draft.leftOutIds.map { DisplayName.of(library.exercise($0)?.name ?? $0) }
         return ShareWorkoutModel(url: url, qrCode: url.flatMap { QRCodeImage.make($0.absoluteString) },
                                  leftOutNotice: leftOutNotice(names, nothingLeft: url == nil),
+                                 nothingMessage: draft.leftOutIds.isEmpty ? "There's nothing to share yet."
+                                     : "These are your own exercises, so they can't go in a link.",
                                  cutOffNotice: draft.cutOffCount > 0
                                      ? "Only the first \(DomainLimits.routineExercisesMax) exercises are in this link." : nil)
     }
