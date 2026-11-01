@@ -58,7 +58,7 @@ struct TodayView: View {
                                 .accessibilityIdentifier("today.summary")
                         }
                         Spacer(minLength: 8)
-                        if env.session == nil && env.hasAnyRoutine { switchButton }
+                        if env.session == nil && (env.hasAnyRoutine || plan?.kind == .built) { switchButton }
                     }
                     if env.session == nil { GymChipRow(gym: currentGym) }
                     if !env.profile.limits.isEmpty {
@@ -72,7 +72,7 @@ struct TodayView: View {
                     RecoveryCard(identifier: "today.recovery")
                     if let loadError { Text(loadError).foregroundStyle(Theme.destructive) }
                     if let session = env.session { resumeBanner(session) }
-                    if !env.hasAnyRoutine { emptyPlanState }
+                    if !env.hasAnyRoutine && model.rows.isEmpty { emptyPlanState }
                     if let note = model.gymNote { gymNote(note) }
                     ForEach(model.rows) { row in exerciseRow(row) }
                     if env.session == nil {
@@ -147,7 +147,10 @@ struct TodayView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
                 reload()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .todayPlanReplaced)) { _ in reload() }
+            .onReceive(NotificationCenter.default.publisher(for: .todayPlanReplaced)) { _ in
+                closePushedScreens()
+                reload()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .resumeWorkoutRequested)) { _ in
                 if env.session != nil { showWorkout = true }
             }
@@ -246,6 +249,17 @@ struct TodayView: View {
             startEntry = nil
         }
         showWorkout = true
+    }
+
+    /// A new plan arrived from outside Today (a workout link): whatever was pushed over Today closes, so the plan shows.
+    private func closePushedScreens() {
+        showPlan = false
+        showSettings = false
+        showClaudeConnection = false
+        reviewing = nil
+        openItem = nil
+        detailExercise = nil
+        historyExercise = nil
     }
 
     private func reload() {

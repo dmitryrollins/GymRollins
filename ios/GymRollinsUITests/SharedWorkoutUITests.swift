@@ -139,7 +139,12 @@ final class SharedWorkoutUITests: XCTestCase {
     private func openFromSafari(_ url: URL, file: StaticString = #filePath, line: UInt = #line) {
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         safari.launch()
-        let address = safari.textFields["Address"].exists ? safari.textFields["Address"] : safari.buttons["Address"]
+        var address = safari.textFields["Address"].exists ? safari.textFields["Address"] : safari.buttons["Address"]
+        if !address.waitForExistence(timeout: 5) {
+            // Safari reopened on a web page (another test's search): its bar is a pill at the bottom, with no "Address".
+            safari.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94)).tap()
+            address = safari.textFields["Address"]
+        }
         XCTAssertTrue(address.waitForExistence(timeout: 10), "no Safari address bar", file: file, line: line)
         address.tap()
         safari.typeText(url.absoluteString + "\n")
@@ -196,13 +201,40 @@ final class SharedWorkoutUITests: XCTestCase {
         XCTAssertFalse(app.buttons["incoming.use"].exists)
     }
 
+    /// Use for today with Settings pushed on Today: the plan shows, not Settings.
+    func testUseForTodayClosesAPushedScreen() {
+        let app = XCUIApplication.launchReady(["-seedHistory"]) { $0.buttons["today.start"] }
+        app.buttons["today.settings"].tapCenter()
+        XCTAssertFalse(app.staticTexts["today.summary"].exists, "Settings didn't open")
+        openFromSafari(benchAndCurl)
+        XCTAssertTrue(app.buttons["incoming.use"].waitForExistence(timeout: 10))
+        app.buttons["incoming.use"].tapCenter()
+        let summary = app.staticTexts["today.summary"]
+        let shared = NSPredicate(format: "label CONTAINS 'Shared workout' AND isHittable == true")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: shared, object: summary)], timeout: 10),
+                       .completed, "Today didn't come back: \(summary.label)")
+    }
+
+    /// A partner with no routine has no "No plan yet" over a shared workout, and a way out of it.
+    func testASharedWorkoutWithNoRoutinesHasNoEmptyStateAndASwitch() {
+        let app = XCUIApplication.launchReady(["-emptyStore", "-skipOnboarding"]) { $0.staticTexts["today.summary"] }
+        XCTAssertTrue(app.staticTexts["today.empty.title"].exists)
+        app.open(benchAndCurl)
+        XCTAssertTrue(app.buttons["incoming.use"].waitForExistence(timeout: 10))
+        app.buttons["incoming.use"].tapCenter()
+        XCTAssertTrue(app.buttons["today.switch"].waitForExistence(timeout: 10), "no way out of the shared workout")
+        XCTAssertFalse(app.staticTexts["today.empty.title"].exists, "No plan yet is over the shared workout")
+    }
+
     /// A first-time partner finishes onboarding, then sees the workout.
     func testALinkWaitsForOnboarding() {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "-onboarding", "-fixedNow", XCUIApplication.fixedNow]
         app.launch()
         XCTAssertTrue(app.buttons["onboarding.skip"].waitForExistence(timeout: 10))
-        app.open(benchAndCurl)
+        // `open` would relaunch into onboarding again; Safari hands the link to the running app.
+        openFromSafari(benchAndCurl)
+        XCTAssertTrue(app.buttons["onboarding.skip"].waitForExistence(timeout: 10), "onboarding wasn't brought back")
         XCTAssertFalse(app.buttons["incoming.use"].waitForExistence(timeout: 3), "the sheet opened over onboarding")
         app.buttons["onboarding.skip"].tap()
         XCTAssertTrue(app.buttons["setup.continue"].waitForExistence(timeout: 5))
