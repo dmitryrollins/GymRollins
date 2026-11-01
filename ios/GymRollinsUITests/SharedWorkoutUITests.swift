@@ -54,4 +54,148 @@ final class SharedWorkoutUITests: XCTestCase {
         scrollAndTap(app, app.buttons["workout.share"])
         expectShareScreen(app)
     }
+
+    private let benchAndCurl = URL(string: "gymrollins://w#1.0025_3_8-10.0313_3_10")!
+
+    private func opened(_ url: URL) -> XCUIApplication {
+        let app = XCUIApplication.launchReady(["-seedHistory"]) { $0.buttons["today.start"] }
+        app.open(url)
+        return app
+    }
+
+    /// Spec criteria 1 and 5: their own weights on the sheet, then on Today and in the workout.
+    func testALinkBecomesTodaysPlan() {
+        let app = opened(benchAndCurl)
+        XCTAssertTrue(app.buttons["incoming.use"].waitForExistence(timeout: 10), "the sheet didn't open")
+        XCTAssertEqual(app.staticTexts["incoming.count"].label, "2 exercises")
+        XCTAssertTrue(element(app, "incoming.row.0025").label.contains("lb"), element(app, "incoming.row.0025").label)
+        app.buttons["incoming.use"].tapCenter()
+        XCTAssertTrue(app.buttons["incoming.use"].waitForNonExistence(timeout: 5))
+        let summary = app.staticTexts["today.summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        let shared = NSPredicate(format: "label CONTAINS 'Shared workout'")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: shared, object: summary)], timeout: 5),
+                       .completed, summary.label)
+        app.startWorkout()
+        XCTAssertTrue(app.buttons["workout.entry.0025"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["workout.entry.0313"].exists)
+        XCTAssertFalse(app.buttons["workout.entry.0194"].exists, "the seeded routine's triceps exercise is still there")
+    }
+
+    func testNotNowLeavesTodayAlone() {
+        let app = opened(benchAndCurl)
+        let before = app.staticTexts["today.summary"].label
+        XCTAssertTrue(app.buttons["incoming.notNow"].waitForExistence(timeout: 10))
+        app.buttons["incoming.notNow"].tapCenter()
+        XCTAssertTrue(app.buttons["incoming.notNow"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["today.summary"].label, before)
+    }
+
+    /// Spec criterion 2.
+    func testANewExerciseSaysSetOnFirstSet() {
+        let app = XCUIApplication.launchReady(["-emptyStore", "-skipOnboarding"]) { $0.staticTexts["today.summary"] }
+        app.open(benchAndCurl)
+        let row = element(app, "incoming.row.0025")
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("Set on first set"), row.label)
+    }
+
+    /// Spec criterion 6.
+    func testADamagedLinkSaysSoAndChangesNothing() {
+        let app = opened(URL(string: "gymrollins://w#nonsense")!)
+        let message = app.staticTexts["incoming.message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 10))
+        XCTAssertEqual(message.label, "This link doesn't work. Ask for a new one.")
+        XCTAssertFalse(app.buttons["incoming.use"].exists)
+        app.buttons["incoming.close"].tapCenter()
+        XCTAssertTrue(message.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["today.summary"].label.contains("Shared workout"))
+    }
+
+    func testANewerLinkAsksForAnUpdate() {
+        let app = opened(URL(string: "gymrollins://w#2.anything")!)
+        let message = app.staticTexts["incoming.message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 10))
+        XCTAssertEqual(message.label, "Update GymRollins to open this workout.")
+    }
+
+    func testSaysWhenAnExerciseIsMissing() {
+        let app = opened(URL(string: "gymrollins://w#1.0025_3_10.ZZZZ_3_10")!)
+        let notice = app.staticTexts["incoming.dropped"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        XCTAssertEqual(notice.label, "1 exercise isn't in your version of the app.")
+    }
+
+    /// `XCUIApplication.open` relaunches the app (a new process, and the UI tests' in-memory store is gone), so it can't
+    /// put a link in front of a workout that is on screen. Safari can: it hands the link to the running app, as a tap in
+    /// Messages does.
+    private func openFromSafari(_ url: URL, file: StaticString = #filePath, line: UInt = #line) {
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        safari.launch()
+        let address = safari.textFields["Address"].exists ? safari.textFields["Address"] : safari.buttons["Address"]
+        XCTAssertTrue(address.waitForExistence(timeout: 10), "no Safari address bar", file: file, line: line)
+        address.tap()
+        safari.typeText(url.absoluteString + "\n")
+        let open = safari.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10), "Safari didn't offer to open the link", file: file, line: line)
+        open.tap()
+    }
+
+    /// Spec criterion 7. The sheet opens over the full-screen workout, and Resume goes back to it.
+    func testALinkDuringAWorkoutChangesNothing() {
+        let app = XCUIApplication.launchReady(["-seedHistory"]) { $0.buttons["today.start"] }
+        app.startWorkout()
+        openFromSafari(benchAndCurl)
+        let message = app.staticTexts["incoming.message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 10), "the sheet didn't open over the workout")
+        XCTAssertEqual(message.label, "Finish your current workout first.")
+        app.buttons["incoming.resume"].tapCenter()
+        XCTAssertTrue(message.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["workout.clock"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["workout.entry.0194"].waitForExistence(timeout: 5), "the workout changed")
+    }
+
+    /// Resume from Today, where the workout's closed: it opens.
+    func testResumeOpensAClosedWorkout() {
+        let app = XCUIApplication.launchReady(["-seedHistory", "-diskStore", "-resetStore"]) { $0.buttons["today.start"] }
+        app.startWorkout()
+        app.buttons["workout.close"].tap()
+        XCTAssertTrue(element(app, "today.resumeBanner").waitForExistence(timeout: 5))
+        // `open` relaunches the app: the workout has to survive that, and the store mustn't be wiped again.
+        app.launchArguments.removeAll { $0 == "-resetStore" }
+        app.open(benchAndCurl)
+        XCTAssertTrue(app.buttons["incoming.resume"].waitForExistence(timeout: 10))
+        app.buttons["incoming.resume"].tapCenter()
+        XCTAssertTrue(app.staticTexts["workout.clock"].waitForExistence(timeout: 5), "the workout didn't open")
+    }
+
+    func testASecondLinkReplacesTheFirst() {
+        let app = opened(benchAndCurl)
+        XCTAssertTrue(element(app, "incoming.row.0313").waitForExistence(timeout: 10))
+        app.open(URL(string: "gymrollins://w#1.0194_3_10")!)
+        XCTAssertTrue(element(app, "incoming.row.0194").waitForExistence(timeout: 10), "the second link didn't show")
+        XCTAssertFalse(element(app, "incoming.row.0313").exists)
+    }
+
+    /// A first-time partner finishes onboarding, then sees the workout.
+    func testALinkWaitsForOnboarding() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-onboarding", "-fixedNow", XCUIApplication.fixedNow]
+        app.launch()
+        XCTAssertTrue(app.buttons["onboarding.skip"].waitForExistence(timeout: 10))
+        app.open(benchAndCurl)
+        XCTAssertFalse(app.buttons["incoming.use"].waitForExistence(timeout: 3), "the sheet opened over onboarding")
+        app.buttons["onboarding.skip"].tap()
+        XCTAssertTrue(app.buttons["setup.continue"].waitForExistence(timeout: 5))
+        let bodyweight = app.textFields["setup.bodyweight"]
+        bodyweight.tap()
+        bodyweight.typeText("180")
+        app.dismissKeyboardIfPresent()
+        app.buttons["setup.continue"].tap()
+        XCTAssertTrue(app.buttons["import.skip"].waitForExistence(timeout: 5))
+        app.buttons["import.skip"].tap()
+        XCTAssertTrue(app.buttons["onboarding.later"].waitForExistence(timeout: 5))
+        app.buttons["onboarding.later"].tap()
+        XCTAssertTrue(app.buttons["incoming.use"].waitForExistence(timeout: 10), "the sheet didn't open after onboarding")
+    }
 }

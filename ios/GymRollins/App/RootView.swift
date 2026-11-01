@@ -6,18 +6,30 @@ struct RootView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab: AppTab = .today
+    @State private var incoming = IncomingWorkoutCoordinator()
 
     var body: some View {
-        if env.onboardingComplete {
-            mainTabs
-            #if DEBUG
-                // During a workout the probe is on the workout flow instead (one probe on screen).
-                .overlay(alignment: .top) { if FakeWatchTransport.isEnabled && env.session == nil { FakeWatchProbe() } }
-            #endif
-        } else {
-            OnboardingFlow().preferredColorScheme(.dark)
+        Group {
+            if env.onboardingComplete {
+                mainTabs
+                #if DEBUG
+                    // During a workout the probe is on the workout flow instead (one probe on screen).
+                    .overlay(alignment: .top) { if FakeWatchTransport.isEnabled && env.session == nil { FakeWatchProbe() } }
+                #endif
+            } else {
+                OnboardingFlow().preferredColorScheme(.dark)
+            }
         }
+        .onOpenURL { receive($0) }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            if let url = activity.webpageURL { receive(url) }
+        }
+        .onChange(of: env.onboardingComplete) { _, _ in incoming.showIfReady(env: env, showToday: showToday) }
     }
+
+    private func receive(_ url: URL) { incoming.receive(url, env: env, showToday: showToday) }
+
+    private func showToday() { tab = .today }
 
     private var mainTabs: some View {
         TabView(selection: $tab) {

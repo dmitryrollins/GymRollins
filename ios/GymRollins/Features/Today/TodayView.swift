@@ -147,6 +147,10 @@ struct TodayView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
                 reload()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .todayPlanReplaced)) { _ in reload() }
+            .onReceive(NotificationCenter.default.publisher(for: .resumeWorkoutRequested)) { _ in
+                if env.session != nil { showWorkout = true }
+            }
         }
     }
 
