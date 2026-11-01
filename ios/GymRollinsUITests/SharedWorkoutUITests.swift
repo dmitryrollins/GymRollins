@@ -172,7 +172,7 @@ final class SharedWorkoutUITests: XCTestCase {
     func testASecondLinkReplacesTheFirst() {
         let app = opened(benchAndCurl)
         XCTAssertTrue(element(app, "incoming.row.0313").waitForExistence(timeout: 10))
-        app.open(URL(string: "gymrollins://w#1.0194_3_10")!)
+        openFromSafari(URL(string: "gymrollins://w#1.0194_3_10")!)
         XCTAssertTrue(element(app, "incoming.row.0194").waitForExistence(timeout: 10), "the second link didn't show")
         XCTAssertFalse(element(app, "incoming.row.0313").exists)
     }
