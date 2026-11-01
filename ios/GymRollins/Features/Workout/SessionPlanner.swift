@@ -50,7 +50,7 @@ enum SessionPlanner {
         let target = ProgressionTarget(sets: item.sets, reps: item.reps, repsMin: item.repsMin, sec: item.sec,
                                        weightKg: item.weightKg ?? 0,
                                        incKg: item.incKg ?? UnitConverter.toKg(isBarbell ? 5 : 2.5, from: .lb),
-                                       weightSetAt: item.weightSetAt)
+                                       weightSetAt: item.weightSetAt, fixedWeightKg: item.fixedWeightKg)
         let suggestion = engine.suggest(policy: policy, mode: item.mode, target: target, history: history)
         return loads.map(suggestion.fitted(to:)) ?? suggestion
     }

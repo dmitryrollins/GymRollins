@@ -28,7 +28,7 @@ enum IncomingWorkoutScreen: Equatable {
     private static let bodyweightEquipment = "body weight"
 
     static func make(url: URL, link: WorkoutLink, library: ExerciseLibrary, profile: Profile, day: String,
-                     isWorkoutRunning: Bool, currentPlan: TodayPlan?, history: (String) -> [SessionResult],
+                     isWorkoutRunning: Bool, currentPlan: TodayPlan?, routines: [Routine], history: (String) -> [SessionResult],
                      gym: TodayGymContext?) -> IncomingWorkoutScreen {
         guard let payload = link.payload(in: url) else { return .damaged }
         switch SharedWorkout.decode(payload, isKnown: { library.exercise($0) != nil }) {
@@ -38,7 +38,10 @@ enum IncomingWorkoutScreen: Equatable {
             return .tooNew
         case let .valid(workout, dropped):
             if isWorkoutRunning { return .workoutRunning }
-            let items = workout.routineItems { library.exercise($0)?.mode }
+            let items = workout.routineItems { library.exercise($0)?.mode }.map { item in
+                item.with(fixedWeightKg: ownWeight(exerciseId: item.exerciseId, routines: routines, library: library,
+                                                   profile: profile, history: history(item.exerciseId)))
+            }
             let plan = TodayPlan.shared(items: items, day: day)
             let model = TodayModel.make(plan: plan, profile: profile, library: library, history: history, gym: gym,
                                         loads: { gym?.loads(for: $0) })
@@ -46,6 +49,22 @@ enum IncomingWorkoutScreen: Equatable {
             return .preview(Preview(plan: plan, countText: count(rows.count), rows: rows,
                                     droppedNotice: droppedNotice(dropped), replacesToday: replacesSomething(currentPlan)))
         }
+    }
+
+    /// This person's weight for `exerciseId`: what their own routine would suggest, else what they last lifted, else none.
+    /// The sender's sets and reps never reach it.
+    private static func ownWeight(exerciseId: String, routines: [Routine], library: ExerciseLibrary, profile: Profile,
+                                  history: [SessionResult]) -> Double {
+        let candidates = routines.flatMap { routine in
+            routine.exercises.filter { $0.exerciseId == exerciseId }.map { (routine: routine, item: $0) }
+        }
+        let chosen = candidates.max { ($0.item.weightSetAt ?? .distantPast) < ($1.item.weightSetAt ?? .distantPast) }
+        let best = chosen?.item.weightSetAt != nil ? chosen : (candidates.first { $0.item.weightKg != nil } ?? candidates.first)
+        guard let best else { return max(0, history.first?.weightKg ?? 0) }
+        let suggestion = SessionPlanner.suggestion(for: best.item, policy: best.item.policy ?? best.routine.policy,
+                                                   profile: profile, exercise: library.exercise(exerciseId),
+                                                   history: history)
+        return max(0, suggestion.weightKg)
     }
 
     private static func count(_ count: Int) -> String { count == 1 ? "1 exercise" : "\(count) exercises" }

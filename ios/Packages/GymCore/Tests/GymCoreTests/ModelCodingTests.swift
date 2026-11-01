@@ -184,4 +184,17 @@ import Testing
         let legacy = try JSONDecoder().decode(Workout.self, from: old)
         #expect(legacy.gymId == nil && legacy.entries[0].gymListingId == nil)
     }
+
+    @Test func routineExerciseFixedWeightIsOptionalInTheStoredShape() throws {
+        let plain = RoutineExercise(exerciseId: "0025", sets: 3, reps: 10)
+        let data = try JSONEncoder().encode(plain)
+        let keys = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(keys["fixedWeightKg"] == nil)
+        let decoded = try JSONDecoder().decode(RoutineExercise.self, from: data)
+        #expect(decoded.fixedWeightKg == nil && decoded == plain)
+
+        let fixed = RoutineExercise(exerciseId: "0025", sets: 3, reps: 10, fixedWeightKg: 42.5)
+        let back = try JSONDecoder().decode(RoutineExercise.self, from: JSONEncoder().encode(fixed))
+        #expect(back.fixedWeightKg == 42.5 && back == fixed)
+    }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import GymCore
 
 extension Notification.Name {
     /// Today's plan was replaced from outside Today: Today reloads.
@@ -17,9 +18,16 @@ extension AppEnvironment {
             Self.log.error("Reading today's plan for a workout link failed: \(error.localizedDescription, privacy: .public)")
             currentPlan = nil
         }
+        let routines: [Routine]
+        do {
+            routines = try self.routines.all()
+        } catch {
+            Self.log.error("Reading routines for a workout link failed: \(error.localizedDescription, privacy: .public)")
+            routines = []
+        }
         return IncomingWorkoutScreen.make(url: url, link: .configured, library: library, profile: profile,
                                           day: TodayPlan.dayKey(now()), isWorkoutRunning: session != nil,
-                                          currentPlan: currentPlan,
+                                          currentPlan: currentPlan, routines: routines,
                                           history: { [workouts] in (try? workouts.history(exerciseId: $0, limit: 5)) ?? [] },
                                           gym: todayGymContext())
     }

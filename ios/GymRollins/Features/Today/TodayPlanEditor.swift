@@ -168,7 +168,7 @@ extension RoutineExercise {
     func withId(_ newId: UUID) -> RoutineExercise {
         RoutineExercise(id: newId, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
                         weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
-                        weightSetAt: weightSetAt)
+                        weightSetAt: weightSetAt, fixedWeightKg: fixedWeightKg)
     }
 }
 
