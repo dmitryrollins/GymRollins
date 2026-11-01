@@ -78,6 +78,9 @@ struct TodayView: View {
                     if env.session == nil {
                         addExerciseRow
                         if plan?.canSaveToRoutine == true { saveToRoutineButton }
+                        if let plan, !plan.exercises.isEmpty {
+                            ShareWorkoutButton(identifier: "today.share") { plan.shareSources }
+                        }
                     }
                 }
                 .padding(.horizontal, Theme.gutter)

@@ -258,6 +258,21 @@ struct TodayPlan: Codable, Equatable {
                   builtListings: listings)
     }
 
+    /// A workout someone shared by link. Every item is pinned, so the gym rules can't swap what was sent, and the items
+    /// carry no weight, so they're planned from this phone's history.
+    static func shared(items: [RoutineExercise], day: String) -> TodayPlan {
+        TodayPlan(day: day, kind: .built, base: nil, exercises: items, edited: !items.isEmpty,
+                  gymPinned: Set(items.map(\.id)), builtName: "Shared workout")
+    }
+
+    /// Today's exercises as shown, for a workout link: an exercise with edited sets uses those sets.
+    var shareSources: [SharedWorkout.Source] {
+        exercises.map { item in
+            sets(for: item.id).flatMap { SharedWorkout.Source(exerciseId: item.exerciseId, group: item.supersetGroup, sets: $0) }
+                ?? SharedWorkout.Source(item: item)
+        }
+    }
+
     /// This plan at the current gym: swaps are re-decided from the planned exercises every time, so this is idempotent
     /// and moving gyms (or leaving them) can't accumulate anything. Set edits survive only while the item's exercise
     /// does.

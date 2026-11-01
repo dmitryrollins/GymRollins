@@ -22,6 +22,11 @@ struct WorkoutOverviewView: View {
                     entryRow(entry)
                 }
                 addExerciseButton
+                if !session.workout.entries.isEmpty {
+                    ShareWorkoutButton(identifier: "workout.share") {
+                        session.workout.entries.compactMap(SharedWorkout.Source.init(entry:))
+                    }
+                }
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.top, 8)

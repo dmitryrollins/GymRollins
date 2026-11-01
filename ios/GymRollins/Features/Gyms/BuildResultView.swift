@@ -53,6 +53,9 @@ struct BuildResultView: View {
             if let skipped = model.skippedNotice { notice(skipped, identifier: "build.skipped", amber: false) }
             if let short = model.shortNotice { notice(short, identifier: "build.short", amber: false) }
             ForEach(model.rows) { row($0) }
+            if !model.isEmpty, let built = run.built {
+                ShareWorkoutButton(identifier: "build.share") { built.items.map { SharedWorkout.Source(item: $0.exercise) } }
+            }
         }
     }
 
