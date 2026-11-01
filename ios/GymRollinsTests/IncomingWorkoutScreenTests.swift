@@ -16,16 +16,18 @@ import Testing
 
     private func screen(_ url: URL, running: Bool = false, current: TodayPlan? = nil, routines: [Routine] = [],
                         profile: Profile = Profile(), gym: TodayGymContext? = nil,
+                        avoided: Set<String> = [],
                         history: @escaping (String) -> [SessionResult] = { _ in [] }) -> IncomingWorkoutScreen {
         IncomingWorkoutScreen.make(url: url, link: WorkoutLink(host: nil), library: library, profile: profile, day: day,
-                                   isWorkoutRunning: running, currentPlan: current, routines: routines, history: history,
-                                   gym: gym)
+                                   isWorkoutRunning: running, currentPlan: current, routines: routines,
+                                   preference: { avoided.contains($0) ? .never : .normal }, history: history, gym: gym)
     }
 
     private func preview(_ url: URL, current: TodayPlan? = nil, routines: [Routine] = [], profile: Profile = Profile(),
+                         avoided: Set<String> = [],
                          history: @escaping (String) -> [SessionResult] = { _ in [] }) throws -> IncomingWorkoutScreen.Preview {
         guard case let .preview(preview) = screen(url, current: current, routines: routines, profile: profile,
-                                                  history: history) else {
+                                                  avoided: avoided, history: history) else {
             throw Failure.notAPreview
         }
         return preview
@@ -213,6 +215,23 @@ import Testing
         let shown = try preview(URL(string: "gymrollins://w#1.0464_3_s45")!)
         #expect(shown.rows[0].row.subtitle == "3 \u{00D7} 45 s")
         #expect(shown.plan.exercises[0].reps == 0)
+    }
+
+    // MARK: What the person chose to avoid
+
+    @Test func anExerciseMarkedNeverIsFlagged() throws {
+        let shown = try preview(benchLink, avoided: ["0025"]) { _ in [self.session(95, reps: [8, 8, 8])] }
+        #expect(shown.rows[0].note == "You marked this \"Don't recommend\"")
+    }
+
+    @Test func theNeverNoteJoinsSetOnFirstSet() throws {
+        let shown = try preview(benchLink, avoided: ["0025"])
+        #expect(shown.rows[0].note == "You marked this \"Don't recommend\" \u{00B7} Set on first set")
+    }
+
+    @Test func theSheetCarriesThePersonsLimits() throws {
+        #expect(try preview(benchLink, profile: Profile(limits: "Bad left knee")).limits == "Bad left knee")
+        #expect(try preview(benchLink).limits == nil)
     }
 
     // MARK: "This replaces today's plan"

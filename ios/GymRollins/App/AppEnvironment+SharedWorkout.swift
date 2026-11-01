@@ -28,6 +28,7 @@ extension AppEnvironment {
         return IncomingWorkoutScreen.make(url: url, link: .configured, library: library, profile: profile,
                                           day: TodayPlan.dayKey(now()), isWorkoutRunning: session != nil,
                                           currentPlan: currentPlan, routines: routines,
+                                          preference: { [exercisePreferences] in exercisePreferences[$0] ?? .normal },
                                           history: { [workouts] in (try? workouts.history(exerciseId: $0, limit: 5)) ?? [] },
                                           gym: todayGymContext())
     }

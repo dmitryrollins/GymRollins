@@ -29,6 +29,7 @@ struct IncomingWorkoutSheet: View {
                     .accessibilityIdentifier("incoming.title")
                 Text(preview.countText).font(.subheadline).foregroundStyle(Theme.textSecondary)
                     .accessibilityIdentifier("incoming.count")
+                if let limits = preview.limits { line(limits, identifier: "incoming.limits") }
                 if let notice = preview.droppedNotice { line(notice, identifier: "incoming.dropped") }
                 if preview.replacesToday { line("This replaces today's plan.", identifier: "incoming.replaces") }
                 ForEach(preview.rows) { row in
