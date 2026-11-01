@@ -50,7 +50,8 @@ App
     ShareWorkoutSheet      QR code, Send link, what was left out
     ShareWorkoutModel      makes the SharedWorkout from Today, Build or the running workout
     IncomingWorkoutSheet   the partner's view: exercises, own weights, Use for today / Not now
-    IncomingWorkoutModel   what the sheet shows, for each outcome in section 7
+    IncomingWorkoutScreen  what the sheet shows, for each outcome in section 7
+    IncomingWorkoutCoordinator  holds a link until onboarding ends, opens the sheet over whatever is on screen
     WorkoutLink            builds the URL from SHARE_LINK_HOST, reads an incoming URL
   Features/Today/TodayPlan TodayPlan.shared(items:day:)
 web/share/                 landing page and Apple's domain file, published once the domain exists
