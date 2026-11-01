@@ -19,7 +19,8 @@ function show(id, href) {
   button.hidden = false
 }
 
-if (typeof document !== 'undefined') {
+// A framed page offers nothing, so it can't be used to trick a tap.
+if (typeof document !== 'undefined' && window.top === window.self) {
   show('open', appLink(location.hash))
   show('store', appStoreLink(APP_STORE_URL))
 }

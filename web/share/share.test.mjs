@@ -49,3 +49,24 @@ test("Apple's domain file covers only the link's path and this app", () => {
   assert.deepEqual(details.appIDs, ['TEAM_ID.com.rollins.gymrollins'])
   assert.deepEqual(details.components.map((c) => c['/']), ['/w', '/w/'])
 })
+
+test('the page asks for no images and uses paths that need no redirect', () => {
+  const html = read('./w/index.html')
+  const policy = /http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)?.[1] ?? ''
+  assert.ok(!policy.includes('img-src'), 'img-src is not needed')
+  // The link is /w with no slash, and a host may serve it without redirecting to /w/.
+  assert.ok(html.includes('href="/w/style.css"'), 'stylesheet is not an absolute path')
+  assert.ok(html.includes('src="/w/open.mjs"'), 'script is not an absolute path')
+  assert.ok(!/(href|src)="(?!\/w\/|#)[^"]*"/.test(html.replace(/<a [^>]*>/g, '')), 'a relative file path')
+})
+
+test('a framed page offers nothing', () => {
+  const script = read('./w/open.mjs')
+  assert.ok(script.includes('window.top === window.self'), 'the script does not check window.top')
+})
+
+test('the README asks the host for frame and sniffing headers', () => {
+  const readme = read('./README.md')
+  assert.ok(readme.includes("Content-Security-Policy: frame-ancestors 'none'"))
+  assert.ok(readme.includes('X-Content-Type-Options: nosniff'))
+})

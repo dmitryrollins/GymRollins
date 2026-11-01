@@ -10,6 +10,9 @@ The steps for when it does are in `docs/specs/2026-11-01-shared-workout-design.m
 3. Set `SHARE_LINK_HOST` in `ios/Config/Base.xcconfig`, and add the associated domain to `ios/project.yml`.
 4. Set `APP_STORE_URL` in `w/open.mjs` once the app is released.
 
+The host should send these as headers, which a page can't set for itself: `Content-Security-Policy: frame-ancestors 'none'`
+and `X-Content-Type-Options: nosniff`.
+
 The host must serve `.mjs` as JavaScript, or the browser won't run `open.mjs`.
 
 Test: `node --test web/share/share.test.mjs`
