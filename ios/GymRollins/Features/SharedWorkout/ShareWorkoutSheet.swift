@@ -59,7 +59,7 @@ struct ShareWorkoutSheet: View {
             }
             .buttonStyle(.glass)
             .accessibilityIdentifier("share.send")
-            line("Your partner sees this workout with their own weights.", identifier: "share.note")
+            line("Your partner scans this with their iPhone camera, or opens the link, and sees this workout with their own weights.", identifier: "share.note")
         }
     }
 

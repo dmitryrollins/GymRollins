@@ -19,7 +19,7 @@ final class SharedWorkoutUITests: XCTestCase {
     private func expectShareScreen(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.images["share.qr"].waitForExistence(timeout: 10), "no QR code", file: file, line: line)
         XCTAssertTrue(element(app, "share.send").exists, "no Send link", file: file, line: line)
-        XCTAssertEqual(app.staticTexts["share.note"].label, "Your partner sees this workout with their own weights.",
+        XCTAssertEqual(app.staticTexts["share.note"].label, "Your partner scans this with their iPhone camera, or opens the link, and sees this workout with their own weights.",
                        file: file, line: line)
         app.buttons["share.done"].tap()
         XCTAssertTrue(app.images["share.qr"].waitForNonExistence(timeout: 5), "the sheet didn't close",
