@@ -419,6 +419,30 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Build result")
     }
 
+    func testShareWorkoutAudit() {
+        let app = launch()
+        let share = app.buttons["today.share"]
+        XCTAssertTrue(share.waitForExistence(timeout: 10))
+        for _ in 0..<6 where !share.isHittable { app.swipeUp() }
+        share.tap()
+        XCTAssertTrue(app.images["share.qr"].waitForExistence(timeout: 10))
+        audit(app, "Share workout")
+    }
+
+    func testIncomingWorkoutAudit() throws {
+        let app = launch()
+        app.open(try XCTUnwrap(URL(string: "gymrollins://w#1.0025_3_8-10.0313_3_10.ZZZZ_3_10")))
+        XCTAssertTrue(app.buttons["incoming.use"].waitForExistence(timeout: 10))
+        audit(app, "Incoming workout")
+    }
+
+    func testIncomingWorkoutMessageAudit() throws {
+        let app = launch()
+        app.open(try XCTUnwrap(URL(string: "gymrollins://w#nonsense")))
+        XCTAssertTrue(app.staticTexts["incoming.message"].waitForExistence(timeout: 10))
+        audit(app, "Incoming workout message")
+    }
+
     // MARK: VoiceOver text
 
     /// Set rows read as one summary ("Warm-up set 1, 10 reps, 45 pounds, done"), and the rest timer exposes the

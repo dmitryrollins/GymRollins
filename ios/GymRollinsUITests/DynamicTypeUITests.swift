@@ -114,6 +114,29 @@ final class DynamicTypeUITests: XCTestCase {
         screenshot("build-result-ax-xl")
     }
 
+    func testSharedWorkoutSheetsAtAccessibilityXL() throws {
+        let app = launch()
+        let share = app.buttons["today.share"]
+        XCTAssertTrue(share.waitForExistence(timeout: 10))
+        for _ in 0..<10 where !share.isHittable { app.swipeUp() }
+        XCTAssertTrue(share.isHittable, "Share workout can be reached")
+        share.tap()
+        XCTAssertTrue(app.images["share.qr"].waitForExistence(timeout: 10))
+        let send = app.descendants(matching: .any)["share.send"]
+        for _ in 0..<6 where !send.isHittable { app.swipeUp() }
+        XCTAssertTrue(send.isHittable, "Send link can be reached")
+        screenshot("share-workout-ax-xl")
+        app.buttons["share.done"].tap()
+        XCTAssertTrue(app.images["share.qr"].waitForNonExistence(timeout: 5))
+
+        app.open(try XCTUnwrap(URL(string: "gymrollins://w#1.0025_3_8-10.0313_3_10")))
+        let use = app.buttons["incoming.use"]
+        XCTAssertTrue(use.waitForExistence(timeout: 10))
+        XCTAssertTrue(use.isHittable, "Use for today can be reached")
+        XCTAssertTrue(app.buttons["incoming.notNow"].isHittable, "Not now can be reached")
+        screenshot("incoming-workout-ax-xl")
+    }
+
     func testPickerEquipmentAndAddFlowAtAccessibilityXL() {
         let app = launch(extra: ["-seedGym", "-gymPhotoFixture"])
         app.buttons["today.gymChip"].tap()
