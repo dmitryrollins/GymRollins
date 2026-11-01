@@ -49,6 +49,8 @@ try it, open an issue, or send a pull request.
   browse what people have shared at a gym without signing in; sign in to share your own or confirm theirs. Anything
   marked This phone only never leaves the phone. Shared listings can be reported, and their authors blocked; three
   reports hide a listing until a moderator decides.
+- **Train with a partner.** Share a day's workout by QR code or link. Your partner opens it with their own weights, and each
+  of you logs on your own phone. No account or signal needed.
 - **Bring your history.** CSV import from Fitbod, Strong, Hevy and FitNotes.
 - **Offline-first.** Everything lives on the device (SwiftData); cloud sync through Supabase is optional.
 
@@ -156,6 +158,7 @@ defaults in `Base.xcconfig` with a signing team and, later, cloud Supabase crede
 | Apple Watch app builds (watchOS simulator + device, unsigned; no watchOS runtime needed) | `scripts/watch-build.sh` |
 | MCP validator, tools and endpoint (deno, `FakeDb`; includes the domain-limits drift guard, `_shared/domain-limits-drift.test.ts`) | `cd supabase/functions && deno test --allow-read _shared/ mcp/` |
 | OAuth consent server unit tests | `node --test web/consent/server.test.mjs` |
+| Workout link page (no requests, content security policy, Apple's domain file) | `node --test web/share/share.test.mjs` |
 | Exercise photo matcher (free-exercise-db mapping) | `node --test scripts/map-exercise-photos.test.mjs` |
 | wger photo + other-language name mapper (per-item CC licenses, provenance policy; review: `docs/import/wger-review.md`) | `node --test scripts/map-wger.test.mjs` |
 | Strong / Hevy / FitNotes alias tables (ids exist, no key collisions, every override explained; review: `docs/import/other-apps-alias-review.md`) | `node --test scripts/other-apps-alias-report.test.mjs` |

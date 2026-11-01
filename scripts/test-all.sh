@@ -28,6 +28,9 @@ echo "==> MCP validator, tools and endpoint (deno test, FakeDb; HTTP e2e: MCP_E2
 echo "==> OAuth consent server (node test)"
 node --test "$ROOT/web/consent/server.test.mjs"
 
+echo "==> Workout link page (node test)"
+node --test "$ROOT/web/share/share.test.mjs"
+
 echo "==> Exercise photo matcher (node test)"
 node --test "$ROOT/scripts/map-exercise-photos.test.mjs"
 

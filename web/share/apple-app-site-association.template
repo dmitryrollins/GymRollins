@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAM_ID.com.rollins.gymrollins"],
+        "components": [
+          { "/": "/w", "comment": "A workout link" },
+          { "/": "/w/", "comment": "A workout link with a trailing slash" }
+        ]
+      }
+    ]
+  }
+}

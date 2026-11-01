@@ -13,6 +13,7 @@ struct PrivacyPolicyView: View {
             + "\"This phone only\" photos stay on this iPhone. Synced ones go to your account, where only you can see "
             + "them. Shared ones are public: anyone can see them, with no account.",
         "If you report something, moderators see the reason and your note, but not who sent it.",
+        "Sharing a workout link sends only its exercises, sets and reps: no weights, name or history.",
         "Deleting your account removes your data and photos from the server and this iPhone. Equipment you shared "
             + "stays listed at the gym, without your name, photos or notes. Reports you sent stay, without your name "
             + "or note.",
