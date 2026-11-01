@@ -21,6 +21,7 @@ struct PlannedTarget: Equatable {
         let raisedReps = loads != nil && suggestion.reps > suggest(nil).reps
         let reps = raisedReps ? "\(suggestion.reps)"
             : item.repsMin.map { $0 < item.reps ? "\($0)\u{2013}\(item.reps)" : "\(item.reps)" } ?? "\(item.reps)"
+        let target = item.mode != .reps && suggestion.sec != nil ? time(suggestion.sec ?? 0) : reps
         let load = suggestion.weightKg > 0
             ? " \u{00B7} " + WeightFormatter.format(kg: suggestion.weightKg, unit: profile.unit)
             : ""
@@ -30,7 +31,12 @@ struct PlannedTarget: Equatable {
         let badge = delta > (loads != nil ? AvailableLoads.toleranceKg : 0.01)
             ? "+\(WeightFormatter.format(kg: delta, unit: profile.unit, includeSecondary: false))"
             : nil
-        return PlannedTarget(subtitle: "\(item.sets) \u{00D7} \(reps)\(load)", suggestedKg: suggestion.weightKg > 0 ? suggestion.weightKg : nil,
+        return PlannedTarget(subtitle: "\(item.sets) \u{00D7} \(target)\(load)", suggestedKg: suggestion.weightKg > 0 ? suggestion.weightKg : nil,
                              badge: badge)
+    }
+
+    /// "10 min" for whole minutes, otherwise "45 s".
+    private static func time(_ seconds: Int) -> String {
+        seconds >= 60 && seconds % 60 == 0 ? "\(seconds / 60) min" : "\(seconds) s"
     }
 }

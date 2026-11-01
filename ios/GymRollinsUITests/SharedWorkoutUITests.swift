@@ -100,6 +100,13 @@ final class SharedWorkoutUITests: XCTestCase {
         XCTAssertTrue(row.label.contains("Set on first set"), row.label)
     }
 
+    func testACardioTargetShowsItsMinutes() {
+        let app = opened(URL(string: "gymrollins://w#1.3220_1_s600")!)
+        let row = element(app, "incoming.row.3220")
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("10 min"), row.label)
+    }
+
     /// Spec criterion 6.
     func testADamagedLinkSaysSoAndChangesNothing() {
         let app = opened(URL(string: "gymrollins://w#nonsense")!)

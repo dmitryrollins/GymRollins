@@ -199,6 +199,20 @@ import Testing
         #expect(items.map(\.sec) == [60, 600, nil])
     }
 
+    /// The logging screen shows a seconds box only when no set has reps (`SetFieldFormat.dataMode`).
+    @Test func aTimedSetHasNoRepsAndCardioKeepsOne() {
+        let workout = SharedWorkout(items: [item("0001", .seconds(60)), item("0002", .seconds(600))])
+        let items = workout.routineItems { $0 == "0002" ? .cardio : .reps }
+        #expect(items.map(\.reps) == [0, 1])
+    }
+
+    @Test func aRepsTargetOnACardioExerciseBecomesCardio() throws {
+        let workout = SharedWorkout(items: [item("0002", sets: 3, .reps(min: 8, max: 10))])
+        let only = try #require(workout.routineItems { _ in .cardio }.first)
+        let defaults = RoutineExercise.defaults(exerciseId: "0002", mode: .cardio, barbell: false)
+        #expect(only.mode == .cardio && only.sec == defaults.sec && only.reps == 1 && only.repsMin == nil)
+    }
+
     @Test func supersetsStayTogetherOnThePhone() {
         let workout = SharedWorkout(items: [item("0001", superset: 1), item("0002", superset: 1), item("0003", superset: 2)])
         let groups = workout.routineItems { _ in .reps }.map(\.supersetGroup)

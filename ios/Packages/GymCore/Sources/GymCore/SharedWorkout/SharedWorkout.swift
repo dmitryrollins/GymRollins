@@ -36,13 +36,21 @@ public struct SharedWorkout: Equatable, Sendable {
     public func routineItems(mode: (String) -> ExerciseMode?) -> [RoutineExercise] {
         items.map { item in
             let group = item.superset.map { "S\($0)" }
+            let isCardio = mode(item.exerciseId) == .cardio
             switch item.target {
             case let .reps(low, high):
+                // Only a crafted link puts reps on a cardio exercise; it gets the usual duration instead.
+                if isCardio {
+                    let cardio = RoutineExercise.defaults(exerciseId: item.exerciseId, mode: .cardio, barbell: false)
+                    return RoutineExercise(exerciseId: item.exerciseId, sets: item.sets, reps: cardio.reps, sec: cardio.sec,
+                                           mode: .cardio, supersetGroup: group)
+                }
                 return RoutineExercise(exerciseId: item.exerciseId, sets: item.sets, reps: high, repsMin: low,
                                        mode: .reps, supersetGroup: group)
             case let .seconds(seconds):
-                return RoutineExercise(exerciseId: item.exerciseId, sets: item.sets, reps: 1, sec: seconds,
-                                       mode: mode(item.exerciseId) == .cardio ? .cardio : .time, supersetGroup: group)
+                // No reps on a timed set, so the logging screen reads its data as time and shows a seconds box.
+                return RoutineExercise(exerciseId: item.exerciseId, sets: item.sets, reps: isCardio ? 1 : 0, sec: seconds,
+                                       mode: isCardio ? .cardio : .time, supersetGroup: group)
             }
         }
     }

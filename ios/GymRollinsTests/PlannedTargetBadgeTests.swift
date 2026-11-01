@@ -46,4 +46,36 @@ import Testing
         #expect(target.suggestedKg.map { abs($0 - 20.2) < 0.001 } == true, "was \(String(describing: target.suggestedKg))")
         #expect(target.badge != nil, "the 0.2 kg rise shows")
     }
+
+    // MARK: Timed and cardio rows say the time
+
+    private func target(mode: ExerciseMode, sets: Int, sec: Int, equipment: String = "body weight") -> PlannedTarget {
+        let exercise = Exercise(id: "t", name: "plank", bodyPart: mode == .cardio ? "cardio" : "waist", equipment: equipment,
+                                target: "abs", mode: mode)
+        let item = RoutineExercise(exerciseId: "t", sets: sets, reps: mode == .time ? 0 : 1, sec: sec, mode: mode,
+                                   policy: mode == .cardio ? .off : .time)
+        return PlannedTarget.make(item: item, policy: .off, profile: Profile(), exercise: exercise, history: [], loads: nil)
+    }
+
+    @Test func aCardioRowSaysItsMinutes() {
+        #expect(target(mode: .cardio, sets: 1, sec: 600).subtitle == "1 \u{00D7} 10 min")
+    }
+
+    @Test func aTimedRowSaysItsSeconds() {
+        #expect(target(mode: .time, sets: 3, sec: 45).subtitle == "3 \u{00D7} 45 s")
+    }
+
+    @Test func aTimeThatIsNotWholeMinutesStaysInSeconds() {
+        #expect(target(mode: .time, sets: 2, sec: 90).subtitle == "2 \u{00D7} 90 s")
+        #expect(target(mode: .time, sets: 2, sec: 120).subtitle == "2 \u{00D7} 2 min")
+    }
+
+    @Test func aTimedRowWithALoadKeepsTheLoad() {
+        let exercise = Exercise(id: "t", name: "farmer hold", bodyPart: "waist", equipment: "dumbbell", target: "abs", mode: .time)
+        let item = RoutineExercise(exerciseId: "t", sets: 3, reps: 0, sec: 30, weightKg: 20, mode: .time, policy: .off)
+        let text = PlannedTarget.make(item: item, policy: .off, profile: Profile(unit: .kg), exercise: exercise,
+                                      history: [SessionResult(date: .now, weightKg: 20, reps: [0], secs: [30])],
+                                      loads: nil).subtitle
+        #expect(text.hasPrefix("3 \u{00D7} 30 s \u{00B7} 20"))
+    }
 }

@@ -7,6 +7,8 @@ import Testing
 @Suite struct IncomingWorkoutScreenTests {
     private let library = ExerciseLibrary(exercises: [
         Exercise(id: "0025", name: "barbell bench press", bodyPart: "chest", equipment: "barbell", target: "pectorals"),
+        Exercise(id: "3220", name: "astride jumps", bodyPart: "cardio", equipment: "body weight", target: "cardiovascular system"),
+        Exercise(id: "0464", name: "plank", bodyPart: "waist", equipment: "body weight", target: "abs", mode: .time),
         Exercise(id: "0251", name: "chest dip", bodyPart: "chest", equipment: "body weight", target: "pectorals"),
     ])
     private let day = "2026-11-01"
@@ -197,6 +199,20 @@ import Testing
         let started = try firstWorkingWeights(shown, profile: odd, history: { _ in [] }, gym: nil)
         #expect(started == [0])
         #expect((shown.rows[0].row.suggestedKg ?? 0) == 0)
+    }
+
+    // MARK: Timed and cardio rows
+
+    @Test func aCardioRowSaysMinutesNotOneByOne() throws {
+        let shown = try preview(URL(string: "gymrollins://w#1.3220_1_s600")!)
+        #expect(shown.rows[0].row.subtitle == "1 \u{00D7} 10 min")
+        #expect(shown.rows[0].note == nil)
+    }
+
+    @Test func aTimedRowSaysSeconds() throws {
+        let shown = try preview(URL(string: "gymrollins://w#1.0464_3_s45")!)
+        #expect(shown.rows[0].row.subtitle == "3 \u{00D7} 45 s")
+        #expect(shown.plan.exercises[0].reps == 0)
     }
 
     // MARK: "This replaces today's plan"
