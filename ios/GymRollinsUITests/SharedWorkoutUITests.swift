@@ -133,31 +133,15 @@ final class SharedWorkoutUITests: XCTestCase {
         XCTAssertEqual(notice.label, "1 exercise isn't in your version of the app.")
     }
 
-    /// `XCUIApplication.open` relaunches the app (a new process, and the UI tests' in-memory store is gone), so it can't
-    /// put a link in front of a workout that is on screen. Safari can: it hands the link to the running app, as a tap in
-    /// Messages does.
-    private func openFromSafari(_ url: URL, file: StaticString = #filePath, line: UInt = #line) {
-        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
-        safari.launch()
-        var address = safari.textFields["Address"].exists ? safari.textFields["Address"] : safari.buttons["Address"]
-        if !address.waitForExistence(timeout: 5) {
-            // Safari reopened on a web page (another test's search): its bar is a pill at the bottom, with no "Address".
-            safari.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94)).tap()
-            address = safari.textFields["Address"]
-        }
-        XCTAssertTrue(address.waitForExistence(timeout: 10), "no Safari address bar", file: file, line: line)
-        address.tap()
-        safari.typeText(url.absoluteString + "\n")
-        let open = safari.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10), "Safari didn't offer to open the link", file: file, line: line)
-        open.tap()
-    }
+    // `XCUIApplication.open` relaunches the app (a new process, and the UI tests' in-memory store is gone), so it can't put a
+    // link in front of something on screen. `XCUIDevice.shared.system.open` hands it to the running app, as a tap in Messages
+    // does. The workout test below would lose its workout if that weren't so.
 
     /// Spec criterion 7. The sheet opens over the full-screen workout, and Resume goes back to it.
     func testALinkDuringAWorkoutChangesNothing() {
         let app = XCUIApplication.launchReady(["-seedHistory"]) { $0.buttons["today.start"] }
         app.startWorkout()
-        openFromSafari(benchAndCurl)
+        XCUIDevice.shared.system.open(benchAndCurl)
         let message = app.staticTexts["incoming.message"]
         XCTAssertTrue(message.waitForExistence(timeout: 10), "the sheet didn't open over the workout")
         XCTAssertEqual(message.label, "Finish your current workout first.")
@@ -184,7 +168,7 @@ final class SharedWorkoutUITests: XCTestCase {
     func testASecondLinkReplacesTheFirst() {
         let app = opened(benchAndCurl)
         XCTAssertTrue(element(app, "incoming.row.0313").waitForExistence(timeout: 10))
-        openFromSafari(URL(string: "gymrollins://w#1.0194_3_10")!)
+        XCUIDevice.shared.system.open(URL(string: "gymrollins://w#1.0194_3_10")!)
         XCTAssertTrue(element(app, "incoming.row.0194").waitForExistence(timeout: 10), "the second link didn't show")
         XCTAssertFalse(element(app, "incoming.row.0313").exists)
     }
@@ -206,7 +190,7 @@ final class SharedWorkoutUITests: XCTestCase {
         let app = XCUIApplication.launchReady(["-seedHistory"]) { $0.buttons["today.start"] }
         app.buttons["today.settings"].tapCenter()
         XCTAssertFalse(app.staticTexts["today.summary"].exists, "Settings didn't open")
-        openFromSafari(benchAndCurl)
+        XCUIDevice.shared.system.open(benchAndCurl)
         XCTAssertTrue(app.buttons["incoming.use"].waitForExistence(timeout: 10))
         app.buttons["incoming.use"].tapCenter()
         let summary = app.staticTexts["today.summary"]
@@ -232,8 +216,7 @@ final class SharedWorkoutUITests: XCTestCase {
         app.launchArguments = ["-uiTesting", "-onboarding", "-fixedNow", XCUIApplication.fixedNow]
         app.launch()
         XCTAssertTrue(app.buttons["onboarding.skip"].waitForExistence(timeout: 10))
-        // `open` would relaunch into onboarding again; Safari hands the link to the running app.
-        openFromSafari(benchAndCurl)
+        XCUIDevice.shared.system.open(benchAndCurl)
         XCTAssertTrue(app.buttons["onboarding.skip"].waitForExistence(timeout: 10), "onboarding wasn't brought back")
         XCTAssertFalse(app.buttons["incoming.use"].waitForExistence(timeout: 3), "the sheet opened over onboarding")
         app.buttons["onboarding.skip"].tap()
