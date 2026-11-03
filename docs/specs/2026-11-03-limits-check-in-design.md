@@ -47,7 +47,7 @@ note or date, and reading a date out of the note's text.
 
 ```
 GymCore
-  LimitsCheckIn          isDue(until:now:calendar:), the default next date (pure Swift)
+  LimitsCheckIn          isDue(note:until:now:calendar:), the Not yet date and the allowed range (pure Swift)
   ReturnWeights          60% of a suggested weight, rounded down on a LoadRounder, never below its smallest load
 GymData
   Profile.limitsUntil    Date?, a calendar day like goalDate; ProfileRecord, ProfileRepository, SyncStore+Profile
@@ -59,8 +59,9 @@ supabase/
 App
   Features/Limits/
     LimitsEditor         note and optional Until date, used by Settings and first-time setup
-    LimitsSettingsView   the Settings screen, row "Injuries / limits" in Training
-    LimitsCheckInCard    the card on Today: question, Not yet, Yes, then the paused routines
+    LimitsSettingsView   the Settings screen, opened from LimitsSettingsRow ("Injuries / limits" in Training)
+    LimitsReminder       on Today: the reminder before the date, the card on or after it
+    LimitsCheckInCard    the card: question, Not yet, Yes, then the paused routines
     LimitsCheckInModel   which step the card is on, and the text it shows
   App/AppEnvironment+Limits.swift  postpone, clear, resume a routine at 60%
 ```
@@ -82,7 +83,7 @@ actions, so its steps can be tested without a database.
 
 ### Yes
 - One profile save clears the note and the date. If it fails, the card stays and says so, and nothing else changes.
-- Then the card lists each paused routine with **Resume at 60%**, and **Not now**. With no paused routine the card closes.
+- Then the card lists each paused routine with its own button, **Resume Legs at 60%**, and **Not now**. With no paused routine the card closes.
 - Not now closes the card and leaves the routines paused. They can still be resumed by hand in My Plan.
 
 ### Resume at 60%
@@ -129,7 +130,7 @@ plan permission is on. The privacy text needs no change, because it already cove
 **GymCore (pure, part of the coverage gate):**
 - `isDue` before, on and after the date, at midnight, and in another time zone.
 - The default next date, and its range.
-- `ReturnWeights` on barbell, dumbbell and machine rounders, at the empty bar, at 0 and with a negative offset.
+- `ReturnWeights` on barbell, dumbbell and machine rounders, at the empty bar, at 0 and on a grid with an offset.
 
 **Data and server:**
 - `ProfileRecord` and `ProfileRepository` round-trip the date. An old store opens with it empty.
