@@ -44,8 +44,9 @@ final class AccessibilityAuditUITests: XCTestCase {
                       file: file, line: line)
     }
 
-    /// Height of the bottom band covered by the floating bottom bar / tab bar and iOS 26's scroll-edge effect.
-    static let bottomEdgeBand: CGFloat = 150
+    /// Height of the bottom band covered by the floating bottom bar / tab bar and iOS 26's scroll-edge effect. Today's
+    /// Start Workout bar begins near y=795 of 956, so a row ending just below that is sampled half-covered.
+    static let bottomEdgeBand: CGFloat = 165
 
     /// Height of the top band covered by the navigation bar and its scroll-edge effect (the bar ends near 118 pt).
     static let topEdgeBand: CGFloat = 120
@@ -118,20 +119,10 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Today")
     }
 
-    /// Scrolls Today up by about 20 pt and holds, so no row's title sits across the top edge of the floating Start
-    /// Workout bar (the bar starts near y=795, the audit's bottom band at 806, so text between them is sampled while
-    /// half-covered). The card stays on screen.
-    private func nudgeToday(_ app: XCUIApplication) {
-        let window = app.windows.firstMatch
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.30)).press(
-            forDuration: 0.1, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.279)),
-            withVelocity: .slow, thenHoldForDuration: 0.5)
-    }
-
     func testLimitsCheckInAudit() {
         let app = launch(["-seedHistory", "-seedLimitsDue"])
         XCTAssertTrue(app.buttons["limits.yes"].waitForExistence(timeout: 5))
-        nudgeToday(app)
+        waitUntilSettled(app.buttons["limits.yes"])
         audit(app, "Limits check-in")
         app.buttons["limits.yes"].tap()
         XCTAssertTrue(app.buttons["limits.resume.0"].waitForExistence(timeout: 5))
