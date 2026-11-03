@@ -118,6 +118,39 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Today")
     }
 
+    /// Scrolls Today up by about 20 pt and holds, so no row's title sits across the top edge of the floating Start
+    /// Workout bar (the bar starts near y=795, the audit's bottom band at 806, so text between them is sampled while
+    /// half-covered). The card stays on screen.
+    private func nudgeToday(_ app: XCUIApplication) {
+        let window = app.windows.firstMatch
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.30)).press(
+            forDuration: 0.1, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.279)),
+            withVelocity: .slow, thenHoldForDuration: 0.5)
+    }
+
+    func testLimitsCheckInAudit() {
+        let app = launch(["-seedHistory", "-seedLimitsDue"])
+        XCTAssertTrue(app.buttons["limits.yes"].waitForExistence(timeout: 5))
+        nudgeToday(app)
+        audit(app, "Limits check-in")
+        app.buttons["limits.yes"].tap()
+        XCTAssertTrue(app.buttons["limits.resume.0"].waitForExistence(timeout: 5))
+        waitUntilSettled(app.buttons["limits.resume.0"])
+        audit(app, "Limits resume")
+    }
+
+    func testLimitsSettingsAudit() {
+        let app = launch()
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.limits"]
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        row.tap()
+        XCTAssertTrue(app.buttons["limits.edit.save"].waitForExistence(timeout: 5))
+        waitUntilSettled(app.buttons["limits.edit.save"])
+        audit(app, "Limits settings")
+    }
+
     /// Today's exercise screen before the workout (plan mode).
     func testPlanScreenAudit() {
         let app = launch()

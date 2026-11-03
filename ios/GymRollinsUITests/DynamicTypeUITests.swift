@@ -223,6 +223,35 @@ final class DynamicTypeUITests: XCTestCase {
         screenshot("add-equipment-who-sees-it-ax-xl")
     }
 
+    func testLimitsCheckInAtAccessibilityXL() {
+        let app = launch(extra: ["-seedHistory", "-seedLimitsDue"])
+        for id in ["limits.yes", "limits.notYet"] {
+            let button = app.buttons[id]
+            XCTAssertTrue(button.waitForExistence(timeout: 5))
+            for _ in 0..<6 where !button.isHittable { app.swipeUp() }
+            XCTAssertTrue(button.isHittable, id)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44, id)
+        }
+        screenshot("limits-check-in-ax-xl")
+    }
+
+    func testLimitsSettingsAtAccessibilityXL() {
+        let app = launch()
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.limits"]
+        // Above the floating tab bar: a row under it still counts as hittable, and the tap would land on a tab.
+        let clearOfTabBar = app.windows.firstMatch.frame.height - 150
+        for _ in 0..<8 where !(row.isHittable && row.frame.maxY < clearOfTabBar) { app.swipeUp() }
+        row.tapCenter()
+        let save = app.buttons["limits.edit.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        for _ in 0..<6 where !save.isHittable { app.swipeUp() }
+        XCTAssertTrue(save.isHittable)
+        XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+        screenshot("limits-settings-ax-xl")
+    }
+
     func testClaudeGymsToggleAtAccessibilityXL() {
         let app = launch()
         app.tabBars.buttons["Log"].tap()
