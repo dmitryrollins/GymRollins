@@ -16,7 +16,8 @@ struct SyncRoundTripTests {
 
         try phone.profiles.save(Profile(unit: .kg, restSec: 150, heightCm: 181.5, goalWeightKg: 85,
                                         goalDate: SyncDay.parse("2026-12-31"), trainingDays: 4,
-                                        limits: "left shoulder", deloadPct: 0.1))
+                                        limits: "left shoulder",
+                                        limitsUntil: SyncDay.parse("2026-10-26"), deloadPct: 0.1))
         let routine = Routine(name: "Push", emoji: "💪", policy: .double, exercises: [
             RoutineExercise(exerciseId: "bench", sets: 3, reps: 8, repsMin: 6, weightKg: 61.234567, policy: .linear,
                             incKg: 2.267962, weightSetAt: phone.clock.now),

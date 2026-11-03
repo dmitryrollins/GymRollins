@@ -33,6 +33,7 @@ Deno.test('get_profile: unit, goal with display, limits, permissions', async () 
   assertEquals(out.unit, 'lb')
   assertEquals(out.goal, { weight_kg: 85, weight_display: '187.4 lb (85 kg)', date: '2026-12-31' })
   assertEquals(out.limits, 'left knee: no deep knee flexion')
+  assertEquals(out.limits_until, null)
   assertEquals(out.training_days, 4)
   assertEquals(out.permissions, {
     read_plan: true,
@@ -42,6 +43,18 @@ Deno.test('get_profile: unit, goal with display, limits, permissions', async () 
     propose: true,
     auto_apply: false,
   })
+})
+
+Deno.test("get_profile: the injury note's end date", async () => {
+  const out = json(
+    await getProfile(
+      await ctx((d) => {
+        d.profile!.limits_until = '2026-10-26'
+      }),
+    ),
+  )
+  assertEquals(out.limits, 'left knee: no deep knee flexion')
+  assertEquals(out.limits_until, '2026-10-26')
 })
 
 Deno.test('get_profile: no profile yet → defaults, lb', async () => {

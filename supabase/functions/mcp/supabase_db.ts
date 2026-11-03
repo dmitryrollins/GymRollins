@@ -23,7 +23,7 @@ import type {
 import { ToolError } from './tools/result.ts'
 
 const PROFILE_COLS =
-  'unit, height_cm, goal_weight_kg, goal_date, training_days, experience, limits, deload_pct, ' +
+  'unit, height_cm, goal_weight_kg, goal_date, training_days, experience, limits, limits_until, deload_pct, ' +
   'rest_sec, mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, mcp_propose, mcp_auto_apply, sex, birth_year'
 const SET_COLS = 'position, w_kg, r, sec, min, dist_m, done, warmup, rir, rpe, multiplier'
 const WORKOUT_COLS = `id, started_at, ended_at, paused_sec, routine_id, name, note, ` +

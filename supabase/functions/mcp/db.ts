@@ -12,6 +12,8 @@ export interface Profile {
   training_days: number
   experience: string
   limits: string
+  /** The injury note's end date, yyyy-MM-dd; null or absent for none. */
+  limits_until?: string | null
   deload_pct: number
   rest_sec: number
   mcp_read_plan: boolean

@@ -42,6 +42,7 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
     training_days: p.training_days,
     experience: p.experience,
     limits: p.limits,
+    limits_until: p.limits_until ?? null,
     deload_pct: p.deload_pct,
     rest_sec: p.rest_sec,
     permissions: {

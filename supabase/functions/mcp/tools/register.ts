@@ -67,7 +67,7 @@ export const TOOL_SPECS = [
     title: 'Get profile',
     description:
       "Get the owner's training profile: preferred unit, goal weight and date, height, training days, " +
-      'injury limits, deload %, and which permissions Claude has.',
+      'injury limits and the day they end, deload %, and which permissions Claude has.',
     input: schemas.empty,
     annotations: READ,
     run: (ctx) => getProfile(ctx),
