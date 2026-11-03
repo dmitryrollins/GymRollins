@@ -47,10 +47,14 @@ final class AccessibilityAuditUITests: XCTestCase {
     /// Height of the bottom band covered by the floating bottom bar / tab bar and iOS 26's scroll-edge effect.
     static let bottomEdgeBand: CGFloat = 150
 
+    /// Height of the top band covered by the navigation bar and its scroll-edge effect (the bar ends near 118 pt).
+    static let topEdgeBand: CGFloat = 120
+
     /// Labels whose contrast was measured from simulator screenshots (default text size) and passes 4.5:1, but which
     /// the audit flags because it samples the Liquid Glass capsule behind them: "How-To" 16.0:1 (white on the dark
-    /// glass capsule over the logging hero).
-    static let measuredContrastLabels: Set<String> = ["How-To"]
+    /// glass capsule over the logging hero). Settings' "Apple Health" and "Data" section headers are #A9A9B5 on #0B0B10
+    /// (about 8:1); the audit flags them only once the longer Settings list has scrolled them up under the nav bar's blur.
+    static let measuredContrastLabels: Set<String> = ["How-To", "Apple Health", "Data"]
 
     /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
     /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first.
@@ -75,6 +79,8 @@ final class AccessibilityAuditUITests: XCTestCase {
             // the same rows read at full contrast once scrolled up. The bar's own prominent buttons measured 5.6:1
             // (white on #C22F3B) from screenshots.
             if frame.maxY > windowHeight - bottomEdgeBand { return "under bottom scroll-edge effect" }
+            // The same effect dims rows scrolled up under the navigation bar, which a longer Settings list now does.
+            if frame.maxY < topEdgeBand { return "under top scroll-edge effect" }
             if measuredContrastLabels.contains(element.label) { return "measured on glass" }
             if measuredContrastIdentifiers.contains(element.identifier) { return "measured on glass" }
             // `.searchable`'s placeholder is system-styled.

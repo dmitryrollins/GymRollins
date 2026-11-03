@@ -116,6 +116,8 @@ struct SettingsView: View {
             NavigationLink { WeeklyTargetsView() } label: { Text("Weekly targets") }
                 .accessibilityIdentifier("settings.weeklyTargets")
 
+            LimitsSettingsRow()
+
             Toggle("Warm-up sets", isOn: $autoWarmups).accessibilityIdentifier("settings.autoWarmups")
 
             Picker("Progression default", selection: $progressionRaw) {
