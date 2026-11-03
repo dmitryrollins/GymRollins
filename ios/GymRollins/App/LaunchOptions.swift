@@ -52,6 +52,8 @@ struct LaunchOptions {
     /// DEBUG/UI-test only (`-seedStrength`): sex/birth year on the profile, a weigh-in and squat/bench/deadlift
     /// sessions, for the strength-level screens (`DebugStrengthSeed`).
     let seedStrength: Bool
+    /// DEBUG/UI-test only (`-seedLimitsDue`): the seeded injury note ended yesterday, so Today shows the check-in card.
+    let seedLimitsDue: Bool
     /// DEBUG/UI-test only (`-forgetSession`): drops the stored auth session but keeps the local data, like a
     /// session revoked elsewhere.
     let forgetSession: Bool
@@ -152,6 +154,7 @@ struct LaunchOptions {
         seedTodayProposal = arguments.contains("-seedTodayProposal")
         seedInsights = arguments.contains("-seedInsights")
         seedStrength = arguments.contains("-seedStrength")
+        seedLimitsDue = arguments.contains("-seedLimitsDue")
         seedGym = arguments.contains("-seedGym")
         gymPhotoFixture = arguments.contains("-gymPhotoFixture")
         fakeLocation = Self.coordinate(after: "-fakeLocation", in: arguments)
@@ -175,6 +178,7 @@ struct LaunchOptions {
         seedTodayProposal = false
         seedInsights = false
         seedStrength = false
+        seedLimitsDue = false
         seedGym = false
         gymPhotoFixture = false
         fakeLocation = nil

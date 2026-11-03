@@ -100,6 +100,7 @@ final class AppEnvironment {
             if options.seedHistory { try OwnerSeed.applyHistory(to: context, now: now()) }
             if options.seedBodyweight { try OwnerSeed.applyBodyweight(to: context, now: now()) }
             if options.seedPlank { try OwnerSeed.applyPlank(to: context, now: now()) }
+            if options.seedLimitsDue { try OwnerSeed.applyLimitsDue(to: context, now: now()) }
             if options.seedLargeHistory {
                 try OwnerSeed.applyLargeHistory(to: context, now: now(), count: options.largeHistoryCount)
             }

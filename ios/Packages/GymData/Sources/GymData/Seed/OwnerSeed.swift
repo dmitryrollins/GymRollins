@@ -65,6 +65,13 @@ public enum OwnerSeed {
             trainingDays: 4, limits: "Knee: no leg loading until ~26 Oct 2026"))
     }
 
+    /// `-seedLimitsDue`: the knee note ended yesterday, so Today asks about it (check-in tests and QA).
+    public static func applyLimitsDue(to context: ModelContext, now: Date, calendar: Calendar = .current) throws {
+        let profiles = ProfileRepository(context: context, now: { now })
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))
+        try profiles.save(try profiles.load().withLimits("Knee: no leg loading", until: yesterday))
+    }
+
     /// Onboarding's "use the Push/Pull/Upper/Legs template" option: the same routines and schedule as `apply`,
     /// but no profile overwrite (the user's own answers from Profile Setup stay) and no workout history.
     /// Idempotent: does nothing if any routine exists.
