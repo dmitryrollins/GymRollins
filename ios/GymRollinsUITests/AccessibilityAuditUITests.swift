@@ -52,9 +52,8 @@ final class AccessibilityAuditUITests: XCTestCase {
 
     /// Labels whose contrast was measured from simulator screenshots (default text size) and passes 4.5:1, but which
     /// the audit flags because it samples the Liquid Glass capsule behind them: "How-To" 16.0:1 (white on the dark
-    /// glass capsule over the logging hero). Settings' "Apple Health" and "Data" section headers are #A9A9B5 on #0B0B10
-    /// (about 8:1); the audit flags them only once the longer Settings list has scrolled them up under the nav bar's blur.
-    static let measuredContrastLabels: Set<String> = ["How-To", "Apple Health", "Data"]
+    /// glass capsule over the logging hero).
+    static let measuredContrastLabels: Set<String> = ["How-To"]
 
     /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
     /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first.
@@ -227,8 +226,22 @@ final class AccessibilityAuditUITests: XCTestCase {
         let confirm = app.buttons["settings.unblockAll.confirm"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
-        XCTAssertTrue(app.staticTexts["settings.unblockAll.result"].waitForExistence(timeout: 5))
+        let result = app.staticTexts["settings.unblockAll.result"]
+        XCTAssertTrue(result.waitForExistence(timeout: 5))
+        waitUntilSettled(result)
         audit(app, "Settings: unblocked")
+    }
+
+    /// Waits until `element` has stopped moving and the dialog's dimming has faded. Audited mid-scroll, the section
+    /// headers sampled the fade and failed contrast at a different place on every run.
+    private func waitUntilSettled(_ element: XCUIElement) {
+        var last = element.frame
+        for _ in 0..<8 {
+            _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: 0.5)
+            if element.frame == last { break }
+            last = element.frame
+        }
+        _ = XCTWaiter.wait(for: [XCTestExpectation(description: "fade")], timeout: 0.5)
     }
 
     func testProposalReviewAudit() {
