@@ -74,6 +74,7 @@ public struct ProfileSnapshot: Sendable, Equatable {
     public var trainingDays = 4
     public var experience = "intermediate"
     public var limits = ""
+    public var limitsUntil: Date?
     public var deloadPct = 0.05
     public var barKg = 20.411656
     public var platesKg: [Double] = []

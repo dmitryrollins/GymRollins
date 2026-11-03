@@ -133,6 +133,7 @@ extension ProfileRecord {
         s.trainingDays = trainingDays
         s.experience = experience
         s.limits = limits
+        s.limitsUntil = limitsUntil
         s.deloadPct = deloadPct
         s.barKg = barKg
         s.platesKg = platesKg
@@ -158,6 +159,7 @@ extension ProfileRecord {
         trainingDays = s.trainingDays
         experience = s.experience
         limits = s.limits
+        limitsUntil = s.limitsUntil
         deloadPct = s.deloadPct
         barKg = s.barKg
         platesKg = s.platesKg

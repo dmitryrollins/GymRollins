@@ -14,6 +14,7 @@ public final class ProfileRecord {
     public var trainingDays: Int
     public var experience: String
     public var limits: String
+    public var limitsUntil: Date?
     public var deloadPct: Double
     public var barKg: Double
     /// Available plate sizes per side, in kg (unlimited count of each) — like `barKg`, always kg

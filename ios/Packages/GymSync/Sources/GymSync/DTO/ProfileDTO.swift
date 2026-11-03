@@ -14,6 +14,8 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
     public let trainingDays: Int
     public let experience: String
     public let limits: String
+    /// Postgres `date`, `yyyy-MM-dd`: the injury note's end date.
+    public let limitsUntil: String?
     public let deloadPct: Double
     public let barKg: Double
     public let platesKg: [Double]
@@ -32,6 +34,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
 
     enum CodingKeys: String, CodingKey {
         case unit, experience, limits
+        case limitsUntil = "limits_until"
         case restSec = "rest_sec", warmupRestSec = "warmup_rest_sec", heightCm = "height_cm"
         case goalWeightKg = "goal_weight_kg", goalDate = "goal_date", trainingDays = "training_days"
         case deloadPct = "deload_pct", barKg = "bar_kg", platesKg = "plates_kg", dumbbellStepKg = "dumbbell_step_kg"
@@ -53,6 +56,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         trainingDays = try c.decode(Int.self, forKey: .trainingDays)
         experience = try c.decode(String.self, forKey: .experience)
         limits = try c.decode(String.self, forKey: .limits)
+        limitsUntil = try c.decodeIfPresent(String.self, forKey: .limitsUntil)
         deloadPct = try c.decode(Double.self, forKey: .deloadPct)
         barKg = try c.decode(Double.self, forKey: .barKg)
         platesKg = try c.decode([Double].self, forKey: .platesKg)
@@ -80,6 +84,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         trainingDays = p.trainingDays
         experience = p.experience
         limits = p.limits
+        limitsUntil = p.limitsUntil.map { SyncDay.format($0) }
         deloadPct = p.deloadPct
         barKg = p.barKg
         platesKg = p.platesKg
@@ -107,6 +112,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         p.trainingDays = trainingDays
         p.experience = experience
         p.limits = limits
+        p.limitsUntil = limitsUntil.flatMap { SyncDay.parse($0) }
         p.deloadPct = deloadPct
         p.barKg = barKg
         p.platesKg = platesKg
@@ -135,6 +141,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         try c.encode(trainingDays, forKey: .trainingDays)
         try c.encode(experience, forKey: .experience)
         try c.encode(limits, forKey: .limits)
+        try c.encode(limitsUntil, forKey: .limitsUntil)
         try c.encode(deloadPct, forKey: .deloadPct)
         try c.encode(barKg, forKey: .barKg)
         try c.encode(platesKg, forKey: .platesKg)

@@ -20,6 +20,26 @@ import Testing
         #expect(loaded.goalWeightKg == 85)
     }
 
+    @Test func theNotesEndDateSavesAndLoads() throws {
+        let repo = ProfileRepository(context: container.mainContext, now: clock)
+        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
+        try repo.save(Profile(limits: "Knee: no leg loading", limitsUntil: until))
+        #expect(try repo.load().limitsUntil == until)
+        try repo.save(try repo.load().withLimits("", until: until))
+        #expect(try repo.load().limits == "")
+        #expect(try repo.load().limitsUntil == nil)
+    }
+
+    @Test func withLimitsTrimsTheNoteAndKeepsEverythingElse() {
+        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
+        let p = Profile(unit: .kg, restSec: 150, heightCm: 181, goalWeightKg: 85, trainingDays: 5, experience: "advanced",
+                        limits: "old", deloadPct: 0.1, mcpAutoApply: true, sex: .male, birthYear: 1990)
+        let changed = p.withLimits("  Knee: no leg loading \n", until: until)
+        #expect(changed.limits == "Knee: no leg loading")
+        #expect(changed.limitsUntil == until)
+        #expect(changed.withLimits("old", until: nil) == p)
+    }
+
     /// Sex and birth year are written only by `setStrengthProfile`: a screen that rebuilds and saves the whole
     /// profile (onboarding, bar & plates, …) can't clear them.
     @Test func strengthProfileSurvivesFullSavesAndValidatesBirthYear() throws {

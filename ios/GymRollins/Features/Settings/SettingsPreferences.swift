@@ -31,7 +31,7 @@ extension Profile {
              mcpReadGyms: Bool? = nil, mcpPropose: Bool? = nil, mcpAutoApply: Bool? = nil) -> Profile {
         Profile(unit: unit ?? self.unit, restSec: restSec ?? self.restSec,
                warmupRestSec: warmupRestSec ?? self.warmupRestSec, heightCm: heightCm, goalWeightKg: goalWeightKg,
-               goalDate: goalDate, trainingDays: trainingDays, experience: experience, limits: limits,
+               goalDate: goalDate, trainingDays: trainingDays, experience: experience, limits: limits, limitsUntil: limitsUntil,
                deloadPct: deloadPct ?? self.deloadPct, barKg: barKg ?? self.barKg,
                plateInventory: plateInventory ?? self.plateInventory,
                dumbbellStepKg: dumbbellStepKg ?? self.dumbbellStepKg,

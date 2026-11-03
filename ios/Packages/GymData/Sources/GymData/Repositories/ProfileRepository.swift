@@ -18,6 +18,7 @@ public final class ProfileRepository {
         return Profile(unit: unit, restSec: r.restSec, warmupRestSec: r.warmupRestSec,
                        heightCm: r.heightCm, goalWeightKg: r.goalWeightKg, goalDate: r.goalDate,
                        trainingDays: r.trainingDays, experience: r.experience, limits: r.limits,
+                       limitsUntil: r.limitsUntil,
                        deloadPct: r.deloadPct, barKg: r.barKg,
                        plateInventory: PlateInventory(unit: unit,
                                                       bar: UnitConverter.fromKg(r.barKg, to: unit).rounded(toPlaces: 2),
@@ -48,6 +49,7 @@ public final class ProfileRepository {
         r.trainingDays = p.trainingDays
         r.experience = p.experience
         r.limits = p.limits
+        r.limitsUntil = p.limitsUntil
         r.deloadPct = p.deloadPct
         // The inventory's bar is what the plate calculator shows; persist it (in kg) so `barKg` and the reloaded
         // inventory can never disagree (e.g. a kg inventory saved next to the default 45 lb `barKg`).

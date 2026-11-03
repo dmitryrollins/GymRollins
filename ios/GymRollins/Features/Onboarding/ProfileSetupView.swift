@@ -159,6 +159,7 @@ struct ProfileSetupView: View {
                               heightCm: input.heightCm, goalWeightKg: input.goalWeightKg,
                               goalDate: (input.goalWeightKg != nil && hasGoalDate) ? GoalDate.normalized(goalDate) : nil,
                               trainingDays: trainingDays, experience: experience, limits: limits,
+                              limitsUntil: env.profile.limitsUntil,
                               deloadPct: current.deloadPct, barKg: current.barKg, plateInventory: current.plateInventory,
                               dumbbellStepKg: current.dumbbellStepKg, mcpReadWorkouts: current.mcpReadWorkouts,
                               mcpReadBody: current.mcpReadBody, mcpReadPlan: current.mcpReadPlan,
