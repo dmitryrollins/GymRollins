@@ -94,6 +94,9 @@ actions, so its steps can be tested without a database.
   in either direction, so the first session comes in light and later ones progress from what's logged.
 - Left alone: exercises with no weight (body weight), timed and cardio exercises, and exercises whose progression is Off,
   because Off means the person sets the weight and the engine ignores a planned one.
+- Also left alone (added after review): an exercise with a fixed weight, and one where the light weight isn't below the
+  suggestion, or lands on the last logged weight after the floor. The engine ignores a planned weight equal to the last
+  one, so the card would claim a change that never happens.
 - The routine is saved once, with `paused` false and the new weights together, so a failure leaves it as it was.
 - The card then says "Legs is back, with 6 exercises at 60%. Pick its day in My Plan." and offers **Open My Plan**. When
   nothing was lowered it says "Legs is back. Pick its day in My Plan."

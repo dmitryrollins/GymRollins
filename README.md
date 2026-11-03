@@ -51,6 +51,8 @@ try it, open an issue, or send a pull request.
   reports hide a listing until a moderator decides.
 - **Train with a partner.** Share a day's workout by QR code or link. Your partner opens it with their own weights, and each
   of you logs on your own phone. No account or signal needed.
+- **Injury notes with an end date.** On the date, Today asks if it's time to continue, and brings a paused routine back at
+  60% of its weights.
 - **Bring your history.** CSV import from Fitbod, Strong, Hevy and FitNotes.
 - **Offline-first.** Everything lives on the device (SwiftData); cloud sync through Supabase is optional.
 
