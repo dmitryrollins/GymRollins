@@ -77,4 +77,12 @@ private let now = Date(timeIntervalSince1970: 1_793_000_000)
         #expect(result.routine.exercises[1].weightKg == lb(80))
         #expect(result.routine.exercises[1].weightSetAt == now)
     }
+
+    @Test func aFixedWeightIsLeftAlone() {
+        let fixed = RoutineExercise(exerciseId: "0043", sets: 4, reps: 6, weightKg: lb(135), fixedWeightKg: lb(135))
+        let routine = Routine(name: "Legs", paused: true, exercises: [fixed])
+        let result = ReturnWeights.resume(routine, now: now) { _ in lb(80) }
+        #expect(result.lowered == 0)
+        #expect(result.routine.exercises == [fixed])
+    }
 }

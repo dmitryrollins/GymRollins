@@ -16,7 +16,8 @@ struct LimitsSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                LimitsEditor(note: $note, hasDate: $hasDate, until: $until, dates: dates, identifier: "limits.edit.note")
+                LimitsEditor(note: $note, hasDate: $hasDate, until: $until, dates: dates,
+                             now: env.now(), identifier: "limits.edit.note")
                 if let error {
                     Text(error).font(.footnote).foregroundStyle(Theme.destructive)
                         .accessibilityIdentifier("limits.edit.error")

@@ -97,7 +97,8 @@ struct ProfileSetupView: View {
                                       identifierPrefix: "setup.experience")
             }
             LimitsEditor(note: $limits, hasDate: $hasLimitsDate, until: $limitsUntil,
-                         dates: LimitsCheckIn.allowedDates(now: env.now(), calendar: .current), identifier: "setup.limits")
+                         dates: LimitsCheckIn.allowedDates(now: env.now(), calendar: .current), now: env.now(),
+                         identifier: "setup.limits")
         }
     }
 

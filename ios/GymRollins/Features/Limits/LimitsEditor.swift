@@ -1,3 +1,4 @@
+import GymCore
 import SwiftUI
 
 /// The injury note and its optional end date, in first-time setup and Settings.
@@ -6,6 +7,7 @@ struct LimitsEditor: View {
     @Binding var hasDate: Bool
     @Binding var until: Date
     let dates: ClosedRange<Date>
+    let now: Date
     /// The note field's identifier; the toggle and the picker add `.hasDate` and `.until`.
     let identifier: String
 
@@ -29,6 +31,12 @@ struct LimitsEditor: View {
                     .tint(Theme.accent)
                     .frame(minHeight: Theme.minTapSize)
                     .accessibilityIdentifier("\(identifier).until")
+            }
+        }
+        // Turning the date back on over one that has passed would be due at once: start from the later date instead.
+        .onChange(of: hasDate) { _, on in
+            if on, !LimitsCheckIn.allowedDates(now: now, calendar: .current).contains(until) {
+                until = LimitsCheckIn.laterDate(now: now, calendar: .current)
             }
         }
         .onChange(of: noteIsEmpty) { _, empty in if empty { hasDate = false } }

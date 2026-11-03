@@ -13,8 +13,7 @@ struct LimitsReminder: View {
     @State private var checkedAt: Date?
 
     private var due: Bool {
-        LimitsCheckIn.isDue(note: env.profile.limits, until: env.profile.limitsUntil, now: checkedAt ?? env.now(),
-                            calendar: .current)
+        env.limitsCheckInDue(at: checkedAt)
     }
 
     var body: some View {

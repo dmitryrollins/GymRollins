@@ -3,9 +3,9 @@ import GymCore
 import GymData
 
 extension AppEnvironment {
-    /// Whether Today asks about the injury note: its end date has come.
-    var limitsCheckInDue: Bool {
-        LimitsCheckIn.isDue(note: profile.limits, until: profile.limitsUntil, now: now(), calendar: .current)
+    /// Whether Today asks about the injury note: its end date has come by `date` (now, when none is given).
+    func limitsCheckInDue(at date: Date? = nil) -> Bool {
+        LimitsCheckIn.isDue(note: profile.limits, until: profile.limitsUntil, now: date ?? now(), calendar: .current)
     }
 
     /// Saves the injury note and its end date. An empty note keeps no date (`Profile.withLimits`).
@@ -42,6 +42,12 @@ extension AppEnvironment {
         let rounder = LoadRounding.rounder(for: exercise, profile: profile)
         let smallest = (exercise?.isBarbellLoaded ?? false)
             ? profile.barKg : UnitConverter.toKg(rounder.step, from: rounder.unit)
-        return ReturnWeights.weight(from: suggested, rounder: rounder, minimumKg: smallest)
+        guard let light = ReturnWeights.weight(from: suggested, rounder: rounder, minimumKg: smallest) else { return nil }
+        // The engine plans a weight only when it differs from the last logged one by more than this. A floor clamp that
+        // lands on the last weight would be ignored and progression would take over, so it isn't counted.
+        let tolerance = 0.01
+        guard suggested - light > tolerance else { return nil }
+        if let last = history.first?.weightKg, abs(light - last) <= tolerance { return nil }
+        return light
     }
 }

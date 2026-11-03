@@ -7,12 +7,20 @@ final class LimitsCheckInUITests: XCTestCase {
 
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id] }
 
-    /// Scrolls until `button` can take a touch, then taps it.
+    /// Same figure as `AccessibilityAuditUITests.bottomEdgeBand`: the floating tab bar and Today's Start Workout bar
+    /// cover the bottom of the window, and a row there can report `isHittable` while the tap lands on the bar.
+    private static let bottomEdgeBand: CGFloat = 165
+
+    private func isClearOfBars(_ app: XCUIApplication, _ button: XCUIElement) -> Bool {
+        button.isHittable && button.frame.maxY < app.windows.firstMatch.frame.height - Self.bottomEdgeBand
+    }
+
+    /// Scrolls until `button` can take a touch clear of the bottom bars, then taps it.
     private func scrollAndTap(_ app: XCUIApplication, _ button: XCUIElement, file: StaticString = #filePath,
                               line: UInt = #line) {
         XCTAssertTrue(button.waitForExistence(timeout: 10), "missing \(button)", file: file, line: line)
-        for _ in 0..<6 where !button.isHittable { app.swipeUp() }
-        XCTAssertTrue(button.isHittable, "\(button) can't be reached", file: file, line: line)
+        for _ in 0..<8 where !isClearOfBars(app, button) { app.swipeUp() }
+        XCTAssertTrue(isClearOfBars(app, button), "\(button) can't be reached", file: file, line: line)
         button.tap()
     }
 
@@ -57,6 +65,25 @@ final class LimitsCheckInUITests: XCTestCase {
         app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(app.buttons["today.start"].waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "today.limits").exists)
+    }
+
+    func testTurningUntilBackOnOverAPastDateStartsFromALaterOne() {
+        let app = XCUIApplication.launchReady(["-seedLimitsDue"]) { $0.buttons["today.start"] }
+        XCTAssertTrue(element(app, "limits.card").waitForExistence(timeout: 5))
+        openLimitsSettings(app)
+        let toggle = app.switches["limits.edit.note.hasDate"]
+        toggle.tap()
+        XCTAssertFalse(element(app, "limits.edit.note.until").exists)
+        toggle.tap()
+        XCTAssertTrue(element(app, "limits.edit.note.until").waitForExistence(timeout: 5))
+        scrollAndTap(app, app.buttons["limits.edit.save"])
+        XCTAssertTrue(app.buttons["settings.limits"].waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["Today"].tap()
+        let chip = element(app, "today.limits")
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        XCTAssertTrue(chip.label.hasPrefix("Knee: no leg loading \u{00B7} until "), chip.label)
+        XCTAssertFalse(element(app, "limits.card").exists)
     }
 
     func testNotYetMovesTheDate() {

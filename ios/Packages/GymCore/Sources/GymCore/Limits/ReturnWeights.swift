@@ -14,11 +14,13 @@ public enum ReturnWeights {
 
     /// `routine` unpaused, with each weighted rep exercise planned at `newWeight(item)` from `now`. The engine prefers a
     /// weight planned after the last session, so the first session back uses it. Timed and cardio exercises, those whose
-    /// progression is Off (the person sets those weights), and those `newWeight` returns nil for keep their weight.
+    /// progression is Off (the person sets those weights), those with a fixed weight (the engine returns it before any planned
+    /// weight), and those `newWeight` returns nil for keep their weight.
     public static func resume(_ routine: Routine, now: Date,
                               newWeight: (RoutineExercise) -> Double?) -> (routine: Routine, lowered: Int) {
         let changes = routine.exercises.map { item -> RoutineExercise? in
-            guard item.mode == .reps, (item.policy ?? routine.policy) != .off, let kg = newWeight(item) else { return nil }
+            guard item.mode == .reps, item.fixedWeightKg == nil, (item.policy ?? routine.policy) != .off,
+                  let kg = newWeight(item) else { return nil }
             return item.with(weightKg: kg, setAt: now)
         }
         let items = zip(routine.exercises, changes).map { original, changed in changed ?? original }

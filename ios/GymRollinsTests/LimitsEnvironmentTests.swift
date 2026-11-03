@@ -21,7 +21,7 @@ import Testing
     @Test func theSeededNoteHasNoDateSoNothingIsDue() throws {
         let env = try makeEnv()
         #expect(env.profile.limitsUntil == nil)
-        #expect(!env.limitsCheckInDue)
+        #expect(!env.limitsCheckInDue())
     }
 
     @Test func seedLimitsDueEndsTheNoteYesterday() throws {
@@ -29,7 +29,7 @@ import Testing
         let today = Calendar.current.startOfDay(for: env.now())
         #expect(env.profile.limits == "Knee: no leg loading")
         #expect(env.profile.limitsUntil == Calendar.current.date(byAdding: .day, value: -1, to: today))
-        #expect(env.limitsCheckInDue)
+        #expect(env.limitsCheckInDue())
     }
 
     @Test func notYetMovesTheDateAndStopsAsking() throws {
@@ -38,7 +38,7 @@ import Testing
         try env.postponeLimits(to: later)
         #expect(env.profile.limits == "Knee: no leg loading")
         #expect(env.profile.limitsUntil == later)
-        #expect(!env.limitsCheckInDue)
+        #expect(!env.limitsCheckInDue())
     }
 
     @Test func yesClearsTheNoteAndItsDate() throws {
@@ -46,7 +46,7 @@ import Testing
         try env.clearLimits()
         #expect(env.profile.limits == "")
         #expect(env.profile.limitsUntil == nil)
-        #expect(!env.limitsCheckInDue)
+        #expect(!env.limitsCheckInDue())
     }
 
     @Test func anEmptyNoteKeepsNoDate() throws {
@@ -119,5 +119,37 @@ import Testing
         let legs = try legsRoutine(env)
         #expect(try env.resumeAtReturnWeights(legs.id) != nil)
         #expect(try env.resumeAtReturnWeights(legs.id) == nil)
+    }
+
+    private func logFinished(_ env: AppEnvironment, _ id: String, sets: Int, reps: Int, lb weight: Double, daysAgo: Int) throws {
+        let start = env.now().addingTimeInterval(Double(-daysAgo) * 86_400)
+        try env.workouts.save(Workout(startedAt: start, endedAt: start.addingTimeInterval(3_000), name: "Past", entries: [
+            WorkoutEntry(exerciseId: id, sets: (0..<sets).map { _ in
+                WorkoutSet(weightKg: UnitConverter.toKg(weight, from: .lb), reps: reps, done: true, completedAt: start) }),
+        ]))
+    }
+
+    @Test func aWeightAtTheFloorIsLeftToProgression() throws {
+        let env = try makeEnv()
+        try logFinished(env, "0085", sets: 3, reps: 8, lb: 45, daysAgo: 1)
+        let before = try #require(try legsRoutine(env).exercises.first { $0.exerciseId == "0085" })
+        let result = try #require(try env.resumeAtReturnWeights(try legsRoutine(env).id))
+        #expect(result.lowered == 5)
+        let after = try #require(try legsRoutine(env).exercises.first { $0.exerciseId == "0085" })
+        #expect(after.weightKg == before.weightKg)
+        #expect(abs(lb(after.weightKg) - 135) < 0.01)
+    }
+
+    @Test func afterHeavierHistoryTheFirstSessionBackIsPlannedAtSixtyPercent() throws {
+        let env = try makeEnv()
+        try logFinished(env, "0043", sets: 4, reps: 6, lb: 135, daysAgo: 7)
+        _ = try env.resumeAtReturnWeights(try legsRoutine(env).id)
+        let legs = try legsRoutine(env)
+        let squat = try #require(legs.exercises.first { $0.exerciseId == "0043" })
+        let first = SessionPlanner.suggestion(for: squat, policy: squat.policy ?? legs.policy, profile: env.profile,
+                                              exercise: env.library.exercise("0043"),
+                                              history: try env.workouts.history(exerciseId: "0043", limit: 5))
+        #expect(abs(lb(first.weightKg) - 80) < 0.01)
+        #expect(first.reason == .planned)
     }
 }
