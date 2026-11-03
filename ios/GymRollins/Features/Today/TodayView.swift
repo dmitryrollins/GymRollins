@@ -61,13 +61,7 @@ struct TodayView: View {
                         if env.session == nil && (env.hasAnyRoutine || plan?.kind == .built) { switchButton }
                     }
                     if env.session == nil { GymChipRow(gym: currentGym) }
-                    if !env.profile.limits.isEmpty {
-                        Text(env.profile.limits).font(.footnote.weight(.semibold))
-                            .accessibilityIdentifier("today.limits")
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .foregroundStyle(Theme.record)
-                            .glassCapsule(tint: Theme.record.opacity(0.25), interactive: false)
-                    }
+                    LimitsReminder(openPlan: { showPlan = true })
                     if let pendingProposal { proposalChip(pendingProposal) }
                     SyncStatusBanner()
                     RecoveryCard(identifier: "today.recovery")
