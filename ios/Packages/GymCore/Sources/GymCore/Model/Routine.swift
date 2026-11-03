@@ -58,6 +58,13 @@ public struct RoutineExercise: Codable, Sendable, Identifiable, Hashable {
                         weightSetAt: weightSetAt, fixedWeightKg: fixedWeightKg)
     }
 
+    /// This item with a new planned weight, stamped `date` so progression uses it next session.
+    public func with(weightKg: Double, setAt date: Date) -> RoutineExercise {
+        RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
+                        weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
+                        weightSetAt: date, fixedWeightKg: fixedWeightKg)
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, exerciseId, sets, reps, repsMin, sec, weightKg, mode, policy, incKg, supersetGroup, weightSetAt
         case fixedWeightKg
