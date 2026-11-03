@@ -42,7 +42,8 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
     training_days: p.training_days,
     experience: p.experience,
     limits: p.limits,
-    limits_until: p.limits_until ?? null,
+    // The app ignores a date with an empty note, so Claude doesn't see one either.
+    limits_until: p.limits ? (p.limits_until ?? null) : null,
     deload_pct: p.deload_pct,
     rest_sec: p.rest_sec,
     permissions: {

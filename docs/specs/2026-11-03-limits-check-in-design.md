@@ -164,3 +164,5 @@ One implementation plan, plan 24, on branch `feat-limits-checkin`, stacked on `f
 | The resumed routine has no weekday | The card says to pick its day and opens My Plan. Switch on Today can also start it. |
 | A schema change on a branch that isn't merged | The column is nullable and new, so plans 19 to 23 can merge first without it. |
 | Depends on five unmerged plans (19 to 23) | Plan 24 stacks on `feat-shared-workout` and can't be merged before them. |
+| The app or Claude's server goes out before the migration | The new column must exist first: a profile push or `get_profile` naming `limits_until` fails without it. Ship the migration first. |
+| Today fits a weight to the gym's equipment | At a gym with coarse steps, Today may round the 60% weight up to the nearest load it has. |

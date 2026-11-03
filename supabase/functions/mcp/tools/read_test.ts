@@ -57,6 +57,19 @@ Deno.test("get_profile: the injury note's end date", async () => {
   assertEquals(out.limits_until, '2026-10-26')
 })
 
+Deno.test('get_profile: a date without a note is hidden', async () => {
+  const out = json(
+    await getProfile(
+      await ctx((d) => {
+        d.profile!.limits = ''
+        d.profile!.limits_until = '2026-10-26'
+      }),
+    ),
+  )
+  assertEquals(out.limits, '')
+  assertEquals(out.limits_until, null)
+})
+
 Deno.test('get_profile: no profile yet → defaults, lb', async () => {
   const out = json(await getProfile(await ctx((d) => (d.profile = null))))
   assertEquals(out.unit, 'lb')
