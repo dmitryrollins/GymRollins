@@ -57,8 +57,9 @@ final class AccessibilityAuditUITests: XCTestCase {
     static let measuredContrastLabels: Set<String> = ["How-To"]
 
     /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
-    /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first.
-    static let measuredContrastIdentifiers: Set<String> = ["addEquipment.save"]
+    /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first. The report
+    /// sheet's "Send report" is the same button, also 7.14:1, flagged on 3 runs of 9.
+    static let measuredContrastIdentifiers: Set<String> = ["addEquipment.save", "report.send"]
 
     /// Why an issue is a false positive, or nil when it's a real issue. Each exclusion is narrow and justified.
     static func exclusionReason(_ issue: XCUIAccessibilityAuditIssue, windowHeight: CGFloat) -> String? {
