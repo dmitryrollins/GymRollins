@@ -53,13 +53,15 @@ final class AccessibilityAuditUITests: XCTestCase {
 
     /// Labels whose contrast was measured from simulator screenshots (default text size) and passes 4.5:1, but which
     /// the audit flags because it samples the Liquid Glass capsule behind them: "How-To" 16.0:1 (white on the dark
-    /// glass capsule over the logging hero).
-    static let measuredContrastLabels: Set<String> = ["How-To"]
+    /// glass capsule over the logging hero). The injury note's "Until" toggle label (only in `LimitsEditor`) is 19.6:1
+    /// (white on #0B0B10), flagged on every run since 7 Nov, on plan 24's commit too.
+    static let measuredContrastLabels: Set<String> = ["How-To", "Until"]
 
     /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
     /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first. The report
-    /// sheet's "Send report" is the same button, also 7.14:1, flagged on 3 runs of 9.
-    static let measuredContrastIdentifiers: Set<String> = ["addEquipment.save", "report.send"]
+    /// sheet's "Send report" is the same button, also 7.14:1, flagged on 3 runs of 9. The injury note's "Save" is the
+    /// same button again, 7.1:1, flagged with "Until".
+    static let measuredContrastIdentifiers: Set<String> = ["addEquipment.save", "report.send", "limits.edit.save"]
 
     /// Why an issue is a false positive, or nil when it's a real issue. Each exclusion is narrow and justified.
     static func exclusionReason(_ issue: XCUIAccessibilityAuditIssue, windowHeight: CGFloat) -> String? {
