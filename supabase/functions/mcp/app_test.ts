@@ -3,6 +3,7 @@
 import { assert, assertEquals, assertFalse, assertMatch } from 'jsr:@std/assert@^1'
 import { createApp, RATE_LIMIT_PER_MINUTE } from './app.ts'
 import type { RoutineRow } from './db.ts'
+import { SERVER_INSTRUCTIONS } from './instructions.ts'
 import { initializeBody, readRpc, rpcBody, rpcRequest, toolCallBody, toolJson } from './test_helpers.ts'
 import { FakeDb, loadOwnerData } from './tools/fake_db.ts'
 
@@ -87,6 +88,12 @@ Deno.test('initialize and tools/list: 15 tools with titles and annotations', asy
   assert(propose.description.includes('- today: routineId'), 'documents the today change')
   assert(propose.description.includes('add-routine (or reuse one) + today'), 'the one-off session recipe')
   assert(propose.description.includes('week only for permanent schedule changes'))
+})
+
+Deno.test('initialize sends the rules for using the tools', async () => {
+  const { app } = await setup()
+  const init = await readRpc(await app(rpcRequest(URL_MCP, initializeBody(), TOKEN)))
+  assertEquals(init.result.instructions, SERVER_INSTRUCTIONS)
 })
 
 Deno.test('tools/call get_plan → result, and an ok audit row with a SHA-256 digest', async () => {

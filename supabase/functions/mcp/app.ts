@@ -14,6 +14,7 @@ import {
   withCors,
 } from './auth.ts'
 import type { Db } from './db.ts'
+import { SERVER_INSTRUCTIONS } from './instructions.ts'
 import { registerTools } from './tools/register.ts'
 
 export interface AppDeps {
@@ -49,7 +50,7 @@ async function serveMcp(
     )
   }
   const handler = createMcpHandler(() => {
-    const server = new McpServer(SERVER_INFO)
+    const server = new McpServer(SERVER_INFO, { instructions: SERVER_INSTRUCTIONS })
     registerTools(server, { db, requestId, now: deps.now })
     return server
   }, {
