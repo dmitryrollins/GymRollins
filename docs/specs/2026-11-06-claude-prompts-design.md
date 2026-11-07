@@ -1,6 +1,6 @@
 # Claude prompts: design spec
 
-Date: 2026-11-06 · Status: approved in brainstorming, waiting for the owner's review of this file.
+Date: 2026-11-06 · Status: approved by the owner on 2026-11-07, with the unit read fresh every time (section 4).
 Builds on: the unmerged branch `feat-limits-checkin` (plan 24), which sits on plans 19 to 23.
 
 ## 1. Goal
@@ -17,8 +17,10 @@ profile and injury note, how to plan a single day, or how the owner reviews a pr
    prompt and the ready requests, each with its own **Copy** button.
 3. **Copy.** Copy puts that row's exact text on the clipboard, and its button reads "Copied" until another Copy on the
    screen is tapped.
-4. **Unit.** The weight request reads "Log my weight today: __ lb" in pounds and "Log my weight today: __ kg" in kilograms,
-   from the profile's unit.
+4. **Unit.** The owner can switch lb and kg in Settings at any time, so no text stores a unit. The weight request is built
+   from the profile's current unit every time the Claude screen draws: "Log my weight today: __ lb" in pounds and
+   "Log my weight today: __ kg" in kilograms. After a switch in Settings, the Claude screen shows the new unit. Claude reads
+   the unit from `get_profile` in every chat.
 5. **Accessibility.** Every control works with VoiceOver and the largest text sizes, and the Claude screen passes the
    accessibility audit.
 
@@ -37,6 +39,7 @@ the prompt in the app, MCP prompts, and changes to any tool.
 | Where the requests appear | Only on the Claude screen, with the coach prompt. |
 | Copy or open Claude | Copy. The Claude mobile app documents a prefill link only for Claude Code sessions, and a chat opened by link would sit outside the Project, without the coach prompt. |
 | Personal details | None in either text. Claude reads the goal, weight, unit and injury note from the profile. |
+| The unit | Never stored in a text, because the owner can switch it at any time. The app builds the weight request from the current unit; Claude reads the unit in each chat. Weights stay stored in kg, as everywhere in the app. |
 
 ## 3. Architecture
 
@@ -47,8 +50,8 @@ supabase/functions/mcp
 App
   Features/Claude/
     ClaudePrompts        the coach prompt, and the ready requests for a unit (pure, no UI)
-    UseWithClaudeModel   which row was copied last; copy(id, to:) writes through a closure
-    UseWithClaudeSection the section on ClaudeConnectionView, under Connect
+    UseWithClaudeModel   which row was copied last; copy(_:text:to:) writes through a closure
+    UseWithClaudeSection the two sections on ClaudeConnectionView, under Connect
 ```
 
 `ClaudePrompts` and `UseWithClaudeModel` don't know about screens, so the texts and the copy behaviour are tested
@@ -61,7 +64,7 @@ without the UI. The section writes to `UIPasteboard.general` through the model's
 ```
 GymRollins is the owner's gym tracker. You read their training and propose plan changes; the owner reviews them in the app.
 - Start with get_profile: unit, goal, injury limits and the day they end, and what you may do. Then read only what the question needs (get_plan, list_workouts, get_exercise_history, get_training_summary).
-- Talk in the owner's unit. Results give weight_kg and weight_display in their unit; proposals take kg.
+- Talk in the owner's unit, read from get_profile in every chat: they can switch it at any time. Results give weight_kg and weight_display in their unit; proposals take kg.
 - While injury limits are active, don't propose exercises that load that area. Only the owner sets or clears the note, in the app.
 - Change the plan only with propose_plan_changes, and tell the owner they review it in the app. Keep proposals small and give each change a reason.
 - For one day only, use a `today` change with the date (up to 7 days ahead), and reuse a routine when one fits. Use `week` only for lasting schedule changes.
@@ -75,7 +78,7 @@ GymRollins is the owner's gym tracker. You read their training and propose plan 
 ```
 You're my strength coach. My training is in GymRollins, connected as a tool.
 - Before advising, read my profile, plan and recent workouts. Tell me briefly what you looked at.
-- Be specific: exercises, sets, reps and weights, in my unit.
+- Be specific: exercises, sets, reps and weights. Use the unit in my profile, and check it each chat, because I can change it.
 - Progress steadily, and respect my injury limits and their end date.
 - To change my plan, propose it in GymRollins so I can review it. A session for one day goes on that date only.
 - Ask me before big changes, like a new split or different training days.
@@ -91,19 +94,21 @@ You're my strength coach. My training is in GymRollins, connected as a tool.
 | `home` | Plan a home session with the equipment I have at home. |
 | `muscles` | Which muscles am I under-training? |
 | `stronger` | Am I getting stronger? Compare my main lifts with a month ago. |
-| `weight` | Log my weight today: __ lb (or kg, from the profile's unit) |
+| `weight` | Log my weight today: __ lb, or __ kg: the profile's current unit, built when the screen draws |
 
 ## 5. UI
 
-- **Use with Claude**, a Form section under Connect on `ClaudeConnectionView`, shown whether or not the build has a
-  server (Connect already says when it hasn't).
-- **Coach prompt:** the first three lines of the prompt, **Show all** to expand it in place, and **Copy**. The footer reads
-  "In Claude, create a Project and paste this into its instructions. Chat in that project."
-- **Ready requests:** a row per request, with its text and **Copy**. The footer reads "Paste one into a chat in your
-  Claude Project."
+- Two Form sections under Connect on `ClaudeConnectionView`, shown whether or not the build has a server (Connect
+  already says when it hasn't). Each row holds one control, like Connect's URL and Copy URL rows, so a tap never hits
+  two buttons.
+- **Use with Claude:** the prompt's first three lines, a **Show all** row that expands it in place (then **Show less**), and
+  a **Copy coach prompt** row. The footer reads "In Claude, create a Project and paste this into its instructions. Chat in
+  that project."
+- **Ready requests:** one row per request, a button showing the request and **Copy** on the right. The footer reads
+  "Paste one into a chat in your Claude Project."
 - Only the last copied row reads "Copied". Copy URL in Connect keeps its own state.
-- Identifiers: `claude.coach.text`, `claude.coach.showAll`, `claude.coach.copy`, `claude.request.<id>` and
-  `claude.request.<id>.copy`. Copy buttons are labelled for VoiceOver ("Copy coach prompt", "Copy request: <text>").
+- Identifiers: `claude.coach.text`, `claude.coach.showAll`, `claude.coach.copy`, and `claude.request.<id>` for each request
+  row. VoiceOver reads a request row as its text, with the value "Copied" once copied.
 
 ## 6. Error handling
 
@@ -132,6 +137,7 @@ instructions.
 - `UseWithClaudeModel`: copy writes that row's exact text through the closure, marks only that row, and a second copy
   moves the mark.
 - UI test: open Settings › Claude, see the section, Show all, Copy the coach prompt and a request, and see "Copied" move.
+- UI test: the weight request reads "__ lb"; after switching Units to kg in Settings it reads "__ kg".
 - Accessibility audit and the largest text size on the Claude screen.
 
 ## 9. Milestones
