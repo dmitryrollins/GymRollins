@@ -117,7 +117,8 @@ final class ProposalUITests: XCTestCase {
         XCTAssertTrue(claude.waitForExistence(timeout: 5))
         claude.tap()
         let autoApply = app.switches["claude.perm.autoApply"]
-        XCTAssertTrue(autoApply.waitForExistence(timeout: 5))
+        scrollTo(autoApply) // the Use with Claude sections push it below the fold
+        XCTAssertTrue(autoApply.isHittable)
         XCTAssertEqual(autoApply.value as? String, "0")
         flip(autoApply)
         app.terminate()
@@ -132,7 +133,8 @@ final class ProposalUITests: XCTestCase {
         app.buttons["log.settings"].tap()
         app.buttons["settings.claude"].tap()
         let undo = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'claude.undo.'")).firstMatch
-        XCTAssertTrue(undo.waitForExistence(timeout: 5))
+        scrollTo(undo)
+        XCTAssertTrue(undo.isHittable)
     }
 
     func testClaudeScreenShowsConnectorPendingAndDisconnect() {
@@ -144,8 +146,10 @@ final class ProposalUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["claude.url"].label.hasSuffix("/functions/v1/mcp"), app.staticTexts["claude.url"].label)
         app.buttons["claude.copyURL"].tap()
         XCTAssertEqual(app.buttons["claude.copyURL"].label, "Copied")
-        XCTAssertTrue(app.buttons["claude.proposal.C1A0DE00-0000-4000-8000-000000000001"].exists)
         XCTAssertEqual(app.staticTexts["claude.status"].label, "Not connected yet")
+        let pendingRow = app.buttons["claude.proposal.C1A0DE00-0000-4000-8000-000000000001"]
+        scrollTo(pendingRow)
+        XCTAssertTrue(pendingRow.isHittable)
 
         let disconnect = app.buttons["claude.disconnect"]
         scrollTo(disconnect)
@@ -159,7 +163,7 @@ final class ProposalUITests: XCTestCase {
         }
     }
 
-    private func scrollTo(_ element: XCUIElement, maxSwipes: Int = 6) {
+    private func scrollTo(_ element: XCUIElement, maxSwipes: Int = 12) {
         var swipes = 0
         while !element.isHittable && swipes < maxSwipes {
             app.swipeUp()

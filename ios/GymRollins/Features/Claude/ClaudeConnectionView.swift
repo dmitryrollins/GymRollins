@@ -33,6 +33,7 @@ struct ClaudeConnectionView: View {
         Form {
             statusSection
             connectSection
+            UseWithClaudeSection(unit: env.profile.unit)
             if !pending.isEmpty || !undoable.isEmpty { proposalsSection }
             permissionsSection
             disconnectSection

@@ -268,6 +268,27 @@ final class DynamicTypeUITests: XCTestCase {
         screenshot("claude-gyms-ax-xl")
     }
 
+    func testUseWithClaudeAtAccessibilityXL() {
+        let app = launch()
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.claude"]
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        row.tapCenter()
+        XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
+        let coach = app.buttons["claude.coach.copy"]
+        for _ in 0..<12 where !coach.isHittable { app.swipeUp() }
+        XCTAssertTrue(coach.isHittable)
+        XCTAssertGreaterThanOrEqual(coach.frame.height, 44)
+        screenshot("claude-coach-ax-xl")
+        let weight = app.buttons["claude.request.weight"]
+        for _ in 0..<12 where !weight.isHittable { app.swipeUp() }
+        XCTAssertTrue(weight.isHittable)
+        XCTAssertGreaterThanOrEqual(weight.frame.height, 44)
+        XCTAssertEqual(weight.label, "Log my weight today: __ lb")
+        screenshot("claude-requests-ax-xl")
+    }
+
     func testModerationAtAccessibilityXL() {
         let app = launch(extra: ["-fakeGymCatalog", "-fakeSignedIn", "-fakeGymAdmin"])
         app.tabBars.buttons["Log"].tap()

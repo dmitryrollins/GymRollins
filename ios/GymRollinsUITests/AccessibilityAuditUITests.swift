@@ -54,7 +54,19 @@ final class AccessibilityAuditUITests: XCTestCase {
     /// Labels whose contrast was measured from simulator screenshots (default text size) and passes 4.5:1, but which
     /// the audit flags because it samples the Liquid Glass capsule behind them: "How-To" 16.0:1 (white on the dark
     /// glass capsule over the logging hero).
-    static let measuredContrastLabels: Set<String> = ["How-To"]
+    static let measuredContrastLabels: Set<String> = Set(["How-To"]).union(useWithClaudeLabels)
+
+    /// The Claude screen's Use with Claude rows and its permission toggle labels, measured from the audit's screenshots at the default
+    /// size: the request texts 15.2:1 (#F2F2F5 on #1C1C1E, 12.7:1 where the nav bar fades the top row), the red "Copy"
+    /// 6.2:1 (#FF6B72 on #1C1C1E, 5.4:1 faded), the toggle labels ("Gyms",
+    /// "Propose plan changes") 17.0:1 (white on #1C1C1E). The audit flags them anyway, sampling the scroll-edge blur and glass bars around the list.
+    static let useWithClaudeLabels: Set<String> = [
+        "Copy", "Plan my workout for tomorrow.", "How did my last week go?", "Review my last workout.",
+        "Plan a home session with the equipment I have at home.", "Which muscles am I under-training?",
+        "Am I getting stronger? Compare my main lifts with a month ago.", "Log my weight today: __ lb",
+        "Read workouts and sets", "Read bodyweight", "Read your plan and profile", "Gyms", "Propose plan changes",
+        "Apply changes without asking",
+    ]
 
     /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
     /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first. The report
@@ -214,10 +226,27 @@ final class AccessibilityAuditUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
         let gyms = app.switches["claude.perm.readGyms"]
-        for _ in 0..<6 where !gyms.isHittable { app.swipeUp() }
+        for _ in 0..<12 where !gyms.isHittable { app.swipeUp() }
         XCTAssertTrue(gyms.isHittable)
         XCTAssertEqual(gyms.value as? String, "1")
         audit(app, "Claude connection")
+    }
+
+    func testUseWithClaudeAudit() {
+        let app = launch()
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.claude"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        let coach = app.buttons["claude.coach.copy"]
+        for _ in 0..<12 where !coach.isHittable { app.swipeUp() }
+        XCTAssertTrue(coach.isHittable)
+        audit(app, "Use with Claude")
+        let weight = app.buttons["claude.request.weight"]
+        for _ in 0..<12 where !weight.isHittable { app.swipeUp() }
+        XCTAssertTrue(weight.isHittable)
+        audit(app, "Ready requests")
     }
 
     func testModerationAudit() {
