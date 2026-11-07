@@ -4,7 +4,7 @@
 > superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Claude gets the rules for GymRollins' tools when it connects, and the Claude screen offers a coach prompt and
-ready requests to copy into a Claude Project.
+ready requests to copy into a Claude Project. (Cut to one prompt while building; see Outcome.)
 
 **Architecture:** The MCP server passes `SERVER_INSTRUCTIONS` (a new `instructions.ts`) to `new McpServer`, so
 `initialize` returns them. In the app, `ClaudePrompts` holds the fixed texts and builds the requests for a unit,
@@ -91,7 +91,7 @@ Use only that destination. A new file needs `xcodegen generate` first, because t
 - Modify: `supabase/functions/mcp/app.ts` (imports at the top, `new McpServer(SERVER_INFO)` at line 52)
 - Modify: `supabase/functions/mcp/app_test.ts` (imports at the top, a test after "initialize and tools/list")
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `supabase/functions/mcp/instructions_test.ts`:
 
@@ -144,12 +144,12 @@ Deno.test('initialize sends the rules for using the tools', async () => {
 })
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd supabase/functions && deno test --allow-read mcp/instructions_test.ts mcp/app_test.ts`
 Expected: FAIL, "Module not found" for `mcp/instructions.ts`.
 
-- [ ] **Step 3: Write the rules**
+- [x] **Step 3: Write the rules**
 
 `supabase/functions/mcp/instructions.ts`:
 
@@ -176,13 +176,13 @@ export const SERVER_INSTRUCTIONS = [
 ].join('\n')
 ```
 
-- [ ] **Step 4: Run again: the rules pass, the endpoint test still fails**
+- [x] **Step 4: Run again: the rules pass, the endpoint test still fails**
 
 Run: `cd supabase/functions && deno test --allow-read mcp/instructions_test.ts mcp/app_test.ts`
 Expected: the 3 instruction tests pass, and `initialize sends the rules for using the tools` fails with `undefined` against
 the text.
 
-- [ ] **Step 5: Send them on connect**
+- [x] **Step 5: Send them on connect**
 
 In `supabase/functions/mcp/app.ts`, add the import after `import type { Db } from './db.ts'`:
 
@@ -196,7 +196,7 @@ and change line 52:
     const server = new McpServer(SERVER_INFO, { instructions: SERVER_INSTRUCTIONS })
 ```
 
-- [ ] **Step 6: Run everything on the server side**
+- [x] **Step 6: Run everything on the server side**
 
 ```bash
 cd supabase/functions && deno test --allow-read _shared/ mcp/
@@ -207,7 +207,7 @@ deno lint mcp/instructions.ts mcp/instructions_test.ts mcp/app.ts mcp/app_test.t
 Expected: every test passes, with 4 new ones. If `deno fmt --check` reports the new files, run `deno fmt` on those four
 files only and check that the text is unchanged.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add supabase/functions/mcp/instructions.ts supabase/functions/mcp/instructions_test.ts \
@@ -225,7 +225,7 @@ git commit -m "feat(server): Claude gets the rules for the tools when it connect
 - Test: `ios/GymRollinsTests/ClaudePromptsTests.swift`
 - Test: `ios/GymRollinsTests/UseWithClaudeModelTests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `ios/GymRollinsTests/ClaudePromptsTests.swift`:
 
@@ -240,7 +240,7 @@ import Testing
         #expect(lines.count == 6)
         #expect(lines.first == "You're my strength coach. My training is in GymRollins, connected as a tool.")
         #expect(ClaudePrompts.coach.contains("check it each chat, because I can change it"))
-        #expect(!ClaudePrompts.coach.contains(where: \.isNumber))
+        #expect(!ClaudePrompts.coach.contains { $0.isNumber })
     }
 
     @Test func theRequestsComeInTheAgreedOrder() {
@@ -294,13 +294,13 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run from `ios/`: `xcodegen generate --quiet`, then the one-class command with
 `-only-testing:GymRollinsTests/ClaudePromptsTests -only-testing:GymRollinsTests/UseWithClaudeModelTests`.
 Expected: build errors, "cannot find 'ClaudePrompts' in scope" and "cannot find 'UseWithClaudeModel' in scope".
 
-- [ ] **Step 3: Write the texts**
+- [x] **Step 3: Write the texts**
 
 `ios/GymRollins/Features/Claude/ClaudePrompts.swift`:
 
@@ -341,7 +341,7 @@ enum ClaudePrompts {
 }
 ```
 
-- [ ] **Step 4: Write the model**
+- [x] **Step 4: Write the model**
 
 `ios/GymRollins/Features/Claude/UseWithClaudeModel.swift`:
 
@@ -362,12 +362,12 @@ struct UseWithClaudeModel: Equatable {
 }
 ```
 
-- [ ] **Step 5: Run them to see them pass**
+- [x] **Step 5: Run them to see them pass**
 
 Run the same command as Step 2.
 Expected: 7 tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ios/GymRollins/Features/Claude/ClaudePrompts.swift ios/GymRollins/Features/Claude/UseWithClaudeModel.swift \
@@ -387,7 +387,7 @@ git commit -m "feat(claude): coach prompt and ready requests to copy"
 - Modify: `ios/GymRollinsUITests/AccessibilityAuditUITests.swift` (`testClaudeConnectionAudit`, and a new test after it)
 - Modify: `ios/GymRollinsUITests/DynamicTypeUITests.swift` (a new test after `testClaudeGymsToggleAtAccessibilityXL`)
 
-- [ ] **Step 1: Write the failing UI tests**
+- [x] **Step 1: Write the failing UI tests**
 
 `ios/GymRollinsUITests/ClaudePromptsUITests.swift`:
 
@@ -517,13 +517,13 @@ In `ios/GymRollinsUITests/DynamicTypeUITests.swift`, add after `testClaudeGymsTo
     }
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run from `ios/`: `xcodegen generate --quiet`, then the one-class command with
 `-only-testing:GymRollinsUITests/ClaudePromptsUITests`.
 Expected: both tests fail, because `claude.coach.showAll` and `claude.request.weight` never become hittable.
 
-- [ ] **Step 3: Write the section**
+- [x] **Step 3: Write the section**
 
 `ios/GymRollins/Features/Claude/UseWithClaudeSection.swift`:
 
@@ -585,7 +585,7 @@ struct UseWithClaudeSection: View {
 }
 ```
 
-- [ ] **Step 4: Put it on the Claude screen**
+- [x] **Step 4: Put it on the Claude screen**
 
 In `ios/GymRollins/Features/Claude/ClaudeConnectionView.swift`, in `body`, after `connectSection`:
 
@@ -596,7 +596,7 @@ In `ios/GymRollins/Features/Claude/ClaudeConnectionView.swift`, in `body`, after
             if !pending.isEmpty || !undoable.isEmpty { proposalsSection }
 ```
 
-- [ ] **Step 5: Run the new and the touched UI tests**
+- [x] **Step 5: Run the new and the touched UI tests**
 
 Run from `ios/`, one at a time:
 - `-only-testing:GymRollinsUITests/ClaudePromptsUITests`
@@ -610,13 +610,13 @@ first (`AccessibilityAuditUITests.measuredContrastIdentifiers` explains how) bef
 lands on the row's text and nothing happens, tap the button's right edge with
 `coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))`.
 
-- [ ] **Step 6: Look at it**
+- [x] **Step 6: Look at it**
 
 Take screenshots of the Claude screen at the default size and at AX-XL (the Dynamic Type test attaches them), and check that:
 - the coach prompt shows three lines, then all six after Show all;
 - each request row reads as one line of text with Copy on the right, and wraps cleanly at AX-XL.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ios/GymRollins/Features/Claude/UseWithClaudeSection.swift ios/GymRollins/Features/Claude/ClaudeConnectionView.swift \
@@ -634,7 +634,7 @@ git commit -m "feat(claude): Use with Claude on the Claude screen"
 - Modify: `docs/testing/flow-coverage.md` (row "5.4 Claude connection + permissions")
 - Modify: this plan (tick the boxes, append `## Outcome`)
 
-- [ ] **Step 1: README**
+- [x] **Step 1: README**
 
 At the end of the "**Claude as your coach, via MCP.**" bullet, after "you approve them in the app.", add:
 
@@ -643,12 +643,12 @@ Claude gets the rules for the tools when it connects, and Settings › Claude ha
 copy into a Claude Project.
 ```
 
-- [ ] **Step 2: Flow coverage**
+- [x] **Step 2: Flow coverage**
 
 In row 5.4, add to the tests column: `ClaudePromptsUITests`; `ClaudePromptsTests`, `UseWithClaudeModelTests`;
 `mcp/instructions_test.ts`, `mcp/app_test.ts` (instructions on initialize).
 
-- [ ] **Step 3: Final run**
+- [x] **Step 3: Final run**
 
 - Server: `cd supabase/functions && deno test --allow-read _shared/ mcp/`.
 - App: the whole `GymRollinsTests` target, then the whole app suite once:
@@ -661,7 +661,7 @@ xcodebuild test -project GymRollins.xcodeproj -scheme GymRollins \
 
 Expected: all pass apart from the known flakes from plan 24's outcome (`IdleFinishUITests`), each rerun alone to confirm.
 
-- [ ] **Step 4: Outcome and commit**
+- [x] **Step 4: Outcome and commit**
 
 Tick the boxes, then append `## Outcome` with the counts, anything that differed from this plan, and what wasn't tested
 (Claude on the web and phone reading the server instructions needs the cloud project).
@@ -670,3 +670,42 @@ Tick the boxes, then append `## Outcome` with the counts, anything that differed
 git add README.md docs/testing/flow-coverage.md docs/plans/2026-11-07-plan-25-claude-prompts.md
 git commit -m "docs: plan 25 outcome"
 ```
+
+## Outcome
+
+Built 2026-11-07 on `feat-claude-prompts`: `d2e8adb`, `edebb0b`, `4ef4637`, `6cec70b`, `2433d66` and this docs commit.
+Not pushed.
+
+**Cut to one prompt.** Tasks 2 and 3 were built as written, a coach prompt plus seven ready requests, then cut the same
+day: the owner wants one main prompt for connecting and building workouts, and Claude asks the rest in the chat.
+`6cec70b` removed the requests, `UseWithClaudeModel` and their tests, and reworded the prompt to eight lines: build
+workouts from the plan, history and equipment as one-day proposals, and ask for what the data doesn't have. The button is
+**Copy prompt**. The spec was rewritten to match. The unit point stands: the prompt names no unit and tells Claude to
+check the profile's unit in each chat, and the server rules say the same.
+
+**Other changes from the plan:**
+- The section sits below "Plan changes from Claude", so a proposal waiting for review stays in view.
+- `ClaudePromptsTests` uses `contains { $0.isNumber }`: the key-path form doesn't compile inside `#expect`.
+- `ProposalUITests` scrolls to the auto-apply toggle, Undo and the pending row, which the new section pushes below the
+  fold, instead of only waiting for them.
+- `ClaudePromptsUITests` scrolls back to Show all after tapping it: the longer text can push it below the fold.
+- The audit's top band now excludes a row only partly under the navigation bar, like the bottom band already did. On the
+  Claude screen whichever row straddled the bar's edge was flagged (toggle labels, Show all, the prompt text), all 17:1
+  or more when measured. This replaced per-label exclusions that would have applied to every screen.
+- The injury note's "Until" (19.6:1) and Save (7.1:1) are measured exclusions. Their audit failed on every run on
+  7 Nov, on plan 24's commit too, so it isn't from this plan.
+
+**Tests:**
+
+| Suite | Result |
+|---|---|
+| Server (`deno test _shared/ mcp/`) | 159 passed, 1 ignored, 4 of them new |
+| `GymRollinsTests` (whole target) | 896 passed |
+| `ClaudePromptsUITests` | passed on 2 runs of 2 |
+| `ProposalUITests` | 5 of 5 |
+| Claude screen audits (`testClaudeConnectionAudit`, `testUseWithClaudeAudit`) | 3 runs of 3 after the band change |
+| Dynamic Type (`testUseWithClaudeAtAccessibilityXL`, `testClaudeGymsToggleAtAccessibilityXL`) | 2 of 2 |
+| `AccessibilityAuditUITests` (whole class) | 33 of 34: `testUnblockEveryoneAudit` flags the "Apple Health" and "Data" headers in a class run. It passes alone after a simulator restart and failed on plan 24's commit too. Left: "Data" is too common a label to exclude everywhere. |
+
+**Not run:** the whole UI suite. **Not tested:** whether the Claude app on the web and phone reads the server
+instructions; that needs the cloud project.

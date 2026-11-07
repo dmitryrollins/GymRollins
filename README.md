@@ -39,6 +39,8 @@ try it, open an issue, or send a pull request.
 - **Claude as your coach, via MCP.** Add GymRollins as a custom connector in Claude (OAuth 2.1 with dynamic client
   registration, no API keys to copy). Claude reads your history and proposes changes; you approve them in the app.
   With the Gyms toggle on, it also reads the equipment at your gyms.
+  It gets the rules for the tools when it connects, and Settings › Claude has one prompt to paste into a Claude
+  Project; after that you just ask.
 - **Apple Watch.** Log sets from the wrist, rest timer with haptics, heart rate during the workout.
 - **Apple Health.** Workouts and weigh-ins go to Health; body weight comes back from it.
 - **Insights.** Muscle recovery map, weekly sets per muscle, streaks, and strength levels compared with
