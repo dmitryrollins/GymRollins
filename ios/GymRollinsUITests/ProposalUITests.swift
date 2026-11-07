@@ -116,8 +116,9 @@ final class ProposalUITests: XCTestCase {
         let claude = app.buttons["settings.claude"]
         XCTAssertTrue(claude.waitForExistence(timeout: 5))
         claude.tap()
+        XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
         let autoApply = app.switches["claude.perm.autoApply"]
-        scrollTo(autoApply) // the Use with Claude sections push it below the fold
+        scrollTo(autoApply) // the Use with Claude section pushes it below the fold
         XCTAssertTrue(autoApply.isHittable)
         XCTAssertEqual(autoApply.value as? String, "0")
         flip(autoApply)
@@ -132,6 +133,7 @@ final class ProposalUITests: XCTestCase {
         app.tabBars.buttons["Log"].tap()
         app.buttons["log.settings"].tap()
         app.buttons["settings.claude"].tap()
+        XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
         let undo = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'claude.undo.'")).firstMatch
         scrollTo(undo)
         XCTAssertTrue(undo.isHittable)
