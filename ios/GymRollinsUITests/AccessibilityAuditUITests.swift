@@ -54,19 +54,7 @@ final class AccessibilityAuditUITests: XCTestCase {
     /// Labels whose contrast was measured from simulator screenshots (default text size) and passes 4.5:1, but which
     /// the audit flags because it samples the Liquid Glass capsule behind them: "How-To" 16.0:1 (white on the dark
     /// glass capsule over the logging hero).
-    static let measuredContrastLabels: Set<String> = Set(["How-To"]).union(useWithClaudeLabels)
-
-    /// The Claude screen's Use with Claude rows and its permission toggle labels, measured from the audit's screenshots at the default
-    /// size: the request texts 15.2:1 (#F2F2F5 on #1C1C1E, 12.7:1 where the nav bar fades the top row), the red "Copy"
-    /// 6.2:1 (#FF6B72 on #1C1C1E, 5.4:1 faded), the toggle labels ("Gyms",
-    /// "Propose plan changes") 17.0:1 (white on #1C1C1E). The audit flags them anyway, sampling the scroll-edge blur and glass bars around the list.
-    static let useWithClaudeLabels: Set<String> = [
-        "Copy", "Plan my workout for tomorrow.", "How did my last week go?", "Review my last workout.",
-        "Plan a home session with the equipment I have at home.", "Which muscles am I under-training?",
-        "Am I getting stronger? Compare my main lifts with a month ago.", "Log my weight today: __ lb",
-        "Read workouts and sets", "Read bodyweight", "Read your plan and profile", "Gyms", "Propose plan changes",
-        "Apply changes without asking",
-    ]
+    static let measuredContrastLabels: Set<String> = ["How-To"]
 
     /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
     /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first. The report
@@ -92,8 +80,10 @@ final class AccessibilityAuditUITests: XCTestCase {
             // the same rows read at full contrast once scrolled up. The bar's own prominent buttons measured 5.6:1
             // (white on #C22F3B) from screenshots.
             if frame.maxY > windowHeight - bottomEdgeBand { return "under bottom scroll-edge effect" }
-            // The same effect dims rows scrolled up under the navigation bar, which a longer Settings list now does.
-            if frame.maxY < topEdgeBand { return "under top scroll-edge effect" }
+            // The same effect dims rows scrolled up under the navigation bar, which a longer Settings list now does. Like
+            // the bottom band, a row only partly under it is sampled half-dimmed: on the Claude screen whichever row
+            // straddles the bar's edge was flagged (toggle labels, "Show all", the prompt text), all 17:1 when measured.
+            if frame.minY < topEdgeBand { return "under top scroll-edge effect" }
             if measuredContrastLabels.contains(element.label) { return "measured on glass" }
             if measuredContrastIdentifiers.contains(element.identifier) { return "measured on glass" }
             // `.searchable`'s placeholder is system-styled.
@@ -243,10 +233,6 @@ final class AccessibilityAuditUITests: XCTestCase {
         for _ in 0..<12 where !coach.isHittable { app.swipeUp() }
         XCTAssertTrue(coach.isHittable)
         audit(app, "Use with Claude")
-        let weight = app.buttons["claude.request.weight"]
-        for _ in 0..<12 where !weight.isHittable { app.swipeUp() }
-        XCTAssertTrue(weight.isHittable)
-        audit(app, "Ready requests")
     }
 
     func testModerationAudit() {

@@ -33,8 +33,8 @@ struct ClaudeConnectionView: View {
         Form {
             statusSection
             connectSection
-            UseWithClaudeSection(unit: env.profile.unit)
             if !pending.isEmpty || !undoable.isEmpty { proposalsSection }
+            UseWithClaudeSection() // below the proposals, so one waiting for review stays in view
             permissionsSection
             disconnectSection
             if let error {

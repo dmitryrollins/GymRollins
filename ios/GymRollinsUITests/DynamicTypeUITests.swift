@@ -281,12 +281,6 @@ final class DynamicTypeUITests: XCTestCase {
         XCTAssertTrue(coach.isHittable)
         XCTAssertGreaterThanOrEqual(coach.frame.height, 44)
         screenshot("claude-coach-ax-xl")
-        let weight = app.buttons["claude.request.weight"]
-        for _ in 0..<12 where !weight.isHittable { app.swipeUp() }
-        XCTAssertTrue(weight.isHittable)
-        XCTAssertGreaterThanOrEqual(weight.frame.height, 44)
-        XCTAssertEqual(weight.label, "Log my weight today: __ lb")
-        screenshot("claude-requests-ax-xl")
     }
 
     func testModerationAtAccessibilityXL() {
