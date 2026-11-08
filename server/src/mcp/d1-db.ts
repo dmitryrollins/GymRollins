@@ -37,6 +37,9 @@ const MAX_GYM_IDS = 200
 const MAX_REQUIREMENT_ROWS = 5000
 const MAX_DATE_ROWS = 15_000
 const NOT_ALLOWED = "Not allowed: the owner's Claude permissions in the app don't allow this."
+/** Audit rows are kept this long; the app's "last use" only reads the newest one. */
+const AUDIT_DAYS = 90
+const AUDIT_CUTOFF_SQL = `(strftime('%Y-%m-%dT%H:%M:%f', 'now', '-${AUDIT_DAYS} days') || '000Z')`
 const MINUTE_AGO_SQL = `(strftime('%Y-%m-%dT%H:%M:%f', 'now', '-60 seconds') || '000Z')`
 
 export interface Permissions {
@@ -225,10 +228,10 @@ export class D1Db implements Db {
     const rows = await this.all(
       `SELECT w.id AS workout_id, w.started_at, s.entry_id, ${SET_COLS} FROM (` +
         `SELECT id, started_at FROM workouts WHERE user_id = ?1 AND deleted_at IS NULL${after} AND EXISTS ` +
-        '(SELECT 1 FROM workout_entries x WHERE x.workout_id = workouts.id AND x.exercise_id = ?2) ' +
+        '(SELECT 1 FROM workout_entries x WHERE x.workout_id = workouts.id AND x.exercise_id = ?2 AND x.user_id = ?1) ' +
         'ORDER BY started_at DESC, id LIMIT ?3) w ' +
-        'JOIN workout_entries e ON e.workout_id = w.id AND e.exercise_id = ?2 ' +
-        'LEFT JOIN workout_sets s ON s.entry_id = e.id ' +
+        'JOIN workout_entries e ON e.workout_id = w.id AND e.exercise_id = ?2 AND e.user_id = ?1 ' +
+        'LEFT JOIN workout_sets s ON s.entry_id = e.id AND s.user_id = ?1 ' +
         'ORDER BY w.started_at DESC, w.id, e.position, s.position',
       ...binds,
     )
@@ -304,15 +307,17 @@ export class D1Db implements Db {
       `SELECT id, n, bp, eq, tg FROM exercises WHERE 1 = 1${filter(libraryBinds)} ORDER BY n, id LIMIT ?1`,
       ...libraryBinds,
     )
-    const customBinds: unknown[] = [this.userId, s.limit]
+    // SQLite's lower() folds ASCII only, so a user's own names (any script) are filtered here; a user has few.
     const custom = (await this.allowed()).plan
-      ? this.all<ExerciseRow>(
-        'SELECT id, n, bp, eq, tg FROM custom_exercises WHERE user_id = ?1 AND deleted_at IS NULL' +
-          `${filter(customBinds)} ORDER BY n, id LIMIT ?2`,
-        ...customBinds,
-      )
-      : Promise.resolve([])
-    const own = (await custom).map((e) => ({ ...e, custom: true }))
+      ? (await this.all<ExerciseRow>(
+        'SELECT id, n, bp, eq, tg FROM custom_exercises WHERE user_id = ?1 AND deleted_at IS NULL ORDER BY n, id',
+        this.userId,
+      )).filter((e) =>
+        (!s.bodyPart || e.bp === s.bodyPart) && (!s.equipment || e.eq === s.equipment) &&
+        words.every((w) => e.n.toLowerCase().includes(w))
+      ).slice(0, s.limit)
+      : []
+    const own = custom.map((e) => ({ ...e, custom: true }))
     return [...own, ...(await library)].slice(0, s.limit)
   }
 
@@ -543,7 +548,9 @@ export class D1Db implements Db {
    * lock instead).
    */
   async takeCall(): Promise<boolean> {
-    const [, taken] = await this.db.batch([
+    const [, , taken] = await this.db.batch([
+      // The audit is written once per call and read only for its newest row: keep 90 days of it, per user.
+      this.db.prepare(`DELETE FROM mcp_audit WHERE user_id = ?1 AND at < ${AUDIT_CUTOFF_SQL}`).bind(this.userId),
       this.db.prepare(`DELETE FROM mcp_calls WHERE user_id = ?1 AND at <= ${MINUTE_AGO_SQL}`).bind(
         this.userId,
       ),

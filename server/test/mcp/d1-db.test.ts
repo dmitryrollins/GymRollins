@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { D1Db } from '../../src/mcp/d1-db.ts'
 import { ToolError } from '../../src/mcp/tools/result.ts'
 import { block, genericItem, insertGym, insertItem, insertListing } from '../gym-fixtures.ts'
+import { NOW_SQL } from '../../src/sync/time.ts'
 import { signUp } from '../helpers.ts'
 
 const T = '2026-11-07T10:00:00.000000Z'
@@ -256,6 +257,17 @@ describe("Claude's reads", () => {
     expect((await db().gymListings(owner.publicGym, 10)).map((l) => l.kind_id)).toEqual(['barbell'])
   })
 
+  it("hides the owner's private listing of someone else's branded item while no public listing uses it", async () => {
+    const owner = await seedOwner()
+    const stranger = (await signUp()).userId
+    const item = await insertItem({ brand: 'Acme', model: 'Press', createdBy: stranger })
+    await insertListing({ gym: owner.privateGym, item, visibility: 'private', owner: owner.userId })
+    const kinds = async () => (await new D1Db(DB, owner.userId, 'claude').gymListings(owner.privateGym, 10)).length
+    expect(await kinds()).toBe(1)
+    await insertListing({ gym: owner.publicGym, item, visibility: 'public', addedBy: stranger })
+    expect(await kinds()).toBe(2)
+  })
+
   it('answers never_exercise_ids while the plan or propose toggle is on', async () => {
     const owner = await seedOwner()
     const never =
@@ -276,6 +288,51 @@ describe("Claude's reads", () => {
     expect(await db.searchExercises({ query: '%', limit: 5 })).toHaveLength(1)
     expect(await db.searchExercises({ query: 'x'.repeat(80), limit: 5 })).toEqual([])
     expect((await db.searchExercises({ query: 'bench press', limit: 3 })).length).toBeGreaterThan(0)
+  })
+})
+
+describe('custom exercise search', () => {
+  it('finds a custom exercise whatever the case of its non-ASCII letters, in the same order', async () => {
+    const owner = await seedOwner()
+    for (const name of ['Übung B', 'übung a', 'Other']) {
+      await run(
+        'INSERT INTO custom_exercises (id, user_id, n, bp, eq, tg, mode, client_updated_at, updated_at) ' +
+          "VALUES (?1, ?2, ?3, 'chest', 'barbell', 'pecs', 'reps', ?4, ?4)",
+        `custom-${crypto.randomUUID()}`,
+        owner.userId,
+        name,
+        T,
+      )
+    }
+    const db = new D1Db(DB, owner.userId, 'claude')
+    expect((await db.searchExercises({ query: 'ÜBUNG', limit: 5 })).map((e) => e.n)).toEqual(['Übung B', 'übung a'])
+    expect((await db.searchExercises({ query: 'übung', limit: 1 })).map((e) => e.n)).toEqual(['Übung B'])
+    expect((await db.searchExercises({ query: 'übung', bodyPart: 'back', limit: 5 }))).toEqual([])
+  })
+})
+
+describe('exerciseSets', () => {
+  it("never returns another user's entries or sets, even when attached to this user's workout", async () => {
+    const owner = await seedOwner()
+    const stranger = (await signUp()).userId
+    const entryId = crypto.randomUUID()
+    await run(
+      'INSERT INTO workout_entries (id, workout_id, user_id, exercise_id, position) VALUES (?1, ?2, ?3, ' +
+        "'0025', 1)",
+      entryId,
+      owner.workoutId,
+      stranger,
+    )
+    await run(
+      'INSERT INTO workout_sets (id, entry_id, user_id, position, w_kg, r, done) VALUES (?1, ?2, ?3, 0, 999, ' +
+        '8, 1)',
+      crypto.randomUUID(),
+      entryId,
+      stranger,
+    )
+    const sessions = await new D1Db(DB, owner.userId, 'claude').exerciseSets('0025')
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0]!.sets.map((x) => x.w_kg)).toEqual([60])
   })
 })
 
@@ -330,6 +387,30 @@ describe("Claude's writes", () => {
 })
 
 describe('the rate limit', () => {
+  it('prunes the caller\'s audit rows older than 90 days, and no one else\'s', async () => {
+    const { userId } = await signUp()
+    const other = (await signUp()).userId
+    const old = '2020-01-01T00:00:00.000000Z'
+    const insert = (u: string, at: string) =>
+      run("INSERT INTO mcp_audit (user_id, client_id, tool, ok, at) VALUES (?1, 'c', 'get_plan', 1, ?2)", u, at)
+    await insert(userId, old)
+    await insert(other, old)
+    await run(
+      `INSERT INTO mcp_audit (user_id, client_id, tool, ok, at) VALUES (?1, 'c', 'get_plan', 1, ${NOW_SQL})`,
+      userId,
+    )
+    const db = new D1Db(DB, userId, 'c')
+    await db.audit('get_plan', true, 'a'.repeat(64))
+    expect(await db.takeCall()).toBe(true)
+    const at = async (u: string) =>
+      (await DB.prepare('SELECT at FROM mcp_audit WHERE user_id = ?1 ORDER BY at').bind(u).all<{ at: string }>())
+        .results.map((r) => r.at)
+    const mine = await at(userId)
+    expect(mine).not.toContain(old)
+    expect(mine).toHaveLength(2)
+    expect(await at(other)).toEqual([old])
+  })
+
   it('gives exactly 60 of 70 concurrent calls a slot, per user', async () => {
     const { userId } = await signUp()
     const results = await Promise.all(Array.from({ length: 70 }, () => new D1Db(DB, userId, 'c').takeCall()))

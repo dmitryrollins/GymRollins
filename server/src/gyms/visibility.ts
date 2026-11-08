@@ -61,9 +61,11 @@ export const claudeReadsPublicListing = (e: string, i: string, me: string) =>
 
 /**
  * One of the owner's private listings as Claude reads it, while the gyms toggle is on (the caller checks it):
- * live, with an item Claude may read (its own, or an active one whose creator isn't blocked).
+ * live, with an item Claude may read (equipment_items_read: its own, or an active one whose creator isn't blocked
+ * that is its kind's generic item or has a public listing Claude can read).
  */
 export const claudeReadsPrivateListing = (e: string, i: string, me: string) =>
   `(${e}.visibility = 'private' AND ${e}.owner_id = ${me} AND ${e}.status = 'active' ` +
   `AND ${e}.deleted_at IS NULL ` +
-  `AND NOT ${blockedAuthor(`${i}.created_by`, me)} AND (${i}.created_by = ${me} OR ${i}.status = 'active'))`
+  `AND NOT ${blockedAuthor(`${i}.created_by`, me)} AND (${i}.created_by = ${me} OR (${i}.status = 'active' AND ((${i}.brand IS NULL AND ${i}.model IS NULL) ` +
+  `OR EXISTS (SELECT 1 FROM gym_equipment ie WHERE ie.item_id = ${i}.id AND ${claudeReadsPublicListing('ie', i, me)})))))`

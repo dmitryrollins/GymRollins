@@ -129,11 +129,11 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
      - `is_mine` is false while gyms is off.
    - **The toggles** are read once per request, which is one tool call.
    - **Writes:** `insertProposal` is refused while propose is off, and `insertBodyweight` while body is off. Each throws `ToolError` "Not allowed", as Postgres's 42501 did.
-   - **Search uses `instr(lower(n), ?)`,** not `LIKE`. So Claude's words can't build a pattern over D1's 50-byte limit (plan 26's outcome), and `%` and `_` match literally.
+   - **Search uses `instr(lower(n), ?)`** on the library's ASCII names, not `LIKE`. The owner's custom exercises are fetched and filtered in TypeScript, because SQLite's `lower()` is ASCII-only (added after review). So Claude's words can't build a pattern over D1's 50-byte limit (plan 26's outcome), and `%` and `_` match literally.
    - **Id lists** are bound as one JSON array with plan 28's `inJson` (`src/sync/sql.ts`), so a statement stays within D1's 100 bound values.
    - **Listings** use plan 28's `src/gyms/visibility.ts`. This plan adds Claude's two rules there, `claudeReadsPublicListing` and `claudeReadsPrivateListing`, built on its `blockedAuthor`. Plan 28's own rules are the app's; Claude's differ only by having no admin view and no flagged rows.
    - **Timestamps from the tools** (`toISOString()`) are normalised to the stored six-digit form before they are compared.
-9. **The rate limit** is one statement: `INSERT INTO mcp_calls … SELECT … WHERE (SELECT count(*) … last minute) < 60 RETURNING id`. It runs in a batch after deleting older calls. In workerd, 70 concurrent calls get exactly 60 slots, both on the `Db` and through HTTP on `/mcp`.
+9. **The rate limit** is one statement: `INSERT INTO mcp_calls … SELECT … WHERE (SELECT count(*) … last minute) < 60 RETURNING id`. It runs in a batch after deleting older calls. In workerd, 70 concurrent calls get exactly 60 slots, both on the `Db` and through HTTP on `/mcp`. The same batch deletes that user's `mcp_audit` rows older than 90 days (added after review); `last-use` reads only the newest row.
 10. **Moving the Deno code.** `server/scripts/copy-from-deno.mjs` copies it. It doesn't move it: plan 30 deletes `supabase/`.
     - **Plan 28's files are kept.** Plan 28 already wrote the server's `src/shared/domain-limits.ts` (the same names and values as the Deno copy) and the Vitest drift test.
       - The script doesn't copy `_shared/domain-limits.ts`. It points the copied `plan-validation.ts` at plan 28's file.
@@ -683,6 +683,7 @@ import { describe, expect, it } from 'vitest'
 import { D1Db } from '../../src/mcp/d1-db.ts'
 import { ToolError } from '../../src/mcp/tools/result.ts'
 import { block, genericItem, insertGym, insertItem, insertListing } from '../gym-fixtures.ts'
+import { NOW_SQL } from '../../src/sync/time.ts'
 import { signUp } from '../helpers.ts'
 
 const T = '2026-11-07T10:00:00.000000Z'
@@ -934,6 +935,18 @@ describe("Claude's reads", () => {
     expect((await db().gymListings(owner.publicGym, 10)).map((l) => l.kind_id)).toEqual(['barbell'])
   })
 
+  // Added after review.
+  it("hides the owner's private listing of someone else's branded item while no public listing uses it", async () => {
+    const owner = await seedOwner()
+    const stranger = (await signUp()).userId
+    const item = await insertItem({ brand: 'Acme', model: 'Press', createdBy: stranger })
+    await insertListing({ gym: owner.privateGym, item, visibility: 'private', owner: owner.userId })
+    const kinds = async () => (await new D1Db(DB, owner.userId, 'claude').gymListings(owner.privateGym, 10)).length
+    expect(await kinds()).toBe(1)
+    await insertListing({ gym: owner.publicGym, item, visibility: 'public', addedBy: stranger })
+    expect(await kinds()).toBe(2)
+  })
+
   it('answers never_exercise_ids while the plan or propose toggle is on', async () => {
     const owner = await seedOwner()
     const never =
@@ -954,6 +967,52 @@ describe("Claude's reads", () => {
     expect(await db.searchExercises({ query: '%', limit: 5 })).toHaveLength(1)
     expect(await db.searchExercises({ query: 'x'.repeat(80), limit: 5 })).toEqual([])
     expect((await db.searchExercises({ query: 'bench press', limit: 3 })).length).toBeGreaterThan(0)
+  })
+})
+
+// Added after review.
+describe('custom exercise search', () => {
+  it('finds a custom exercise whatever the case of its non-ASCII letters, in the same order', async () => {
+    const owner = await seedOwner()
+    for (const name of ['Übung B', 'übung a', 'Other']) {
+      await run(
+        'INSERT INTO custom_exercises (id, user_id, n, bp, eq, tg, mode, client_updated_at, updated_at) ' +
+          "VALUES (?1, ?2, ?3, 'chest', 'barbell', 'pecs', 'reps', ?4, ?4)",
+        `custom-${crypto.randomUUID()}`,
+        owner.userId,
+        name,
+        T,
+      )
+    }
+    const db = new D1Db(DB, owner.userId, 'claude')
+    expect((await db.searchExercises({ query: 'ÜBUNG', limit: 5 })).map((e) => e.n)).toEqual(['Übung B', 'übung a'])
+    expect((await db.searchExercises({ query: 'übung', limit: 1 })).map((e) => e.n)).toEqual(['Übung B'])
+    expect((await db.searchExercises({ query: 'übung', bodyPart: 'back', limit: 5 }))).toEqual([])
+  })
+})
+
+describe('exerciseSets', () => {
+  it("never returns another user's entries or sets, even when attached to this user's workout", async () => {
+    const owner = await seedOwner()
+    const stranger = (await signUp()).userId
+    const entryId = crypto.randomUUID()
+    await run(
+      'INSERT INTO workout_entries (id, workout_id, user_id, exercise_id, position) VALUES (?1, ?2, ?3, ' +
+        "'0025', 1)",
+      entryId,
+      owner.workoutId,
+      stranger,
+    )
+    await run(
+      'INSERT INTO workout_sets (id, entry_id, user_id, position, w_kg, r, done) VALUES (?1, ?2, ?3, 0, 999, ' +
+        '8, 1)',
+      crypto.randomUUID(),
+      entryId,
+      stranger,
+    )
+    const sessions = await new D1Db(DB, owner.userId, 'claude').exerciseSets('0025')
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0]!.sets.map((x) => x.w_kg)).toEqual([60])
   })
 })
 
@@ -1008,6 +1067,30 @@ describe("Claude's writes", () => {
 })
 
 describe('the rate limit', () => {
+  it('prunes the caller\'s audit rows older than 90 days, and no one else\'s (added after review)', async () => {
+    const { userId } = await signUp()
+    const other = (await signUp()).userId
+    const old = '2020-01-01T00:00:00.000000Z'
+    const insert = (u: string, at: string) =>
+      run("INSERT INTO mcp_audit (user_id, client_id, tool, ok, at) VALUES (?1, 'c', 'get_plan', 1, ?2)", u, at)
+    await insert(userId, old)
+    await insert(other, old)
+    await run(
+      `INSERT INTO mcp_audit (user_id, client_id, tool, ok, at) VALUES (?1, 'c', 'get_plan', 1, ${NOW_SQL})`,
+      userId,
+    )
+    const db = new D1Db(DB, userId, 'c')
+    await db.audit('get_plan', true, 'a'.repeat(64))
+    expect(await db.takeCall()).toBe(true)
+    const at = async (u: string) =>
+      (await DB.prepare('SELECT at FROM mcp_audit WHERE user_id = ?1 ORDER BY at').bind(u).all<{ at: string }>())
+        .results.map((r) => r.at)
+    const mine = await at(userId)
+    expect(mine).not.toContain(old)
+    expect(mine).toHaveLength(2)
+    expect(await at(other)).toEqual([old])
+  })
+
   it('gives exactly 60 of 70 concurrent calls a slot, per user', async () => {
     const { userId } = await signUp()
     const results = await Promise.all(Array.from({ length: 70 }, () => new D1Db(DB, userId, 'c').takeCall()))
@@ -1059,12 +1142,15 @@ export const claudeReadsPublicListing = (e: string, i: string, me: string) =>
 
 /**
  * One of the owner's private listings as Claude reads it, while the gyms toggle is on (the caller checks it):
- * live, with an item Claude may read (its own, or an active one whose creator isn't blocked).
+ * live, with an item Claude may read (equipment_items_read: its own, or an active one whose creator isn't blocked
+ * that is its kind's generic item or has a public listing Claude can read).
+ * Added after review: the generic-or-public-listing clause; before, any active item passed.
  */
 export const claudeReadsPrivateListing = (e: string, i: string, me: string) =>
   `(${e}.visibility = 'private' AND ${e}.owner_id = ${me} AND ${e}.status = 'active' ` +
   `AND ${e}.deleted_at IS NULL ` +
-  `AND NOT ${blockedAuthor(`${i}.created_by`, me)} AND (${i}.created_by = ${me} OR ${i}.status = 'active'))`
+  `AND NOT ${blockedAuthor(`${i}.created_by`, me)} AND (${i}.created_by = ${me} OR (${i}.status = 'active' AND ((${i}.brand IS NULL AND ${i}.model IS NULL) ` +
+  `OR EXISTS (SELECT 1 FROM gym_equipment ie WHERE ie.item_id = ${i}.id AND ${claudeReadsPublicListing('ie', i, me)})))))`
 ```
 
 - [ ] **Step 4: Write `server/src/mcp/d1-db.ts`**
@@ -1109,6 +1195,9 @@ const MAX_GYM_IDS = 200
 const MAX_REQUIREMENT_ROWS = 5000
 const MAX_DATE_ROWS = 15_000
 const NOT_ALLOWED = "Not allowed: the owner's Claude permissions in the app don't allow this."
+/** Added after review: audit rows are kept 90 days; the app's "last use" only reads the newest one. */
+const AUDIT_DAYS = 90
+const AUDIT_CUTOFF_SQL = `(strftime('%Y-%m-%dT%H:%M:%f', 'now', '-${AUDIT_DAYS} days') || '000Z')`
 const MINUTE_AGO_SQL = `(strftime('%Y-%m-%dT%H:%M:%f', 'now', '-60 seconds') || '000Z')`
 
 export interface Permissions {
@@ -1297,10 +1386,10 @@ export class D1Db implements Db {
     const rows = await this.all(
       `SELECT w.id AS workout_id, w.started_at, s.entry_id, ${SET_COLS} FROM (` +
         `SELECT id, started_at FROM workouts WHERE user_id = ?1 AND deleted_at IS NULL${after} AND EXISTS ` +
-        '(SELECT 1 FROM workout_entries x WHERE x.workout_id = workouts.id AND x.exercise_id = ?2) ' +
+        '(SELECT 1 FROM workout_entries x WHERE x.workout_id = workouts.id AND x.exercise_id = ?2 AND x.user_id = ?1) ' +
         'ORDER BY started_at DESC, id LIMIT ?3) w ' +
-        'JOIN workout_entries e ON e.workout_id = w.id AND e.exercise_id = ?2 ' +
-        'LEFT JOIN workout_sets s ON s.entry_id = e.id ' +
+        'JOIN workout_entries e ON e.workout_id = w.id AND e.exercise_id = ?2 AND e.user_id = ?1 ' +
+        'LEFT JOIN workout_sets s ON s.entry_id = e.id AND s.user_id = ?1 ' +
         'ORDER BY w.started_at DESC, w.id, e.position, s.position',
       ...binds,
     )
@@ -1376,15 +1465,18 @@ export class D1Db implements Db {
       `SELECT id, n, bp, eq, tg FROM exercises WHERE 1 = 1${filter(libraryBinds)} ORDER BY n, id LIMIT ?1`,
       ...libraryBinds,
     )
-    const customBinds: unknown[] = [this.userId, s.limit]
+    // Added after review: SQLite's lower() folds ASCII only, so the owner's own names (any script) are
+    // filtered here; a user has a few hundred at most.
     const custom = (await this.allowed()).plan
-      ? this.all<ExerciseRow>(
-        'SELECT id, n, bp, eq, tg FROM custom_exercises WHERE user_id = ?1 AND deleted_at IS NULL' +
-          `${filter(customBinds)} ORDER BY n, id LIMIT ?2`,
-        ...customBinds,
-      )
-      : Promise.resolve([])
-    const own = (await custom).map((e) => ({ ...e, custom: true }))
+      ? (await this.all<ExerciseRow>(
+        'SELECT id, n, bp, eq, tg FROM custom_exercises WHERE user_id = ?1 AND deleted_at IS NULL ORDER BY n, id',
+        this.userId,
+      )).filter((e) =>
+        (!s.bodyPart || e.bp === s.bodyPart) && (!s.equipment || e.eq === s.equipment) &&
+        words.every((w) => e.n.toLowerCase().includes(w))
+      ).slice(0, s.limit)
+      : []
+    const own = custom.map((e) => ({ ...e, custom: true }))
     return [...own, ...(await library)].slice(0, s.limit)
   }
 
@@ -1615,7 +1707,9 @@ export class D1Db implements Db {
    * lock instead).
    */
   async takeCall(): Promise<boolean> {
-    const [, taken] = await this.db.batch([
+    const [, , taken] = await this.db.batch([
+      // Added after review: one token at 60 calls a minute would add ~86k audit rows a day to the one 10 GB D1.
+      this.db.prepare(`DELETE FROM mcp_audit WHERE user_id = ?1 AND at < ${AUDIT_CUTOFF_SQL}`).bind(this.userId),
       this.db.prepare(`DELETE FROM mcp_calls WHERE user_id = ?1 AND at <= ${MINUTE_AGO_SQL}`).bind(
         this.userId,
       ),
@@ -4098,6 +4192,17 @@ test(
   },
 )
 
+test('a JSON-RPC batch → 400 with -32600, no tool runs, and it took one slot (added after review)', async () => {
+  const { app, db } = await setup()
+  const res = await app(
+    rpcRequest(URL_MCP, [toolCallBody(10, 'get_profile'), toolCallBody(11, 'get_profile')], TOKEN),
+  )
+  assertEquals(res.status, 400)
+  assertEquals((await res.json()).error.code, -32600)
+  assertEquals(db.audits.length, 0, 'a refused batch runs no tool')
+  assertEquals(db.calls, 1)
+})
+
 test('a token that is not a Claude token (an app session) → 401, the database is never touched', async () => {
   const fake = new FakeDb(await loadOwnerData())
   let touched = false
@@ -4346,6 +4451,13 @@ function unauthorized(resourceMetadataUrl: string): Response {
   )
 }
 
+/** A POST whose body is a JSON array. A body over the limit is left to the handler, which answers 413. */
+async function isBatch(req: Request): Promise<boolean> {
+  if (req.method !== 'POST') return false
+  if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return false
+  return (await req.clone().text()).trimStart().startsWith('[')
+}
+
 async function serveMcp(
   req: Request,
   caller: McpCaller,
@@ -4359,6 +4471,15 @@ async function serveMcp(
       429,
       { 'retry-after': '60' },
     )
+  }
+  // The slot above is per HTTP request, and @modelcontextprotocol/server 2.4.0 accepts a JSON-RPC batch of up to
+  // 100 messages, so an array body could run 100 tool calls for one slot: refuse it (added after review).
+  if (await isBatch(req)) {
+    return withCors(Response.json({
+      jsonrpc: '2.0',
+      error: { code: -32600, message: 'Invalid Request: JSON-RPC batches are not supported.' },
+      id: null,
+    }, { status: 400 }))
   }
   const handler = createMcpHandler(() => {
     const server = new McpServer(SERVER_INFO, { instructions: SERVER_INSTRUCTIONS })
