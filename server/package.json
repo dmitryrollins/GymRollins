@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --local",
+    "dev": "wrangler dev --local --var PUBLIC_BASE_URL:http://127.0.0.1:8787 --infer-origin-from-routes=false",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "gen:auth-schema": "node scripts/gen-auth-schema.mjs > migrations/0001_better_auth.sql",

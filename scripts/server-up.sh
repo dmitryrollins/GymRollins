@@ -14,4 +14,7 @@ if grep -q '^BETTER_AUTH_SECRET=replace-with' .dev.vars; then
 fi
 [[ -d node_modules ]] || npm ci
 npx wrangler d1 migrations apply gymrollins --local --persist-to .wrangler/state < /dev/null
-exec npx wrangler dev --local --persist-to .wrangler/state
+# wrangler.jsonc is the deployed Worker: this one keeps its local address, and the origin it sees stays local
+# instead of the custom domain in routes.
+exec npx wrangler dev --local --persist-to .wrangler/state --var PUBLIC_BASE_URL:http://127.0.0.1:8787 \
+  --infer-origin-from-routes=false

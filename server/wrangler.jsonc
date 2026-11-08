@@ -1,16 +1,24 @@
-// The GymRollins API: one Worker with D1 and three R2 buckets. Local only: `wrangler dev --local` and
-// `wrangler d1 migrations apply gymrollins --local` need no Cloudflare account. The deploy (owner's approval) replaces
-// database_id and sets BETTER_AUTH_SECRET with `wrangler secret put`.
+// The GymRollins API: one Worker with D1 and three R2 buckets. The top level is the deployed Worker, so a plain
+// `wrangler deploy` ships only these values (docs/cloudflare-checklist.md, the owner's approval). Every local start
+// (scripts/server-up.sh, scripts/test-server.sh, `npm run dev`) passes its own loopback PUBLIC_BASE_URL and
+// --infer-origin-from-routes=false, and needs no Cloudflare account. database_id is filled in after `wrangler d1 create`.
 {
   "name": "gymrollins",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Only the custom domain: its zone carries the per-IP rate limits, which a workers.dev or preview address would skip.
+  "routes": [{ "pattern": "api.gymrollins.com", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
   "vars": {
     "ALLOW_PASSWORD_AUTH": "0",
     "APPLE_BUNDLE_ID": "com.rollins.gymrollins",
-    "PUBLIC_BASE_URL": "http://127.0.0.1:8787"
+    // The OAuth issuer and the MCP resource are built from it. Local starts override it with --var.
+    "PUBLIC_BASE_URL": "https://api.gymrollins.com"
   },
+  // A deploy that would leave the Worker without it fails; the first deploy brings it with --secrets-file.
+  "secrets": { "required": ["BETTER_AUTH_SECRET"] },
   "d1_databases": [
     {
       "binding": "DB",

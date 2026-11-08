@@ -137,7 +137,9 @@ Settings → General → VPN & Device Management → trust the developer certifi
 physical iPhone resolves `127.0.0.1` to the *phone itself*, so sync fails and the app works offline, as in airplane
 mode (SwiftData is the source of truth). Don't point the owner's phone at any server before the cutover
 (`docs/cloudflare-checklist.md`): the first launch with a new `API_URL` runs the server move. For a test phone
-against the Mac, run the Worker on the LAN (`npx wrangler dev --local --ip 0.0.0.0` in `server/`) and set
+against the Mac, run the Worker on the LAN (`npx wrangler dev --local --ip 0.0.0.0 --var
+PUBLIC_BASE_URL:http://127.0.0.1:8787 --infer-origin-from-routes=false` in `server/`: `wrangler.jsonc` holds the
+deployed Worker's values, so a local start passes its own) and set
 `API_URL = http:/$()/<Mac's LAN IP>:8787` in `Local.xcconfig` (the split `$()` keeps xcconfig from reading `//` as
 a comment); `NSAllowsLocalNetworking` already allows plain http on the local network.
 

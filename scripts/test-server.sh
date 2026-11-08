@@ -25,9 +25,11 @@ start_test_server() {
   (cd "$server" && { [[ -d node_modules ]] || npm ci; } \
     && npx wrangler d1 migrations apply gymrollins --local --persist-to "$TEST_API_STATE" < /dev/null) > "$log" 2>&1 || {
     echo "Migrating the test D1 failed; see $log" >&2; return 1; }
-  # PUBLIC_BASE_URL follows the port: password sign-up is allowed only on a local base URL.
+  # PUBLIC_BASE_URL follows the port (wrangler.jsonc holds the deployed one): password sign-up is allowed only on a
+  # local base URL. The origin the Worker sees stays local instead of the custom domain in routes.
   (cd "$server" && exec npx wrangler dev --local --persist-to "$TEST_API_STATE" --ip 127.0.0.1 \
-    --port "$TEST_API_PORT" --var "PUBLIC_BASE_URL:$TEST_API_URL" --show-interactive-dev-session=false) >> "$log" 2>&1 &
+    --port "$TEST_API_PORT" --var "PUBLIC_BASE_URL:$TEST_API_URL" --infer-origin-from-routes=false \
+    --show-interactive-dev-session=false) >> "$log" 2>&1 &
   TEST_API_PID=$!
   for _ in $(seq 1 90); do
     [[ "$(curl -s -o /dev/null -w '%{http_code}' "$TEST_API_URL/v1/sync/profile")" == "401" ]] && return 0
