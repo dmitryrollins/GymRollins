@@ -1,6 +1,6 @@
 // Who may read a gym, an item or a listing, and when a workout's link to one survives: the Postgres read policies and
 // gym_link_survives / listing_link_survives (supabase/migrations/20261030000001_gyms.sql), for the app's own session.
-// Plan 29 adds Claude's side (the mcp_read_gyms toggle). Each fragment takes `me`, the SQL parameter that holds the
+// Claude's side is at the end (plan 29). Each fragment takes `me`, the SQL parameter that holds the
 // caller's user id (such as '?2'), so a statement binds the caller wherever its other parameters leave room. The
 // fragments use the aliases rg, ri, sg, si and ie inside; a query that uses them must not use those aliases itself.
 
@@ -46,3 +46,24 @@ export const itemReadable = (i: string, me: string) =>
   `(NOT ${blockedAuthor(`${i}.created_by`, me)} AND (${isAdmin(me)} OR ${i}.created_by = ${me} ` +
   `OR (${i}.status = 'active' AND ((${i}.brand IS NULL AND ${i}.model IS NULL) OR EXISTS (SELECT 1 FROM gym_equipment ie ` +
   `WHERE ie.item_id = ${i}.id AND ie.visibility = 'public' AND ie.status = 'active' AND ${listingReadable('ie', me)})))))`
+
+/**
+ * A public listing as Claude reads it (gym_equipment_read and equipment_items_read for an OAuth client, where
+ * is_app_admin() is false and a flagged row never shows): active, under an active public gym, by an author
+ * the owner hasn't blocked, of an active item whose creator the owner hasn't blocked. `i` is the listing's
+ * item.
+ */
+export const claudeReadsPublicListing = (e: string, i: string, me: string) =>
+  `(${e}.visibility = 'public' AND ${e}.status = 'active' AND ${i}.status = 'active' ` +
+  `AND NOT ${blockedAuthor(`${e}.added_by`, me)} AND NOT ${blockedAuthor(`${i}.created_by`, me)} ` +
+  'AND EXISTS (SELECT 1 FROM gyms rg ' +
+  `WHERE rg.id = ${e}.gym_id AND rg.visibility = 'public' AND rg.status = 'active'))`
+
+/**
+ * One of the owner's private listings as Claude reads it, while the gyms toggle is on (the caller checks it):
+ * live, with an item Claude may read (its own, or an active one whose creator isn't blocked).
+ */
+export const claudeReadsPrivateListing = (e: string, i: string, me: string) =>
+  `(${e}.visibility = 'private' AND ${e}.owner_id = ${me} AND ${e}.status = 'active' ` +
+  `AND ${e}.deleted_at IS NULL ` +
+  `AND NOT ${blockedAuthor(`${i}.created_by`, me)} AND (${i}.created_by = ${me} OR ${i}.status = 'active'))`
