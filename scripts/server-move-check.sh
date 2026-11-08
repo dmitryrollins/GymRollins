@@ -98,6 +98,10 @@ CHECKS=(
   "profile|select count(*) from ZPROFILERECORD|select count(*) as n from profiles"
   "exercise preferences|select count(*) from ZEXERCISEPREFERENCERECORD|select count(*) as n from exercise_prefs"
   "muscle targets|select count(*) from ZMUSCLETARGETRECORD|select count(*) as n from muscle_targets"
+  "private gyms|select count(*) from ZGYMRECORD where ZVISIBILITYRAW = 'synced'|select count(*) as n from gyms where visibility = 'private'"
+  "private listings|select count(*) from ZGYMLISTINGRECORD where ZVISIBILITYRAW = 'synced'|select count(*) as n from gym_equipment where visibility = 'private'"
+  "workouts at a gym|select count(*) from ZWORKOUTRECORD w join ZGYMRECORD g on g.ZID = w.ZGYMID where w.ZISACTIVE = 0 and g.ZVISIBILITYRAW = 'synced'|select count(*) as n from workouts where gym_id is not null"
+  "entries at a listing|select count(*) from ZWORKOUTENTRYRECORD e join ZGYMLISTINGRECORD l on l.ZID = e.ZGYMLISTINGID join ZWORKOUTRECORD w on e.ZWORKOUT = w.Z_PK where w.ZISACTIVE = 0 and l.ZVISIBILITYRAW = 'synced'|select count(*) as n from workout_entries where gym_equipment_id is not null"
 )
 failed=0
 printf '%-22s %8s %8s\n' "" "phone" "D1"
@@ -118,7 +122,9 @@ unsynced="$(sqlite3 "$WORK/after/default.store" "select
   + (select count(*) from ZWEEKDAYRECORD where ZDIRTY = 1)
   + (select count(*) from ZPROFILERECORD where ZDIRTY = 1)
   + (select count(*) from ZEXERCISEPREFERENCERECORD where ZDIRTY = 1)
-  + (select count(*) from ZMUSCLETARGETRECORD where ZDIRTY = 1)")"
+  + (select count(*) from ZMUSCLETARGETRECORD where ZDIRTY = 1)
+  + (select count(*) from ZGYMRECORD where ZVISIBILITYRAW = 'synced' and ZDIRTY = 1)
+  + (select count(*) from ZGYMLISTINGRECORD where ZVISIBILITYRAW = 'synced' and ZDIRTY = 1)")"
 echo "Records still unsynced on the phone: $unsynced"
 [[ "$unsynced" == "0" ]] || failed=1
 
