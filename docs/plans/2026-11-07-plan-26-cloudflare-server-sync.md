@@ -1518,11 +1518,13 @@ describe('storedValue', () => {
     expect(() => stored(col('json'), 'text')).toThrow(RowError)
   })
 
-  it('normalises timestamps, and takes dates as YYYY-MM-DD only', () => {
+  it('normalises timestamps, and takes dates as real YYYY-MM-DD days only', () => {
     expect(stored(col('ts'), '2026-11-07T10:00:00Z')).toBe('2026-11-07T10:00:00.000000Z')
     expect(() => stored(col('ts'), '2026-11-07')).toThrow('rows[0].x is not a valid ts')
     expect(stored(col('date'), '2026-12-31')).toBe('2026-12-31')
     expect(() => stored(col('date'), '2026-12-31T00:00:00Z')).toThrow(RowError)
+    expect(() => stored(col('date'), '2026-13-45')).toThrow(RowError)
+    expect(() => stored(col('date'), '2026-02-30')).toThrow(RowError)
   })
 
   it('treats a missing or null value by the column', () => {
@@ -1657,6 +1659,13 @@ export class RowError extends ApiError {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 
+/** YYYY-MM-DD and a real day, as Postgres's `date` type required (the D1 CHECK only sees the shape). */
+function isCalendarDay(raw: string): boolean {
+  if (!DAY.test(raw)) return false
+  const day = new Date(`${raw}T00:00:00Z`)
+  return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === raw
+}
+
 /** `raw`, a value from the app's JSON, as D1 stores it; throws RowError naming `label.column` when it doesn't fit. */
 export function storedValue(column: Column, raw: unknown, label: string): unknown {
   if (raw === undefined || raw === null) {
@@ -1684,7 +1693,7 @@ function convert(kind: Kind, raw: unknown): unknown {
     case 'ts':
       return typeof raw === 'string' ? (normalizeTimestamp(raw) ?? undefined) : undefined
     case 'date':
-      return typeof raw === 'string' && DAY.test(raw) ? raw : undefined
+      return typeof raw === 'string' && isCalendarDay(raw) ? raw : undefined
     case 'uuid':
       return typeof raw === 'string' && UUID.test(raw) ? raw.toLowerCase() : undefined
   }
