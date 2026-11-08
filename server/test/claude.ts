@@ -160,3 +160,58 @@ export function exchangeCode(flow: Flow, code: string, verifier = flow.verifier)
     resource: RESOURCE,
   })
 }
+
+export function refresh(clientId: string, refreshToken: string): Promise<Response> {
+  return tokenRequest({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: clientId,
+    resource: RESOURCE,
+  })
+}
+
+export interface Connection {
+  userId: string
+  /** The owner's app session. */
+  appToken: string
+  clientId: string
+  tokens: Tokens
+}
+
+/** The whole approval flow, from registration to Claude's tokens, for a new account. */
+export async function connectClaude(): Promise<Connection> {
+  const { token: appToken, userId } = await signUp()
+  const clientId = await registerClient()
+  const flow = await startFlow(clientId)
+  const browser = new Browser()
+  const { code } = await openConnect(browser, flow)
+  const decided = await decideCode(appToken, code, 'approve')
+  if (decided.status !== 200) throw new Error(`approve failed: ${decided.status} ${await decided.text()}`)
+  const res = await exchangeCode(flow, await finishInBrowser(browser, flow))
+  if (res.status !== 200) throw new Error(`token exchange failed: ${res.status} ${await res.text()}`)
+  return { userId, appToken, clientId, tokens: await res.json<Tokens>() }
+}
+
+export const ACCEPT = 'application/json, text/event-stream'
+export const PROTOCOL_VERSION = '2025-06-18'
+
+/** A JSON-RPC message to /mcp with a bearer token. */
+export function mcp(token: string | undefined, method: string, params?: Record<string, unknown>, id = 1) {
+  return call('/mcp', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: ACCEPT,
+      'mcp-protocol-version': PROTOCOL_VERSION,
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, ...(params ? { params } : {}) }),
+  })
+}
+
+export const initialize = (token: string) =>
+  mcp(token, 'initialize', {
+    protocolVersion: PROTOCOL_VERSION,
+    capabilities: {},
+    clientInfo: { name: 't', version: '0' },
+  })

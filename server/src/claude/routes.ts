@@ -12,6 +12,7 @@ import {
   waitingRequest,
 } from './connect-requests.ts'
 import { lastClaudeUse, parseResolution, pendingProposals, resolveProposal } from './proposals.ts'
+import { revokeClaude } from './revoke.ts'
 
 /** Hosts the app shows without a warning: Claude's own. */
 const CLAUDE_HOSTS = new Set(['claude.ai', 'claude.com'])
@@ -81,3 +82,6 @@ claudeRoutes.patch('/proposals/:id', async (c) => {
 })
 
 claudeRoutes.get('/last-use', async (c) => c.json({ at: await lastClaudeUse(c.env.DB, c.var.userId) }))
+
+/** Disconnect Claude. */
+claudeRoutes.post('/revoke', async (c) => c.json({ revoked: await revokeClaude(c.env.DB, c.var.userId) }))
