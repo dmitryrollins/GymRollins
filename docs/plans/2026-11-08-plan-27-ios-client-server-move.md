@@ -4736,3 +4736,68 @@ Commit it as `docs: plan 27 outcome`.
     `.email`, so real tokens should carry it, but a real Apple token is first used at the cutover. If one doesn't, the
     server needs Better Auth's `mapProfileToUser` with a placeholder email.
   - Set `API_URL` in `Local.xcconfig` before installing on the phone: the move runs on that first launch.
+
+## Outcome
+
+Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudflare account was used. Plan 28's server tasks and iOS tasks landed on the same branch in between, so some commits below sit among theirs.
+
+**Commits** (code; review fixes sit on the task they fix)
+
+| Task | Commits |
+|---|---|
+| 1 `ApiError`, session store, `ApiClient` | `106981a`, review fix `c325ec3` |
+| 2 `ApiConfig` and `API_URL` | `4dbb5d4` |
+| 3 The engine leaves out what the server lacks | `a767e2c` |
+| 4 `ApiSyncTransport` | `f2dd98c` |
+| 5 The server move in GymData | `d5b1435` |
+| 6 `AuthService` on Better Auth | `509cbf1`, review gaps `d404e4b` |
+| 7 The app on the API | `8ea76b2`, review fixes `282259b`, `220bc5f` |
+| 8 Integration suites on a throwaway Worker | `46f7a97` |
+| 9 Sync UI tests on the Worker | `452086c` |
+| 10 Server-move check with a copy of the owner's store | `d3eee14`, fix `19179d4` (the comparison names a differing column, never its values) |
+
+**Final counts**
+- GymCore: `Test run with 533 tests in 64 suites passed`.
+- GymData: `Test run with 371 tests in 50 suites passed`.
+- GymHealth: `Test run with 85 tests in 17 suites passed`.
+- GymSync (`--filter GymSyncTests`): `Test run with 216 tests in 27 suites passed`.
+- Server: `Test Files  25 passed (25)`, `Tests  322 passed (322)`, and `tsc --noEmit` clean.
+- Integration (`scripts/test-sync-integration.sh`): `Test run with 15 tests in 4 suites passed`, then `Account deletion verified: 17 deleted users, 0 rows left`.
+- Store comparison: `# pass 4`, `# fail 0`.
+- Sync UI (`scripts/ios-test-sync.sh`): 4 passed, 1 skipped, 0 failed.
+- The GymData, GymSync, GymCore and server totals are higher than this plan's Task 11 expected, because plan 28 added tests to the same packages.
+
+**Server-move check** (`scripts/server-move-check.sh`, run on a copy of the phone's store; counts copy/D1)
+- workouts 148/148, entries 836/836, sets 2685/2685, routines 6/6, body weights 23/23, custom exercises 42/42, week days 4/4, profile 1/1, exercise prefs 0/0, muscle targets 0/0.
+- 0 records unsynced.
+- `Stores match apart from sync state.`
+
+**Where the build differs from the plan as first written**
+1. **Store comparison (Task 10):** the first version printed the differing values. They come from a copy of the owner's training data, so a difference now prints only the table, the column and the record's id (`19179d4`).
+2. **The move forgets the old Supabase session (Task 7):** the plan only moved the data. Review found the old Supabase token left in the Keychain after a move, so `220bc5f` deletes it.
+3. **Sign-out and restore (Task 7):** both were reworked after review (`282259b`), see below.
+4. **Plan 28 widened the move:** the catalogue cache, shared listings and the share outbox are forgotten by the move (`5280104`, `5e29177`), which the plan listed under "Handed to later plans".
+5. **The Task 11 reviewer step** was done by the per-task reviews, not by one reviewer over the whole diff at the end.
+
+**What reviews caught and fixed**
+- **A stale 401 signing out a newer sign-in.** A request that began under an old session could sign out the one that replaced it (`c325ec3`, `282259b`). A stale 401 now signals nothing.
+- **The restore race.** A slow session restore could overwrite a sign-in that finished after it began (`282259b`).
+- **Sign-out always finishing locally.** It no longer waits on the server: a failed or offline call still clears the local session (`282259b`).
+- **Redirects refused, and tokens redacted.** `ApiClient` follows no redirects, and logs and errors carry no bearer token (`c325ec3`).
+- **The old Supabase Keychain token** deleted after a move (`220bc5f`).
+- **Keychain update-then-add,** and the accessibility class asserted in the tests (`220bc5f`).
+- **Review test gaps in the move** and the API transport (`d404e4b`).
+
+**Passed to later plans**
+- **Plan 30 (remove Supabase):**
+  - Run the whole app UI suite once, at the end (see "Not run").
+  - Everything in "Handed to later plans" above that is still open.
+- **Account deletion's check** in `scripts/test-sync-integration.sh` counts the plan-27 tables only. It doesn't count the plan-28 tables (gyms, listings, photos, reports, blocks) yet, so a leftover row there would go unseen.
+- **Plan 29:** `servesProposals`, the proposal and OAuth-grant transports, and `ProposalSyncUITests` stay on Supabase until it lands.
+- **Before the deploy:** the real Apple token's `email` claim, and `API_URL` in `Local.xcconfig` (unchanged from "Handed to later plans").
+
+**Not run**
+- The full app UI suite (about an hour). It is deferred to plan 30, which runs it once at the end.
+- `scripts/server-move-check.sh` wasn't re-run for this commit: it ran earlier in the session and passed (above), and the only change since is the comparison's output text.
+- The app's unit tests and the hermetic UI classes of Task 11's `xcodebuild` line were not re-run in this final pass.
+- Nothing ran against a deployed Worker or a physical iPhone.
