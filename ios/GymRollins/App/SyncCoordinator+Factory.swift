@@ -42,6 +42,10 @@ extension SyncCoordinator {
     /// remove it). The next launch tries again.
     private static func moveIfNeeded(_ store: SyncStore, to config: ApiConfig, sessions: any SessionStore) -> Bool {
         do {
+            // The catalogue has its own marker: it may come from another server although the account's marker matches.
+            if try store.forgetCatalogueOfOtherServer(config.origin) {
+                log.notice("Forgot the shared catalogue cached from another server")
+            }
             if try store.moveToServer(config.origin) {
                 sessions.clear() // a session the old server gave means nothing here
                 LegacySupabaseKeychain.forget() // nor does the Supabase refresh token; it would travel in backups

@@ -6155,6 +6155,20 @@ import Testing
         await #expect(throws: URLError.self) { _ = try await transport.downloadPrivatePhoto(path: "../secret.jpg") }
         #expect(server.requests.count == 3)
     }
+
+    @Test func aPrivatePhotoPutAnswering200WithItsNameCountsAsUploaded() async throws {
+        let server = StubServer { _ in .json(200, #"{"name": "\#(photo)"}"#) }
+        let stored = try await ApiSyncTransport(api: server.client()).uploadPrivatePhoto(Data([1]), name: upperPhoto)
+        #expect(stored == photo)
+        #expect(server.requests.map { "\($0.method) \($0.path)" } == ["PUT /v1/photos/private/\(photo)"])
+    }
+
+    @Test func aPrivatePhotoPutRefusedWithAnotherConflictIsAnError() async throws {
+        let server = StubServer { _ in .json(409, #"{"error": {"code": "version_conflict", "message": "No."}}"#) }
+        await #expect(throws: ApiError.self) {
+            _ = try await ApiSyncTransport(api: server.client()).uploadPrivatePhoto(Data([1]), name: upperPhoto)
+        }
+    }
 }
 ```
 
@@ -6218,12 +6232,12 @@ extension ApiSyncTransport {
         try await pull("gym-listings", tiebreak: "id", since: since)
     }
 
-    /// Uploads as JPEG; a name the caller already uploaded (409) counts as uploaded.
+    /// Uploads as JPEG; a name the caller already uploaded (409 `duplicate`) counts as uploaded; any other 409 is an error.
     public func uploadPrivatePhoto(_ data: Data, name: String) async throws -> String {
         let stored = try Self.privatePhotoPath(name)
         do {
             _ = try await api.data("PUT", stored, body: data, contentType: "image/jpeg")
-        } catch let failure as ApiError where failure.status == 409 {
+        } catch let failure as ApiError where failure.status == 409 && failure.code == "duplicate" {
             // The same photo, uploaded by an earlier try whose answer was lost.
         }
         return name.lowercased()
@@ -6416,6 +6430,33 @@ extension SyncStore {
         }
     }
 
+    private static let catalogueKey = "gymrollins.catalog.server"
+
+    /// The API the shared catalogue's cache came from; nil until a launch records one. Separate from `syncedServer`.
+    public var catalogueServer: String? {
+        get { defaults.string(forKey: Self.catalogueKey) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Self.catalogueKey) }
+            else { defaults.removeObject(forKey: Self.catalogueKey) }
+        }
+    }
+
+    /// Run at launch next to `moveToServer`, whatever the account did. When the catalogue marker differs from `server`,
+    /// the old catalogue is forgotten, the store saved, and then the marker recorded. Returns whether it ran.
+    @discardableResult
+    public func forgetCatalogueOfOtherServer(_ server: String) throws -> Bool {
+        guard catalogueServer != server else { return false }
+        do {
+            try forgetOldCatalogue()
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+        catalogueServer = server
+        return true
+    }
+
     /// Run at launch, before the session is restored, with the API this build talks to. When another server (or none)
     /// is recorded and the data carries an owner, a pull cursor or a server version, the move runs:
     /// - the owner, the cursors and the recorded refusals are forgotten;
@@ -6474,6 +6515,7 @@ extension SyncStore {
     /// - Other people's cached listings stay until the gym's next refresh, which the cleared stamp makes its next open.
     ///   The new server doesn't know the old gym id, so that refresh drops them and their pictures, as it does when a
     ///   moderator removed a gym; the maps gym keeps the old id until then, because that is how the refresh finds out.
+    /// - A flagged or removed own listing becomes active again; an `unsupported` one stays (it has no loads).
     /// - Items lose the catalogue picture they borrowed, and the outbox is emptied.
     private func forgetOldCatalogue() throws {
         let shared = GymVisibility.shared.rawValue
@@ -6486,7 +6528,9 @@ extension SyncStore {
             listing.duplicatesData = nil
             listing.remoteId = nil
             listing.remotePhotoPath = nil
-            listing.statusRaw = ListingStatus.active.rawValue
+            if listing.statusRaw != ListingStatus.unsupported.rawValue { // `unsupported` loads are `{}`; stay that way
+                listing.statusRaw = ListingStatus.active.rawValue
+            }
             listing.confirmCount = 0
             listing.confirmedByMe = false
         }
@@ -6530,6 +6574,14 @@ What changed from plan 27's file:
 - the doc line about the catalogue;
 - `try forgetOldCatalogue()` in `markEverythingUnsynced`, before its single `save`, so a failed move still runs again;
 - the new `forgetOldCatalogue()`.
+
+> **Added after review.** The catalogue has its own marker, `gymrollins.catalog.server` (`catalogueServer`), and
+> `forgetCatalogueOfOtherServer(_:)` runs `forgetOldCatalogue` whenever it differs from the origin, independent of the
+> account move: a phone that recorded the Worker origin under an earlier build, or only browsed signed out, would
+> otherwise keep the old gym ids, and the first refresh would delete the user's own listings as `.gone`. The app calls
+> it in `SyncCoordinator+Factory.moveIfNeeded`, before `moveToServer`. `unsupported` own listings keep that status.
+> Tests: `aCatalogueFromAnotherServerIsForgotten...`, `aSignedOutPhone...`, `forgettingTheCatalogueTwiceIsANoOp`,
+> `aFreshInstall...`, `anUnsupportedListingStays...` (`SyncStoreServerMoveCatalogueTests`).
 
 - [ ] **Step 4: Run the tests**
 

@@ -102,4 +102,75 @@ import Testing
         #expect(try listing(old.waiting) != nil)
         #expect(try gymRecord(old.gym).remoteId == nil, "the new server has no gym at this place yet")
     }
+
+    // MARK: The catalogue's own marker
+
+    @Test func aCatalogueFromAnotherServerIsForgottenEvenWhenTheAccountMoveAlreadyRan() throws {
+        defer { f.tearDown() }
+        let old = try oldCatalogue()
+        f.store.syncedServer = new // an earlier build recorded the Worker origin; the catalogue marker did not exist
+
+        #expect(try !f.store.moveToServer(new), "the account move has nothing to do")
+        #expect(try f.store.forgetCatalogueOfOtherServer(new))
+
+        for id in [old.own, old.waiting] {
+            let row = try #require(try listing(id))
+            #expect(row.visibilityRaw == GymVisibility.device.rawValue)
+            #expect(row.uploadStateRaw == UploadState.local.rawValue)
+            #expect(row.remoteId == nil && row.remotePhotoPath == nil)
+        }
+        #expect(try gymRecord(old.gym).catalogRefreshedAt == nil)
+        #expect(try item(old.item).catalogPhotoPath == nil)
+        #expect(try f.context.fetch(FetchDescriptor<ShareOutboxRecord>()).isEmpty)
+    }
+
+    @Test func aSignedOutPhoneThatOnlyBrowsedTheOldCatalogueForgetsItToo() throws {
+        defer { f.tearDown() }
+        let old = try oldCatalogue()
+        f.store.ownerUserId = nil
+        f.store.syncedServer = nil
+
+        #expect(try f.store.forgetCatalogueOfOtherServer(new))
+
+        #expect(try item(old.item).catalogPhotoPath == nil)
+    }
+
+    @Test func forgettingTheCatalogueTwiceIsANoOp() throws {
+        defer { f.tearDown() }
+        let old = try oldCatalogue()
+        f.store.syncedServer = new
+        #expect(try f.store.forgetCatalogueOfOtherServer(new))
+
+        // The new server's catalogue, cached since.
+        let gymRow = try gymRecord(old.gym)
+        gymRow.catalogRefreshedAt = f.clock.now
+        let borrowed = try item(old.item)
+        borrowed.catalogPhotoPath = "\(UUID().uuidString.lowercased()).jpg"
+        try f.context.save()
+
+        #expect(try !f.store.forgetCatalogueOfOtherServer(new))
+        #expect(try gymRecord(old.gym).catalogRefreshedAt != nil)
+        #expect(try item(old.item).catalogPhotoPath != nil)
+        #expect(f.store.catalogueServer == new)
+    }
+
+    @Test func aFreshInstallJustRecordsTheCatalogueMarker() throws {
+        defer { f.tearDown() }
+        #expect(try f.store.forgetCatalogueOfOtherServer(new))
+        #expect(f.store.catalogueServer == new)
+        #expect(try !f.store.forgetCatalogueOfOtherServer(new))
+    }
+
+    @Test func anUnsupportedListingStaysUnsupportedWhenItBecomesThisPhoneOnly() throws {
+        defer { f.tearDown() }
+        let old = try oldCatalogue()
+        try #require(try listing(old.own)).statusRaw = ListingStatus.unsupported.rawValue
+        try #require(try listing(old.waiting)).statusRaw = ListingStatus.flagged.rawValue
+        try f.context.save()
+
+        try f.store.moveToServer(new)
+
+        #expect(try listing(old.own)?.statusRaw == ListingStatus.unsupported.rawValue)
+        #expect(try listing(old.waiting)?.statusRaw == ListingStatus.active.rawValue)
+    }
 }

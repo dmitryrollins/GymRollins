@@ -30,12 +30,12 @@ extension ApiSyncTransport {
         try await pull("gym-listings", tiebreak: "id", since: since)
     }
 
-    /// Uploads as JPEG; a name the caller already uploaded (409) counts as uploaded.
+    /// Uploads as JPEG; a name the caller already uploaded (409 `duplicate`) counts as uploaded; any other 409 is an error.
     public func uploadPrivatePhoto(_ data: Data, name: String) async throws -> String {
         let stored = try Self.privatePhotoPath(name)
         do {
             _ = try await api.data("PUT", stored, body: data, contentType: "image/jpeg")
-        } catch let failure as ApiError where failure.status == 409 {
+        } catch let failure as ApiError where failure.status == 409 && failure.code == "duplicate" {
             // The same photo, uploaded by an earlier try whose answer was lost.
         }
         return name.lowercased()

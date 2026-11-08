@@ -89,4 +89,18 @@ import Testing
         await #expect(throws: URLError.self) { _ = try await transport.downloadPrivatePhoto(path: "../secret.jpg") }
         #expect(server.requests.count == 3)
     }
+
+    @Test func aPrivatePhotoPutAnswering200WithItsNameCountsAsUploaded() async throws {
+        let server = StubServer { _ in .json(200, #"{"name": "\#(photo)"}"#) }
+        let stored = try await ApiSyncTransport(api: server.client()).uploadPrivatePhoto(Data([1]), name: upperPhoto)
+        #expect(stored == photo)
+        #expect(server.requests.map { "\($0.method) \($0.path)" } == ["PUT /v1/photos/private/\(photo)"])
+    }
+
+    @Test func aPrivatePhotoPutRefusedWithAnotherConflictIsAnError() async throws {
+        let server = StubServer { _ in .json(409, #"{"error": {"code": "version_conflict", "message": "No."}}"#) }
+        await #expect(throws: ApiError.self) {
+            _ = try await ApiSyncTransport(api: server.client()).uploadPrivatePhoto(Data([1]), name: upperPhoto)
+        }
+    }
 }

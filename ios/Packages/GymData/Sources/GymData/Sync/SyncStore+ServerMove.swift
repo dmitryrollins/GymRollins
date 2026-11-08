@@ -17,6 +17,37 @@ extension SyncStore {
         }
     }
 
+    private static let catalogueKey = "gymrollins.catalog.server"
+
+    /// The API the shared catalogue's cache (gym ids, cached listings, borrowed pictures, the outbox) came from; nil
+    /// until a launch records one. Separate from `syncedServer`: a phone that recorded the Worker origin under an
+    /// earlier build, or one that only browsed the catalogue signed out, still holds the old server's catalogue.
+    public var catalogueServer: String? {
+        get { defaults.string(forKey: Self.catalogueKey) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Self.catalogueKey) }
+            else { defaults.removeObject(forKey: Self.catalogueKey) }
+        }
+    }
+
+    /// Run at launch next to `moveToServer`, whatever the account did. When the catalogue marker differs from `server`,
+    /// the old catalogue is forgotten (`forgetOldCatalogue`), the store saved, and then the marker recorded, so a
+    /// failed save runs again at the next launch. A fresh install has nothing to forget and just records it. Returns
+    /// whether it ran.
+    @discardableResult
+    public func forgetCatalogueOfOtherServer(_ server: String) throws -> Bool {
+        guard catalogueServer != server else { return false }
+        do {
+            try forgetOldCatalogue()
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+        catalogueServer = server
+        return true
+    }
+
     /// Run at launch, before the session is restored, with the API this build talks to. When another server (or none)
     /// is recorded and the data carries an owner, a pull cursor or a server version, the move runs:
     /// - the owner, the cursors and the recorded refusals are forgotten;
@@ -80,6 +111,7 @@ extension SyncStore {
     /// - Other people's cached listings stay until the gym's next refresh, which the cleared stamp makes its next open.
     ///   The new server doesn't know the old gym id, so that refresh drops them and their pictures, as it does when a
     ///   moderator removed a gym; the maps gym keeps the old id until then, because that is how the refresh finds out.
+    /// - A flagged or removed own listing becomes active again; an `unsupported` one stays (it has no loads).
     /// - Items lose the catalogue picture they borrowed, and the outbox is emptied.
     private func forgetOldCatalogue() throws {
         let shared = GymVisibility.shared.rawValue
@@ -92,7 +124,9 @@ extension SyncStore {
             listing.duplicatesData = nil
             listing.remoteId = nil
             listing.remotePhotoPath = nil
-            listing.statusRaw = ListingStatus.active.rawValue
+            if listing.statusRaw != ListingStatus.unsupported.rawValue { // `unsupported` loads are `{}`; stay that way
+                listing.statusRaw = ListingStatus.active.rawValue
+            }
             listing.confirmCount = 0
             listing.confirmedByMe = false
         }
