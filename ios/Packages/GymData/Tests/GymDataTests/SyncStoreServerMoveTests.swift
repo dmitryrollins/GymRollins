@@ -157,7 +157,7 @@ import Testing
     @Test func noRecordedServerCountsAsAnother() throws {
         defer { f.tearDown() }
         try syncedAccount()
-        f.store.syncedServer = nil // the owner's phone today: synced to Supabase, which recorded nothing
+        f.store.syncedServer = nil // the owner's phone today: synced to the old server, which recorded nothing
         #expect(try f.store.moveToServer(new))
         #expect(f.store.ownerUserId == nil)
     }

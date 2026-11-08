@@ -160,9 +160,8 @@ final class ReadmeScreenshotsUITests: XCTestCase {
     }
 
     func test06ClaudeConnect() throws {
-        // A placeholder project URL, so the connector URL shown is not the local test server's.
-        let app = launch([], environment: ["SUPABASE_URL": "https://your-project.supabase.co",
-                                           "SUPABASE_ANON_KEY": "anon"])
+        // A placeholder Worker address, so the connector URL shown is not the local test server's.
+        let app = launch([], environment: ["API_URL": "https://gymrollins.your-subdomain.workers.dev"])
         app.tabBars.buttons["Log"].tap()
         app.buttons["log.settings"].tap()
         let claude = app.buttons["settings.claude"]

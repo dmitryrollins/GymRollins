@@ -138,7 +138,7 @@ public struct PlanViolation: Codable, Sendable, Equatable {
 
 /// Value ranges a plan change may carry — shared by `PlanChangeValidator` and, as defense in depth,
 /// `PlanChangeApplier` (which must throw, never trap, on a value it cannot store). Mirrored in
-/// supabase/functions/_shared/plan-validation.ts.
+/// server/src/shared/plan-validation.ts.
 public enum PlanChangeLimits {
     public static let sets = 1...10
     public static let reps = 1...100

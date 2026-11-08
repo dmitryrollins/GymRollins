@@ -39,7 +39,7 @@ final class AppEnvironment {
     let media: ExerciseMediaService
     /// Exercise names in other languages (wger) with their credits; search and import matching use them too.
     let otherNames: ExerciseNamesI18n?
-    /// `<SUPABASE_URL>/functions/v1/mcp`, nil when this build has no Supabase config.
+    /// `<API_URL>/mcp`, nil when this build has no API.
     let connectorURL: String?
     private let bundledLibrary: ExerciseLibrary
     private(set) var library: ExerciseLibrary

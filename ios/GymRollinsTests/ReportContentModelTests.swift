@@ -37,7 +37,7 @@ import Testing
         #expect(ReportContentModel.cleanNote(String(repeating: "\u{1F3CB}", count: 281))?.unicodeScalars.count == 280)
     }
 
-    /// The cases of `supabase/tests/database/gym_rules.test.sql`, which pin `gym_private.clean_text`.
+    /// The cases `server/test/text.test.ts` runs on the server's port of `clean_text`.
     @Test func hiddenCharactersAreRefusedAtBothEndsOfEachRange() {
         func put(_ value: UInt32) -> String { "Iron" + String(UnicodeScalar(value)!) + "Gym" }
         let refused: [UInt32] = [0xAD, 0x34F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x180B, 0x180C, 0x180D, 0x180E, 0x180F,

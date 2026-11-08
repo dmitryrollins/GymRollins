@@ -2,7 +2,7 @@
 /// owner pastes it into a Claude Project's instructions once, then just talks; Claude asks for what it needs. Fixed
 /// text with no personal data. It names no unit and tells Claude to check the profile's unit in each chat, because the
 /// owner can switch lb and kg in Settings at any time. The server sends Claude its own rules for the tools
-/// (`supabase/functions/mcp/instructions.ts`); this prompt repeats the key ones for clients that ignore them.
+/// (`server/src/mcp/instructions.ts`); this prompt repeats the key ones for clients that ignore them.
 enum ClaudePrompts {
     static let coach = """
         You're my strength coach. My training is in GymRollins, connected as a tool.

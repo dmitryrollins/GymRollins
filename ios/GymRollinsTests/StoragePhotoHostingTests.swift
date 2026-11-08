@@ -60,7 +60,7 @@ enum PhotoTestData {
         return try! JSONSerialization.data(withJSONObject: object) // swiftlint:disable:this force_try
     }
 
-    static func uniqueHost() -> String { "t\(UUID().uuidString.prefix(8).lowercased()).supabase.test" }
+    static func uniqueHost() -> String { "t\(UUID().uuidString.prefix(8).lowercased()).workers.test" }
 
     static func tempDir() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("photo-hosting-\(UUID().uuidString)")
@@ -77,14 +77,14 @@ enum PhotoTestData {
 @Suite struct PhotoURLPolicyTests {
     @Test func httpsOnlyRejectsEveryPlainHTTPURL() {
         let policy = PhotoURLPolicy.httpsOnly
-        #expect(policy.allows(URL(string: "https://abc.supabase.co/x.jpg")!))
+        #expect(policy.allows(URL(string: "https://gymrollins.example.workers.dev/x.jpg")!))
         #expect(!policy.allows(URL(string: "http://127.0.0.1:55421/x.jpg")!))
         #expect(!policy.allows(URL(string: "http://localhost:55421/x.jpg")!))
-        #expect(!policy.allows(URL(string: "ftp://abc.supabase.co/x.jpg")!))
+        #expect(!policy.allows(URL(string: "ftp://gymrollins.example.workers.dev/x.jpg")!))
         #expect(!policy.allows(URL(fileURLWithPath: "/tmp/x.jpg")))
     }
 
-    @Test func debugPolicyAllowsHTTPOnlyToLoopbackAndALocalSupabaseHost() {
+    @Test func debugPolicyAllowsHTTPOnlyToLoopbackAndALocalAPIHost() {
         let loopback = PhotoURLPolicy.debugLocal(apiURL: URL(string: "http://127.0.0.1:55421"))
         #expect(loopback.allows(URL(string: "http://127.0.0.1:55421/a.jpg")!))
         #expect(loopback.allows(URL(string: "http://localhost:55421/a.jpg")!))
@@ -94,8 +94,8 @@ enum PhotoTestData {
         let lan = PhotoURLPolicy.debugLocal(apiURL: URL(string: "http://192.168.1.20:55421"))
         #expect(lan.allows(URL(string: "http://192.168.1.20:55421/a.jpg")!))
 
-        let publicHTTP = PhotoURLPolicy.debugLocal(apiURL: URL(string: "http://abc.supabase.co"))
-        #expect(!publicHTTP.allows(URL(string: "http://abc.supabase.co/a.jpg")!), "a public host never gets http")
+        let publicHTTP = PhotoURLPolicy.debugLocal(apiURL: URL(string: "http://gymrollins.example.workers.dev"))
+        #expect(!publicHTTP.allows(URL(string: "http://gymrollins.example.workers.dev/a.jpg")!), "a public host never gets http")
     }
 
     @Test func thisDebugBuildUsesTheDebugPolicy() {
@@ -107,7 +107,7 @@ enum PhotoTestData {
         ("127.0.0.1", true), ("127.1.2.3", true), ("localhost", true), ("::1", true), ("[::1]", true),
         ("10.0.0.5", true), ("192.168.0.9", true), ("172.16.0.1", true), ("172.31.255.255", true),
         ("169.254.1.1", true), ("macbook.local", true),
-        ("172.32.0.1", false), ("192.169.0.1", false), ("8.8.8.8", false), ("abc.supabase.co", false),
+        ("172.32.0.1", false), ("192.169.0.1", false), ("8.8.8.8", false), ("gymrollins.example.workers.dev", false),
         ("127.0.0.1.evil.com", false), (".local", false), ("300.1.1.1", false), ("10.0.0", false)
     ])
     func localDevHostDetection(host: String, expected: Bool) {
@@ -222,16 +222,16 @@ enum PhotoTestData {
     }
 
     @Test func trailingSlashAndNoRevision() {
-        let provider = HostedPhotoProvider(apiURL: URL(string: "https://abc.supabase.co/")!,
+        let provider = HostedPhotoProvider(apiURL: URL(string: "https://gymrollins.example.workers.dev/")!,
                                                     manifest: StoragePhotoManifest(photos: ["0227": 1]))
         #expect(provider.media(for: PhotoTestData.exercise("0227"))?.photos.map(\.absoluteString) ==
-            ["https://abc.supabase.co/photos/exercises/own-0227-0.jpg"])
-        #expect(HostedPhotoProvider.manifestURL(apiURL: URL(string: "https://abc.supabase.co/")!)
-            .absoluteString == "https://abc.supabase.co/photos/exercises/manifest.json")
+            ["https://gymrollins.example.workers.dev/photos/exercises/own-0227-0.jpg"])
+        #expect(HostedPhotoProvider.manifestURL(apiURL: URL(string: "https://gymrollins.example.workers.dev/")!)
+            .absoluteString == "https://gymrollins.example.workers.dev/photos/exercises/manifest.json")
     }
 
     @Test func noManifestOrUnlistedExerciseMeansNoMedia() {
-        let empty = HostedPhotoProvider(apiURL: URL(string: "https://abc.supabase.co")!)
+        let empty = HostedPhotoProvider(apiURL: URL(string: "https://gymrollins.example.workers.dev")!)
         #expect(empty.media(for: PhotoTestData.exercise("0453")) == nil)
         empty.apply(StoragePhotoManifest(photos: ["0453": 1]))
         #expect(empty.media(for: PhotoTestData.exercise("0453"))?.photos.count == 1)
@@ -241,7 +241,7 @@ enum PhotoTestData {
 
     /// record URLs -> Storage -> bundled own photos -> free-exercise-db -> (nil) illustration.
     @Test func providerOrder() throws {
-        let storage = HostedPhotoProvider(apiURL: URL(string: "https://abc.supabase.co")!,
+        let storage = HostedPhotoProvider(apiURL: URL(string: "https://gymrollins.example.workers.dev")!,
                                                    manifest: StoragePhotoManifest(photos: ["0453": 2, "0001": 1]))
         let bundled = BundledOwnPhotoProvider(files: [
             URL(fileURLWithPath: "/app/own-0453-0.jpg"), URL(fileURLWithPath: "/app/own-0002-0.jpg")
@@ -253,7 +253,7 @@ enum PhotoTestData {
 
         let record = chain.media(for: PhotoTestData.exercise("0453", image: "https://media.example.com/0453.jpg"))
         #expect(record?.photos.first?.host() == "media.example.com", "record URLs win")
-        #expect(chain.media(for: PhotoTestData.exercise("0453"))?.photos.first?.host() == "abc.supabase.co",
+        #expect(chain.media(for: PhotoTestData.exercise("0453"))?.photos.first?.host() == "gymrollins.example.workers.dev",
                 "Storage wins over the bundled copy")
         #expect(chain.media(for: PhotoTestData.exercise("0002"))?.photos.first?.isFileURL == true,
                 "bundled photos when Storage has none")
@@ -360,14 +360,14 @@ enum PhotoTestData {
 // MARK: - Wiring (config switch -> providers)
 
 @Suite struct ExerciseMediaServiceHostingTests {
-    private let https = URL(string: "https://abc.supabase.co")!
+    private let https = URL(string: "https://gymrollins.example.workers.dev")!
 
     @Test func bundleModeHasNoStorageProvider() {
         let config = PhotoHostingConfig(hosting: .bundle, apiURL: https)
         #expect(ExerciseMediaService.storageProvider(config: config, policy: .httpsOnly) == nil)
     }
 
-    @Test func storageModeNeedsASupabaseURLTheBuildMayFetch() {
+    @Test func storageModeNeedsAnAPIURLTheBuildMayFetch() {
         #expect(ExerciseMediaService.storageProvider(
             config: PhotoHostingConfig(hosting: .storage, apiURL: nil), policy: .httpsOnly) == nil)
         #expect(ExerciseMediaService.storageProvider(

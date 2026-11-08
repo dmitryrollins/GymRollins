@@ -22,8 +22,8 @@ private struct Fixed: ExerciseMediaProvider {
 @Suite struct PhotoFallbackAndRefreshTests {
     private let bench = Exercise(id: "0453", name: "ez bar extension", bodyPart: "upper arms", equipment: "ez barbell",
                                  target: "triceps")
-    private let hosted = ExerciseMedia(photos: [URL(string: "https://abc.supabase.co/own-0453-0.jpg")!,
-                                                URL(string: "https://abc.supabase.co/own-0453-1.jpg")!],
+    private let hosted = ExerciseMedia(photos: [URL(string: "https://gymrollins.example.workers.dev/own-0453-0.jpg")!,
+                                                URL(string: "https://gymrollins.example.workers.dev/own-0453-1.jpg")!],
                                        animation: nil, source: .own)
     private let bundled = ExerciseMedia(photos: [URL(fileURLWithPath: "/app/OwnPhotos/own-0453-0.jpg"),
                                                  URL(fileURLWithPath: "/app/OwnPhotos/own-0453-1.jpg")],
@@ -69,7 +69,7 @@ private struct Fixed: ExerciseMediaProvider {
     // MARK: Views reload when a fresh manifest arrives
 
     @Test func applyReportsWhetherTheManifestChanged() {
-        let provider = HostedPhotoProvider(apiURL: URL(string: "https://abc.supabase.co")!)
+        let provider = HostedPhotoProvider(apiURL: URL(string: "https://gymrollins.example.workers.dev")!)
         #expect(provider.apply(StoragePhotoManifest(photos: ["0453": 2])))
         #expect(!provider.apply(StoragePhotoManifest(photos: ["0453": 2])))
         #expect(provider.apply(StoragePhotoManifest(photos: ["0453": 2], rev: ["0453": "ab"])))

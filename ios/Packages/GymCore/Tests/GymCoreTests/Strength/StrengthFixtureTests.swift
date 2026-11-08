@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import GymCore
 
-/// Runs `fixtures/strength-levels.json`, the cases the MCP server's TypeScript port (`_shared/strength-levels.test.ts`)
+/// Runs `fixtures/strength-levels.json`, the cases the MCP server's TypeScript port (`server/test/shared/strength-levels.test.ts`)
 /// runs too, on the bundled table, so both sides compute the same levels.
 struct StrengthFixtureTests {
     struct Doc: Decodable { let cases: [Case] }

@@ -42,7 +42,7 @@ public struct MuscleRecovery: Equatable, Sendable, Identifiable {
 /// 0.5; see `MuscleLoads`). The session leaves fatigue `min(1, load / 6)` that decays linearly to zero over
 /// `clamp(24 + 6 × load, 24, 96)` hours — about 48 h for a normal 4-set session, up to 4 days for high volume.
 /// Sessions stack (sum, capped at 1). Recovery % = round(100 × (1 − fatigue)).
-/// Keep in sync with `supabase/functions/_shared/insights.ts` (shared fixture `fixtures/insights.json`).
+/// Keep in sync with `server/src/shared/insights.ts` (shared fixture `fixtures/insights.json`).
 public enum RecoveryModel {
     /// Effective sets that leave a group fully fatigued right after the session.
     public static let saturationLoad = 6.0

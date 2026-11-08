@@ -61,8 +61,7 @@ struct LaunchOptions {
     let syncBackend: SyncBackend
     /// DEBUG only: `GYM_SIMULATE_OFFLINE=1` in the environment makes every sync request fail as offline.
     let simulateOffline: Bool
-    /// The process environment (DEBUG builds read `API_URL` from it, and the Supabase overrides that photo hosting and
-    /// Claude's connector still use).
+    /// The process environment (DEBUG builds read `API_URL` and `PHOTO_HOSTING` from it).
     let environment: [String: String]
     /// `-uiTesting`: also used to default onboarding to already-complete, so the existing app UI test suite
     /// (which doesn't expect the onboarding flow) keeps working.

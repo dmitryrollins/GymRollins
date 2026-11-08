@@ -145,7 +145,7 @@ final class ProposalUITests: XCTestCase {
         app.buttons["log.settings"].tap()
         app.buttons["settings.claude"].tap()
         XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["claude.url"].label.hasSuffix("/functions/v1/mcp"), app.staticTexts["claude.url"].label)
+        XCTAssertTrue(app.staticTexts["claude.url"].label.hasSuffix("/mcp"), app.staticTexts["claude.url"].label)
         app.buttons["claude.copyURL"].tap()
         XCTAssertEqual(app.buttons["claude.copyURL"].label, "Copied")
         XCTAssertEqual(app.staticTexts["claude.status"].label, "Not connected yet")

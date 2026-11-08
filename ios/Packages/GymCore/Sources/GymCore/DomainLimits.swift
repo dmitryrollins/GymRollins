@@ -1,7 +1,7 @@
 import Foundation
 
 /// Value limits shared by local validation and the database CHECK constraints
-/// (supabase/migrations/*_schema.sql, *_security_fixes.sql). Anything saved locally must fit these, or the row
+/// (server/migrations/0002_app_schema.sql, 0005_gyms_photos.sql). Anything saved locally must fit these, or the row
 /// would be rejected when it syncs.
 public enum DomainLimits {
     // Routines

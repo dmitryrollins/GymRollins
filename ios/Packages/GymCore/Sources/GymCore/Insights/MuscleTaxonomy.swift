@@ -15,7 +15,7 @@ public struct MuscleContribution: Equatable, Sendable {
 }
 
 /// Maps the exercise library's muscle strings (`tg` target, `sm` secondary muscles) onto `MuscleGroup`s.
-/// Keep in sync with `supabase/functions/_shared/insights.ts` (the shared fixture `fixtures/insights.json` checks).
+/// Keep in sync with `server/src/shared/insights.ts` (the shared fixture `fixtures/insights.json` checks).
 public enum MuscleTaxonomy {
     public static let primaryWeight = 1.0
     public static let secondaryWeight = 0.5

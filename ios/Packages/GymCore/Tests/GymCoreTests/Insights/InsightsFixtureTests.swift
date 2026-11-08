@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import GymCore
 
-/// Runs `fixtures/insights.json`, the cases the MCP server's TypeScript port (`_shared/insights.test.ts`) runs
+/// Runs `fixtures/insights.json`, the cases the MCP server's TypeScript port (`server/test/shared/insights.test.ts`) runs
 /// too, so both sides compute the same numbers.
 struct InsightsFixtureTests {
     struct Doc: Decodable {

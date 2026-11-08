@@ -72,10 +72,8 @@ targets:
           GymRollins uses your location to find gyms near you on Apple Maps. GymRollins doesn't store it.
         NSLocalNetworkUsageDescription: >-
           GymRollins syncs with a development server on your local network.
-        # The GymRollins API (Config/Base.xcconfig): sign-in and sync.
+        # The GymRollins API (Config/Base.xcconfig): sign-in, sync, photos and Claude's connector address.
         API_URL: $(API_URL)
-        SUPABASE_URL: $(SUPABASE_URL)
-        SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
         # bundle | storage (Config/Base.xcconfig): where GymRollins' own exercise photos come from.
         PHOTO_HOSTING: $(PHOTO_HOSTING)
         # The domain workout links use (Config/Base.xcconfig). Empty: they use the gymrollins scheme below.
@@ -83,7 +81,7 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.rollins.gymrollins.workout-link
             CFBundleURLSchemes: [gymrollins]
-        # Plain http to the local Supabase stack (127.0.0.1) only; ATS stays on for every other host.
+        # Plain http to local addresses only (the local Worker on 127.0.0.1); ATS stays on for every other host.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:

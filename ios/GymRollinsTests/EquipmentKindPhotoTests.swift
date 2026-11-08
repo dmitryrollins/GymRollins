@@ -7,7 +7,7 @@ import Testing
 /// Stock photos of equipment kinds: the manifest's `kinds`, the Storage URL, the hosted-then-bundled lookup, and
 /// the bundled files themselves.
 @Suite struct EquipmentKindPhotoTests {
-    private let supabase = URL(string: "https://abc.supabase.co")!
+    private let api = URL(string: "https://gymrollins.example.workers.dev")!
     private let bundledDumbbells = URL(fileURLWithPath: "/App.app/OwnPhotos/kind-dumbbells.jpg")
 
     private func manifest(_ json: String) throws -> StoragePhotoManifest {
@@ -16,7 +16,7 @@ import Testing
 
     private func photos(kinds: [String: String]? = nil, bundled: Bool = true) -> EquipmentKindPhotos {
         let storage = kinds.map {
-            HostedPhotoProvider(apiURL: supabase, manifest: StoragePhotoManifest(photos: [:], kinds: $0))
+            HostedPhotoProvider(apiURL: api, manifest: StoragePhotoManifest(photos: [:], kinds: $0))
         }
         let url = bundledDumbbells
         return EquipmentKindPhotos(storage: storage) { id in bundled && id == "dumbbells" ? url : nil }
@@ -51,12 +51,12 @@ import Testing
 
     @Test func storageAnswersTheHostedKindPhotoWithItsRev() throws {
         let storage = HostedPhotoProvider(
-            apiURL: supabase, manifest: StoragePhotoManifest(photos: [:], kinds: ["dumbbells": "ab12"]))
+            apiURL: api, manifest: StoragePhotoManifest(photos: [:], kinds: ["dumbbells": "ab12"]))
         let url = try #require(storage.kindPhotoURL(kindId: "dumbbells"))
-        #expect(url.absoluteString == "https://abc.supabase.co/photos/exercises/kind-dumbbells.jpg?v=ab12")
+        #expect(url.absoluteString == "https://gymrollins.example.workers.dev/photos/exercises/kind-dumbbells.jpg?v=ab12")
         #expect(storage.kindPhotoURL(kindId: "kettlebells") == nil, "the manifest doesn't list it")
         #expect(storage.kindPhotoURL(kindId: "../dumbbells") == nil)
-        #expect(HostedPhotoProvider(apiURL: supabase).kindPhotoURL(kindId: "dumbbells") == nil,
+        #expect(HostedPhotoProvider(apiURL: api).kindPhotoURL(kindId: "dumbbells") == nil,
                 "no manifest yet")
     }
 
@@ -65,7 +65,7 @@ import Testing
     @Test func hostedComesBeforeBundled() throws {
         let candidates = photos(kinds: ["dumbbells": "ab12"]).candidates(kindId: "dumbbells")
         #expect(candidates.count == 2)
-        #expect(candidates.first?.host() == "abc.supabase.co")
+        #expect(candidates.first?.host() == "gymrollins.example.workers.dev")
         #expect(candidates.first?.query() == "v=ab12")
         #expect(candidates.last == bundledDumbbells)
     }
@@ -79,7 +79,7 @@ import Testing
     @Test func hostedOnlyWhenNotBundled() {
         let candidates = photos(kinds: ["dumbbells": "ab12"], bundled: false).candidates(kindId: "dumbbells")
         #expect(candidates.count == 1)
-        #expect(candidates.first?.host() == "abc.supabase.co")
+        #expect(candidates.first?.host() == "gymrollins.example.workers.dev")
     }
 
     @Test func noPhotoAtAll() {
