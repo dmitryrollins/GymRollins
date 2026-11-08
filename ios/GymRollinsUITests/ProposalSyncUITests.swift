@@ -1,50 +1,61 @@
 import XCTest
 
-/// End-to-end proposal flow against the LOCAL Supabase stack (skipped unless SUPABASE_URL is set; plan 29 moves it):
-/// the owner signs up in the app (the seeded plan syncs up), a proposal is inserted as that user over PostgREST
-/// (as the MCP tool would), the app pulls it and shows the chip, the owner applies it, and the server's row ends up
-/// `applied`.
+/// Claude end to end against a throwaway LOCAL Worker (run via `scripts/ios-test-sync.sh`, which passes its URL as
+/// `TEST_RUNNER_API_URL`; Xcode hands it to the runner as `API_URL`). Skipped otherwise. Claude is played by
+/// `ClaudeTestClient` (a real OAuth client and MCP caller); the owner signs up in the app, approves Claude's code in
+/// Settings › Claude › Approve a connection, and reviews what Claude proposes.
 @MainActor
 final class ProposalSyncUITests: XCTestCase {
     static let password = "Passw0rd!"
-    private var url = ""
-    private var anonKey = ""
+    private var apiURL: URL!
 
     override func setUpWithError() throws {
         continueAfterFailure = false
         let env = ProcessInfo.processInfo.environment
-        guard let url = env["SUPABASE_URL"], let key = env["SUPABASE_ANON_KEY"], !url.isEmpty, !key.isEmpty else {
-            throw XCTSkip("Proposals stay on Supabase until plan 29")
+        guard let url = env["API_URL"].flatMap(URL.init(string:)) else {
+            throw XCTSkip("No local Worker; run scripts/ios-test-sync.sh")
         }
-        self.url = url
-        anonKey = key
+        apiURL = url
     }
 
-    func testProposalFromServerIsAppliedAndResolved() async throws {
+    /// Claude asks to connect, the owner approves its code in the sheet, Claude proposes a heavier bench, the app pulls
+    /// it and the owner applies it; Claude then sees it applied, and the plan on the server has the new weight.
+    func testClaudeConnectsThroughTheSheetAndItsProposalIsApplied() async throws {
         let email = "ui-\(UUID().uuidString.lowercased())@test.local"
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting", "-uiTestingBackend", "local", "-diskStore", "-resetStore",
-                               "-fixedNow", "2026-09-26T09:00:00Z"]
-        app.launchEnvironment = ["SUPABASE_URL": url, "SUPABASE_ANON_KEY": anonKey]
-        app.launch()
-
-        // 1. Sign up; the seeded plan is pushed.
-        openAccount(app)
+        let app = launch()
+        openSettings(app)
         signUp(app, email: email)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
 
-        // 2. "Claude" proposes a heavier bench (inserted as the user, like the MCP tool does).
-        let token = try await accessToken(email: email)
-        let routines = try await rest("GET", "routines?select=id,name", token: token) as? [[String: Any]] ?? []
+        // 1. Claude's sign-in page shows a code; the owner types it loosely and approves it.
+        let claude = ClaudeTestClient(base: apiURL)
+        let signIn = try await claude.startSignIn(clientId: try await claude.register())
+        openApproveConnection(app)
+        type(signIn.code.lowercased().replacingOccurrences(of: "-", with: ""), into: app.textFields["connect.code"])
+        XCTAssertEqual(app.textFields["connect.code"].value as? String, signIn.code)
+        waitForLabel(app.staticTexts["connect.client"], "Claude Code", timeout: 10)
+        XCTAssertEqual(app.staticTexts["connect.host"].label, "127.0.0.1:53682")
+        XCTAssertTrue(app.staticTexts["connect.warning"].exists, "a loopback callback isn't Claude's own host")
+        app.buttons["connect.approve"].tap()
+        waitForLabel(app.staticTexts["connect.result"], "Approved. Your browser returns to Claude in a moment.")
+        let tokens = try await claude.exchange(signIn, code: try await claude.finish(signIn))
+        app.buttons["connect.done"].tap()
+
+        // 2. Claude proposes a heavier bench on the synced Push + Arms.
+        let session = try await appSession(email: email)
+        let routines = try await get("/v1/sync/routines?limit=500", token: session)["rows"] as? [[String: Any]] ?? []
         let push = try XCTUnwrap(routines.first { $0["name"] as? String == "Push + Arms" }?["id"] as? String)
-        let body: [String: Any] = ["summary": "Heavier bench", "changes": [[
-            "id": "c1", "type": "weight", "routineId": push, "exerciseId": "0025", "weightKg": 65.77, "reason": "Top of range",
-        ]]]
-        let inserted = try await rest("POST", "proposals?select=id", token: token, body: body) as? [[String: Any]]
-        let proposalId = try XCTUnwrap(inserted?.first?["id"] as? String)
+        let proposed = try await claude.callTool(tokens.access, "propose_plan_changes", [
+            "summary": "Heavier bench",
+            "changes": [["id": "c1", "type": "weight", "routineId": push, "exerciseId": "0025", "weightKg": 65.77,
+                         "reason": "Top of range"]],
+        ])
+        XCTAssertFalse(proposed.isError, "\(proposed.json)")
+        let proposalId = try XCTUnwrap(proposed.json["proposal_id"] as? String)
 
         // 3. The app pulls it: chip on Today → review → apply.
-        app.buttons["account.syncNow"].tap()
+        app.navigationBars.buttons.firstMatch.tap() // back to Settings
+        syncNow(app)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
         app.tabBars.buttons["Today"].tap()
         let chip = app.buttons["today.proposal"]
@@ -57,54 +68,108 @@ final class ProposalSyncUITests: XCTestCase {
         let heavier = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS '145 lb'"), object: bench)
         XCTAssertEqual(XCTWaiter().wait(for: [heavier], timeout: 5), .completed)
 
-        // 4. The resolution syncs (debounced local change, or "Sync now"); Log's stack is still on Settings.
+        // 4. The resolution syncs; Claude sees it applied, and the server's plan has the new weight.
         app.tabBars.buttons["Log"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
-        app.buttons["account.syncNow"].tap()
+        syncNow(app)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
-        // "Up to date" is shown only after a round that pushed the local resolution (Apply left changes pending),
-        // so the server already holds it: no polling needed.
-        let rows = try await rest("GET", "proposals?select=status,applied_change_ids&id=eq.\(proposalId)",
-                                  token: token) as? [[String: Any]]
-        XCTAssertEqual(rows?.first?["status"] as? String, "applied")
-        let plan = try await rest("GET", "routines?select=exercises&id=eq.\(push)", token: token) as? [[String: Any]]
-        let exercises = plan?.first?["exercises"] as? [[String: Any]] ?? []
+        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposalId])
+        XCTAssertEqual(seen.json["status"] as? String, "applied")
+        let plan = try await get("/v1/sync/routines?limit=500", token: session)["rows"] as? [[String: Any]] ?? []
+        let exercises = plan.first { $0["id"] as? String == push }?["exercises"] as? [[String: Any]] ?? []
         let serverBench = exercises.first { $0["exercise_id"] as? String == "0025" }
         XCTAssertEqual((serverBench?["weight_kg"] as? Double) ?? 0, 65.77, accuracy: 0.01)
-        XCTAssertNotNil(serverBench?["weight_set_at"] as? String)
     }
 
-    // MARK: Helpers (local stack only)
-
-    private func accessToken(email: String) async throws -> String {
-        let json = try await request("POST", "\(url)/auth/v1/token?grant_type=password", token: nil,
-                                     body: ["email": email, "password": Self.password]) as? [String: Any]
-        return try XCTUnwrap(json?["access_token"] as? String)
+    /// Deny: the sheet says so, and Claude's callback gets `access_denied`.
+    func testADeniedCodeSendsClaudeAway() async throws {
+        let app = launch()
+        openSettings(app)
+        signUp(app, email: "ui-\(UUID().uuidString.lowercased())@test.local")
+        let claude = ClaudeTestClient(base: apiURL)
+        let signIn = try await claude.startSignIn(clientId: try await claude.register())
+        openApproveConnection(app)
+        type(signIn.code, into: app.textFields["connect.code"])
+        XCTAssertTrue(app.buttons["connect.deny"].waitForExistence(timeout: 10))
+        app.buttons["connect.deny"].tap()
+        waitForLabel(app.staticTexts["connect.result"], "Denied. Claude wasn't given access.")
+        let callback = try await claude.denial(signIn)
+        XCTAssertEqual(callback.queryItems?.first { $0.name == "error" }?.value, "access_denied")
     }
 
-    private func rest(_ method: String, _ path: String, token: String, body: Any? = nil) async throws -> Any? {
-        try await request(method, "\(url)/rest/v1/\(path)", token: token, body: body)
+    /// A code nobody is waiting with says why, and offers no Approve.
+    func testAWrongCodeSaysSo() {
+        let app = launch()
+        openSettings(app)
+        signUp(app, email: "ui-\(UUID().uuidString.lowercased())@test.local")
+        openApproveConnection(app)
+        type("ZZZZZZZZ", into: app.textFields["connect.code"])
+        let error = app.staticTexts["connect.error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 10))
+        XCTAssertTrue(error.label.hasPrefix("No sign-in is waiting with this code."))
+        XCTAssertFalse(app.buttons["connect.approve"].exists)
     }
 
-    private func request(_ method: String, _ address: String, token: String?, body: Any?) async throws -> Any? {
-        var req = URLRequest(url: try XCTUnwrap(URL(string: address)))
+    // MARK: Helpers (local Worker only)
+
+    private func launch() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-uiTestingBackend", "local", "-diskStore", "-resetStore",
+                               "-fixedNow", "2026-09-26T09:00:00Z"]
+        app.launchEnvironment = ["API_URL": apiURL.absoluteString]
+        app.launch()
+        return app
+    }
+
+    /// The account's app session, as the app gets it: the bearer for `/v1` checks.
+    private func appSession(email: String) async throws -> String {
+        let json = try await request("POST", "/api/auth/sign-in/email", token: nil,
+                                     body: ["email": email, "password": Self.password])
+        return try XCTUnwrap(json["token"] as? String)
+    }
+
+    private func get(_ path: String, token: String) async throws -> [String: Any] {
+        try await request("GET", path, token: token, body: nil)
+    }
+
+    private func request(_ method: String, _ path: String, token: String?, body: Any?) async throws -> [String: Any] {
+        var req = URLRequest(url: try XCTUnwrap(URL(string: path, relativeTo: apiURL)?.absoluteURL))
         req.httpMethod = method
-        req.setValue(anonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(token ?? anonKey)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("return=representation", forHTTPHeaderField: "Prefer")
-        if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
+        if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let body {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
         let (data, response) = try await URLSession.shared.data(for: req)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        XCTAssertTrue((200..<300).contains(code), "\(method) \(address): \(code) \(String(decoding: data, as: UTF8.self))")
-        return data.isEmpty ? nil : try JSONSerialization.jsonObject(with: data)
+        XCTAssertTrue((200..<300).contains(code), "\(method) \(path): \(code) \(String(decoding: data, as: UTF8.self))")
+        return (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
     }
 
-    private func openAccount(_ app: XCUIApplication) {
+    private func openSettings(_ app: XCUIApplication) {
         app.tabBars.buttons["Log"].tap()
         XCTAssertTrue(app.buttons["log.settings"].waitForExistence(timeout: 5))
         app.buttons["log.settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+    }
+
+    /// Settings keeps its scroll position after the Claude row was reached; the account's Sync now is at the top.
+    private func syncNow(_ app: XCUIApplication) {
+        let button = app.buttons["account.syncNow"]
+        for _ in 0..<8 where !(button.exists && button.isHittable) { app.swipeDown() }
+        button.tap()
+    }
+
+    private func openApproveConnection(_ app: XCUIApplication) {
+        // The Claude row sits below the fold of Settings' Form (rows load lazily): scroll until it is there.
+        let claude = app.descendants(matching: .any)["settings.claude"]
+        for _ in 0..<8 where !(claude.exists && claude.isHittable) { app.swipeUp() }
+        XCTAssertTrue(claude.waitForExistence(timeout: 5))
+        claude.tap()
+        let approve = app.buttons["claude.approveConnection"]
+        XCTAssertTrue(approve.waitForExistence(timeout: 5))
+        approve.tap()
+        XCTAssertTrue(app.textFields["connect.code"].waitForExistence(timeout: 5))
     }
 
     private func signUp(_ app: XCUIApplication, email: String) {

@@ -157,7 +157,8 @@ targets:
   GymRollinsUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [GymRollinsUITests]
+    # ClaudeTestClient.swift plays Claude (OAuth and MCP), shared with GymSyncIntegrationTests.
+    sources: [GymRollinsUITests, Packages/GymSync/Tests/GymSyncIntegrationTests/ClaudeTestClient.swift]
     dependencies: [{ target: GymRollins }]
     settings: { base: { GENERATE_INFOPLIST_FILE: YES } }
 schemes:
