@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { entryListings, workoutGym } from '../src/sync/gym-links.ts'
-import { block, genericItem, insertGym, insertListing, makeAdmin, setStatus } from './gym-fixtures.ts'
+import { block, genericItem, insertGym, insertItem, insertListing, makeAdmin, setStatus } from './gym-fixtures.ts'
 import { signUp } from './helpers.ts'
 
 const db = env.DB
@@ -61,6 +61,16 @@ describe("a workout's gym", () => {
     const hidden = await insertGym({ visibility: 'private', owner: other.userId })
     expect(await workoutGym(db, me.userId, old, hidden)).toBeNull()
   })
+
+  it("drops a stored link to another account's private gym, and to a flagged gym with no creator", async () => {
+    const me = await signUp()
+    const other = await signUp()
+    const theirs = await insertGym({ visibility: 'private', owner: other.userId })
+    expect(await workoutGym(db, me.userId, theirs, null)).toBeNull()
+    const flagged = await insertGym({ visibility: 'public', status: 'flagged' })
+    expect(await workoutGym(db, me.userId, flagged, null)).toBe(flagged)
+    expect(await workoutGym(db, me.userId, null, flagged)).toBeNull()
+  })
 })
 
 describe("an entry's listing", () => {
@@ -112,5 +122,126 @@ describe("an entry's listing", () => {
     await setStatus('gym_equipment', listing, 'removed')
     const links = await entryListings(db, userId, [entry('a', null)], new Map([['a', listing]]))
     expect(links.get('a')).toBeNull()
+  })
+
+  it('shows an admin any public listing: flagged, or under a removed gym or item', async () => {
+    const admin = await signUp()
+    await makeAdmin(admin.userId)
+    const item = await genericItem()
+    const flagged = await insertListing({
+      gym: await insertGym({ visibility: 'public' }), item, visibility: 'public', status: 'flagged',
+    })
+    const removedGym = await insertGym({ visibility: 'public' })
+    const underRemovedGym = await insertListing({ gym: removedGym, item, visibility: 'public' })
+    await setStatus('gyms', removedGym, 'removed')
+    const removedItem = await insertItem({ brand: 'Acme', model: 'X1', createdBy: admin.userId })
+    const underRemovedItem = await insertListing({
+      gym: await insertGym({ visibility: 'public' }), item: removedItem, visibility: 'public',
+    })
+    await setStatus('equipment_items', removedItem, 'removed')
+    const links = await entryListings(
+      db,
+      admin.userId,
+      [entry('a', flagged), entry('b', underRemovedGym), entry('c', underRemovedItem)],
+      new Map(),
+    )
+    expect(Object.fromEntries(links)).toEqual({ a: flagged, b: underRemovedGym, c: underRemovedItem })
+  })
+
+  it('shows a flagged listing to whoever added it, and hides a listing under a flagged or removed item from others', async () => {
+    const me = await signUp()
+    const gym = await insertGym({ visibility: 'public' })
+    const mine = await insertListing({
+      gym, item: await genericItem(), visibility: 'public', addedBy: me.userId, status: 'flagged',
+    })
+    const flaggedItem = await insertItem({ brand: 'Acme', model: 'F1', createdBy: me.userId })
+    await setStatus('equipment_items', flaggedItem, 'flagged')
+    const underFlaggedItem = await insertListing({ gym, item: flaggedItem, visibility: 'public' })
+    const removedItem = await insertItem({ brand: 'Acme', model: 'R1', createdBy: me.userId })
+    await setStatus('equipment_items', removedItem, 'removed')
+    const underRemovedItem = await insertListing({ gym, item: removedItem, visibility: 'public' })
+    const links = await entryListings(
+      db,
+      me.userId,
+      [entry('a', mine), entry('b', underFlaggedItem), entry('c', underRemovedItem)],
+      new Map(),
+    )
+    expect(Object.fromEntries(links)).toEqual({ a: mine, b: null, c: null })
+  })
+
+  it("drops a previous link to a blocked author's listing", async () => {
+    const me = await signUp()
+    const other = await signUp()
+    const listing = await insertListing({
+      gym: await insertGym({ visibility: 'public' }), item: await genericItem(), visibility: 'public',
+      addedBy: other.userId,
+    })
+    await block(me.userId, other.userId)
+    const links = await entryListings(db, me.userId, [entry('a', null)], new Map([['a', listing]]))
+    expect(links.get('a')).toBeNull()
+  })
+
+  it("drops a previous link once its gym or item is removed, or when it's another account's private listing", async () => {
+    const me = await signUp()
+    const other = await signUp()
+    const item = await genericItem()
+    const gym = await insertGym({ visibility: 'public' })
+    const underGym = await insertListing({ gym, item, visibility: 'public' })
+    await setStatus('gyms', gym, 'removed')
+    const removedItem = await insertItem({ brand: 'Acme', model: 'R2', createdBy: me.userId })
+    const underItem = await insertListing({ gym: await insertGym({ visibility: 'public' }), item: removedItem, visibility: 'public' })
+    await setStatus('equipment_items', removedItem, 'removed')
+    const theirGym = await insertGym({ visibility: 'private', owner: other.userId })
+    const theirs = await insertListing({ gym: theirGym, item, visibility: 'private', owner: other.userId })
+    const links = await entryListings(
+      db,
+      me.userId,
+      [entry('a', null), entry('b', null), entry('c', null)],
+      new Map([['a', underGym], ['b', underItem], ['c', theirs]]),
+    )
+    expect(Object.fromEntries(links)).toEqual({ a: null, b: null, c: null })
+  })
+
+  it("hides another account's private gym and listing even from an admin", async () => {
+    const admin = await signUp()
+    await makeAdmin(admin.userId)
+    const other = await signUp()
+    const theirGym = await insertGym({ visibility: 'private', owner: other.userId })
+    const theirs = await insertListing({
+      gym: theirGym, item: await genericItem(), visibility: 'private', owner: other.userId,
+    })
+    expect(await workoutGym(db, admin.userId, null, theirGym)).toBeNull()
+    const links = await entryListings(db, admin.userId, [entry('a', theirs)], new Map())
+    expect(links.get('a')).toBeNull()
+  })
+
+  it('hides a listing only from whoever blocked its author', async () => {
+    const me = await signUp()
+    const other = await signUp()
+    const third = await signUp()
+    const listing = await insertListing({
+      gym: await insertGym({ visibility: 'public' }), item: await genericItem(), visibility: 'public',
+      addedBy: other.userId,
+    })
+    await block(third.userId, other.userId)
+    const mine = await entryListings(db, me.userId, [entry('a', listing)], new Map())
+    expect(mine.get('a')).toBe(listing)
+    const theirs = await entryListings(db, third.userId, [entry('a', listing)], new Map())
+    expect(theirs.get('a')).toBeNull()
+  })
+
+  it('takes a different new listing over the previous one, and reads one listing shared by two entries once', async () => {
+    const { userId } = await signUp()
+    const gym = await insertGym({ visibility: 'public' })
+    const item = await genericItem()
+    const x = await insertListing({ gym, item, visibility: 'public' })
+    const y = await insertListing({ gym, item, visibility: 'public' })
+    const links = await entryListings(
+      db,
+      userId,
+      [entry('a', y), entry('b', y), entry('c', y)],
+      new Map([['a', x]]),
+    )
+    expect(Object.fromEntries(links)).toEqual({ a: y, b: y, c: y })
   })
 })
