@@ -17,13 +17,26 @@ KEYCHAIN_FILE='ios/Packages/GymSync/Sources/GymSync/OldServerKeychain.swift'
 KEYCHAIN_LINE='    public static let service = "supa[b]ase\.gotrue\.swift"'
 failed=0
 
-if [[ -n "$(git ls-files -- 'supa[b]ase')" ]]; then
+# `git grep`, where no match (exit 1) is an empty answer and a scan that failed (exit 2 or more) stops the guard, so
+# a broken repository never reads as a clean one.
+scan() {
+  local out rc=0
+  out="$(git grep "$@")" || rc=$?
+  if (( rc > 1 )); then
+    echo "FAIL: git grep could not scan the repository (exit $rc)." >&2
+    exit 2
+  fi
+  printf '%s' "$out"
+}
+
+tracked="$(git ls-files -- 'supa[b]ase')"
+if [[ -n "$tracked" ]]; then
   echo "FAIL: the old backend's folder still has tracked files." >&2
   failed=1
 fi
 
-hits="$(git grep -n -I -i -E "$NAMES" -- . ':!docs/plans/' ':!docs/specs/' ':!docs/research/' \
-  | grep -v -E "^${KEYCHAIN_FILE}:[0-9]+:${KEYCHAIN_LINE}\$" || true)"
+named="$(scan -n -I -i -E "$NAMES" -- . ':!docs/plans/' ':!docs/specs/' ':!docs/research/')"
+hits="$(printf '%s\n' "$named" | grep -v -E "^${KEYCHAIN_FILE}:[0-9]+:${KEYCHAIN_LINE}\$" || true)"
 if [[ -n "$hits" ]]; then
   echo "$hits" >&2
   echo "FAIL: the lines above name the old backend. The app, the tests and the docs name API_URL and the Worker only." >&2
@@ -35,7 +48,7 @@ if [[ -f "$KEYCHAIN_FILE" ]] && [[ "$(grep -c -i -E "$NAMES" "$KEYCHAIN_FILE")" 
   failed=1
 fi
 
-docker_hits="$(git grep -n -I -E '(^|[^A-Za-z])(dock[e]r|colim[a]) [a-z]' -- scripts || true)"
+docker_hits="$(scan -n -I -E '(^|[^A-Za-z])(dock[e]r(-compos[e])?|colim[a])( [a-z]|[[:space:]]*\\?$)' -- scripts)"
 if [[ -n "$docker_hits" ]]; then
   echo "$docker_hits" >&2
   echo "FAIL: a script above runs Docker; local development needs none." >&2
