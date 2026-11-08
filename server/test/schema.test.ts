@@ -32,6 +32,47 @@ describe('the D1 schema', () => {
     await expect(insert.bind(userId, T, T).run()).resolves.toBeTruthy()
   })
 
+  it.each([
+    '2026-11-07T10:00:00.000000',
+    '2026-11-07T10:00:00.00000Z',
+    '2026-11-07 10:00:00.000000Z',
+  ])('refuses the malformed timestamp %s', async (bad) => {
+    const { userId } = await signUp()
+    const insert = env.DB.prepare('INSERT INTO profiles (user_id, client_updated_at, updated_at) VALUES (?1, ?2, ?3)')
+    await expect(insert.bind(userId, bad, T).run()).rejects.toThrow(/CHECK constraint failed/)
+  })
+
+  it("keeps every GLOB and LIKE pattern within D1's 50-byte limit", () => {
+    const tooLong: string[] = []
+    for (const migration of env.TEST_MIGRATIONS) {
+      for (const query of migration.queries) {
+        for (const match of query.matchAll(/\b(?:GLOB|LIKE)\s+'((?:[^']|'')*)'/gi)) {
+          const bytes = new TextEncoder().encode(match[1]!).length
+          if (bytes > 50) tooLong.push(`${migration.name}: ${bytes} bytes: ${match[1]}`)
+        }
+      }
+    }
+    expect(tooLong).toEqual([])
+  })
+
+  it('checks a listing photo name', async () => {
+    const gymId = crypto.randomUUID()
+    await env.DB.prepare(`INSERT INTO gyms (id, visibility, name, maps_place_id, status, client_updated_at, created_at, updated_at)
+      VALUES (?1, 'public', 'Test gym', ?2, 'active', ?3, ?3, ?3)`).bind(gymId, `place-${gymId}`, T).run()
+    const item = await env.DB.prepare("SELECT id FROM equipment_items WHERE kind_id = 'dumbbells' AND brand IS NULL")
+      .first<{ id: string }>()
+    const insert = (photo: string) => env.DB.prepare(`INSERT INTO gym_equipment
+      (id, gym_id, item_id, visibility, photo_path, client_updated_at, created_at, updated_at)
+      VALUES (?1, ?2, ?3, 'public', ?4, ?5, ?5, ?5)`).bind(crypto.randomUUID(), gymId, item!.id, photo, T).run()
+    const uuid = crypto.randomUUID()
+    await expect(insert(`${uuid}.jpg`)).resolves.toBeTruthy()
+    const moved = `${uuid.slice(0, 8)}${uuid[9]}-${uuid.slice(10)}.jpg`
+    const rejected = [`${uuid.toUpperCase()}.jpg`, `${uuid.slice(1)}.jpg`, `${uuid}.png`, moved, uuid]
+    for (const photo of rejected) {
+      await expect(insert(photo), photo).rejects.toThrow(/CHECK constraint failed/)
+    }
+  })
+
   it("removes an account's rows with the account", async () => {
     const { userId } = await signUp()
     await env.DB.prepare('INSERT INTO profiles (user_id, client_updated_at, updated_at) VALUES (?1, ?2, ?2)')
