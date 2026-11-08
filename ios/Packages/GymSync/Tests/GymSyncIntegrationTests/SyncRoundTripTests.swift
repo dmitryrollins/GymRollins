@@ -4,9 +4,9 @@ import GymData
 import Testing
 @testable import GymSync
 
-/// Full `SyncEngine` rounds: real in-memory SwiftData stores, `SupabaseTransport`, local Supabase.
+/// Full `SyncEngine` rounds: real in-memory SwiftData stores, `ApiSyncTransport`, the local Worker.
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
+@Suite(.enabled(if: apiConfigured, "Set API_URL to run against a local Worker (scripts/test-sync-integration.sh)"))
 struct SyncRoundTripTests {
     /// Everything pushed from one device arrives unchanged on a second, fresh device of the same user.
     @Test func secondDevicePullsEverythingTheFirstPushed() async throws {
@@ -130,7 +130,7 @@ struct SyncRoundTripTests {
         try await user.deleteAccount()
     }
 
-    /// RLS: a second user syncs nothing of the first user's data and can't overwrite it.
+    /// Isolation: a second user syncs nothing of the first user's data and can't overwrite it.
     @Test func anotherUserSeesAndOverwritesNothing() async throws {
         let owner = try await Account.signUp()
         let phone = try Device(owner, clock: DeviceClock("2026-09-27T07:00:00Z"))
@@ -162,7 +162,7 @@ struct SyncRoundTripTests {
         #expect(try await t.pullWorkouts(since: nil).isEmpty)
         #expect(try await t.fetchWorkout(id: workout.id) == nil)
 
-        // Writing onto the owner's ids is rejected (RLS / RPC ownership check) and changes nothing.
+        // Writing onto the owner's ids is refused (403 not_allowed) and changes nothing.
         let hijack = Routine(id: routine.id, name: "Hijacked")
         let hijackAcks = try? await t.push(routines: [RoutineDTO(SyncRow(value: RoutineSnapshot(routine: hijack,
                                                                                                 position: 0),

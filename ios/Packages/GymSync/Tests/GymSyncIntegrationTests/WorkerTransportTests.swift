@@ -4,14 +4,14 @@ import GymData
 import Testing
 @testable import GymSync
 
-/// `SupabaseTransport` against the local stack: the PostgREST/RPC behaviors the sync engine relies on.
+/// `ApiSyncTransport` against the local Worker: the /v1/sync behaviours the sync engine relies on.
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
-struct SupabaseTransportTests {
+@Suite(.enabled(if: apiConfigured, "Set API_URL to run against a local Worker (scripts/test-sync-integration.sh)"))
+struct WorkerTransportTests {
     private let t0 = SyncDate.parse("2026-09-27T08:00:00.123456Z")!
 
-    /// Profile and week schedule upsert with `on_conflict` columns absent from the body (`user_id` comes from the
-    /// column default `auth.uid()`), and a push older than the stored edit is skipped with no ack.
+    /// Profile and week schedule are keyed by the session's account (the body has no user_id), and a push older than
+    /// the stored edit is skipped with no ack.
     @Test func profileAndWeekdayUpsertsUseTheCallerAsKeyAndSkipOlderEdits() async throws {
         let user = try await Account.signUp()
         let transport = user.transport
@@ -30,7 +30,7 @@ struct SupabaseTransportTests {
 
         let pulled = try #require(try await transport.pullProfile(since: nil).first)
         #expect(pulled.restSec == 90)
-        #expect(pulled.platesKg == [20.411656, 0.1 + 0.2, 1.133981])  // numeric[] -> JSON numbers, exact
+        #expect(pulled.platesKg == [20.411656, 0.1 + 0.2, 1.133981])  // JSON numbers, exact
         #expect(pulled.heightCm == 180.3)
         #expect(pulled.clientUpdatedAt == t0 + 60)
 
@@ -66,7 +66,7 @@ struct SupabaseTransportTests {
         try await user.deleteAccount()
     }
 
-    /// Upserts ack only the rows the LWW trigger let through; acked `updated_at` equals the pulled one exactly.
+    /// Upserts ack only the rows last-write-wins let through; acked `updated_at` equals the pulled one exactly.
     @Test func batchUpsertAcksOnlyWrittenRowsAndTimestampsRoundTrip() async throws {
         let user = try await Account.signUp()
         let transport = user.transport
@@ -106,8 +106,8 @@ struct SupabaseTransportTests {
         try await user.deleteAccount()
     }
 
-    /// `upsert_workout` stores the aggregate, answers `stale` for an older edit, and its `updated_at` matches the pull.
-    @Test func workoutRPCStoresAggregateAndReportsStale() async throws {
+    /// A workout push stores the aggregate, answers `stale` for an older edit, and its `updated_at` matches the pull.
+    @Test func workoutPushStoresAggregateAndReportsStale() async throws {
         let user = try await Account.signUp()
         let transport = user.transport
         let workout = finishedWorkout(name: "Push", at: t0)

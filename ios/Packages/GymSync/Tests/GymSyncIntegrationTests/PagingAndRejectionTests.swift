@@ -5,9 +5,9 @@ import SwiftData
 import Testing
 @testable import GymSync
 
-/// Keyset-paged pulls and row rejections against the local stack.
+/// Keyset-paged pulls and row rejections against the local Worker.
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
+@Suite(.enabled(if: apiConfigured, "Set API_URL to run against a local Worker (scripts/test-sync-integration.sh)"))
 struct PagingAndRejectionTests {
     private let t0 = SyncDate.parse("2026-09-27T08:00:00.123456Z")!
 
@@ -15,9 +15,10 @@ struct PagingAndRejectionTests {
     /// and the cursor semantics (`updated_at > since`) still hold.
     @Test func pullPagesByUpdatedAtAndIdAcrossSharedTimestamps() async throws {
         let user = try await Account.signUp()
-        let small = SupabaseTransport(client: user.auth.client, pageSize: 3)
+        let small = ApiSyncTransport(api: user.auth.api, pageSize: 3, workoutPageSize: 3)
         let entries = (0..<7).map { BodyweightEntry(date: t0 + Double($0) * 86_400, weightKg: 80 + Double($0) / 10) }
         _ = try await small.push(bodyweight: entries.map { BodyweightDTO(SyncRow(value: $0, clientUpdatedAt: t0)) })
+        try await Task.sleep(for: .milliseconds(5)) // the server's clock moves in milliseconds
         let later = BodyweightEntry(date: t0 + 30 * 86_400, weightKg: 85)
         _ = try await small.push(bodyweight: [BodyweightDTO(SyncRow(value: later, clientUpdatedAt: t0))])
 
@@ -30,7 +31,7 @@ struct PagingAndRejectionTests {
         let sinceShared = try await small.pullBodyweight(since: sharedStamp)
         #expect(sinceShared.map(\.id) == [later.id])
 
-        // Workouts (nested select, rpc-written) page the same way.
+        // Workouts (entries and sets nested) page the same way.
         for i in 0..<4 {
             let w = finishedWorkout(name: "W\(i)", at: t0 + Double(i) * 3_600)
             let row = SyncRow(value: WorkoutSnapshot(workout: w, records: [], volumeKg: 1_000), clientUpdatedAt: t0)
@@ -56,8 +57,8 @@ struct PagingAndRejectionTests {
             _ = try await transport.push(bodyweight: [BodyweightDTO(SyncRow(value: bad, clientUpdatedAt: t0))])
             Issue.record("Expected a rejection")
         } catch let rejected as SyncRecordRejected {
-            #expect(rejected.code == "23514")
-            #expect(rejected.message.contains("check constraint"))
+            #expect(rejected.code == "row_rejected")
+            #expect(rejected.message.contains("CHECK constraint failed"))
         }
         try await user.deleteAccount()
     }

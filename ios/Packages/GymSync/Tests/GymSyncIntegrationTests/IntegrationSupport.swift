@@ -1,23 +1,21 @@
 import Foundation
 import GymCore
 import GymData
-import Supabase
 import SwiftData
 import Testing
 @testable import GymSync
 
-/// Integration suites run only against the local stack (`scripts/test-sync-integration.sh` sets these).
-let supabaseConfigured = ProcessInfo.processInfo.environment["SUPABASE_URL"] != nil
-    && ProcessInfo.processInfo.environment["SUPABASE_ANON_KEY"] != nil
+/// Integration suites run only against a local Worker (`scripts/test-sync-integration.sh` sets API_URL).
+let apiConfigured = ProcessInfo.processInfo.environment["API_URL"] != nil
 
 enum IntegrationEnv {
     static let password = "sync-test-password-1"
 
-    static func config() throws -> SupabaseConfig { try SupabaseConfig(environment: ProcessInfo.processInfo.environment) }
+    static func config() throws -> ApiConfig { try ApiConfig(environment: ProcessInfo.processInfo.environment) }
 
     static func uniqueEmail() -> String { "sync-\(UUID().uuidString.lowercased())@test.local" }
 
-    /// Hands deleted user ids to the shell script, which checks with admin SQL that no rows survived.
+    /// Hands deleted user ids to the shell script, which checks in D1 that no rows survived.
     static func recordDeletedUser(_ id: UUID) {
         guard let path = ProcessInfo.processInfo.environment["SYNC_DELETED_USERS_FILE"],
               let line = (id.uuidString.lowercased() + "\n").data(using: .utf8),
@@ -28,12 +26,12 @@ enum IntegrationEnv {
     }
 }
 
-/// A signed-in user on one simulated device (its own client and session storage).
+/// A signed-in user on one simulated device (its own client and session store).
 @MainActor
 struct Account {
     let email: String
     let auth: AuthService
-    var transport: SupabaseTransport { SupabaseTransport(client: auth.client) }
+    var transport: ApiSyncTransport { ApiSyncTransport(api: auth.api) }
     var userId: UUID { auth.state.userId! }
 
     static func signUp() async throws -> Account {
@@ -49,17 +47,27 @@ struct Account {
         return other
     }
 
+    /// The Worker holds no photos before plan 28, so there are no photo steps.
     func deleteAccount() async throws {
         let id = userId
-        let catalog = SupabaseGymCatalogTransport(client: auth.client)
-        try await auth.deleteAccount(photos: AccountPhotoSteps(
-            detach: { try await catalog.detachAllPhotos() }, remove: { try await catalog.deleteAllPhotos() }))
+        try await auth.deleteAccount()
         IntegrationEnv.recordDeletedUser(id)
     }
 
     static func fresh(email: String) throws -> Account {
-        Account(email: email, auth: AuthService(client: try IntegrationEnv.config().makeClient(storage: InMemoryAuthStorage())))
+        let api = try IntegrationEnv.config().makeClient(sessions: InMemorySessionStore())
+        return Account(email: email, auth: AuthService(api: api))
     }
+}
+
+/// Polls until `condition` holds (two seconds at most).
+@MainActor
+func waitUntil(_ condition: () -> Bool) async throws {
+    for _ in 0..<200 {
+        if condition() { return }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    Issue.record("Timed out waiting for condition")
 }
 
 @MainActor
@@ -69,7 +77,7 @@ final class DeviceClock {
     func advance(_ seconds: TimeInterval) { now = now.addingTimeInterval(seconds) }
 }
 
-/// A fresh in-memory SwiftData store + SyncEngine talking to the real local Supabase as `account`.
+/// A fresh in-memory SwiftData store + SyncEngine talking to the local Worker as `account`.
 @MainActor
 struct Device {
     let container: ModelContainer

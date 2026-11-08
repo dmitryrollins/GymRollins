@@ -1,13 +1,13 @@
 import Foundation
-import Supabase
 import GymCore
 import GymData
 import Testing
 @testable import GymSync
 
-/// `AuthService` against local Supabase Auth (email/password is DEBUG-only; the app uses Sign in with Apple).
+/// `AuthService` against the local Worker's Better Auth (email/password is DEBUG-only and on only with
+/// ALLOW_PASSWORD_AUTH=1; the app uses Sign in with Apple).
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
+@Suite(.enabled(if: apiConfigured, "Set API_URL to run against a local Worker (scripts/test-sync-integration.sh)"))
 struct AuthIntegrationTests {
     @Test func signUpSignOutSignInAndRestore() async throws {
         let user = try await Account.signUp()
@@ -43,7 +43,23 @@ struct AuthIntegrationTests {
         try await user.deleteAccount()
     }
 
-    /// Deleting the account removes the user and every row they own (the script re-checks with admin SQL).
+    /// A session ended on the server (here, signed out by another client) signs the phone out at its next call.
+    @Test func aSessionEndedElsewhereSignsOutAtTheNextCall() async throws {
+        let user = try await Account.signUp()
+        let token = try #require(user.auth.api.sessions.load()?.token)
+        try await IntegrationEnv.config().makeClient(sessions: InMemorySessionStore()).signOut(token: token)
+
+        await #expect(throws: ApiError.self) { _ = try await user.transport.pullRoutines(since: nil) }
+        try await waitUntil { user.auth.state == .signedOut }
+        #expect(user.auth.api.sessions.load() == nil)
+        await user.auth.restore()
+        #expect(user.auth.state == .signedOut)
+
+        try await user.auth.signIn(email: user.email, password: IntegrationEnv.password)
+        try await user.deleteAccount()
+    }
+
+    /// Deleting the account removes the user and every row they own (the script re-checks D1).
     @Test func deleteAccountRemovesUserAndData() async throws {
         let user = try await Account.signUp()
         let phone = try Device(user, clock: DeviceClock("2026-09-27T07:00:00Z"))
@@ -59,13 +75,10 @@ struct AuthIntegrationTests {
 
         try await user.deleteAccount()
         #expect(user.auth.state == .signedOut)
-        #expect(user.auth.client.auth.currentSession == nil)
-        // Signed out, the same client is the anon role, which has no table privileges at all.
-        do {
+        #expect(user.auth.api.sessions.load() == nil)
+        // Signed out, the same client gets nothing.
+        await #expect(throws: ApiError(status: 401, code: "signed_out", message: "Sign in required.")) {
             _ = try await transport.pullWorkouts(since: nil)
-            Issue.record("anon read workouts")
-        } catch let error as PostgrestError {
-            #expect(error.code == "42501")
         }
 
         await #expect(throws: AuthFailure(message: "Wrong email or password.")) {

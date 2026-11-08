@@ -6,8 +6,8 @@ import Testing
 @Suite struct AuthEventTests {
     private func service() -> (AuthService, AsyncStream<AuthEvent>.Continuation) {
         let (stream, continuation) = AsyncStream<AuthEvent>.makeStream()
-        let config = SupabaseConfig(url: URL(string: "http://127.0.0.1:9")!, anonKey: "anon")
-        return (AuthService(client: config.makeClient(storage: InMemoryAuthStorage()), events: stream), continuation)
+        let api = ApiClient(baseURL: URL(string: "http://127.0.0.1:9")!, sessions: InMemorySessionStore())
+        return (AuthService(api: api, events: stream), continuation)
     }
 
     @Test func externalSignOutUpdatesStateAndNotifies() async throws {

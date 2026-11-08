@@ -2350,6 +2350,39 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         #expect(sessions.load() == nil)
     }
 
+    /// Added after review: a sign-in that finishes while `get-session` is on the wire must not be signed out by the
+    /// answer about the old token.
+    @Test(arguments: [StubAnswer.json(200, "null"), StubAnswer.json(401, signedOutBody)])
+    func restoreLeavesASignInThatFinishedWhileItWasAsking(answer: StubAnswer) async throws {
+        let newer = StoredSession(token: "newer.c2ln", userId: UUID(), email: "b@test.local")
+        let sessions = InMemorySessionStore(stored)
+        let server = StubServer { _ in
+            try sessions.save(newer) // the sign-in lands while the request is in flight
+            return answer
+        }
+        let auth = service(server, sessions: sessions)
+        auth.handle(.signedIn(userId: newer.userId, email: newer.email))
+        var seen: [AuthState] = []
+        auth.onExternalChange = { seen.append($0) }
+        await auth.restore()
+        #expect(auth.state == .signedIn(userId: newer.userId, email: "b@test.local"))
+        #expect(sessions.load() == newer)
+        #expect(seen.isEmpty)
+    }
+
+    @Test func restoreTellsTheCoordinatorWhenItSignsOutForReal() async throws {
+        let server = StubServer { _ in .json(200, "null") }
+        let sessions = InMemorySessionStore(stored)
+        let auth = service(server, sessions: sessions)
+        auth.handle(.signedIn(userId: userId, email: "a@test.local"))
+        var seen: [AuthState] = []
+        auth.onExternalChange = { seen.append($0) }
+        await auth.restore()
+        #expect(auth.state == .signedOut)
+        #expect(sessions.load() == nil)
+        #expect(seen == [.signedOut])
+    }
+
     @Test func restoreOfflineOrWithTheServerBusyKeepsTheStoredAccount() async throws {
         for answer in [nil, StubAnswer.json(503, "{}")] {
             let server = StubServer { _ in
@@ -2726,14 +2759,25 @@ public final class AuthService {
             if let user = try await api.currentUser() {
                 state = .signedIn(userId: user.id, email: user.email)
             } else {
-                api.sessions.clear(ifToken: stored.token)
-                state = .signedOut
+                endSession(checked: stored.token)
             }
         } catch where ApiError.isOffline(error) {
             state = .signedIn(userId: stored.userId, email: stored.email)
+        } catch let refused as ApiError where refused.status == 401 {
+            // The client has forgotten the token it sent, if it was still the stored one, and has signalled.
+            endSession(checked: stored.token)
         } catch {
             state = .signedOut
         }
+    }
+
+    /// Added after review. `get-session` answered `null` (or 401) about `token`. Signs out only if that is still the
+    /// stored token: a sign-in that finished while the request was on the wire stays signed in. Reports the change
+    /// like any external one.
+    private func endSession(checked token: String) {
+        guard api.sessions.clear(ifToken: token) else { return }
+        state = .signedOut
+        onExternalChange?(.signedOut)
     }
 
     public func signInWithApple(idToken: String, nonce: String) async throws {
@@ -3178,7 +3222,8 @@ Expected: no output.
 - [ ] **Step 9: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 188 tests in 24 suites passed`. The integration target builds too, and its suites skip without
+Expected: `Test run with 190 tests in 24 suites passed` (188 plus the two review tests above; a parameterized test
+counts once). The integration target builds too, and its suites skip without
 `API_URL`; Task 8 runs them.
 
 - [ ] **Step 10: Commit**
@@ -3623,7 +3668,8 @@ xcrun xcresulttool get test-results summary --path "$(ls -td build/TestResults-p
 Expected: `"result" : "Passed"`, `failedTests` 0, and `passedTests` equal to `totalTestCount`. The new suites add 4 tests.
 
 Then run the package suites again: `(cd Packages/GymSync && swift test --filter GymSyncTests)`.
-Expected: `Test run with 188 tests in 24 suites passed`. The Keychain store is tested in the app, where the simulator's
+Expected: `Test run with 190 tests in 24 suites passed` (188 plus the two review tests above; a parameterized test
+counts once). The Keychain store is tested in the app, where the simulator's
 Keychain works.
 
 - [ ] **Step 9: Commit**
