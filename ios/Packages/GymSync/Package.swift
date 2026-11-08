@@ -8,20 +8,11 @@ let package = Package(
     dependencies: [
         .package(path: "../GymCore"),
         .package(path: "../GymData"),
-        .package(url: "https://github.com/supabase/supabase-swift", from: "2.55.0"),
     ],
     targets: [
-        .target(name: "GymSync", dependencies: [
-            "GymCore", "GymData",
-            .product(name: "Supabase", package: "supabase-swift"),
-        ]),
-        .testTarget(name: "GymSyncTests", dependencies: [
-            "GymSync", "GymCore", "GymData",
-            .product(name: "Supabase", package: "supabase-swift"),
-        ]),
-        .testTarget(name: "GymSyncIntegrationTests", dependencies: [
-            "GymSync", "GymCore", "GymData",
-            .product(name: "Supabase", package: "supabase-swift"),
-        ]),
+        .target(name: "GymSync", dependencies: ["GymCore", "GymData"]),
+        .testTarget(name: "GymSyncTests", dependencies: ["GymSync", "GymCore", "GymData"]),
+        // Against a throwaway local Worker (scripts/test-sync-integration.sh); each suite skips itself without API_URL.
+        .testTarget(name: "GymSyncIntegrationTests", dependencies: ["GymSync", "GymCore", "GymData"]),
     ]
 )

@@ -11,11 +11,11 @@ struct OwnedPhoto: Decodable, Equatable, Hashable {
 }
 
 /// Removing every photo an account owns, before the account is deleted: list, remove, list again until nothing is
-/// left. Shared by the API's catalogue transport and, until plan 30 deletes it, the Supabase one.
+/// left. Used by the API's catalogue transport.
 enum OwnedPhotos {
     /// A remove call takes a few names at a time, so each request stays small.
     static let removeBatch = 100
-    /// A list is capped (PostgREST's `max_rows`, the API's 1,000 rows), so a user with more is listed again after each
+    /// A list is capped (the API answers at most 1,000 rows), so a user with more is listed again after each
     /// pass.
     static let maxPhotoPasses = 20
 

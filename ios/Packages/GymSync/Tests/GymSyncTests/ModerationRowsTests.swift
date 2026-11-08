@@ -1,7 +1,6 @@
 import Foundation
 import GymCore
 import GymData
-import Supabase
 import Testing
 @testable import GymSync
 
@@ -60,14 +59,6 @@ struct ModerationRowsTests {
         #expect(throws: GymCatalogError.self) { try GymCatalogRows.moderatedPhoto(from: Data("[]".utf8)) }
     }
 
-    @Test func theServersRefusalsReadAsPlainCases() {
-        let notAdmin = PostgrestError(detail: nil, hint: nil, code: "42501", message: "not allowed")
-        #expect(GymCatalogErrors.map(notAdmin, hasSession: true) == .notAllowed)
-        #expect(GymCatalogErrors.map(notAdmin, hasSession: false) == .signedOut)
-        let taken = PostgrestError(detail: nil, hint: nil, code: "P0001", message: "place_taken")
-        #expect(GymCatalogErrors.map(taken, hasSession: true) == .placeTaken)
-    }
-
     @Test func theNewColumnsGiveStatusAddressAndTheListingsOwnNotes() throws {
         let json = """
         [{"target_type":"listing","target_id":"\(listing)","title":"Acme X1","photo_path":"\(photo)","report_count":1,
@@ -103,14 +94,5 @@ struct ModerationRowsTests {
         """
         let row = try #require(try entries(json).rows.first)
         #expect(row.address == nil && row.listingNotes == nil)
-    }
-
-    @Test func aForeignKeyRefusalOnAShareReadsAsARetry() {
-        // `share_listing` found an item another test's (or user's) account deletion removed a moment before.
-        let gone = PostgrestError(detail: nil, hint: nil, code: "23503",
-                                  message: #"insert or update on table "gym_equipment" violates foreign key constraint "gym_equipment_item_id_fkey""#)
-        #expect(GymCatalogErrors.map(gone, hasSession: true) == .offline)
-        let other = PostgrestError(detail: nil, hint: nil, code: "23505", message: "duplicate key")
-        #expect(GymCatalogErrors.map(other, hasSession: true) == .rejected("duplicate key"))
     }
 }

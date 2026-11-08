@@ -62,7 +62,7 @@ public protocol SyncTransport: Sendable {
 }
 
 extension SyncTransport {
-    /// Supabase and the test doubles keep both.
+    /// The test doubles serve both, as the Worker does.
     public var servesGyms: Bool { true }
     public var servesProposals: Bool { true }
 
@@ -84,7 +84,7 @@ extension SyncTransport {
 
     public func revokeOAuthGrants() async throws -> Int { 0 }
 
-    /// Supabase and the test doubles have no approval codes: Claude signs in on their own consent page.
+    /// The test doubles have no approval codes.
     public func connectRequest(code: String) async throws -> ConnectRequest { throw URLError(.unsupportedURL) }
     public func decideConnect(code: String, decision: ConnectDecision) async throws { throw URLError(.unsupportedURL) }
 }

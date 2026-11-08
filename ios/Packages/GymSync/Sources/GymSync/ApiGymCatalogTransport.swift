@@ -5,7 +5,7 @@ import GymData
 /// `GymCatalogTransport` over the API: the shared catalogue (`/v1/gyms`, `/v1/items`, `/v1/listings`), moderation
 /// (`/v1/reports`, `/v1/blocks`, `/v1/admin`) and shared photos (`/v1/photos`, read at `/photos/shared`); see
 /// server/src/gyms, src/moderation and src/photos. Every call but the public photo URL needs the app session: a
-/// signed-out phone hears `.signedOut`, reads included (spec section 3; Supabase let the anon key read the views).
+/// signed-out phone hears `.signedOut`, reads included (spec section 3; plan 28, decision 7).
 public struct ApiGymCatalogTransport: GymCatalogTransport {
     /// A gym holds at most `DomainLimits.gymActiveListingsMax` (300) active listings, so one page covers it; two pages
     /// is the most this reads, and a gym past that is reported as partial instead of looped on.

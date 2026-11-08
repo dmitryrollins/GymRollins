@@ -50,19 +50,19 @@ import Testing
         #expect(sync == nil || (sync as? Bool) == false || (sync as? Int) == 0, "never iCloud Keychain")
     }
 
-    @Test func forgettingTheOldSupabaseSessionDeletesItsItems() throws {
+    @Test func forgettingTheOldServersSessionDeletesItsItems() throws {
         let account = "test-legacy-\(UUID().uuidString)"
         let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                   kSecAttrService as String: LegacySupabaseKeychain.service,
+                                   kSecAttrService as String: OldServerKeychain.service,
                                    kSecAttrAccount as String: account, kSecValueData as String: Data("refresh".utf8)]
         defer { SecItemDelete(item.filter { $0.key != kSecValueData as String } as CFDictionary) }
         #expect(SecItemAdd(item as CFDictionary, nil) == errSecSuccess)
-        let status = LegacySupabaseKeychain.forget()
+        let status = OldServerKeychain.forget()
         #expect(status == errSecSuccess)
         var probe = item
         probe[kSecValueData as String] = nil
         #expect(SecItemCopyMatching(probe as CFDictionary, nil) == errSecItemNotFound)
-        #expect(LegacySupabaseKeychain.forget() == errSecItemNotFound, "nothing left is fine")
+        #expect(OldServerKeychain.forget() == errSecItemNotFound, "nothing left is fine")
     }
 
     @Test func savingOverAnExistingSessionReplacesItInPlace() throws {

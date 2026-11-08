@@ -212,8 +212,8 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(w.entries[1].gymListingId == nil)
     }
 
-    /// A PostgREST response for `workouts?select=*,workout_entries(*,workout_sets(*))` (embeds unordered).
-    @Test func decodesCapturedPostgRESTWorkout() throws {
+    /// A workout with its entries and sets nested (unordered), the shape `GET /v1/sync/workouts` answers.
+    @Test func decodesANestedWorkout() throws {
         let json = """
         [{"id":"8f7c0a2e-3b1d-4c55-9a51-2f7e0b8c9d10","user_id":"11111111-2222-3333-4444-555555555555",
           "started_at":"2026-09-26T17:00:00+00:00","ended_at":"2026-09-26T18:05:12.5+00:00","paused_sec":30.5,

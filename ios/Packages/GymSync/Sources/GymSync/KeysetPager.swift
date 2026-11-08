@@ -3,10 +3,10 @@ import Foundation
 /// Position of a row in the pull order `(updated_at, tiebreak)`.
 struct PageKey: Sendable, Equatable {
     let updatedAt: Date
-    /// The tiebreak column's value as PostgREST should compare it (uuid/text as-is, integers as decimal text).
+    /// The tiebreak column's value as the server compares it (uuid/text as-is, integers as decimal text).
     let tiebreak: String
 
-    /// Reads each row's `updated_at` and tiebreak column from a pulled page: the API's `{"rows": [...]}` or PostgREST's
+    /// Reads each row's `updated_at` and tiebreak column from a pulled page: the API's `{"rows": [...]}` or a
     /// bare array. Other columns are ignored.
     static func decode(_ data: Data, tiebreak column: String) throws -> [PageKey] {
         let page = try JSONSerialization.jsonObject(with: data)
