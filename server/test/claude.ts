@@ -74,3 +74,42 @@ export async function startFlow(clientId: string, redirectUri = LOOPBACK): Promi
   }
   return { clientId, redirectUri, verifier, state, connectUrl: location }
 }
+
+/** A browser: keeps the cookies its responses set (name → value), and sends them all back. */
+export class Browser {
+  readonly cookies = new Map<string, string>()
+
+  async get(path: string): Promise<Response> {
+    const cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ')
+    const res = await call(path, { headers: { accept: 'text/html', ...(cookie ? { cookie } : {}) } })
+    for (const set of res.headers.getSetCookie()) {
+      const [pair, ...attributes] = set.split(';')
+      const [name, value] = [pair!.slice(0, pair!.indexOf('=')), pair!.slice(pair!.indexOf('=') + 1)]
+      if (value === '' || attributes.some((a) => a.trim().toLowerCase() === 'max-age=0')) {
+        this.cookies.delete(name)
+      } else this.cookies.set(name, value)
+    }
+    return res
+  }
+}
+
+/** The approval code a /connect page shows (XXXX-XXXX), or null. */
+export const shownCode = (html: string): string | null =>
+  /class="code">([0-9A-Z]{4}-[0-9A-Z]{4})</.exec(html)?.[1] ?? null
+
+/** The page's meta refresh: [seconds, url or null]. */
+export function metaRefresh(html: string): [number, string | null] | null {
+  const m = /http-equiv="refresh" content="(\d+)(?:;url=([^"]*))?"/.exec(html)
+  return m ? [Number(m[1]), m[2] === undefined ? null : m[2].replace(/&amp;/g, '&')] : null
+}
+
+export async function openConnect(
+  browser: Browser,
+  flow: Flow,
+): Promise<{ res: Response; html: string; code: string }> {
+  const res = await browser.get(flow.connectUrl)
+  const html = await res.text()
+  const code = shownCode(html)
+  if (code === null) throw new Error(`no code on /connect: ${res.status} ${html}`)
+  return { res, html, code }
+}
