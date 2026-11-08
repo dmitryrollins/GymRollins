@@ -2,10 +2,10 @@ import { env } from 'cloudflare:workers'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
 import { ACCOUNT_CAPS } from '../src/sync/caps.ts'
-import { type CappedTable, countOf, seedRows } from './cap-fixtures.ts'
+import { type CappedTable, countOf, kept, type LoggedTable, seedCount, seedRows } from './cap-fixtures.ts'
 import { insertUser } from './gym-fixtures.ts'
 import { request, signUp } from './helpers.ts'
-import { KEY, type Row, SAMPLES, sampleNeeds, T1, T2, workoutSample } from './samples.ts'
+import { appUUID, KEY, type Row, SAMPLES, sampleNeeds, T1, T2, type WorkoutJSON, workoutSample } from './samples.ts'
 
 // Each account cap at its exact number (plan 31): N-1 and N are stored, N+1 is refused with its code and the app's
 // words, and nothing of the refused push is stored. A stored row can still be edited, deleted and brought back at the
@@ -14,6 +14,7 @@ import { KEY, type Row, SAMPLES, sampleNeeds, T1, T2, workoutSample } from './sa
 beforeAll(sampleNeeds)
 
 const T3 = '2026-11-07T12:00:00.000000Z'
+const T4 = '2026-11-07T13:00:00.000000Z'
 
 interface Saved {
   status: 'ok' | 'stale'
@@ -210,6 +211,107 @@ describe('workouts', () => {
     const { token, userId } = await signUp()
     expect((await save(token, workoutSample())).status).toBe(200)
     expect(await countOf('workouts', userId)).toBe(1)
+  })
+})
+
+describe('exercises and sets logged, deleted workouts included', () => {
+  /** A workout of `entries` exercises with `sets` sets each. */
+  const sized = (entries: number, sets: number): WorkoutJSON => workoutSample({
+    entries: Array.from({ length: entries }, (_, i) => ({
+      id: appUUID(), exercise_id: `ex_${i}`, position: i, note: null, superset_group: null,
+      sets: Array.from({ length: sets }, (_, j) => ({ id: appUUID(), position: j, w_kg: 60, r: 8 })),
+    })),
+  })
+  const counts = async (userId: string) =>
+    [await countOf('workout_entries', userId), await countOf('workout_sets', userId)]
+
+  it('stay exact: a re-save moves nothing, a smaller one lowers them, a stale one and a deletion keep them',
+    async () => {
+      const { token, userId } = await signUp()
+      const w = sized(3, 4)
+      const first = await (await save(token, w)).json<Saved>()
+      expect(await counts(userId)).toEqual([3, 12])
+      const again = await (await save(token, {
+        ...w, client_updated_at: T2, base_updated_at: first.updated_at,
+      })).json<Saved>()
+      expect(again.status).toBe('ok')
+      expect(await counts(userId)).toEqual([3, 12])
+      const stale = await (await save(token, {
+        ...sized(5, 5), id: w.id, client_updated_at: T3, base_updated_at: first.updated_at,
+      })).json<Saved>()
+      expect(stale.status).toBe('stale')
+      expect(await counts(userId)).toEqual([3, 12])
+      const smaller = { ...w, entries: w.entries.slice(0, 2), client_updated_at: T3, base_updated_at: again.updated_at }
+      const third = await (await save(token, smaller)).json<Saved>()
+      expect(await counts(userId)).toEqual([2, 8])
+      await save(token, { ...smaller, deleted_at: T4, client_updated_at: T4, base_updated_at: third.updated_at })
+      expect(await counts(userId)).toEqual([2, 8])
+    })
+
+  interface Logged {
+    readonly table: LoggedTable
+    readonly max: number
+    readonly code: string
+    /** A new workout that adds exactly 1 to the count. */
+    readonly one: () => WorkoutJSON
+  }
+  const LOGGED: Logged[] = [
+    {
+      table: 'workout_entries', max: DomainLimits.accountEntriesMax, code: 'too_many_logged_exercises',
+      one: () => sized(1, 0),
+    },
+    { table: 'workout_sets', max: DomainLimits.accountSetsMax, code: 'too_many_logged_sets', one: () => sized(1, 1) },
+  ]
+
+  it.each(LOGGED)('$table: N-1 and N are saved, N+1 is refused whole and writes nothing', async (c) => {
+    const { token, userId } = await signUp()
+    await seedCount(c.table, userId, c.max - 2)
+    expect((await save(token, c.one())).status).toBe(200)
+    expect(await kept(c.table, userId)).toBe(c.max - 1)
+    expect((await save(token, c.one())).status).toBe(200)
+    expect(await kept(c.table, userId)).toBe(c.max)
+    const refused = c.one()
+    await refusedWith(await save(token, refused), c.code)
+    expect(await kept(c.table, userId)).toBe(c.max)
+    expect((await request('GET', `/v1/sync/workouts/${refused.id}`, { token })).status).toBe(404)
+  })
+
+  it('at the cap: a re-save passes, a bigger one is refused and changes nothing, a smaller one makes room',
+    async () => {
+      const { token, userId } = await signUp()
+      await seedCount('workout_sets', userId, DomainLimits.accountSetsMax - 2)
+      const w = sized(1, 2)
+      const first = await (await save(token, w)).json<Saved>()
+      expect(await kept('workout_sets', userId)).toBe(DomainLimits.accountSetsMax)
+      const same = await (await save(token, {
+        ...w, name: 'Pull', client_updated_at: T2, base_updated_at: first.updated_at,
+      })).json<Saved>()
+      expect(same.status).toBe('ok')
+      const [entry] = w.entries
+      const extra = { id: appUUID(), position: 2, w_kg: 60, r: 8 }
+      const bigger = {
+        ...w, entries: [{ ...entry, sets: [...entry.sets, extra] }], client_updated_at: T3,
+        base_updated_at: same.updated_at,
+      }
+      await refusedWith(await save(token, bigger), 'too_many_logged_sets')
+      const stored = await (await request('GET', `/v1/sync/workouts/${w.id}`, { token })).json<WorkoutJSON>()
+      expect(stored.name).toBe('Pull')
+      expect(stored.entries[0].sets).toHaveLength(2)
+      const smaller = {
+        ...w, entries: [{ ...entry, sets: entry.sets.slice(0, 1) }], client_updated_at: T3,
+        base_updated_at: same.updated_at,
+      }
+      expect((await (await save(token, smaller)).json<Saved>()).status).toBe('ok')
+      expect(await kept('workout_sets', userId)).toBe(DomainLimits.accountSetsMax - 1)
+    })
+
+  it("don't count another account's", async () => {
+    const other = await insertUser()
+    await seedCount('workout_entries', other, DomainLimits.accountEntriesMax)
+    await seedCount('workout_sets', other, DomainLimits.accountSetsMax)
+    const { token, userId } = await signUp()
+    expect((await save(token, sized(1, 1))).status).toBe(200)
+    expect(await counts(userId)).toEqual([1, 1])
   })
 })
 

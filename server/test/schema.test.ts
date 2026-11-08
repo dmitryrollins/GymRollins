@@ -128,6 +128,19 @@ describe('the D1 schema', () => {
       .toMatch(/USING (COVERING )?INDEX proposals_user_pending\b/)
   })
 
+  it("moves a workout's logged counts by reading its entries and sets through their indexes", async () => {
+    for (const query of [
+      'SELECT count(*) FROM workout_entries WHERE workout_id = ?1',
+      'SELECT count(*) FROM workout_sets WHERE entry_id IN (SELECT id FROM workout_entries WHERE workout_id = ?1)',
+    ]) {
+      const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${query}`).bind(crypto.randomUUID())
+        .all<{ detail: string }>()
+      const details = plan.results.map((r) => r.detail).join('\n')
+      expect(details, query).toMatch(/INDEX workout_entries_workout\b/)
+      expect(details, query).not.toMatch(/^SCAN/m)
+    }
+  })
+
   it("indexes a workout's entries and an entry's sets", async () => {
     const { results } = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all<{ name: string }>()
     const names = results.map((r) => r.name)

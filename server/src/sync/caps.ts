@@ -30,3 +30,11 @@ export const ACCOUNT_CAPS: Readonly<Record<string, string>> = {
   too_many_pending_proposals: `${grouped(DomainLimits.pendingProposalsMax)} proposals are waiting for review.`,
   too_many_proposals: `The account holds ${grouped(DomainLimits.proposalsMax)} proposals.`,
 }
+
+/** What a workout save refuses before it writes (src/sync/workouts.ts): one workout's size, as the app shows it. */
+export const WORKOUT_CAPS = {
+  too_many_workout_exercises:
+    `A workout can have up to ${DomainLimits.workoutEntriesMax} exercises. This one stays on this iPhone.`,
+  too_many_exercise_sets:
+    `An exercise in a workout can have up to ${DomainLimits.entrySetsMax} sets. This workout stays on this iPhone.`,
+} as const

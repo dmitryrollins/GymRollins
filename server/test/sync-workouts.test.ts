@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { WORKOUT_CAPS } from '../src/sync/caps.ts'
 import { genericItem, insertGym, insertListing } from './gym-fixtures.ts'
 import { request, signUp } from './helpers.ts'
 import { appUUID, T0, T1, T2, type WorkoutJSON, workoutSample } from './samples.ts'
@@ -283,5 +284,56 @@ describe('workout saves under load and in shape', () => {
     const w = workoutSample({ deleted_at: T1 })
     await save(token, w)
     expect((await fetchOne(token, w.id)).deleted_at).toBe(T1)
+  })
+})
+
+describe('the size of one workout', () => {
+  const sets = (n: number) => Array.from({ length: n }, (_, i) => ({ id: appUUID(), position: i, w_kg: 60, r: 8 }))
+  const entries = (n: number, setsEach = 1) => Array.from({ length: n }, (_, i) => ({
+    id: appUUID(), exercise_id: `ex_${i}`, position: i, note: null, superset_group: null, sets: sets(setsEach),
+  }))
+  /** Three exercises, the last with `n` sets. */
+  const oneLong = (n: number) =>
+    workoutSample({ entries: entries(3).map((e, i) => (i === 2 ? { ...e, sets: sets(n) } : e)) })
+  const push = (token: string, workout: unknown) => request('POST', '/v1/sync/workouts', { token, body: workout })
+
+  async function refusedWith(res: Response, code: keyof typeof WORKOUT_CAPS): Promise<void> {
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: { code, message: WORKOUT_CAPS[code] } })
+  }
+
+  it('takes 49 and 50 exercises, and refuses 51 with the words the app shows', async () => {
+    const { token } = await signUp()
+    for (const n of [49, 50]) expect((await push(token, workoutSample({ entries: entries(n) }))).status).toBe(200)
+    const refused = workoutSample({ entries: entries(51) })
+    await refusedWith(await push(token, refused), 'too_many_workout_exercises')
+    expect((await request('GET', `/v1/sync/workouts/${refused.id}`, { token })).status).toBe(404)
+  })
+
+  it('takes 49 and 50 sets in an exercise, and refuses 51 in any one of them', async () => {
+    const { token } = await signUp()
+    for (const n of [49, 50]) expect((await push(token, oneLong(n))).status).toBe(200)
+    await refusedWith(await push(token, oneLong(51)), 'too_many_exercise_sets')
+  })
+
+  it('saves a workout at both caps, 50 exercises of 50 sets, within the body limit', async () => {
+    const { token } = await signUp()
+    const w = workoutSample({ entries: entries(50, 50) })
+    expect(JSON.stringify(w).length).toBeLessThan(1024 * 1024)
+    expect((await push(token, w)).status).toBe(200)
+    const stored = await fetchOne(token, w.id)
+    expect(stored.entries).toHaveLength(50)
+    expect(stored.entries.every((e) => e.sets.length === 50)).toBe(true)
+  })
+
+  it('refuses before anything is written: a stored workout keeps its entries when an edit is too big', async () => {
+    const { token } = await signUp()
+    const w = workoutSample()
+    const first = await save(token, w)
+    const tooBig = { ...w, entries: entries(51), client_updated_at: T2, base_updated_at: first.updated_at }
+    await refusedWith(await push(token, tooBig), 'too_many_workout_exercises')
+    const stored = await fetchOne(token, w.id)
+    expect(stored.entries.map((e) => e.id)).toEqual([w.entries[0].id.toLowerCase()])
+    expect(stored.updated_at).toBe(first.updated_at)
   })
 })
