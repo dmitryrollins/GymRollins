@@ -8,7 +8,8 @@
 //
 // Records are matched by their own id, because a pull writes a workout's entries and sets afresh (new Z_PK). Dates are
 // compared to the microsecond the server keeps, a profile's day fields by calendar day, and JSON blobs by value. Exits
-// 1 and lists the differences when there are any.
+// 1 and lists the differences when there are any. A difference names the table, the column and the record's id, never
+// the values: they come from a copy of someone's personal data.
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -118,7 +119,6 @@ function cell(value, type, isDay) {
 
 const same = (a, b) =>
   a.time !== undefined && b.time !== undefined ? Math.abs(a.time - b.time) <= 1 : a.value === b.value
-const shown = (c) => (c.time !== undefined ? `${c.time}µs` : JSON.stringify(c.value))
 
 function hasTable(db, table) {
   return db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !== undefined
@@ -165,7 +165,7 @@ export function compareStores(beforeFile, afterFile) {
         }
         for (const [column, value] of cells) {
           const other = now.cells.get(column) ?? { value: null }
-          if (!same(value, other)) problems.push(`${spec.table} ${key}.${column}: ${shown(value)} -> ${shown(other)}`)
+          if (!same(value, other)) problems.push(`${spec.table} ${key}.${column} differs`)
         }
       }
       for (const key of is.keys()) if (!was.has(key)) problems.push(`${spec.table} ${key}: new after`)

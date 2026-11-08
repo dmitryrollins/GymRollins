@@ -40,7 +40,7 @@ test('a changed value, a missing record and a new one are', () => inTemp((dir) =
   const before = store(dir, 'before', [{ pk: 1, id: 1, date: 800000000, kg: 81.4 }, { pk: 2, id: 2, date: 800000100, kg: 82 }])
   const after = store(dir, 'after', [{ pk: 1, id: 1, date: 800000000, kg: 82 }, { pk: 3, id: 3, date: 800000200, kg: 80 }])
   assert.deepEqual(compareStores(before, after), [
-    `ZBODYWEIGHTRECORD ${hexId(1)}.ZWEIGHTKG: 81.4 -> 82`,
+    `ZBODYWEIGHTRECORD ${hexId(1)}.ZWEIGHTKG differs`,
     `ZBODYWEIGHTRECORD ${hexId(2)}: missing after`,
     `ZBODYWEIGHTRECORD ${hexId(3)}: new after`,
   ])
@@ -96,8 +96,8 @@ test('the catalogue step does not excuse other changes to listings', () => inTem
     { pk: 3, id: 3, own: false, visibility: 'shared', upload: 'uploaded' },
   ])
   assert.deepEqual(compareStores(before, after), [
-    `ZGYMLISTINGRECORD ${hexId(1)}.ZQUANTITY: 2 -> 3`,
-    `ZGYMLISTINGRECORD ${hexId(2)}.ZVISIBILITYRAW: "synced" -> "device"`,
-    `ZGYMLISTINGRECORD ${hexId(3)}.ZSTATUSRAW: "flagged" -> "active"`,
+    `ZGYMLISTINGRECORD ${hexId(1)}.ZQUANTITY differs`,
+    `ZGYMLISTINGRECORD ${hexId(2)}.ZVISIBILITYRAW differs`,
+    `ZGYMLISTINGRECORD ${hexId(3)}.ZSTATUSRAW differs`,
   ])
 }))
