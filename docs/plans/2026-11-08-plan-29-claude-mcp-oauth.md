@@ -9,7 +9,11 @@
 - **The sign-in page `/connect`,** which shows a code that the owner approves in the app.
 - **The app's routes** under `/v1/claude`: pending proposals, resolving one, last use, the approval code, and Disconnect Claude.
 
-The iOS part of plan 29 (the Approve a connection sheet and the transports) is written after plan 27 is committed. Its notes are at the end.
+**The iOS part** (Tasks 11–15) follows the server's 10 tasks. It is built after plan 28's iOS tasks:
+- the app's transport on `/v1/claude`,
+- the Approve a connection sheet,
+- the connector address `<API_URL>/mcp`,
+- the Claude integration and UI suites on the Worker.
 
 **Architecture:**
 - **Discovery and OAuth** are Better Auth's `mcp` plugin under `/api/auth/oauth2/*` and `/.well-known/*`. `src/auth/routes.ts` lets through only the OAuth routes Claude uses. It refuses any redirect URL that isn't Claude's.
@@ -47,7 +51,7 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
 - Commit messages have no `Co-Authored-By`, `Generated with` or `Claude-Session` trailers; the owner forbids them.
 
 **Not in this plan:**
-- iOS. This plan only notes what it will need.
+- iOS work beyond Tasks 11–15 (the iOS part, after plan 28's iOS tasks).
 - Deploying.
 - Client ID Metadata Documents (Decision 4).
 - Removing `supabase/` and `web/consent/` (plan 30).
@@ -96,8 +100,13 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
    - **At most 30 new clients an hour,** across everyone. `OAUTH_REGISTRATIONS_PER_HOUR` overrides it; the tests set 1000, because a test file's D1 keeps every client it registered.
    - **A client that names no grant types** gets `authorization_code` and `refresh_token`.
 
-   Client ID Metadata Documents (`@better-auth/cimd` 1.7.18) are left off. With them, the server fetches the client's document from claude.ai, which can't happen locally and isn't needed: Claude and Claude Code both register dynamically. That is an owner question.
-5. **Scopes** are `mcp` and `offline_access`.
+   Client ID Metadata Documents (`@better-auth/cimd` 1.7.18) are left off. With them, the server fetches the client's document from claude.ai, which can't happen locally and isn't needed: Claude and Claude Code both register dynamically.
+
+   **Decided by the controller, 2026-11-08:**
+   - Dynamic registration only, for now. Revisit Client ID Metadata Documents at the deploy step, if claude.ai needs them.
+   - Keep the caps: 30 new clients an hour overall, and 20 sign-ins per client per 10 minutes.
+   - The deploy checklist (Task 10) notes that the global cap can be used up by others, so Cloudflare rate-limit rules come first.
+5. **Scopes** are `mcp` and `offline_access`. Any other scope is refused (`invalid_scope`); the controller confirmed this on 2026-11-08.
    - Refresh tokens need `offline_access`. `/connect` always adds it, whatever Claude asked for.
    - The resource metadata advertises `mcp`. Claude's tools aren't split by scope: the toggles decide.
 6. **Discovery.**
@@ -4847,9 +4856,9 @@ With the server still running, from the repo root:
 6. `node scripts/claude-local.mjs revoke` prints `{ revoked: 1 }`. Claude Code's next tool call fails with a 401, and it offers to authenticate again.
 7. Clean up: `claude mcp remove gymrollins-local --scope local`, then `pkill -f "wrangler dev --local"`.
 
-If Claude Code asks for a scope other than `mcp` and `offline_access`, the authorize step refuses it with `invalid_scope`. Record that and stop; it is a question for the owner.
+If Claude Code asks for a scope other than `mcp` and `offline_access`, the authorize step refuses it with `invalid_scope`. That is decided (Decision 5): record it in the outcome.
 
-The same goes for a Client ID Metadata Document instead of registering (the server would answer `invalid_client`).
+The same goes for a Client ID Metadata Document instead of registering (the server would answer `invalid_client`). Decision 4 leaves those off.
 
 - [ ] **Step 4: Commit**
 
@@ -4945,33 +4954,1680 @@ git commit -m "docs(server): Claude on the Worker in the README and the suite"
 
    Under "Before any deploy", add for plan 30's checklist:
    - `PUBLIC_BASE_URL` as the https origin, because the MCP resource and the issuer are built from it,
-   - a Cloudflare rate-limit rule on `/connect` and `/api/auth/oauth2/*`,
+   - a Cloudflare rate-limit rule on `/connect` and `/api/auth/oauth2/*`, set up before anything else. The registration cap (30 new clients an hour) is global, so anyone can use it up and keep Claude from registering; the rule comes first,
    - deleting clients that never got a token,
    - the claude.ai connection test (spec section 9, step 4).
 
    Commit it as `docs: plan 29 outcome`.
 
-## iOS tasks (to be added)
+## The iOS part
 
-To be written after plan 27 is committed, on its `ApiClient`.
+The app's half of plan 29, after plan 28's iOS tasks.
 
-- **Transport, on plan 27's `ApiClient`** (`ApiSyncTransport` or a `ClaudeTransport` beside it):
-  - **`pendingProposals()`:** `GET /v1/claude/proposals` → `{rows}`, decoded per row into `PulledProposal` as now, so a malformed row stays `.malformed`.
-  - **`resolveProposal(id:status:appliedChangeIds:at:)`:** `PATCH /v1/claude/proposals/:id` with `{status, applied_change_ids, resolved_at, client_updated_at}`, where both times are `SyncDate.format(at)`. A `422 row_rejected` maps to `SyncRecordRejected`, through `mappingRejections` on `ApiError`.
-  - **`lastMcpUse()`:** `GET /v1/claude/last-use` → `{at}`.
-  - **`revokeOAuthGrants()`:** `POST /v1/claude/revoke` → `{revoked}`, keeping its `Int` result.
-  - **New, for the sheet:** `connectRequest(code:)` → `GET /v1/claude/connect/:code`, and `decideConnect(code:approve:)` → `POST` with `{decision}`. The errors to map are `unknown_code` (404) and `too_many_attempts` (429).
-- **Approve a connection** (spec section 5): a row in Settings › Claude that opens a sheet.
-  1. A code field: 8 characters shown as `XXXX-XXXX`, case-insensitive; the server also reads O/I/L as 0/1/1.
-  2. Then the client's name and redirect host, with a warning when `known_host` is false.
-  3. Then **Approve** and **Deny**, each on its own row, since a Form row fires every button it holds.
+**Builds on plan 27's types exactly:**
+- `ApiClient` (`get`, `post`, `data`), `ApiError`, `SessionStore`,
+- `ApiSyncTransport` with `servesProposals` and `mappingRejections`,
+- `AuthService(api:)`,
+- the factory's `apiConfig(_:)`,
+- `scripts/test-server.sh` (port 8788),
+- the parked suites in `Tests/GymSyncIntegrationTests/SupabaseParked/` (plan 27, Decision 16).
 
-  Messages are needed for a wrong or expired code and for too many tries.
-- **The connector address** becomes `<API_URL>/mcp` in `SyncCoordinator+Factory.connectorURL`, which is shown in `ClaudeConnectionView` and `ConnectClaudeStepView`.
-- **Disconnect Claude** keeps its order: push all toggles off, then revoke.
-- **Tests:**
-  - `ProposalTransportTests` and `OAuthGrantTransportTests` against `wrangler dev`. The OAuth one drives registration, `/connect` and approval as `scripts/claude-local.mjs` does.
-  - A UI test of the sheet with a stubbed transport.
+**Ordering:**
+- Server Tasks 1–10 come first, because the app's calls need `/v1/claude/*`.
+- Plan 28's iOS tasks also edit `ApiSyncTransport.swift`, `ApiSyncTransportTests.swift`, `project.yml` and the scripts. The edits here are insertions and line changes next to plan 27's text, so they fit plan 28's versions.
+
+### iOS decisions
+
+1. **Claude's calls stay on `SyncTransport`, as `lastMcpUse` and `revokeOAuthGrants` are.**
+   - Two calls are added: `connectRequest(code:)` and `decideConnect(code:decision:)`. They go through `SyncEngine` and `SyncCoordinator` to the sheet.
+   - The protocol's defaults throw `URLError(.unsupportedURL)`, for Supabase and the test doubles.
+   - `ApiSyncTransport` implements all six calls in `ApiSyncTransport+Claude.swift`, and `servesProposals` becomes true.
+2. **A resolution the server answers 404 counts as sent.** On Supabase, an update that matched no row raised nothing. The engine then marked the resolution sent, and still does. A refused value (`422 row_rejected`) is a `SyncRecordRejected`, as before.
+3. **The code field (spec section 5):**
+   - `ConnectCode` in GymSync turns what is typed into code characters, then shows them as `XXXX-XXXX`: upper case, O/I/L read as 0/1/1, anything else dropped, at most 8. The server reads the code the same way.
+   - The sheet looks the code up once all 8 are in. A refused code isn't sent again until it changes, because each wrong code uses one of the account's 5 tries.
+4. **The sheet:**
+   - **Shows:** the client's name, the redirect host, and a warning when `known_host` is false.
+   - **Then Approve and Deny,** each its own row in one section. A Form row fires every button it holds, so neither shares a row.
+   - **Refusals** read as the owner needs them: a wrong or used code, too many tries, signed out, offline.
+   - **The logic** sits in `ApproveConnectionModel`, which tests drive without a server.
+5. **The connector address** is `<API_URL>/mcp`, from the same `ApiConfig` the app syncs with. Onboarding and Settings show it through `ConnectorInstructions`. Its third step now names Approve a connection.
+6. **Claude in tests is a real OAuth client.** `ClaudeTestClient.swift` covers registration, PKCE, authorize, a cookie-keeping browser on `/connect`, the token exchange and MCP calls.
+   - It uses Foundation only, so the integration suites and `GymRollinsUITests` compile the same file (`project.yml` lists it).
+   - The approval is the caller's: the transport in the suites, the sheet in the UI tests.
+7. **`scripts/test-server.sh` passes `--var PUBLIC_BASE_URL:$TEST_API_URL`.** The issuer and the MCP resource then name the test Worker's own address (port 8788), not `wrangler.jsonc`'s 8787.
+8. **Proved ahead,** in a scratch copy of the three packages at plan 27's tip (`509cbf1`), never committed:
+   - **GymSync** with Task 11's code: `Test run with 201 tests in 26 suites passed`.
+   - **Task 13's 5 integration tests** passed against the plan 29 server, run with `wrangler dev --local --port 8791 --var PUBLIC_BASE_URL:http://127.0.0.1:8791` from the server spike.
+   - **`ApproveConnectionModel` and its 5 tests** ran on macOS beside GymSync's tests, with a stand-in `SyncUnavailableError`.
+   - **`ApproveConnectionView` and the UI tests** were typechecked for the iOS 26.2 simulator: `swiftc -typecheck` with GymSync's types, plus stubs for `Theme` and `SyncUnavailableError`, and the UI tests with XCTest and `ClaudeTestClient.swift`.
+   - **Not run ahead:** the app target and the UI tests themselves. The app on the API is plan 27 Task 7, which wasn't in the tree yet.
+
+### Task 11: Claude's routes in `ApiSyncTransport`
+
+**Files:**
+- Create: `ios/Packages/GymSync/Sources/GymSync/ClaudeConnect.swift`, `ios/Packages/GymSync/Sources/GymSync/ApiSyncTransport+Claude.swift`
+- Modify: `ios/Packages/GymSync/Sources/GymSync/SyncTransport.swift`, `SyncEngine.swift`, `ApiSyncTransport.swift`, `ios/Packages/GymSync/Tests/GymSyncTests/ApiSyncTransportTests.swift`
+- Test: `ios/Packages/GymSync/Tests/GymSyncTests/ApiClaudeTransportTests.swift`
+
+- [ ] **Step 1: Write the failing tests**
+
+`ios/Packages/GymSync/Tests/GymSyncTests/ApiClaudeTransportTests.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+import Testing
+@testable import GymSync
+
+/// `ApiSyncTransport` against a stub of `/v1/claude`: the paths, bodies and answers of server/src/claude/routes.ts.
+@Suite struct ApiClaudeTransportTests {
+    private let proposalId = UUID()
+
+    private func proposalJSON(type: String = "weight") -> String {
+        #"{"id": "\#(proposalId.uuidString.lowercased())", "created_at": "2026-11-08T10:00:00.123000Z", "#
+            + #""source": "claude", "summary": "Heavier bench", "#
+            + #""changes": [{"id": "c1", "type": "\#(type)", "routineId": "r1", "exerciseId": "0025", "#
+            + #""weightKg": 65}], "#
+            + #""status": "pending", "applied_change_ids": [], "resolved_at": null}"#
+    }
+
+    @Test func pendingProposalsComeFromTheClaudeRoutesOneRowAtATime() async throws {
+        let rows = #"{"rows": [\#(proposalJSON()), \#(proposalJSON(type: "teleport"))]}"#
+        let server = StubServer { _ in .json(200, rows) }
+
+        let pulled = try await ApiSyncTransport(api: server.client()).pendingProposals()
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "GET" && request.path == "/v1/claude/proposals")
+        guard case .valid(let dto) = pulled.first else { Issue.record("first row not valid"); return }
+        #expect(dto.id == proposalId && dto.changes.first?.weightKg == 65 && dto.toDomain().status == .pending)
+        guard case .malformed(let bad) = pulled.last else { Issue.record("second row not malformed"); return }
+        #expect(bad.id == proposalId.uuidString.lowercased())
+    }
+
+    @Test func aResolutionIsPatchedWithBothTimesAsTheResolutions() async throws {
+        let server = StubServer { _ in .json(200, #"{"id": "x", "updated_at": "2026-11-08T10:00:01.000000Z"}"#) }
+        let at = SyncDate.parse("2026-11-08T10:00:00.654321Z")!
+
+        try await ApiSyncTransport(api: server.client())
+            .resolveProposal(id: proposalId, status: "partial", appliedChangeIds: ["c1"], at: at)
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "PATCH")
+        #expect(request.path == "/v1/claude/proposals/\(proposalId.uuidString.lowercased())")
+        let body = try #require(try request.json() as? [String: Any])
+        #expect(body["status"] as? String == "partial")
+        #expect(body["applied_change_ids"] as? [String] == ["c1"])
+        #expect(body["resolved_at"] as? String == "2026-11-08T10:00:00.654321Z")
+        #expect(body["client_updated_at"] as? String == "2026-11-08T10:00:00.654321Z")
+    }
+
+    @Test func aRefusedResolutionIsAboutThatProposalAndAGoneOneCountsAsSent() async throws {
+        let refused = StubServer { _ in
+            .json(422, #"{"error": {"code": "row_rejected", "message": "status: must be applied or dismissed"}}"#)
+        }
+        await #expect(throws: SyncRecordRejected.self) {
+            try await ApiSyncTransport(api: refused.client())
+                .resolveProposal(id: proposalId, status: "pending", appliedChangeIds: [], at: Date())
+        }
+        let gone = StubServer { _ in .json(404, #"{"error": {"code": "not_found", "message": "No such proposal."}}"#) }
+        try await ApiSyncTransport(api: gone.client())
+            .resolveProposal(id: proposalId, status: "applied", appliedChangeIds: ["c1"], at: Date())
+    }
+
+    @Test func lastUseIsNilUntilClaudeCallsATool() async throws {
+        let never = StubServer { _ in .json(200, #"{"at": null}"#) }
+        #expect(try await ApiSyncTransport(api: never.client()).lastMcpUse() == nil)
+        let once = StubServer { _ in .json(200, #"{"at": "2026-11-08T05:44:54.223000Z"}"#) }
+        #expect(try await ApiSyncTransport(api: once.client()).lastMcpUse()
+            == SyncDate.parse("2026-11-08T05:44:54.223Z"))
+        #expect(once.requests.first?.path == "/v1/claude/last-use")
+    }
+
+    @Test func disconnectPostsTheRevokeAndCountsWhatWent() async throws {
+        let server = StubServer { _ in .json(200, #"{"revoked": 1}"#) }
+
+        #expect(try await ApiSyncTransport(api: server.client()).revokeOAuthGrants() == 1)
+        let request = try #require(server.requests.first)
+        #expect(request.method == "POST" && request.path == "/v1/claude/revoke")
+    }
+
+    @Test func aCodeLooksUpItsWaitingSignIn() async throws {
+        let answer = #"{"code": "ABCD-EFGH", "client_name": "Claude", "redirect_host": "claude.ai", "#
+            + #""known_host": true, "expires_at": "2026-11-08T10:10:00.000000Z"}"#
+        let server = StubServer { _ in .json(200, answer) }
+
+        let request = try await ApiSyncTransport(api: server.client()).connectRequest(code: "ABCDEFGH")
+
+        #expect(request == ConnectRequest(code: "ABCD-EFGH", clientName: "Claude", redirectHost: "claude.ai",
+                                          knownHost: true, expiresAt: SyncDate.parse("2026-11-08T10:10:00Z")!))
+        #expect(server.requests.first?.path == "/v1/claude/connect/ABCDEFGH")
+    }
+
+    @Test func aDecisionIsPostedForTheCode() async throws {
+        let server = StubServer { _ in .json(200, #"{"status": "denied"}"#) }
+
+        try await ApiSyncTransport(api: server.client()).decideConnect(code: "ABCDEFGH", decision: .deny)
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "POST" && request.path == "/v1/claude/connect/ABCDEFGH")
+        #expect((try request.json() as? [String: String]) == ["decision": "deny"])
+    }
+
+    @Test func aWrongCodeAndTooManyTriesSaySo() async throws {
+        let unknown = StubServer { _ in
+            .json(404, #"{"error": {"code": "unknown_code", "message": "No waiting request has this code."}}"#)
+        }
+        await #expect(throws: ConnectCodeError.unknownCode) {
+            try await ApiSyncTransport(api: unknown.client()).connectRequest(code: "ZZZZZZZZ")
+        }
+        let limited = StubServer { _ in
+            .json(429, #"{"error": {"code": "too_many_attempts", "message": "Too many wrong codes."}}"#)
+        }
+        await #expect(throws: ConnectCodeError.tooManyAttempts) {
+            try await ApiSyncTransport(api: limited.client()).decideConnect(code: "ZZZZZZZZ", decision: .approve)
+        }
+        let signedOut = StubServer { _ in .json(401, #"{"error": {"code": "signed_out", "message": "Sign in."}}"#) }
+        await #expect(throws: ApiError.self) {
+            try await ApiSyncTransport(api: signedOut.client()).connectRequest(code: "ZZZZZZZZ")
+        }
+    }
+}
+
+@Suite struct ConnectCodeTests {
+    @Test func whatIsTypedBecomesCodeCharacters() {
+        #expect(ConnectCode.characters(of: "abcd-efgh") == "ABCDEFGH")
+        #expect(ConnectCode.characters(of: " 7k2m 9pqr ") == "7K2M9PQR")
+        #expect(ConnectCode.characters(of: "OIL0-1234") == "01101234")
+        #expect(ConnectCode.characters(of: "UUAB") == "AB")
+        #expect(ConnectCode.characters(of: "ABCDEFGHJK") == "ABCDEFGH")
+    }
+
+    @Test func itShowsTheDashAfterFour() {
+        #expect(ConnectCode.display("ab") == "AB")
+        #expect(ConnectCode.display("abcd") == "ABCD")
+        #expect(ConnectCode.display("abcde") == "ABCD-E")
+        #expect(ConnectCode.display("ABCD-EFGH") == "ABCD-EFGH")
+    }
+
+    @Test func itIsCompleteAtEight() {
+        #expect(ConnectCode.complete("ABCD-EFG") == nil)
+        #expect(ConnectCode.complete("abcd-efgh") == "ABCDEFGH")
+    }
+}
+```
+
+In `ApiSyncTransportTests.swift`, the test that checks what the transport serves (plan 27's `itServesNeitherGymsNorProposalsYet`; plan 28 may have renamed it) expects proposals now:
+- Make its `servesProposals` expectation `transport.servesProposals` (true).
+- Keep its `servesGyms` expectation as plan 28 left it.
+- Delete its `pendingProposals()` and `server.requests.isEmpty` lines.
+
+On plan 27's tip, it becomes:
+
+```swift
+    @Test func itServesProposalsButNotGymsYet() {
+        let server = StubServer { _ in .json(500, "{}") }
+        let transport = ApiSyncTransport(api: server.client())
+        #expect(!transport.servesGyms && transport.servesProposals)
+    }
+```
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
+
+Expected: the build fails with `cannot find 'ConnectRequest' in scope` and `value of type 'ApiSyncTransport' has no member 'connectRequest'`.
+
+- [ ] **Step 3: Write the types and the protocol's two calls**
+
+`ios/Packages/GymSync/Sources/GymSync/ClaudeConnect.swift`:
+
+```swift
+import Foundation
+
+/// A Claude sign-in waiting for the owner, as Settings › Claude › Approve a connection shows it: what the browser's
+/// `/connect` page asked for, looked up by the code it shows (`GET /v1/claude/connect/:code`, spec section 4,
+/// "Claude's connection").
+public struct ConnectRequest: Decodable, Equatable, Sendable {
+    /// The code as the page shows it, `XXXX-XXXX`.
+    public let code: String
+    /// The name the client registered with ("Claude", "Claude Code"); nil when it gave none.
+    public let clientName: String?
+    /// Where an approval sends the browser back to: `claude.ai`, or `127.0.0.1:<port>` for Claude Code.
+    public let redirectHost: String
+    /// True for Claude's own hosts (claude.ai, claude.com). For any other, the sheet warns before Approve.
+    public let knownHost: Bool
+    public let expiresAt: Date
+
+    public init(code: String, clientName: String?, redirectHost: String, knownHost: Bool, expiresAt: Date) {
+        self.code = code
+        self.clientName = clientName
+        self.redirectHost = redirectHost
+        self.knownHost = knownHost
+        self.expiresAt = expiresAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case code, clientName = "client_name", redirectHost = "redirect_host", knownHost = "known_host"
+        case expiresAt = "expires_at"
+    }
+}
+
+public enum ConnectDecision: String, Sendable {
+    case approve, deny
+}
+
+/// Why a typed code couldn't be used.
+public enum ConnectCodeError: Error, Equatable, Sendable {
+    /// No sign-in is waiting with this code: mistyped, expired or already decided (404 `unknown_code`).
+    case unknownCode
+    /// Five wrong codes in 10 minutes; even a right one waits (429 `too_many_attempts`).
+    case tooManyAttempts
+}
+
+/// The approval code as the owner types it (spec section 5): 8 characters of Crockford's alphabet (no I, L, O or U),
+/// case-insensitive, shown as `XXXX-XXXX`. O, I and L read as 0, 1 and 1, as the server reads them.
+public enum ConnectCode {
+    public static let length = 8
+    private static let alphabet = Set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+
+    /// What the owner typed, as at most `length` code characters: upper case, O/I/L as 0/1/1, anything else dropped.
+    public static func characters(of typed: String) -> String {
+        let read = typed.uppercased().map { (ch: Character) -> Character in
+            switch ch {
+            case "O": "0"
+            case "I", "L": "1"
+            default: ch
+            }
+        }
+        return String(read.filter { alphabet.contains($0) }.prefix(length))
+    }
+
+    /// The code as typed so far, with the dash after the fourth character: "AB", "ABCD-E", "ABCD-EFGH".
+    public static func display(_ typed: String) -> String {
+        let code = characters(of: typed)
+        guard code.count > 4 else { return code }
+        return "\(code.prefix(4))-\(code.dropFirst(4))"
+    }
+
+    /// The 8 characters once all are typed, else nil.
+    public static func complete(_ typed: String) -> String? {
+        let code = characters(of: typed)
+        return code.count == length ? code : nil
+    }
+}
+```
+
+In `SyncTransport.swift`, add after `func revokeOAuthGrants() async throws -> Int` in the protocol:
+
+```swift
+    /// A Claude sign-in waiting for this account's approval, by the code its page shows. Throws `ConnectCodeError`
+    /// when no sign-in waits with that code.
+    func connectRequest(code: String) async throws -> ConnectRequest
+    /// Approves or denies that sign-in. The browser that showed the code then returns to Claude.
+    func decideConnect(code: String, decision: ConnectDecision) async throws
+```
+
+and after `public func revokeOAuthGrants() async throws -> Int { 0 }` in the extension:
+
+```swift
+
+    /// Supabase and the test doubles have no approval codes: Claude signs in on their own consent page.
+    public func connectRequest(code: String) async throws -> ConnectRequest { throw URLError(.unsupportedURL) }
+    public func decideConnect(code: String, decision: ConnectDecision) async throws { throw URLError(.unsupportedURL) }
+```
+
+In `SyncEngine.swift`, add after `revokeOAuthGrants()`:
+
+```swift
+
+    /// The Claude sign-in waiting with `code` (Approve a connection).
+    public func connectRequest(code: String) async throws -> ConnectRequest {
+        try await transport.connectRequest(code: code)
+    }
+
+    public func decideConnect(code: String, decision: ConnectDecision) async throws {
+        try await transport.decideConnect(code: code, decision: decision)
+    }
+```
+
+- [ ] **Step 4: Put the transport on `/v1/claude`**
+
+`ios/Packages/GymSync/Sources/GymSync/ApiSyncTransport+Claude.swift`:
+
+```swift
+import Foundation
+
+/// Claude's side of the API, `/v1/claude` (server/src/claude/routes.ts; spec section 3, "Routes"), behind the app's
+/// session like the rest of `/v1`:
+/// - `GET /proposals` → `{"rows": [...]}`, the pending ones oldest first, each decoded on its own (`PulledProposal`).
+/// - `PATCH /proposals/:id` with the resolution → `{"id", "updated_at"}`. Last-write-wins keeps a newer one, as
+///   `lww_guard` did; a refused value is `422 row_rejected`.
+/// - `GET /last-use` → `{"at"}`, the newest audit row's time or null.
+/// - `POST /revoke` → `{"revoked"}`: Disconnect Claude removes every grant and token of the account.
+/// - `GET /connect/:code` and `POST /connect/:code` `{"decision"}`: Approve a connection.
+extension ApiSyncTransport {
+    public func pendingProposals() async throws -> [PulledProposal] {
+        let answer: ProposalRows = try await api.get("/v1/claude/proposals")
+        return answer.rows
+    }
+
+    /// A proposal the server no longer has (404) has nothing left to resolve, so the resolution counts as sent, as an
+    /// update of no row did on Supabase.
+    public func resolveProposal(id: UUID, status: String, appliedChangeIds: [String], at: Date) async throws {
+        let stamp = SyncDate.format(at)
+        let body = try SyncJSON.encoder.encode(Resolution(status: status, appliedChangeIds: appliedChangeIds,
+                                                          resolvedAt: stamp, clientUpdatedAt: stamp))
+        do {
+            _ = try await Self.mappingRejections {
+                try await api.data("PATCH", "/v1/claude/proposals/\(id.uuidString.lowercased())", body: body)
+            }
+        } catch let error as ApiError where error.status == 404 {
+            return
+        }
+    }
+
+    public func lastMcpUse() async throws -> Date? {
+        let answer: LastUse = try await api.get("/v1/claude/last-use")
+        return answer.at
+    }
+
+    public func revokeOAuthGrants() async throws -> Int {
+        let answer: Revoked = try await api.post("/v1/claude/revoke", NoBody())
+        return answer.revoked
+    }
+
+    public func connectRequest(code: String) async throws -> ConnectRequest {
+        try await Self.mappingConnectErrors { try await api.get("/v1/claude/connect/\(code)") }
+    }
+
+    public func decideConnect(code: String, decision: ConnectDecision) async throws {
+        let _: Decided = try await Self.mappingConnectErrors {
+            try await api.post("/v1/claude/connect/\(code)", Decision(decision: decision.rawValue))
+        }
+    }
+
+    /// The two answers about the code itself; anything else (signed out, offline) stays an `ApiError` or `URLError`.
+    static func mappingConnectErrors<R>(_ call: () async throws -> R) async throws -> R {
+        do {
+            return try await call()
+        } catch let error as ApiError where error.code == "unknown_code" {
+            throw ConnectCodeError.unknownCode
+        } catch let error as ApiError where error.code == "too_many_attempts" {
+            throw ConnectCodeError.tooManyAttempts
+        }
+    }
+}
+
+private struct ProposalRows: Decodable {
+    let rows: [PulledProposal]
+}
+
+/// What `SupabaseTransport.resolveProposal` wrote: both times are the resolution's.
+private struct Resolution: Encodable {
+    let status: String
+    let appliedChangeIds: [String]
+    let resolvedAt: String
+    let clientUpdatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case status, appliedChangeIds = "applied_change_ids", resolvedAt = "resolved_at"
+        case clientUpdatedAt = "client_updated_at"
+    }
+}
+
+private struct LastUse: Decodable {
+    let at: Date?
+}
+
+private struct Revoked: Decodable {
+    let revoked: Int
+}
+
+private struct NoBody: Encodable {}
+
+private struct Decision: Encodable {
+    let decision: String
+}
+
+private struct Decided: Decodable {
+    let status: String
+}
+```
+
+In `ApiSyncTransport.swift`:
+1. In the type's doc comment, replace the paragraph that begins `/// Gyms, listings, their photos and Claude's proposals aren't on the API` (plan 28 may have reworded its gym half; keep that) with a sentence saying Claude's proposals, last use, grants and approval codes are on `/v1/claude` (`ApiSyncTransport+Claude.swift`).
+2. Replace `public var servesProposals: Bool { false }` with `public var servesProposals: Bool { true }`.
+3. Delete the `// MARK: Not on the API yet (plan 29)` section: its `pendingProposals()` and `resolveProposal(…)` stubs. The extension implements them now.
+
+- [ ] **Step 5: Run the tests**
+
+Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
+
+Expected:
+- `Test run with N tests in M suites passed`, with 11 tests and 2 suites more than before this task (`ApiClaudeTransportTests` 8, `ConnectCodeTests` 3).
+- On plan 27's tip that is 201 tests in 26 suites.
+- `GymSyncIntegrationTests` still builds; its suites skip without `API_URL`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add ios/Packages/GymSync
+git commit -m "feat(sync): Claude's proposals, last use, revoke and approval codes on /v1/claude"
+```
+
+- [ ] **Step 7: Review**
+
+- **Spec:** sections 3 (`/v1/claude/*`) and 6: the codes `unknown_code` and `too_many_attempts`, and a 401 still signing out through `ApiClient`.
+- **Quality:** the `code-reviewer` and `swift` agents. The fields are exactly server Decision 11's, and `PulledProposal` still decodes row by row.
+- **Security:** no code or token is logged. The code goes in the path only after `ConnectCode` reduced it to 8 alphabet characters (Task 12 passes `complete` only).
+
+### Task 12: Approve a connection in the app
+
+**Files:**
+- Create: `ios/GymRollins/Features/Claude/ApproveConnectionModel.swift`, `ios/GymRollins/Features/Claude/ApproveConnectionView.swift`
+- Modify: `ios/GymRollins/App/SyncCoordinator.swift`, `ios/GymRollins/App/SyncCoordinator+Factory.swift`, `ios/GymRollins/App/AppEnvironment+Claude.swift`, `ios/GymRollins/Features/Claude/ClaudeConnectionView.swift`, `ios/GymRollins/Features/Claude/ConnectorInstructions.swift`
+- Test: `ios/GymRollinsTests/ApproveConnectionModelTests.swift`, `ios/GymRollinsTests/ConnectorURLTests.swift`
+
+- [ ] **Step 1: Write the failing tests**
+
+`ios/GymRollinsTests/ApproveConnectionModelTests.swift`:
+
+```swift
+import Foundation
+import GymSync
+import Testing
+@testable import GymRollins
+
+/// Approve a connection's behaviour without a server: what the field shows, when the code is looked up, and what a
+/// refusal or a decision leaves on screen.
+@MainActor
+@Suite struct ApproveConnectionModelTests {
+    private static let request = ConnectRequest(code: "ABCD-EFGH", clientName: "Claude Code",
+                                                redirectHost: "127.0.0.1:53682", knownHost: false,
+                                                expiresAt: Date(timeIntervalSince1970: 1_800_000_000))
+
+    private final class Calls {
+        var lookedUp: [String] = []
+        var decided: [(String, ConnectDecision)] = []
+    }
+
+    private func model(lookUp: Error? = nil, decide: Error? = nil, calls: Calls = Calls()) -> ApproveConnectionModel {
+        ApproveConnectionModel(lookUp: { code in
+            calls.lookedUp.append(code)
+            if let lookUp { throw lookUp }
+            return Self.request
+        }, decide: { code, decision in
+            calls.decided.append((code, decision))
+            if let decide { throw decide }
+        })
+    }
+
+    @Test func theFieldShowsTheCodeWithItsDashAndLooksItUpOnceComplete() async {
+        let calls = Calls()
+        let model = model(calls: calls)
+        model.type("abcd")
+        #expect(model.typed == "ABCD" && model.complete == nil)
+        await model.lookUp()
+        #expect(calls.lookedUp.isEmpty)
+        model.type("abcd-efgh")
+        await model.lookUp()
+        #expect(model.typed == "ABCD-EFGH")
+        #expect(calls.lookedUp == ["ABCDEFGH"] && model.request == Self.request)
+    }
+
+    @Test func aWrongCodeSaysWhyAndAChangedCodeTriesAgain() async {
+        let calls = Calls()
+        let model = model(lookUp: ConnectCodeError.unknownCode, calls: calls)
+        model.type("ZZZZZZZZ")
+        await model.lookUp()
+        #expect(model.phase == .typing && model.error?.hasPrefix("No sign-in is waiting with this code") == true)
+        await model.lookUp()
+        #expect(calls.lookedUp.count == 1) // the same code isn't sent again
+        model.type("ZZZZZZZY")
+        #expect(model.error == nil)
+    }
+
+    @Test func refusalsReadAsTheOwnerNeedsThem() {
+        #expect(ApproveConnectionModel.message(for: ConnectCodeError.tooManyAttempts)
+            == "Too many wrong codes. Try again in 10 minutes.")
+        #expect(ApproveConnectionModel.message(for: SyncUnavailableError()) == ApproveConnectionModel.signInFirst)
+        #expect(ApproveConnectionModel.message(for: ApiError(status: 401, code: "signed_out", message: ""))
+            == ApproveConnectionModel.signInFirst)
+        #expect(ApproveConnectionModel.message(for: URLError(.notConnectedToInternet)).hasPrefix("Couldn't reach"))
+    }
+
+    @Test func approveAndDenyDecideTheTypedCode() async {
+        let calls = Calls()
+        let approving = model(calls: calls)
+        approving.type("ABCDEFGH")
+        await approving.lookUp()
+        await approving.decide(.approve)
+        #expect(approving.phase == .approved && approving.isDone)
+        approving.type("ZZZZ")
+        #expect(approving.typed == "ABCD-EFGH") // the field is done
+
+        let denying = model(calls: calls)
+        denying.type("ABCDEFGH")
+        await denying.lookUp()
+        await denying.decide(.deny)
+        #expect(denying.phase == .denied)
+        #expect(calls.decided.map(\.1) == [.approve, .deny] && calls.decided.allSatisfy { $0.0 == "ABCDEFGH" })
+    }
+
+    @Test func aFailedDecisionKeepsTheRequestToTryAgain() async {
+        let model = model(decide: URLError(.timedOut))
+        model.type("ABCDEFGH")
+        await model.lookUp()
+        await model.decide(.approve)
+        #expect(model.request == Self.request && model.error?.hasPrefix("Couldn't reach") == true)
+    }
+}
+```
+
+`ios/GymRollinsTests/ConnectorURLTests.swift`:
+
+```swift
+import Testing
+@testable import GymRollins
+
+/// The connector address Settings › Claude shows (spec section 5): the API the app syncs with, plus `/mcp`.
+@Suite struct ConnectorURLTests {
+    @Test func theConnectorIsTheAPIsMcp() {
+        let options = LaunchOptions(arguments: [], environment: ["API_URL": "http://127.0.0.1:8788"])
+        #expect(SyncCoordinator.connectorURL(options: options) == "http://127.0.0.1:8788/mcp")
+    }
+}
+```
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run, from `ios/`:
+
+```bash
+xcodegen generate --quiet
+xcodebuild test -project GymRollins.xcodeproj -scheme GymRollins \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' \
+  -only-testing:GymRollinsTests/ApproveConnectionModelTests -only-testing:GymRollinsTests/ConnectorURLTests \
+  -resultBundlePath build/TestResults-one-$(date +%s).xcresult -quiet
+```
+
+Expected: the build fails with `cannot find 'ApproveConnectionModel' in scope`.
+
+- [ ] **Step 3: Write the model and the sheet**
+
+`ios/GymRollins/Features/Claude/ApproveConnectionModel.swift`:
+
+```swift
+import Foundation
+import GymSync
+import Observation
+
+/// What Approve a connection does (spec section 5), apart from how it looks: the typed code shown as `XXXX-XXXX`, the
+/// lookup once all 8 characters are in, then the owner's decision. The calls are injected, so tests run it without a
+/// server (`ApproveConnectionModelTests`); the app passes the sync coordinator's.
+@MainActor @Observable
+final class ApproveConnectionModel {
+    enum Phase: Equatable {
+        case typing
+        case lookingUp
+        case found(ConnectRequest)
+        case deciding(ConnectRequest)
+        case approved
+        case denied
+    }
+
+    typealias LookUp = @MainActor (String) async throws -> ConnectRequest
+    typealias Decide = @MainActor (String, ConnectDecision) async throws -> Void
+
+    private(set) var typed = ""
+    private(set) var phase: Phase = .typing
+    private(set) var error: String?
+    @ObservationIgnored private let lookUpCall: LookUp
+    @ObservationIgnored private let decideCall: Decide
+    /// The code last refused: it isn't sent again until the owner changes it (each wrong one uses a try).
+    @ObservationIgnored private var refused: String?
+
+    init(lookUp: @escaping LookUp, decide: @escaping Decide) {
+        lookUpCall = lookUp
+        decideCall = decide
+    }
+
+    /// All 8 characters, once typed: what the view looks up.
+    var complete: String? { ConnectCode.complete(typed) }
+
+    /// The request being decided on, while there is one.
+    var request: ConnectRequest? {
+        switch phase {
+        case .found(let request), .deciding(let request): request
+        default: nil
+        }
+    }
+
+    var isDone: Bool { phase == .approved || phase == .denied }
+
+    /// The field's new text: kept as code characters with the dash, and a changed code starts over.
+    func type(_ text: String) {
+        guard !isDone else { return }
+        let shown = ConnectCode.display(text)
+        guard shown != typed else { return }
+        typed = shown
+        phase = .typing
+        error = nil
+    }
+
+    /// Looks the complete code up once. A wrong one stays in the field with the reason; changing it tries again.
+    func lookUp() async {
+        guard let code = complete, phase == .typing, code != refused else { return }
+        phase = .lookingUp
+        do {
+            let found = try await lookUpCall(code)
+            guard complete == code else { return } // retyped meanwhile
+            phase = .found(found)
+        } catch {
+            guard complete == code else { return }
+            phase = .typing
+            refused = code
+            self.error = Self.message(for: error)
+        }
+    }
+
+    func decide(_ decision: ConnectDecision) async {
+        guard case .found(let request) = phase, let code = complete else { return }
+        phase = .deciding(request)
+        error = nil
+        do {
+            try await decideCall(code, decision)
+            phase = decision == .approve ? .approved : .denied
+        } catch {
+            phase = .found(request)
+            self.error = Self.message(for: error)
+        }
+    }
+
+    static let signInFirst = "Sign in to GymRollins first, with the account Claude should use."
+
+    static func message(for error: Error) -> String {
+        switch error {
+        case ConnectCodeError.unknownCode:
+            "No sign-in is waiting with this code. Check it, or start again from Claude: a code lasts 10 minutes "
+                + "and works once."
+        case ConnectCodeError.tooManyAttempts:
+            "Too many wrong codes. Try again in 10 minutes."
+        case is SyncUnavailableError:
+            signInFirst
+        case let api as ApiError where api.status == 401:
+            signInFirst
+        default:
+            ApiError.isOffline(error)
+                ? "Couldn't reach GymRollins. Check your connection and try again."
+                : "Couldn't check this code. Try again."
+        }
+    }
+}
+```
+
+`ios/GymRollins/Features/Claude/ApproveConnectionView.swift`:
+
+```swift
+import GymSync
+import SwiftUI
+
+/// Settings › Claude › Approve a connection (spec section 5). Claude's sign-in page in the browser shows a code; the
+/// owner types it here, sees which app asks and where an approval sends the browser (with a warning when that isn't
+/// Claude's), then approves or denies. Approve and Deny each sit on their own row: a Form row fires every button it
+/// holds.
+struct ApproveConnectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var model: ApproveConnectionModel
+    @FocusState private var codeFocused: Bool
+
+    init(model: ApproveConnectionModel) {
+        _model = State(initialValue: model)
+    }
+
+    var body: some View {
+        Form {
+            codeSection
+            if let request = model.request { askingSection(request) }
+            if model.request != nil { decisionSection }
+            if let result = resultText {
+                Section { Text(result).accessibilityIdentifier("connect.result") }
+            }
+            if let error = model.error {
+                Section { Text(error).foregroundStyle(Theme.destructive).accessibilityIdentifier("connect.error") }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
+        .navigationTitle("Approve a connection")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }.accessibilityIdentifier("connect.done")
+            }
+        }
+        .task(id: model.complete) { await model.lookUp() }
+        .onAppear { codeFocused = true }
+    }
+
+    private var codeSection: some View {
+        Section {
+            TextField("XXXX-XXXX", text: Binding(get: { model.typed }, set: { model.type($0) }))
+                .font(.title2.monospaced())
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .keyboardType(.asciiCapable)
+                .focused($codeFocused)
+                .disabled(model.isDone)
+                .accessibilityLabel("Code")
+                .accessibilityIdentifier("connect.code")
+            if model.phase == .lookingUp {
+                HStack { ProgressView(); Text("Checking the code\u{2026}").foregroundStyle(Theme.textSecondary) }
+            }
+        } footer: {
+            Text("Claude's sign-in page in your browser shows this code. It lasts 10 minutes.")
+        }
+    }
+
+    private func askingSection(_ request: ConnectRequest) -> some View {
+        Section("Asking for access") {
+            row("App", request.clientName ?? "An app with no name", id: "connect.client")
+            row("Returns to", request.redirectHost, id: "connect.host")
+            if !request.knownHost {
+                Text("This isn't Claude's address. Approve only if you started this connection yourself, for example "
+                     + "in Claude Code on your computer.")
+                    .font(.footnote).foregroundStyle(Theme.destructive)
+                    .accessibilityIdentifier("connect.warning")
+            }
+        }
+    }
+
+    private func row(_ label: String, _ value: String, id: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value).foregroundStyle(Theme.textSecondary).accessibilityIdentifier(id)
+        }
+    }
+
+    private var decisionSection: some View {
+        Section {
+            Button("Approve") { Task { await model.decide(.approve) } }
+                .disabled(deciding)
+                .accessibilityIdentifier("connect.approve")
+            Button("Deny", role: .destructive) { Task { await model.decide(.deny) } }
+                .disabled(deciding)
+                .accessibilityIdentifier("connect.deny")
+        } footer: {
+            Text("Claude can then use what Settings \u{203A} Claude allows, until you disconnect it.")
+        }
+    }
+
+    private var deciding: Bool {
+        if case .deciding = model.phase { return true }
+        return false
+    }
+
+    private var resultText: String? {
+        switch model.phase {
+        case .approved: "Approved. Your browser returns to Claude in a moment."
+        case .denied: "Denied. Claude wasn't given access."
+        default: nil
+        }
+    }
+}
+```
+
+- [ ] **Step 4: Reach the sheet from Settings › Claude**
+
+In `ios/GymRollins/App/SyncCoordinator.swift`, add after `revokeClaudeAccess()`:
+
+```swift
+
+    /// The Claude sign-in waiting with `code` (Approve a connection). Signed out there's no session to ask with.
+    func connectRequest(code: String) async throws -> ConnectRequest {
+        guard let engine else { throw SyncUnavailableError() }
+        return try await engine.connectRequest(code: code)
+    }
+
+    func decideConnect(code: String, decision: ConnectDecision) async throws {
+        guard let engine else { throw SyncUnavailableError() }
+        try await engine.decideConnect(code: code, decision: decision)
+    }
+```
+
+In `ios/GymRollins/Features/Claude/ClaudeConnectionView.swift`:
+
+1. Add `@State private var approving = false` after `@State private var copied = false`.
+2. Replace `connectSection` with:
+
+```swift
+    private var connectSection: some View {
+        Section("Connect") {
+            ConnectorInstructions(connectorURL: env.connectorURL, copied: $copied)
+            Button("Approve a connection") { approving = true }
+                .accessibilityIdentifier("claude.approveConnection")
+        }
+    }
+```
+
+3. After the `.confirmationDialog { … }` modifier in `body`, add:
+
+```swift
+        .sheet(isPresented: $approving, onDismiss: { Task { await loadLastUse() } }) { approveSheet }
+```
+
+4. Add after `connectSection`:
+
+```swift
+    /// A fresh model each time the sheet opens, asking through the account's sync coordinator.
+    private var approveSheet: some View {
+        NavigationStack {
+            ApproveConnectionView(model: ApproveConnectionModel(
+                lookUp: { [sync = env.sync] code in try await sync.connectRequest(code: code) },
+                decide: { [sync = env.sync] code, decision in
+                    try await sync.decideConnect(code: code, decision: decision)
+                }
+            ))
+        }
+    }
+```
+
+In `ios/GymRollins/Features/Claude/ConnectorInstructions.swift`, replace `step(3, "Approve access when asked")` with:
+
+```swift
+        step(3, "When Claude shows a code, open Settings \u{203A} Claude \u{203A} Approve a connection and type it")
+```
+
+- [ ] **Step 5: The connector address and Disconnect on the API**
+
+In `ios/GymRollins/App/SyncCoordinator+Factory.swift`, replace `connectorURL(options:)` and its doc comment with:
+
+```swift
+    /// The MCP connector URL Claude needs, `<API_URL>/mcp` (spec section 5); nil without an API.
+    static func connectorURL(options: LaunchOptions) -> String? {
+        apiConfig(options).map { $0.baseURL.appending(path: "mcp").absoluteString }
+    }
+```
+
+If nothing else calls `supabaseConfig(_:)` now (plan 28 may have moved photo hosting off it), delete it too.
+
+In `ios/GymRollins/App/AppEnvironment+Claude.swift`, replace the doc comment above `disconnectClaude()` with:
+
+```swift
+    /// "Disconnect Claude": every permission goes off first and the profile is pushed at once (the server checks the
+    /// toggles on each call Claude makes), then `POST /v1/claude/revoke` removes every grant and token of the account,
+    /// so Claude's next call is refused and its refresh token is dead.
+    /// Returns the connections revoked; succeeds only when the server stored the flags AND the revoke worked
+    /// (`ClaudeDisconnectError` says which step failed; the revoke is not attempted if the flags weren't stored).
+```
+
+- [ ] **Step 6: Run the tests**
+
+Run: the step 2 command, plus `-only-testing:GymRollinsTests/ClaudeConnectionBadgeTests`, then:
+
+```bash
+xcrun xcresulttool get test-results summary --path "$(ls -td build/TestResults-one-*.xcresult | head -1)"
+```
+
+Expected:
+- 8 tests passed and 0 failed: `ApproveConnectionModelTests` 5, `ConnectorURLTests` 1, `ClaudeConnectionBadgeTests` 2.
+- Then the same command with `-only-testing:GymRollinsUITests/AccessibilityAuditUITests/testClaudeConnectionAudit` passes. Its audit of the Claude screen now meets the new row.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add ios/GymRollins ios/GymRollinsTests
+git commit -m "feat(app): Approve a connection in Settings › Claude; the connector address is <API_URL>/mcp"
+```
+
+- [ ] **Step 8: Review**
+
+- **Spec:** section 5, item by item:
+  - the code field `XXXX-XXXX`, case-insensitive,
+  - the client's name and host, with the warning,
+  - Approve and Deny on their own rows,
+  - the connector address.
+- **Quality:** the `swiftui-expert-skill` and `code-reviewer` agents: the model's phases, a code changed while being looked up, the sheet's state per opening.
+- **Security:** the `security-reviewer` agent:
+  - the sheet never shows the account's data,
+  - it never approves without an explicit tap,
+  - the warning shows for every host but claude.ai and claude.com,
+  - nothing logs the code.
+
+### Task 13: The Claude integration suites on the Worker
+
+**Files:**
+- Create: `ios/Packages/GymSync/Tests/GymSyncIntegrationTests/ClaudeTestClient.swift`
+- Move and rewrite: `Tests/GymSyncIntegrationTests/SupabaseParked/ProposalTransportTests.swift` and `OAuthGrantTransportTests.swift`, to `Tests/GymSyncIntegrationTests/`
+- Modify: `scripts/test-server.sh`
+
+- [ ] **Step 1: Give the test Worker its own address as its base URL**
+
+In `scripts/test-server.sh`, in `start_test_server`, add `--var "PUBLIC_BASE_URL:$TEST_API_URL"` to the `wrangler dev` line, after `--port "$TEST_API_PORT"`:
+
+```bash
+  (cd "$server" && exec npx wrangler dev --local --persist-to "$TEST_API_STATE" --ip 127.0.0.1 \
+    --port "$TEST_API_PORT" --var "PUBLIC_BASE_URL:$TEST_API_URL" --show-interactive-dev-session=false) \
+    >> "$log" 2>&1 &
+```
+
+The comment above the function says why: the OAuth issuer and the MCP resource are built from it.
+
+- [ ] **Step 2: Write Claude's side for tests**
+
+`ios/Packages/GymSync/Tests/GymSyncIntegrationTests/ClaudeTestClient.swift`:
+
+```swift
+import CryptoKit
+import Foundation
+
+/// Claude's side of the connection for tests, as claude.ai or Claude Code would run it against the local Worker:
+/// registration, PKCE, the authorize step, the `/connect` page in a browser that keeps its own cookies, the token
+/// exchange and MCP calls. Plain Foundation, because GymRollinsUITests compiles this file too (project.yml), and
+/// the code's approval is the caller's: the app's transport in the integration suites, the sheet in the UI tests.
+/// Local only: it talks to `base` and nothing else.
+final class ClaudeTestClient: @unchecked Sendable {
+    struct Tokens: Sendable {
+        let access: String
+        let refresh: String
+        let scope: String
+    }
+
+    /// One sign-in waiting at `/connect`: its code as the page shows it (`XXXX-XXXX`), and what the rest needs.
+    struct SignIn: Sendable {
+        let code: String
+        let clientId: String
+        let connectPath: String
+        let verifier: String
+        let state: String
+    }
+
+    struct Failure: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    let base: URL
+    let redirectURI = "http://127.0.0.1:53682/callback"
+    private let session: URLSession
+    private let lock = NSLock()
+    private var cookies: [String: String] = [:]
+    private var resource = ""
+
+    init(base: URL) {
+        self.base = base
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCache = nil
+        session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+    }
+
+    // MARK: The flow
+
+    /// Registers a public client with a loopback callback, as Claude Code does; its client_id.
+    func register(name: String = "Claude Code") async throws -> String {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "client_name": name, "redirect_uris": [redirectURI], "token_endpoint_auth_method": "none",
+        ])
+        let (data, status) = try await send("POST", "/api/auth/oauth2/register", body: body,
+                                            type: "application/json")
+        guard status == 201, let id = try json(data)["client_id"] as? String else {
+            throw Failure(description: "registration answered \(status): \(String(decoding: data, as: UTF8.self))")
+        }
+        return id
+    }
+
+    /// The authorize step without a session sends the browser to `/connect`, which shows the code.
+    func startSignIn(clientId: String) async throws -> SignIn {
+        let resource = try await mcpResource()
+        let verifier = Data((0..<32).map { _ in UInt8.random(in: 0...255) }).base64URL
+        let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URL
+        let state = UUID().uuidString
+        var query = URLComponents()
+        query.queryItems = [
+            .init(name: "response_type", value: "code"), .init(name: "client_id", value: clientId),
+            .init(name: "redirect_uri", value: redirectURI), .init(name: "state", value: state),
+            .init(name: "code_challenge", value: challenge), .init(name: "code_challenge_method", value: "S256"),
+            .init(name: "scope", value: "mcp"), .init(name: "resource", value: resource),
+        ]
+        let (_, status, location) = try await browse("/api/auth/oauth2/authorize?\(query.percentEncodedQuery ?? "")")
+        guard status == 302, let connectPath = location, connectPath.hasPrefix("/connect?") else {
+            throw Failure(description: "authorize answered \(status), to \(location ?? "nowhere")")
+        }
+        let (page, _, _) = try await browse(connectPath)
+        guard let code = Self.firstMatch(#"class="code">([0-9A-Z]{4}-[0-9A-Z]{4})<"#, in: page) else {
+            throw Failure(description: "/connect showed no code: \(page.prefix(300))")
+        }
+        return SignIn(code: code, clientId: clientId, connectPath: connectPath, verifier: verifier, state: state)
+    }
+
+    /// After the approval: the page signs this browser in and re-enters the authorize step, which answers Claude's
+    /// callback with a code. Waits up to `timeout` for the decision, checking every second as the page does.
+    func finish(_ signIn: SignIn, timeout: Duration = .seconds(30)) async throws -> String {
+        let back = try await waitForDecision(signIn, timeout: timeout)
+        guard back.hasPrefix("/api/auth/oauth2/authorize?") else {
+            throw Failure(description: "the page went to \(back), not back into authorize")
+        }
+        let (_, status, location) = try await browse(back)
+        guard status == 302, let location, let callback = URLComponents(string: location),
+              location.hasPrefix(redirectURI), callback.queryItems?.first(where: { $0.name == "state" })?.value
+                == signIn.state,
+              let code = callback.queryItems?.first(where: { $0.name == "code" })?.value else {
+            throw Failure(description: "authorize answered \(status), to \(location ?? "nowhere")")
+        }
+        return code
+    }
+
+    /// After a denial: where the page sends the browser (Claude's callback with `error=access_denied`).
+    func denial(_ signIn: SignIn, timeout: Duration = .seconds(30)) async throws -> URLComponents {
+        let back = try await waitForDecision(signIn, timeout: timeout)
+        guard let url = URLComponents(string: back), back.hasPrefix(redirectURI) else {
+            throw Failure(description: "the page went to \(back), not to Claude's callback")
+        }
+        return url
+    }
+
+    func exchange(_ signIn: SignIn, code: String) async throws -> Tokens {
+        let (data, status) = try await token([
+            "grant_type": "authorization_code", "code": code, "redirect_uri": redirectURI,
+            "client_id": signIn.clientId, "code_verifier": signIn.verifier, "resource": try await mcpResource(),
+        ])
+        let answer = try json(data)
+        guard status == 200, let access = answer["access_token"] as? String,
+              let refresh = answer["refresh_token"] as? String else {
+            throw Failure(description: "token answered \(status): \(String(decoding: data, as: UTF8.self))")
+        }
+        return Tokens(access: access, refresh: refresh, scope: answer["scope"] as? String ?? "")
+    }
+
+    /// The token endpoint's status for a refresh: 200 while the grant lives.
+    func refreshStatus(clientId: String, refreshToken: String) async throws -> Int {
+        try await token([
+            "grant_type": "refresh_token", "refresh_token": refreshToken, "client_id": clientId,
+            "resource": try await mcpResource(),
+        ]).status
+    }
+
+    /// Registration, the sign-in, `approve(code)`, and the tokens: a connected Claude in one call.
+    func connect(approve: @Sendable (String) async throws -> Void) async throws -> Tokens {
+        let signIn = try await startSignIn(clientId: try await register())
+        try await approve(signIn.code)
+        return try await exchange(signIn, code: try await finish(signIn))
+    }
+
+    // MARK: MCP
+
+    /// A JSON-RPC call to `/mcp`: the HTTP status, and the answer's `result` when there is one.
+    func mcp(_ accessToken: String, method: String, params: [String: Any] = [:]) async throws
+        -> (status: Int, result: [String: Any]?) {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "jsonrpc": "2.0", "id": 1, "method": method, "params": params,
+        ])
+        var request = URLRequest(url: base.appending(path: "/mcp"))
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("2025-06-18", forHTTPHeaderField: "MCP-Protocol-Version")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let text = String(decoding: data, as: UTF8.self)
+        let message = text.split(separator: "\n").last { $0.hasPrefix("data:") }.map { String($0.dropFirst(5)) } ?? text
+        let answer = (try? JSONSerialization.jsonObject(with: Data(message.utf8))) as? [String: Any]
+        return (status, answer?["result"] as? [String: Any])
+    }
+
+    /// A tool's JSON answer (the text content parsed), and whether the tool reported an error.
+    func callTool(_ accessToken: String, _ name: String, _ arguments: [String: Any] = [:]) async throws
+        -> (isError: Bool, json: [String: Any]) {
+        let (status, result) = try await mcp(accessToken, method: "tools/call",
+                                             params: ["name": name, "arguments": arguments])
+        guard status == 200, let result, let content = result["content"] as? [[String: Any]],
+              let text = content.first?["text"] as? String else {
+            throw Failure(description: "tools/call \(name) answered \(status)")
+        }
+        let json = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+        return (result["isError"] as? Bool ?? false, json)
+    }
+
+    // MARK: HTTP
+
+    /// The MCP resource, as the server's RFC 9728 document names it.
+    private func mcpResource() async throws -> String {
+        if let known = lock.withLock({ resource.isEmpty ? nil : resource }) { return known }
+        let (data, _) = try await send("GET", "/.well-known/oauth-protected-resource/mcp")
+        guard let named = try json(data)["resource"] as? String else { throw Failure(description: "no resource") }
+        lock.withLock { resource = named }
+        return named
+    }
+
+    /// The page's meta refresh target once the request is decided; nil while it still waits (a plain reload).
+    private func waitForDecision(_ signIn: SignIn, timeout: Duration) async throws -> String {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            let (page, status, _) = try await browse(signIn.connectPath)
+            if let target = Self.firstMatch(#"http-equiv="refresh" content="\d+;url=([^"]+)""#, in: page) {
+                return target.replacingOccurrences(of: "&amp;", with: "&")
+            }
+            guard status == 200 else { throw Failure(description: "/connect answered \(status)") }
+            try await Task.sleep(for: .seconds(1))
+        }
+        throw Failure(description: "no decision within \(timeout)")
+    }
+
+    /// A browser's GET: its cookies sent, the answer's cookies kept, no redirect followed.
+    private func browse(_ path: String) async throws -> (page: String, status: Int, location: String?) {
+        var request = URLRequest(url: URL(string: path, relativeTo: base)!.absoluteURL)
+        request.setValue("text/html", forHTTPHeaderField: "Accept")
+        let jar = lock.withLock { cookies.map { "\($0.key)=\($0.value)" }.joined(separator: "; ") }
+        if !jar.isEmpty { request.setValue(jar, forHTTPHeaderField: "Cookie") }
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, let url = http.url else { throw URLError(.badServerResponse) }
+        let fields = http.allHeaderFields.reduce(into: [String: String]()) { $0["\($1.key)"] = "\($1.value)" }
+        for cookie in HTTPCookie.cookies(withResponseHeaderFields: fields, for: url) {
+            lock.withLock {
+                if cookie.value.isEmpty || (cookie.expiresDate.map { $0 <= Date() } ?? false) {
+                    cookies[cookie.name] = nil
+                } else {
+                    cookies[cookie.name] = cookie.value
+                }
+            }
+        }
+        return (String(decoding: data, as: UTF8.self), http.statusCode, http.value(forHTTPHeaderField: "Location"))
+    }
+
+    private func token(_ form: [String: String]) async throws -> (data: Data, status: Int) {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        let body = form.map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")" }
+            .joined(separator: "&")
+        return try await send("POST", "/api/auth/oauth2/token", body: Data(body.utf8),
+                              type: "application/x-www-form-urlencoded")
+    }
+
+    private func send(_ method: String, _ path: String, body: Data? = nil,
+                      type: String? = nil) async throws -> (data: Data, status: Int) {
+        var request = URLRequest(url: base.appending(path: path))
+        request.httpMethod = method
+        request.httpBody = body
+        if let type { request.setValue(type, forHTTPHeaderField: "Content-Type") }
+        let (data, response) = try await session.data(for: request)
+        return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
+    }
+
+    private func json(_ data: Data) throws -> [String: Any] {
+        (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    }
+
+    private static func firstMatch(_ pattern: String, in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[range])
+    }
+}
+
+/// Hands every 3xx back instead of following it, so each step of the flow can be checked.
+private final class NoRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
+private extension Data {
+    var base64URL: String {
+        base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+}
+```
+
+- [ ] **Step 3: Un-park and port the two suites**
+
+Run: `git rm ios/Packages/GymSync/Tests/GymSyncIntegrationTests/SupabaseParked/{ProposalTransportTests,OAuthGrantTransportTests}.swift`
+
+`ios/Packages/GymSync/Tests/GymSyncIntegrationTests/ProposalTransportTests.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+import Testing
+@testable import GymSync
+
+/// Claude's proposals and last use on the local Worker, read and resolved as the app does: Claude (a real OAuth client,
+/// `ClaudeTestClient`) proposes through `/mcp`, the owner's transport pulls and resolves it, and Claude then sees it
+/// applied. A row the app can't read is covered by `ApiClaudeTransportTests` (the server's tools never write one).
+@MainActor
+@Suite(.enabled(if: apiConfigured, "Set API_URL to run against a local Worker"))
+struct ProposalTransportTests {
+    @Test func aProposalFromClaudeIsPulledResolvedAndSeenApplied() async throws {
+        let user = try await Account.signUp()
+        let transport = user.transport
+        #expect(try await transport.lastMcpUse() == nil)
+        let claude = ClaudeTestClient(base: try IntegrationEnv.config().baseURL)
+        let tokens = try await claude.connect { code in
+            try await transport.decideConnect(code: code, decision: .approve)
+        }
+
+        let proposed = try await claude.callTool(tokens.access, "propose_plan_changes", [
+            "summary": "Add a Push day",
+            "changes": [["id": "c1", "type": "add-routine", "routineId": "new-push", "name": "Push"]],
+        ])
+        #expect(!proposed.isError)
+        let pulled = try await transport.pendingProposals()
+        guard case .valid(let proposal) = try #require(pulled.first), pulled.count == 1 else {
+            Issue.record("expected one valid proposal, got \(pulled)")
+            return
+        }
+        #expect(proposal.summary == "Add a Push day" && proposal.source == "claude")
+        #expect(proposal.changes.first?.type == .addRoutine && proposal.toDomain().status == .pending)
+
+        try await transport.resolveProposal(id: proposal.id, status: "applied", appliedChangeIds: ["c1"],
+                                            at: max(Date(), proposal.createdAt))
+        #expect(try await transport.pendingProposals().isEmpty)
+        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposal.id.uuidString.lowercased()])
+        #expect(seen.json["status"] as? String == "applied")
+        #expect(seen.json["applied_change_ids"] as? [String] == ["c1"])
+
+        let last = try #require(try await transport.lastMcpUse())
+        #expect(abs(last.timeIntervalSinceNow) < 120)
+        try await user.deleteAccount()
+    }
+
+    @Test func anOlderResolutionLeavesTheNewerOne() async throws {
+        let user = try await Account.signUp()
+        let transport = user.transport
+        let claude = ClaudeTestClient(base: try IntegrationEnv.config().baseURL)
+        let tokens = try await claude.connect { code in
+            try await transport.decideConnect(code: code, decision: .approve)
+        }
+        _ = try await claude.callTool(tokens.access, "propose_plan_changes", [
+            "summary": "Add a Pull day",
+            "changes": [["id": "c1", "type": "add-routine", "routineId": "new-pull", "name": "Pull"]],
+        ])
+        guard case .valid(let proposal) = try #require(try await transport.pendingProposals().first) else { return }
+        let later = max(Date(), proposal.createdAt).addingTimeInterval(60)
+        try await transport.resolveProposal(id: proposal.id, status: "dismissed", appliedChangeIds: [], at: later)
+        try await transport.resolveProposal(id: proposal.id, status: "applied", appliedChangeIds: ["c1"],
+                                            at: later.addingTimeInterval(-30))
+        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposal.id.uuidString.lowercased()])
+        #expect(seen.json["status"] as? String == "dismissed")
+        try await user.deleteAccount()
+    }
+}
+```
+
+`ios/Packages/GymSync/Tests/GymSyncIntegrationTests/OAuthGrantTransportTests.swift`:
+
+```swift
+import Foundation
+import Testing
+@testable import GymSync
+
+/// Approve a connection and Disconnect Claude against the local Worker: a real OAuth client (`ClaudeTestClient`, what
+/// Claude does) registers and opens `/connect`, the owner's transport approves or denies its code, and revoking ends
+/// its access token and its refresh token at once (spec section 4, "Claude's connection").
+@MainActor
+@Suite(.enabled(if: apiConfigured, "Set API_URL to run against a local Worker"))
+struct OAuthGrantTransportTests {
+    @Test func anApprovedCodeConnectsClaudeAndDisconnectEndsItsTokens() async throws {
+        let user = try await Account.signUp()
+        let transport = user.transport
+        #expect(try await transport.revokeOAuthGrants() == 0) // nothing granted yet
+        let claude = ClaudeTestClient(base: try IntegrationEnv.config().baseURL)
+        let clientId = try await claude.register()
+        let signIn = try await claude.startSignIn(clientId: clientId)
+
+        let request = try await transport.connectRequest(code: signIn.code.lowercased())
+        #expect(request.code == signIn.code && request.clientName == "Claude Code")
+        #expect(request.redirectHost == "127.0.0.1:53682" && !request.knownHost)
+        try await transport.decideConnect(code: signIn.code, decision: .approve)
+        await #expect(throws: ConnectCodeError.unknownCode) { // a code works once
+            try await transport.decideConnect(code: signIn.code, decision: .deny)
+        }
+        let tokens = try await claude.exchange(signIn, code: try await claude.finish(signIn))
+        #expect(tokens.scope == "mcp offline_access")
+        #expect(try await claude.mcp(tokens.access, method: "tools/list").status == 200)
+
+        #expect(try await transport.revokeOAuthGrants() == 1)
+        #expect(try await claude.mcp(tokens.access, method: "tools/list").status == 401)
+        let refresh = try await claude.refreshStatus(clientId: clientId, refreshToken: tokens.refresh)
+        #expect((400..<500).contains(refresh), "refresh after Disconnect answered HTTP \(refresh)")
+        try await user.deleteAccount()
+    }
+
+    @Test func aDeniedCodeSendsClaudeAccessDenied() async throws {
+        let user = try await Account.signUp()
+        let claude = ClaudeTestClient(base: try IntegrationEnv.config().baseURL)
+        let signIn = try await claude.startSignIn(clientId: try await claude.register())
+
+        try await user.transport.decideConnect(code: signIn.code, decision: .deny)
+
+        let callback = try await claude.denial(signIn)
+        #expect(callback.queryItems?.first { $0.name == "error" }?.value == "access_denied")
+        #expect(callback.queryItems?.first { $0.name == "state" }?.value == signIn.state)
+        try await user.deleteAccount()
+    }
+
+    @Test func fiveWrongCodesThenNoMoreTries() async throws {
+        let user = try await Account.signUp()
+        for _ in 0..<5 {
+            await #expect(throws: ConnectCodeError.unknownCode) {
+                try await user.transport.connectRequest(code: "ZZZZZZZZ")
+            }
+        }
+        await #expect(throws: ConnectCodeError.tooManyAttempts) {
+            try await user.transport.connectRequest(code: "ZZZZZZZZ")
+        }
+        try await user.deleteAccount()
+    }
+}
+```
+
+If plan 28 emptied `SupabaseParked/`, also remove its `exclude: ["SupabaseParked"]` in `Package.swift`.
+
+- [ ] **Step 4: Run them**
+
+Run: `scripts/test-sync-integration.sh`
+
+Expected:
+- Every suite passes, these 5 among them:
+  - `aProposalFromClaudeIsPulledResolvedAndSeenApplied()`, `anOlderResolutionLeavesTheNewerOne()`,
+  - `anApprovedCodeConnectsClaudeAndDisconnectEndsItsTokens()`, `aDeniedCodeSendsClaudeAccessDenied()`, `fiveWrongCodesThenNoMoreTries()`.
+- The script's D1 check after account deletion still finds no rows.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/test-server.sh ios/Packages/GymSync/Tests/GymSyncIntegrationTests
+git commit -m "test(sync): Claude's proposals, approval codes and Disconnect against the local Worker"
+```
+
+- [ ] **Step 6: Review**
+
+- **Spec:** section 8's Claude items through the app's own transport: approve, deny, reuse, 5 wrong tries, the token, a tool call, revoke and the 401.
+- **Quality:** the `code-reviewer` agent. `ClaudeTestClient` follows no redirect, keeps its own cookies, and talks only to `base`.
+
+### Task 14: The Claude UI tests on the Worker
+
+**Files:**
+- Rewrite: `ios/GymRollinsUITests/ProposalSyncUITests.swift`
+- Modify: `ios/project.yml`, `scripts/ios-test-sync.sh`
+
+- [ ] **Step 1: Share Claude's test client with the UI tests**
+
+In `ios/project.yml`, give `GymRollinsUITests` the shared file:
+
+```yaml
+  GymRollinsUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    # ClaudeTestClient.swift plays Claude (OAuth and MCP), shared with GymSyncIntegrationTests.
+    sources: [GymRollinsUITests, Packages/GymSync/Tests/GymSyncIntegrationTests/ClaudeTestClient.swift]
+```
+
+- [ ] **Step 2: Rewrite `ProposalSyncUITests` for the Worker and the sheet**
+
+`ios/GymRollinsUITests/ProposalSyncUITests.swift`:
+
+```swift
+import XCTest
+
+/// Claude end to end against a throwaway LOCAL Worker (run via `scripts/ios-test-sync.sh`, which passes its URL as
+/// `TEST_RUNNER_API_URL`; Xcode hands it to the runner as `API_URL`). Skipped otherwise. Claude is played by
+/// `ClaudeTestClient` (a real OAuth client and MCP caller); the owner signs up in the app, approves Claude's code in
+/// Settings › Claude › Approve a connection, and reviews what Claude proposes.
+@MainActor
+final class ProposalSyncUITests: XCTestCase {
+    static let password = "Passw0rd!"
+    private var apiURL: URL!
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        let env = ProcessInfo.processInfo.environment
+        guard let url = env["API_URL"].flatMap(URL.init(string:)) else {
+            throw XCTSkip("No local Worker; run scripts/ios-test-sync.sh")
+        }
+        apiURL = url
+    }
+
+    /// Claude asks to connect, the owner approves its code in the sheet, Claude proposes a heavier bench, the app pulls
+    /// it and the owner applies it; Claude then sees it applied, and the plan on the server has the new weight.
+    func testClaudeConnectsThroughTheSheetAndItsProposalIsApplied() async throws {
+        let email = "ui-\(UUID().uuidString.lowercased())@test.local"
+        let app = launch()
+        openSettings(app)
+        signUp(app, email: email)
+        waitForLabel(app.staticTexts["account.status"], "Up to date")
+
+        // 1. Claude's sign-in page shows a code; the owner types it loosely and approves it.
+        let claude = ClaudeTestClient(base: apiURL)
+        let signIn = try await claude.startSignIn(clientId: try await claude.register())
+        openApproveConnection(app)
+        type(signIn.code.lowercased().replacingOccurrences(of: "-", with: ""), into: app.textFields["connect.code"])
+        XCTAssertEqual(app.textFields["connect.code"].value as? String, signIn.code)
+        waitForLabel(app.staticTexts["connect.client"], "Claude Code", timeout: 10)
+        XCTAssertEqual(app.staticTexts["connect.host"].label, "127.0.0.1:53682")
+        XCTAssertTrue(app.staticTexts["connect.warning"].exists, "a loopback callback isn't Claude's own host")
+        app.buttons["connect.approve"].tap()
+        waitForLabel(app.staticTexts["connect.result"], "Approved. Your browser returns to Claude in a moment.")
+        let tokens = try await claude.exchange(signIn, code: try await claude.finish(signIn))
+        app.buttons["connect.done"].tap()
+
+        // 2. Claude proposes a heavier bench on the synced Push + Arms.
+        let session = try await appSession(email: email)
+        let routines = try await get("/v1/sync/routines?limit=500", token: session)["rows"] as? [[String: Any]] ?? []
+        let push = try XCTUnwrap(routines.first { $0["name"] as? String == "Push + Arms" }?["id"] as? String)
+        let proposed = try await claude.callTool(tokens.access, "propose_plan_changes", [
+            "summary": "Heavier bench",
+            "changes": [["id": "c1", "type": "weight", "routineId": push, "exerciseId": "0025", "weightKg": 65.77,
+                         "reason": "Top of range"]],
+        ])
+        XCTAssertFalse(proposed.isError, "\(proposed.json)")
+        let proposalId = try XCTUnwrap(proposed.json["proposal_id"] as? String)
+
+        // 3. The app pulls it: chip on Today → review → apply.
+        app.navigationBars.buttons.firstMatch.tap() // back to Settings
+        app.buttons["account.syncNow"].tap()
+        waitForLabel(app.staticTexts["account.status"], "Up to date")
+        app.tabBars.buttons["Today"].tap()
+        let chip = app.buttons["today.proposal"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 10))
+        chip.tap()
+        XCTAssertTrue(app.buttons["proposal.apply"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["proposal.apply"].label, "Apply 1 change")
+        app.buttons["proposal.apply"].tap()
+        let bench = app.descendants(matching: .any)["today.row.0025"]
+        let heavier = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS '145 lb'"), object: bench)
+        XCTAssertEqual(XCTWaiter().wait(for: [heavier], timeout: 5), .completed)
+
+        // 4. The resolution syncs; Claude sees it applied, and the server's plan has the new weight.
+        app.tabBars.buttons["Log"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        app.buttons["account.syncNow"].tap()
+        waitForLabel(app.staticTexts["account.status"], "Up to date")
+        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposalId])
+        XCTAssertEqual(seen.json["status"] as? String, "applied")
+        let plan = try await get("/v1/sync/routines?limit=500", token: session)["rows"] as? [[String: Any]] ?? []
+        let exercises = plan.first { $0["id"] as? String == push }?["exercises"] as? [[String: Any]] ?? []
+        let serverBench = exercises.first { $0["exercise_id"] as? String == "0025" }
+        XCTAssertEqual((serverBench?["weight_kg"] as? Double) ?? 0, 65.77, accuracy: 0.01)
+    }
+
+    /// Deny: the sheet says so, and Claude's callback gets `access_denied`.
+    func testADeniedCodeSendsClaudeAway() async throws {
+        let app = launch()
+        openSettings(app)
+        signUp(app, email: "ui-\(UUID().uuidString.lowercased())@test.local")
+        let claude = ClaudeTestClient(base: apiURL)
+        let signIn = try await claude.startSignIn(clientId: try await claude.register())
+        openApproveConnection(app)
+        type(signIn.code, into: app.textFields["connect.code"])
+        XCTAssertTrue(app.buttons["connect.deny"].waitForExistence(timeout: 10))
+        app.buttons["connect.deny"].tap()
+        waitForLabel(app.staticTexts["connect.result"], "Denied. Claude wasn't given access.")
+        let callback = try await claude.denial(signIn)
+        XCTAssertEqual(callback.queryItems?.first { $0.name == "error" }?.value, "access_denied")
+    }
+
+    /// A code nobody is waiting with says why, and offers no Approve.
+    func testAWrongCodeSaysSo() {
+        let app = launch()
+        openSettings(app)
+        signUp(app, email: "ui-\(UUID().uuidString.lowercased())@test.local")
+        openApproveConnection(app)
+        type("ZZZZZZZZ", into: app.textFields["connect.code"])
+        let error = app.staticTexts["connect.error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 10))
+        XCTAssertTrue(error.label.hasPrefix("No sign-in is waiting with this code."))
+        XCTAssertFalse(app.buttons["connect.approve"].exists)
+    }
+
+    // MARK: Helpers (local Worker only)
+
+    private func launch() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-uiTestingBackend", "local", "-diskStore", "-resetStore",
+                               "-fixedNow", "2026-09-26T09:00:00Z"]
+        app.launchEnvironment = ["API_URL": apiURL.absoluteString]
+        app.launch()
+        return app
+    }
+
+    /// The account's app session, as the app gets it: the bearer for `/v1` checks.
+    private func appSession(email: String) async throws -> String {
+        let json = try await request("POST", "/api/auth/sign-in/email", token: nil,
+                                     body: ["email": email, "password": Self.password])
+        return try XCTUnwrap(json["token"] as? String)
+    }
+
+    private func get(_ path: String, token: String) async throws -> [String: Any] {
+        try await request("GET", path, token: token, body: nil)
+    }
+
+    private func request(_ method: String, _ path: String, token: String?, body: Any?) async throws -> [String: Any] {
+        var req = URLRequest(url: try XCTUnwrap(URL(string: path, relativeTo: apiURL)?.absoluteURL))
+        req.httpMethod = method
+        if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let body {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        let (data, response) = try await URLSession.shared.data(for: req)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        XCTAssertTrue((200..<300).contains(code), "\(method) \(path): \(code) \(String(decoding: data, as: UTF8.self))")
+        return (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    }
+
+    private func openSettings(_ app: XCUIApplication) {
+        app.tabBars.buttons["Log"].tap()
+        XCTAssertTrue(app.buttons["log.settings"].waitForExistence(timeout: 5))
+        app.buttons["log.settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+    }
+
+    private func openApproveConnection(_ app: XCUIApplication) {
+        let claude = app.buttons["settings.claude"]
+        XCTAssertTrue(claude.waitForExistence(timeout: 5))
+        claude.tap()
+        let approve = app.buttons["claude.approveConnection"]
+        XCTAssertTrue(approve.waitForExistence(timeout: 5))
+        approve.tap()
+        XCTAssertTrue(app.textFields["connect.code"].waitForExistence(timeout: 5))
+    }
+
+    private func signUp(_ app: XCUIApplication, email: String) {
+        let emailField = app.textFields["account.email"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 10))
+        type(email, into: emailField)
+        type(Self.password, into: app.textFields["account.password"])
+        app.buttons["account.signUp"].tap()
+        XCTAssertTrue(app.staticTexts["account.emailLabel"].waitForExistence(timeout: 15))
+    }
+
+    private func type(_ text: String, into field: XCUIElement) {
+        field.tap()
+        let focused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: field)
+        XCTAssertEqual(XCTWaiter().wait(for: [focused], timeout: 5), .completed)
+        for character in text { field.typeText(String(character)) }
+    }
+
+    private func waitForLabel(_ element: XCUIElement, _ label: String, timeout: TimeInterval = 20) {
+        let predicate = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", label), object: element)
+        XCTAssertEqual(XCTWaiter().wait(for: [predicate], timeout: timeout), .completed,
+                       "Expected '\(label)', got '\(element.exists ? element.label : "<missing>")'")
+    }
+}
+```
+
+- [ ] **Step 3: Run them with the sync UI tests**
+
+In `scripts/ios-test-sync.sh`:
+- Replace the comment line `# ProposalSyncUITests stays on Supabase until plan 29, and the server-move test runs only from server-move-check.sh.` with `# ProposalSyncUITests plays Claude with ClaudeTestClient; the server-move test runs only from server-move-check.sh.`
+- Add `-only-testing:GymRollinsUITests/ProposalSyncUITests \` after `-only-testing:GymRollinsUITests/SyncUITests \`.
+
+Run:
+
+```bash
+DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' scripts/ios-test-sync.sh
+xcrun xcresulttool get test-results summary --path "$(ls -td ios/build/TestResults-sync-*.xcresult | head -1)"
+```
+
+Expected:
+- `SyncUITests` passes as plan 27 (and 28) left it.
+- These 3 pass: `testClaudeConnectsThroughTheSheetAndItsProposalIsApplied`, `testADeniedCodeSendsClaudeAway`, `testAWrongCodeSaysSo`.
+- 0 failed. The server-move test skips.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add ios/project.yml ios/GymRollinsUITests/ProposalSyncUITests.swift scripts/ios-test-sync.sh
+git commit -m "test(app): Claude connects through Approve a connection, and its proposal is applied, on the Worker"
+```
+
+- [ ] **Step 5: Review**
+
+- **Spec:** section 8: "Claude Code connects …" (server Task 9), and the proposal flow end to end on the Worker.
+- **Quality:** the `code-reviewer` agent. Each test makes its own account; nothing depends on order.
+
+### Task 15: Finish the iOS part
+
+**Files:**
+- Modify: this plan (`## Outcome`)
+
+- [ ] **Step 1: Run everything the iOS part touched**
+
+Run:
+
+```bash
+(cd ios/Packages/GymSync && swift test --filter GymSyncTests)
+scripts/test-sync-integration.sh
+DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' scripts/ios-test.sh
+DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' scripts/ios-test-sync.sh
+```
+
+Expected: all pass. The hermetic suite (`scripts/ios-test.sh`) skips `ProposalSyncUITests`, which has no `API_URL` there.
+
+- [ ] **Step 2: Review and outcome**
+
+1. A separate reviewer reads the iOS diff since Task 11. Use:
+   - the `code-reviewer` and `swift` agents,
+   - the `swiftui-expert-skill` for the sheet,
+   - the `security-reviewer` for `ApiSyncTransport+Claude.swift`, the sheet and `ClaudeTestClient.swift`.
+2. Fix CRITICAL and HIGH findings in their own commits.
+3. Append the iOS results to `## Outcome`:
+   - the commits and counts,
+   - what Claude Code and the simulator showed,
+   - every difference from this plan.
+
+   Commit it as `docs: plan 29 outcome (iOS)`.
 
 ## Self-review against the spec
 
@@ -4987,6 +6643,8 @@ To be written after plan 27 is committed, on its `ApiClient`.
 | §6 error body and codes; 401, 404, 422, 429 | Tasks 6–8 |
 | §7 user id only from the session or token; token kinds refused outside their routes; CORS only on `/mcp` and metadata; codes hashed, expiring, single-use, limited | Tasks 3–8 |
 | §8 the moved MCP and shared tests; tokens, toggles, the limit, the connection; Claude Code locally | Tasks 1–3, 8 and 9 |
+| §5 Approve a connection: the code field `XXXX-XXXX`, the client and host with the warning, Approve and Deny on their own rows; the connector address `<API_URL>/mcp` | Tasks 11 and 12 |
+| §4 Disconnect Claude from the app; §8 the iOS suites (proposals and grants on the Worker, the proposal UI test) | Tasks 11, 13 and 14 |
 | §10 the login hook and revocable tokens | Decisions 2 and 3 (proved in the scratch copy, Decision 13) |
 
 **What this plan found that the spec says differently** (for the spec's next revision):
