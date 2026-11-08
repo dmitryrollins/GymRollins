@@ -3,8 +3,8 @@
 The app shows its own photos first, named `own-<id>-<frame>.jpg` (frame 0 = start position, frame 1 = end position,
 1536×1024 JPEG, 3:2). They live in two places:
 
-- `media/photos/` (repo root, gitignored): where the generator writes. Not bundled; served from Supabase Storage
-  (see [Hosting](#4-hosting-supabase-storage)).
+- `media/photos/` (repo root, gitignored): where the generator writes. Not bundled; served from R2 behind the Worker
+  (see [Hosting](#4-hosting)).
 - `ios/GymRollins/Resources/OwnPhotos/`: bundled in the app. `BundledOwnPhotoProvider` picks up any file dropped
   there on the next build; copy photos here for exercises you train while the app still uses `PHOTO_HOSTING = bundle`.
  `own-0453-0.jpg` / `own-0453-1.jpg` are the style reference: same man, same clothes, light-grey
@@ -55,15 +55,16 @@ node scripts/generate-photos.mjs --priority 1
    exercise and equipment, start vs end actually differ, no extra people, no text or logos, body fully in frame.
 2. Delete any bad ones and re-run the generate command (only the deleted files are regenerated).
 3. Re-run `node scripts/build-photo-prompts.mjs` so done rows drop out of the CSV.
-4. Either upload them ([Hosting](#4-hosting-supabase-storage)), or, while the app still bundles photos, copy the
+4. Either upload them ([Hosting](#4-hosting)), or, while the app still bundles photos, copy the
    ones you want into `ios/GymRollins/Resources/OwnPhotos/` and rebuild/reinstall the app.
 
-## 4. Hosting (Supabase Storage)
+## 4. Hosting
 
 The full set (2,046 photos × ~110 KB ≈ 225 MB) is far too big for the app bundle, so own photos are hosted in the
-public, read-only Storage bucket **`exercise-photos`** (migration `supabase/migrations/20260929000001_exercise_photos_bucket.sql`:
-public read, JPEG + JSON only, 5 MB cap; no storage policies, so only the service role can write — pgTAP-tested in
-`supabase/tests/database/exercise_photos_bucket.test.sql`).
+**`exercise-photos`** R2 bucket behind the Worker (`server/`). Anyone can read them at
+`<API_URL>/photos/exercises/<name>`. The route serves only `own-<id>-<frame>.jpg`, `kind-<kindId>.jpg` and
+`manifest.json`, and takes no writes (`server/test/public-photos.test.ts`); only `scripts/upload-photos.mjs` writes
+the bucket.
 
 **How the app finds them.** The bucket holds `manifest.json`:
 
@@ -73,34 +74,37 @@ public read, JPEG + JSON only, 5 MB cap; no storage policies, so only the servic
 
 `photos` = frame count per exercise id, `rev` = a content hash per exercise. The app fetches the manifest once per
 launch (in the background; the last good copy is cached in Caches/ExercisePhotoManifest and used meanwhile and
-offline) and builds `<API_URL>/photos/exercises/own-<id>-<frame>.jpg?v=<rev>` — the
-`?v=` makes a regenerated photo bypass the long-lived photo caches. Photos download on demand into the existing
-150 MB photo cache. If the manifest can't be loaded (first launch offline, error), the app silently falls back.
+offline) and builds `<API_URL>/photos/exercises/own-<id>-<frame>.jpg?v=<rev>` — the `?v=` makes a regenerated photo
+bypass the long-lived photo caches. Photos download on demand into the existing 150 MB photo cache. If the manifest
+can't be loaded (first launch offline, error), the app silently falls back.
 
-**Provider order** with `PHOTO_HOSTING = storage`: photo URLs on the exercise record → Storage → photos bundled in the
-app → free-exercise-db → wger.de (Creative Commons, credited on the detail photo; only fills gaps — see
-`docs/licenses/wger.md`) → body-part illustration. With `bundle` (the default) the Storage step is skipped.
+**Provider order** with `PHOTO_HOSTING = storage`: photo URLs on the exercise record → hosted photos → photos bundled
+in the app → free-exercise-db → wger.de (Creative Commons, credited on the detail photo; only fills gaps — see
+`docs/licenses/wger.md`) → body-part illustration. With `bundle` (the default) the hosted step is skipped.
 
 ### Upload
 
-`scripts/upload-photos.mjs` uploads every `own-*.jpg` and `kind-*.jpg` in `media/photos/` and `ios/GymRollins/Resources/OwnPhotos/`
-(`content-type: image/jpeg`, `cache-control: max-age=31536000`), then rebuilds `manifest.json` from the bucket
-listing (`max-age=60`). Idempotent: objects with the same size and MD5 (Storage's eTag) are skipped, and an unchanged
-manifest isn't rewritten. Nothing local is moved or deleted; nothing in the bucket is deleted.
+`scripts/upload-photos.mjs` uploads every `own-*.jpg` and `kind-*.jpg` in `media/photos/` and
+`ios/GymRollins/Resources/OwnPhotos/` (`content-type: image/jpeg`, `cache-control: max-age=31536000`), then rebuilds
+`manifest.json` (`max-age=60`) from what the bucket holds: the local photos, plus every photo the stored manifest
+already listed. Idempotent: objects with the same size and MD5 (the ETag) are skipped, and an unchanged manifest isn't
+rewritten. Nothing local is moved or deleted; nothing in the bucket is deleted.
 
 ```bash
-# local stack (default target; URL + service-role key come from supabase/.env.local, written by supabase-up.sh)
-scripts/supabase-up.sh
+# the local Worker (the default target), with scripts/server-up.sh running; no Cloudflare account
 node scripts/upload-photos.mjs --dry-run      # what would be uploaded
 node scripts/upload-photos.mjs
 
-# cloud project (once it exists) — key from the environment or app/.env (gitignored), never logged or committed
-SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=... node scripts/upload-photos.mjs --target remote --dry-run
-SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=... node scripts/upload-photos.mjs --target remote
+# the deployed Worker, only with the owner's approval for this upload (docs/cloudflare-checklist.md, section 8)
+GYM_CLOUD_APPROVED=1 WORKER_URL=https://gymrollins.<subdomain>.workers.dev node scripts/upload-photos.mjs --target cloud --dry-run
+GYM_CLOUD_APPROVED=1 WORKER_URL=https://gymrollins.<subdomain>.workers.dev node scripts/upload-photos.mjs --target cloud
 ```
 
-`--dir <folder>` (repeatable) uploads from other folders instead. `--target local` refuses anything but a loopback
-URL; `--target remote` requires https.
+- `--target worker` writes with `wrangler r2 object put --local` into `server/.wrangler/state` (`WORKER_STATE` names
+  another local state folder), and accepts only a loopback `WORKER_URL` (default `http://127.0.0.1:8787`).
+- `--target cloud` writes with `wrangler r2 object put --remote` (the owner's `wrangler login`), needs an https
+  `WORKER_URL`, and refuses to run without `GYM_CLOUD_APPROVED=1`.
+- Both read through the Worker's public route. `--dir <folder>` (repeatable) uploads from other folders instead.
 
 ### Switch the app to the hosted photos
 
@@ -108,45 +112,32 @@ Set `PHOTO_HOSTING = storage` in `ios/Config/Local.xcconfig` (gitignored; defaul
 rebuild. The photos come from `<API_URL>/photos/exercises/` of whatever `API_URL` the build uses:
 
 - **Local Worker (DEBUG only):** the default `API_URL = http://127.0.0.1:8787` works in the simulator once
-  `node scripts/upload-photos.mjs --target worker` has filled it. Plain http is allowed only in DEBUG builds and only
-  for 127.0.0.1 / localhost, or the configured `API_URL` host when it is a loopback/LAN address — see
-  `PhotoURLPolicy`. Release builds load photos over https only; with an http `API_URL` a Release build keeps the
-  bundled photos.
-- **Deployed Worker:** set its https `API_URL` in `Local.xcconfig` once the owner has deployed it (plan 30's
-  checklist).
+  `node scripts/upload-photos.mjs` has filled it. Plain http is allowed only in DEBUG builds and only for 127.0.0.1 /
+  localhost, or the configured `API_URL` host when it is a loopback/LAN address — see `PhotoURLPolicy`. Release builds
+  load photos over https only; with an http `API_URL` a Release build keeps the bundled photos.
+- **Deployed Worker:** set its https `API_URL` in `Local.xcconfig` once the owner has deployed it
+  (`docs/cloudflare-checklist.md`, section 9).
 
 In DEBUG, the environment variables `PHOTO_HOSTING` and `API_URL` (Xcode scheme) override the build settings. UI tests
 (`-uiTesting`) never load hosted photos.
 
-### When the cloud project exists
+### When the Worker is deployed
 
-1. `supabase db push` creates the bucket (the migration above) — check in the dashboard that `exercise-photos` is
-   public and has no storage policies.
-2. Upload: `node scripts/upload-photos.mjs --target remote` (see above), then open
-   `https://<ref>.supabase.co/storage/v1/object/public/exercise-photos/manifest.json` to check it.
-3. App: cloud `SUPABASE_URL` / `SUPABASE_ANON_KEY` and `PHOTO_HOSTING = storage` in `Local.xcconfig`.
-4. Once Storage is live, the bundled `own-*` photos can be removed from `Resources/OwnPhotos/` (keep `own-0453-*`: it is the
+1. The owner creates the `exercise-photos` bucket with the others (`docs/cloudflare-checklist.md`, section 2). It stays
+   private: the Worker serves it.
+2. Upload with `--target cloud` (above), then check `curl -s https://<the Worker>/photos/exercises/manifest.json`.
+3. App: the deployed `API_URL` and `PHOTO_HOSTING = storage` in `Local.xcconfig`.
+4. Once hosting is live, the bundled `own-*` photos can be removed from `Resources/OwnPhotos/` (keep `own-0453-*`: it is the
    generator's style reference) — the bundle stays a fallback only for what's left in it. Keep every `kind-*.jpg`: they are
    the offline fallback for the equipment stock photos, and a test needs them.
 
-### The local Worker (plan 28)
-
-The Cloudflare Worker serves the same bucket at `<API_URL>/photos/exercises/<name>` (`manifest.json` included), from
-R2. Locally, with `scripts/server-up.sh` running:
-
-    node scripts/upload-photos.mjs --target worker --dry-run
-    node scripts/upload-photos.mjs --target worker
-
-It writes with `wrangler r2 object put --local` into `server/.wrangler/state` (no Cloudflare account) and reads back
-through the Worker, so a second run uploads nothing. `WORKER_URL` overrides `http://127.0.0.1:8787` (loopback only).
-The app switches `PHOTO_HOSTING = storage` to the Worker in the iOS part of plan 28; the deployed bucket is filled
-after the deploy (plan 30's checklist).
-
 ### Tests
 
-- Uploader: `node --test scripts/upload-photos.test.mjs` (mocked Storage API; in `scripts/test-all.sh`).
+- Uploader: `node --test scripts/upload-photos.test.mjs` (a fake Worker route and a fake wrangler; in
+  `scripts/test-all.sh`).
+- Server: `server/test/public-photos.test.ts` (the public route: names, ETag, 304, cache times, no writes).
 - App: `StoragePhotoHostingTests` (URL policy, config switch, manifest parsing/caching/failure, URL building,
   provider order) run in `scripts/ios-test.sh` without network.
-- End-to-end: `scripts/test-photo-hosting.sh` (or `PHOTO_E2E=1 scripts/test-all.sh`) uploads two generated test photos
-  to the **local** bucket with the script, checks the second upload is a no-op, loads them through the manifest,
-  provider and photo store in the simulator, then deletes them and rebuilds the manifest.
+- End-to-end: `scripts/test-photo-hosting.sh` (or `PHOTO_E2E=1 scripts/test-all.sh`) starts a throwaway local Worker,
+  uploads two generated test photos into its R2 with the script, checks the second upload is a no-op, and loads them
+  through the manifest, provider and photo store in the simulator. The Worker and its state are removed afterwards.

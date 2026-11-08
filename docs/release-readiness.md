@@ -1,13 +1,12 @@
 # Release readiness — v0.1.0
 
-Status as of 2026-09-28, branch `plan-08-e2e-polish` (Plan 08, Task 5), all commits through
-`7b96daf`. Full local test matrix is green: `scripts/test-all.sh`, `scripts/test-db.sh` (147),
-`cd supabase/functions && deno test` (MCP), `scripts/test-sync-integration.sh` (15),
-`scripts/ios-test-sync.sh` (5/5), SwiftLint (0 errors), `deno lint` (clean).
+Status first written 2026-09-28 (Plan 08, Task 5); the backend parts were rewritten for the Cloudflare Worker in
+plan 30 (2026-11-08). The full local matrix is `scripts/test-all.sh` with `SYNC_E2E=1 MCP_E2E=1 PHOTO_E2E=1
+GYM_E2E=1`; each end-to-end suite starts its own throwaway local Worker. Plan 30's Outcome has the latest counts.
 
 ## What works locally
 
-Everything below runs against the local Supabase stack (`scripts/supabase-up.sh`) or fully
+Everything below runs against the local Worker (`scripts/server-up.sh`, no Docker) or fully
 offline, and is proven by the listed suites.
 
 | Feature | Proven by |
@@ -23,7 +22,7 @@ offline, and is proven by the listed suites.
 | Settings: units, rest, bar/plates, import/export, account deletion | `SettingsUITests`, `ExportServiceTests`, `AuthIntegrationTests::deleteAccountRemovesUserAndData` (E2E) |
 | Offline-first sync, conflict resolution (keep local / keep other), resume after relaunch | `SyncUITests`, `ConflictUITests`, `SyncEngineTests`, `SyncCoordinatorTests`, `SyncRoundTripTests` (E2E) |
 | Empty states across Today/Log/Library | `EmptyStatesUITests` |
-| Claude connection screen, proposal review (apply/undo, auto-apply), MCP read/write tools, OAuth consent page and DCR flow (local) | `ProposalUITests`, `ClaudeConnectionBadgeTests`, `mcp/tools/*_test.ts`, `mcp_hardening.test.sql`, `mcp_audit.test.sql`, `web/consent/server.test.mjs`, `web/consent/e2e.test.mjs` (headless Chromium) |
+| Claude connection screen, Approve a connection, proposal review (apply/undo, auto-apply), MCP read/write tools, the OAuth flow with the code page (local) | `ProposalUITests`, `ProposalSyncUITests`, `ClaudeConnectionBadgeTests`, `ApproveConnectionModelTests`, `server/test/mcp/**`, `server/test/connect-page.test.ts`, `connect-approve.test.ts`, `claude-connection.test.ts`, `scripts/test-mcp.sh` |
 | Accessibility: VoiceOver labels, Dynamic Type up to accessibility XL, `performAccessibilityAudit()` | `AccessibilityAuditUITests`, screenshots in `docs/screenshots/plan-08/a11y/` |
 | Repository query performance (150-workout history) | `WorkoutRepositoryPerformanceTests` — all six queries under the 50 ms target, see `docs/testing/performance.md` |
 
@@ -32,38 +31,29 @@ end; the remaining 2 are partial only because they hit surfaces XCUITest can't d
 with Apple system sheet, and the routine editor's superset/progression controls, which only change
 through Claude proposals and are covered there).
 
-Run everything: `scripts/test-all.sh` (opt-in Docker suites: `SYNC_E2E=1`, `MCP_E2E=1`). Full
-command list in the README's test matrix.
+Run everything: `scripts/test-all.sh` (opt-in end-to-end suites, each on a throwaway local Worker: `SYNC_E2E=1`,
+`MCP_E2E=1`, `PHOTO_E2E=1`, `GYM_E2E=1`). Full command list in the README's test matrix.
 
-## Needs the cloud project
+## Needs the deploy
 
-Everything below needs an owner-approved Supabase cloud project; none of it can be verified
-locally. See `docs/cloud-checklist.md` for the exact settings to change before pointing a build at
-it (email confirmation, minimum password length or disabling the email provider, closing
-sign-ups after the owner registers, the OAuth consent page showing client name/scope, the Apple
-auth provider, RLS/`anon` advisor checks, `pgcrypto` in `extensions`).
+Everything below needs the Worker deployed to the owner's Cloudflare account, which waits for the owner's approval
+(`docs/cloudflare-checklist.md`, in its order: rate limits first). None of it can be verified locally.
 
-- **The Claude connector end to end.** The full "add custom connector" flow inside claude.ai/the
-  Claude Desktop app needs public HTTPS — the OAuth 2.1 dynamic client registration, authorize,
-  and token endpoints all have to be reachable from claude.ai's servers, which `127.0.0.1:5xxxx`
-  never will be. Locally we've verified every piece up to that boundary: `scripts/oauth-local-smoke.sh`
-  automates DCR → PKCE → authorize → consent → token exchange → `tools/list`, and
-  `web/consent/e2e.test.mjs` drives the consent page itself in headless Chromium.
-- **Sign in with Apple.** Requires `[auth.external.apple]` configured in the cloud project
-  (Services ID / bundle id, key id, team id, private key in the Supabase dashboard) and the
-  app's `com.apple.developer.applesignin` entitlement pointed at a matching bundle id. Locally,
-  auth is exercised with email/password (DEBUG-only in the shipping app).
+- **The Claude connector end to end.** claude.ai must reach the Worker over public https: discovery, registration,
+  authorize, `/connect` and the token endpoint. Locally every piece up to that boundary is covered:
+  `scripts/test-mcp.sh` (and `node scripts/claude-local.mjs smoke`) runs registration → PKCE → authorize →
+  `/connect` → the app's approval → tokens → MCP calls → refresh → Disconnect, and Claude Code connects to the local
+  `/mcp` (`server/README.md`).
+- **Sign in with Apple with a real Apple token.** The Worker checks the app's id token (audience = the bundle id,
+  nonce, signature) with no web flow and no extra Apple setup. Locally it is tested with locally signed tokens; the
+  first real token comes at the cutover. Email and password exist in debug builds only, and the deployed Worker keeps
+  `ALLOW_PASSWORD_AUTH=0`.
 - **TestFlight builds.** Needs a distribution certificate/provisioning profile under an App Store
   Connect app record, which needs the owner's Apple Developer Program membership context — see
   "Device build" below for the closest thing tested locally (a Debug device build).
-- **A hosted consent page.** `web/consent/` currently only runs via `scripts/consent-server.mjs`
-  bound to `127.0.0.1:55430`. For a cloud project it needs to be hosted somewhere with HTTPS and
-  `[auth] site_url` pointed at it; the page itself (static HTML/JS/CSS, CSP already set) doesn't
-  change, just where it's served from and `/config.js`'s cloud `SUPABASE_URL`/anon key.
-- **Asymmetric JWT keys.** Local Supabase uses a shared HS256 secret; production should move to
-  the ES256/RS256 asymmetric JWT signing Supabase cloud projects support, which the MCP Edge
-  Function's token validation already expects to work with (JWKS-based verification) but hasn't
-  been exercised against a real asymmetric-key issuer.
+- **The phone's move.** The first launch of a build pointed at the deployed Worker hands the phone's data to the
+  account that signs in, and uploads it. It is rehearsed with a copy of the phone's store
+  (`scripts/server-move-check.sh`). Back up the phone first, and deploy the Worker before or with that build.
 
 ## Deferred
 
@@ -100,8 +90,9 @@ weren't folded into the fixes above.
 
 ## Owner decisions needed
 
-- **Cloud project approval** — creating and configuring the Supabase cloud project per
-  `docs/cloud-checklist.md`, and deciding when to cut over from local-only.
+- **The deploy** — creating the Worker, D1 and the three R2 buckets per `docs/cloudflare-checklist.md`, each step
+  approved separately, and deciding when the phone moves to it. Before it: how to rate-limit on `workers.dev`, and
+  the per-user row and tombstone caps (the checklist's sections 1 and 5).
 - **Exercise media — decided 2026-09-28: stopgap photos now, own AI media later.** The app shows
   public-domain start/end photos from `yuhonas/free-exercise-db` (Unlicense, pinned commit, see
   `docs/licenses/free-exercise-db.md`) for **300 / 1,324** library exercises (23 / 24 of the owner's
@@ -140,18 +131,14 @@ does the same automatically.
 First launch on a new device may need: Settings → Privacy & Security → **Developer Mode** on, and
 Settings → General → VPN & Device Management → trust the developer certificate.
 
-**Device sync caveat (documented, not tested on device):** `Base.xcconfig` defaults
-`SUPABASE_URL` to `http://127.0.0.1:55421` (the Mac's local Supabase stack), overridden only by
-`Local.xcconfig`, which does **not** currently set a `SUPABASE_URL`. A Debug or Release build
-installed on a physical iPhone will resolve `127.0.0.1` to the *phone itself*, not the Mac, so
-sync will fail (the app is fully usable offline — SwiftData is the local source of truth,
-`SyncEngine` degrades to "offline, will sync later" the same way it does in airplane mode). For
-device sync ahead of a cloud project: add `SUPABASE_URL = http:/$()/<Mac's LAN IP>:55421` to
-`Local.xcconfig` (same split-`$()` trick `Base.xcconfig` uses so xcconfig doesn't treat `//` as a
-comment) — the phone and Mac need to be on the same LAN/Wi-Fi, and `NSAllowsLocalNetworking` in
-`Info.plist`'s `NSAppTransportSecurity` already permits plain-HTTP local-network traffic, so no
-ATS change is needed. This is plausible but unverified on an actual device; it's the fallback
-until the cloud project exists.
+**Device sync caveat (documented, not tested on device):** `Base.xcconfig` defaults `API_URL` to
+`http://127.0.0.1:8787` (the Mac's local Worker), overridden only by `Local.xcconfig`. A build installed on a
+physical iPhone resolves `127.0.0.1` to the *phone itself*, so sync fails and the app works offline, as in airplane
+mode (SwiftData is the source of truth). Don't point the owner's phone at any server before the cutover
+(`docs/cloudflare-checklist.md`): the first launch with a new `API_URL` runs the server move. For a test phone
+against the Mac, run the Worker on the LAN (`npx wrangler dev --local --ip 0.0.0.0` in `server/`) and set
+`API_URL = http:/$()/<Mac's LAN IP>:8787` in `Local.xcconfig` (the split `$()` keeps xcconfig from reading `//` as
+a comment); `NSAllowsLocalNetworking` already allows plain http on the local network.
 
 ## How to install on your iPhone
 
@@ -167,9 +154,7 @@ until the cloud project exists.
    (add `-allowProvisioningUpdates` only if you're comfortable letting Xcode manage the profile
    automatically; not required once step 1 is done via Xcode itself).
 4. The app works fully offline out of the box (SwiftData local store, no network dependency for
-   logging workouts). For sync against your Mac's local Supabase stack instead of the cloud
-   project, see "Device sync caveat" above — add your Mac's LAN IP to
-   `ios/Config/Local.xcconfig` and make sure `scripts/supabase-up.sh` is running and your phone
-   is on the same network.
+   logging workouts). For sync against your Mac's local Worker, see "Device sync caveat" above; for the deployed
+   Worker, `docs/cloudflare-checklist.md` (back up the phone first).
 5. Onboard with Sign in with Apple (or, in a DEBUG build, email/password), import your Fitbod
    export if you have one, and set up your profile.

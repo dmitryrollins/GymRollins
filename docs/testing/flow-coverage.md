@@ -5,9 +5,9 @@ Built by reading the suites on 2026-09-27 (Plan 08, Task 1). Gap tests added by 
 `ios/GymRollinsUITests/FlowCoverageUITests.swift` (marked **new**).
 
 **Type:** UI = XCUITest (`ios/GymRollinsUITests`, hermetic unless noted) · Unit = Swift Testing
-(`ios/GymRollinsTests`, `ios/Packages/*/Tests`) · HTTP = deno (`supabase/functions`) / node (`web/consent`) ·
-DB = pgTAP (`supabase/tests/database`) · E2E = opt-in against the local Supabase stack
-(`scripts/ios-test-sync.sh`, `SYNC_E2E=1` / `MCP_E2E=1`).
+(`ios/GymRollinsTests`, `ios/Packages/*/Tests`) · HTTP = Vitest in workerd (`server/test`) · DB = the same suite,
+on an in-memory D1 · E2E = opt-in, each on a throwaway local Worker (`scripts/ios-test-sync.sh`, `scripts/test-mcp.sh`;
+`SYNC_E2E=1` / `MCP_E2E=1`). Before plan 30, HTTP was the Deno MCP suite and DB the pgTAP files.
 
 **Status:** covered = the step's user-visible behaviour is driven end to end and asserted · partial = some of the
 step is driven, the rest only at unit level or not at all (reason given) · uncovered = no test.
@@ -31,7 +31,7 @@ proposals, covered in 2.4); drag-to-reorder is covered at the data layer.
 | 1.2 Profile: units, body, goal, days, injuries | `OnboardingUITests::testFullOnboardingWithImport`, `::testProfileSetupShowsValidationErrorForMissingBodyweight`; `ProfileSetupInputTests` (all); `DomainLimitsTests::profileRanges` | UI, Unit | covered |
 | 1.3 Import CSV + column mapping | `OnboardingUITests::testFullOnboardingWithImport` (bad row reported); `CSVParserTests`, `FitbodImporterTests`, `ImportPlanTests`, `ImportServiceTests`, `RealExportImportTests` | UI, Unit | covered |
 | 1.4 Import result + match unknown exercises | `OnboardingUITests::testFullOnboardingWithImport` (two unmatched names → custom, 3 workouts in Log); `ImportPlanTests::unknownNameIsNeedsChoice`, `ImportServiceTests::customExercisesAreCreatedOnceAcrossWorkouts`, `ExerciseMatcherTests` | UI, Unit | covered |
-| 1.5 Connect Claude (connector + OAuth) | `OnboardingUITests` (done / later); `EmptyStatesUITests::testTodayEmptyPlanStateOffersAskClaude`; `ProposalUITests::testClaudeScreenShowsConnectorPendingAndDisconnect`; `web/consent/server.test.mjs` (consent page, CSP, config); `mcp/auth_test.ts`, `mcp/http_test.ts` (401 + RFC 9728 metadata, OAuth-client-only tokens); `mcp_client.test.sql`; `OAuthGrantTransportTests` (E2E) | UI, HTTP, DB, E2E | covered — the claude.ai side of the OAuth round trip is manual |
+| 1.5 Connect Claude (connector + OAuth) | `OnboardingUITests` (done / later); `EmptyStatesUITests::testTodayEmptyPlanStateOffersAskClaude`; `ProposalUITests::testClaudeScreenShowsConnectorPendingAndDisconnect`; `ApproveConnectionModelTests`; `server/test/connect-page.test.ts`, `connect-approve.test.ts` (the code page, CSP, approval); `server/test/oauth-discovery.test.ts`, `claude-connection.test.ts` (401 + RFC 9728 metadata, Claude tokens only on `/mcp`); `OAuthGrantTransportTests` (E2E) | UI, Unit, HTTP, E2E | covered — the claude.ai side of the OAuth round trip is manual |
 
 ## 2 · Plan
 
@@ -40,7 +40,7 @@ proposals, covered in 2.4); drag-to-reorder is covered at the data layer.
 | 2.1 Today: next routine + suggested weights | `ShellUITests::testTodayShowsSaturdayPushDay`; `SettingsUITests::testSwitchingUnitsToKgChangesTodayDisplay`; `TodayModelTests` (all); `ProgressionEngineTests` (all) | UI, Unit | covered |
 | 2.2 My Plan: week schedule + routines | `PlanUITests::testPlanShowsWeekAndRoutines`; `WeekScheduleTests`, `RepositoryTests::scheduleAndRoutineForDate` | UI, Unit | covered |
 | 2.3 Edit routine: order, sets, supersets, progression | `PlanUITests::testEditRoutineAddsExerciseAndChangesSets` (sets, add exercise); `EmptyStatesUITests::testTodayEmptyPlanStateOffersCreateRoutine`; `PlanChangeApplierTests::reorderMovesAndClamps`, `::supersetGroupsBothExercises`, `::progressionPolicyAndIncrement`; `MappingTests::routineRoundTripKeepsOrder`; `SmokeTests::newRoutineDraftUsesProgressionDefault` | UI, Unit | partial — drag-reorder isn't driven by XCUITest; supersets/progression have no editor controls (set via proposals, 2.4) |
-| 2.4 Review Claude's proposal: apply / dismiss / undo | `ProposalUITests::testApplySubsetThenUndo`, `::testDismissAllRemovesTheChip`, `::testAutoApplyOnRelaunchAppliesTheProposal`; `ProposalSyncUITests` (E2E); `ProposalTests`, `ProposalModelTests`, `PlanChangeApplier*Tests`, `SyncEngineProposalTests`; `mcp/tools/write_test.ts` | UI, Unit, HTTP, E2E | covered |
+| 2.4 Review Claude's proposal: apply / dismiss / undo | `ProposalUITests::testApplySubsetThenUndo`, `::testDismissAllRemovesTheChip`, `::testAutoApplyOnRelaunchAppliesTheProposal`; `ProposalSyncUITests` (E2E); `ProposalTests`, `ProposalModelTests`, `PlanChangeApplier*Tests`, `SyncEngineProposalTests`; `server/test/mcp/tools/write.test.ts` | UI, Unit, HTTP, E2E | covered |
 
 ## 3 · Workout
 
@@ -66,7 +66,7 @@ proposals, covered in 2.4); drag-to-reorder is covered at the data layer.
 | 4.2 Workout detail: edit / delete / share | `LogUITests::testEditWorkoutSet`, `::testEditTimedSetDuration`, `::testDeleteWorkout`; **new** `FlowCoverageUITests::testStep4_2WorkoutDetailSharesTheWorkout`; `WorkoutTextTests` (share text) | UI, Unit | covered (was partial) |
 | 4.3 Exercise history + e1RM trend | `WorkoutScreensUITests::testHistoryChipShowsExerciseHistorySheet`; `BodyUITests::testStrengthRowPushesExerciseHistoryWithinBodyStack`; **new** `FlowCoverageUITests::testStep4_3ExerciseHistoryShowsTheE1RMTrend`; `ExerciseTrendsTests`, `OneRepMaxTests`, `SessionHistoryTests` | UI, Unit | covered (was partial) |
 | 4.4 Body: goal + trends | `BodyUITests::testEmptyStateThenAddWeighIn`, `::testAddWeighInShowsTrendPendingWithoutEnoughDataForTrend`; **new** `FlowCoverageUITests::testStep4_4BodyShowsGoalProgressAndTrend`; `BodyTrendTests`, `BodyweightChartDomainTests` | UI, Unit | covered (was partial) |
-| 4.5 Add weigh-in | `BodyUITests::testEmptyStateThenAddWeighIn`, `::testInvalidWeighInRejected`; `ProfileBodyRepositoryTests::bodyweightUpsertUpdatesExistingEntry`; `mcp/tools/write_test.ts` (log_bodyweight) | UI, Unit, HTTP | covered |
+| 4.5 Add weigh-in | `BodyUITests::testEmptyStateThenAddWeighIn`, `::testInvalidWeighInRejected`; `ProfileBodyRepositoryTests::bodyweightUpsertUpdatesExistingEntry`; `server/test/mcp/tools/write.test.ts` (log_bodyweight) | UI, Unit, HTTP | covered |
 
 ## 5 · Library and settings
 
@@ -75,7 +75,7 @@ proposals, covered in 2.4); drag-to-reorder is covered at the data layer.
 | 5.1 Library: search + filters | `LibraryUITests::testSearchAndOpenDetail`, `::testFilterByBodyPart`, `::testFilterByBodyPartReachesLastRowBySwiping`; `LibraryTests::searchByTextAndFilters` | UI, Unit | covered |
 | 5.2 Create custom exercise | `LibraryUITests::testCreateCustomExercise`; `EmptyStatesUITests::testLibraryNoResultsOffersCreateCustomExercise`; **new** `FlowCoverageUITests::testStep5_2CustomExerciseIsUsableInRoutineAndWorkout`; `RepositoryTests::customExercises`, `DomainValidationTests::customExerciseNameLongerThan80IsRejected` | UI, Unit | covered (was partial) |
 | 5.3 Settings: units, rest, plates, import/export, delete account | `SettingsUITests::testSwitchingUnitsToKgChangesTodayDisplay`, `::testPlatesEditorChangeReflectsInPlateCalculator`, `::testExportAllDataShowsShareSheet`, `::testEraseAllDataReturnsToOnboarding`; `SmokeTests::sessionsApplySavedRestPreference`; `ExportServiceTests`; `AuthIntegrationTests::deleteAccountRemovesUserAndData` (E2E) | UI, Unit, E2E | covered |
-| 5.4 Claude connection + permissions | `ProposalUITests::testClaudeScreenShowsConnectorPendingAndDisconnect`, `::testAutoApplyOnRelaunchAppliesTheProposal`; `SettingsUITests::testClaudeBadgeDefaultsToNotConnected`; `ClaudeEnvironmentTests`, `ClaudeConnectionBadgeTests`; `mcp_hardening.test.sql`, `mcp_audit.test.sql`; `mcp/tools/read_test.ts` (permissions); the main prompt: `ClaudePromptsUITests`, `ClaudePromptsTests`, `AccessibilityAuditUITests::testUseWithClaudeAudit`; rules on connect: `mcp/instructions_test.ts`, `mcp/app_test.ts` | UI, Unit, DB, HTTP | covered |
+| 5.4 Claude connection + permissions | `ProposalUITests::testClaudeScreenShowsConnectorPendingAndDisconnect`, `::testAutoApplyOnRelaunchAppliesTheProposal`; `SettingsUITests::testClaudeBadgeDefaultsToNotConnected`; `ClaudeEnvironmentTests`, `ClaudeConnectionBadgeTests`; `server/test/mcp/d1-db.test.ts` (toggles, the two writes, audit, the call limit); `server/test/mcp/tools/read.test.ts` (permissions); the main prompt: `ClaudePromptsUITests`, `ClaudePromptsTests`, `AccessibilityAuditUITests::testUseWithClaudeAudit`; rules on connect: `server/test/mcp/instructions.test.ts`, `server/test/mcp/app.test.ts` | UI, Unit, HTTP | covered |
 
 ## 6 · Edge cases
 

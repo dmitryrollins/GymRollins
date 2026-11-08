@@ -37,7 +37,8 @@ try it, open an issue, or send a pull request.
 - **Plan and log workouts.** Routines on a weekly schedule, weight suggestions from a progression engine, plate
   rounding, rest timer, supersets, and a one-tap "reps left" effort rating.
 - **Claude as your coach, via MCP.** Add GymRollins as a custom connector in Claude (OAuth 2.1 with dynamic client
-  registration, no API keys to copy). Claude reads your history and proposes changes; you approve them in the app.
+  registration, no API keys to copy). Claude's sign-in page shows a code; you approve it in the app under Settings ›
+  Claude › Approve a connection. Claude reads your history and proposes changes; you approve them in the app.
   With the Gyms toggle on, it also reads the equipment at your gyms.
   It gets the rules for the tools when it connects, and Settings › Claude has one prompt to paste into a Claude
   Project; after that you just ask.
@@ -47,22 +48,23 @@ try it, open an issue, or send a pull request.
   OpenPowerlifting data.
 - **Train with what's actually there.** Keep a photo catalogue of each gym's equipment, no account needed. Today's
   plan swaps what this gym can't do for that session only, weights snap to the bells and stacks that exist, and Build
-  workout makes a session from what's there. An item with no photo shows a sample until you add yours. Anyone can
-  browse what people have shared at a gym without signing in; sign in to share your own or confirm theirs. Anything
-  marked This phone only never leaves the phone. Shared listings can be reported, and their authors blocked; three
-  reports hide a listing until a moderator decides.
+  workout makes a session from what's there. An item with no photo shows a sample until you add yours. Sign in to see
+  what people have shared at a gym, share your own or confirm theirs. Anything marked This phone only never leaves the
+  phone. Shared listings can be reported, and their authors blocked; three reports hide a listing until a moderator
+  decides.
 - **Train with a partner.** Share a day's workout by QR code or link. Your partner opens it with their own weights, and each
   of you logs on your own phone. No account or signal needed.
 - **Injury notes with an end date.** On the date, Today asks if it's time to continue, and brings a paused routine back at
   60% of its weights.
 - **Bring your history.** CSV import from Fitbod, Strong, Hevy and FitNotes.
-- **Offline-first.** Everything lives on the device (SwiftData); cloud sync through Supabase is optional.
+- **Offline-first.** Everything lives on the device (SwiftData); sync with the GymRollins API, one Cloudflare Worker,
+  is optional.
 
 ## Status
 
-Early, and built for one user first (me). It runs today on the simulator or your own iPhone against a local
-Supabase stack. Hosted cloud sync and an App Store release are next; see `docs/release-readiness.md` for what works
-and what's still missing.
+Early, and built for one user first (me). It runs today on the simulator or your own iPhone, against a local
+Cloudflare Worker (`scripts/server-up.sh`; no Docker, no Cloudflare account). Deploying the Worker and an App Store
+release are next: see `docs/cloudflare-checklist.md` and `docs/release-readiness.md`.
 
 ## Build it with me
 
@@ -78,104 +80,108 @@ Open an issue to discuss an idea first, or pick an existing one. Contributions n
 
 ## Developer docs
 
-Native SwiftUI iOS app + Supabase backend + remote MCP server. Offline-first: SwiftData is the source of truth on
-the device and cloud sync is best-effort. Claude reads training data and *proposes* plan changes through MCP; it
-never edits the plan directly. The owner applies proposals in the app (or opts in to auto-apply).
+Native SwiftUI iOS app + one Cloudflare Worker (Hono, Better Auth, D1, R2) that serves sign-in, sync, photos and the
+remote MCP server. Offline-first: SwiftData is the source of truth on the device and sync is best-effort. Claude
+reads training data and *proposes* plan changes through MCP; it never edits the plan directly. The owner applies
+proposals in the app (or opts in to auto-apply).
 
-- Spec: `docs/specs/2026-09-26-gymrollins-ios-design.md`
+- Spec: `docs/specs/2026-09-26-gymrollins-ios-design.md`; the backend: `docs/specs/2026-11-07-cloudflare-backend-design.md`
 - Plans: `docs/plans/`
+- Server: `server/README.md`
 - Mockups: `docs/design/`
-- Release readiness: `docs/release-readiness.md` — what works locally, what needs the cloud
-  project, what's deferred, owner decisions needed, install instructions
-- Cloud checklist: `docs/cloud-checklist.md` — settings to change before pointing a build at a
-  cloud Supabase project
+- Release readiness: `docs/release-readiness.md`: what works locally, what needs the deploy, what's deferred, owner
+  decisions needed, install instructions
+- Deploy checklist: `docs/cloudflare-checklist.md`: the owner's steps to deploy the Worker and move the phone to it,
+  each approved separately
 - Flow-map test coverage: `docs/testing/flow-coverage.md`
 - Performance baselines: `docs/testing/performance.md`
 
 ## Architecture
 
 ```
-┌──────────────── iPhone ────────────────┐        ┌──────────── Supabase ─────────────┐
-│ SwiftUI features (Today, Workout, Log, │        │ Postgres (RLS by auth.uid())       │
-│ Body, Library, Settings, Onboarding)   │        │ Auth: Apple ID token, OAuth 2.1     │
-│        │ observes                      │  sync  │   server (+ DCR) for MCP clients   │
-│ GymData: SwiftData store + SyncEngine ─┼───────►│ PostgREST (tables, RPC)            │
-│        │ uses                          │        │ Edge Fn `mcp` (MCP tools)  ◄───────┼── Claude (custom
-│ GymCore: pure Swift domain & rules     │        │                                     │    connector)
-└────────────────────────────────────────┘        └────────────────────────────────────┘
+iPhone app ──(session token)──▶ /api/auth/*   Better Auth (Apple id token, sessions; email in debug builds only)
+           ──(session token)──▶ /v1/*         sync, gyms, photos, moderation, Claude settings, account
+Claude     ──(OAuth token)────▶ /mcp          MCP server, the 15 tools
+           ──(browser)────────▶ /api/auth/oauth2/*, /connect, /.well-known/*
+Public     ───────────────────▶ /photos/shared/*, /photos/exercises/*
+                                        │
+                     one Worker (Hono, TypeScript) ── D1 `gymrollins` · R2 ×3
 ```
+
+On the phone: GymCore (pure Swift rules) → GymData (the SwiftData store, repositories, sync state) → GymSync
+(`SyncEngine`, `ApiClient`, `AuthService` with a Keychain session) → the SwiftUI features.
 
 | Package / dir | What lives there |
 |---|---|
 | `ios/GymRollins/` | App target: entry point, `Features/*` (SwiftUI screens), `DesignSystem/*` (Liquid Glass components, tokens), `Resources/` (exercise library JSON, fonts) |
 | `ios/GymRollinsTests/`, `ios/GymRollinsUITests/` | App-level unit + XCUITest E2E suites |
 | `ios/Packages/GymCore/` | Pure Swift domain: models, progression engine, 1RM, plate rounding, CSV import (Fitbod, Strong, Hevy, FitNotes behind `WorkoutImporter`; plan 13), plan-change validation — no I/O |
-| `ios/Packages/GymData/` | SwiftData schema, repositories, `SyncEngine`, Supabase client wrapper |
-| `ios/Packages/GymSync/` | Sync DTOs, transport (real + fake for tests), auth service |
+| `ios/Packages/GymData/` | SwiftData schema, repositories, `SyncStore` (sync state, and the server move) |
+| `ios/Packages/GymSync/` | `ApiClient`, `ApiSyncTransport`, `ApiGymCatalogTransport`, `AuthService` (Keychain session), `SyncEngine`, DTOs; fakes for tests |
 | `ios/Packages/GymHealth/` | Apple Health: `HealthStore` seam (HealthKit + fake), workout/weigh-in export, body import (plan 15) |
 | `ios/Packages/GymWatchLink/` | Phone ↔ Apple Watch link (plan 17): versioned WatchConnectivity messages, the watch's view model, Digital Crown stepping, single-Health-workout rules — Foundation only, builds for watchOS 10 |
 | `ios/GymRollinsWatch/` | Apple Watch app (watchOS 10, `com.rollins.gymrollins.watchkitapp`): live set + Log set, rest timer with haptic, `HKWorkoutSession` heart rate. See "Apple Watch" below |
-| `web/consent/` | The OAuth consent page Claude's connector redirects to (static site: `index.html`/`consent.js`/`style.css`), served locally by `scripts/consent-server.mjs` — **not** a Supabase Edge Function, since Supabase rewrites Edge Function HTML responses to `text/plain` (`docs/research/2026-09-26-mcp-on-supabase.md` §5) |
-| `supabase/` | `config.toml` (local auth/OAuth server config), `migrations/*.sql` (schema, RLS, RPCs), `seed.sql` (exercise library + test users, local only), `functions/mcp/` (the MCP Edge Function: tools, auth, rate limiting, audit) |
-| `scripts/` | Everything below — stack lifecycle, test runners, one-off generators |
+| `server/` | The Cloudflare Worker: `src/` (Hono routes, Better Auth, sync, gyms, photos, moderation, Claude and the MCP server), `migrations/` (D1), `test/` (Vitest in workerd). See `server/README.md` |
+| `web/share/` | The workout-link page, for when the app doesn't open a link (static, makes no requests) |
+| `scripts/` | Everything below — the local Worker, test runners, one-off generators |
 
-MCP: a remote Streamable-HTTP MCP server as a Supabase Edge Function, authenticated via Supabase
-Auth's OAuth 2.1 server with dynamic client registration (Claude registers itself as a client, no
-manual API key setup). AI writes go through **proposals**: Claude calls MCP tools to read
-training data and create a proposal; the owner reviews and applies it in the app (or turns on
-auto-apply). Consent for a newly registered OAuth client is never automatic — see "OAuth (Claude
-connector)" below.
+MCP: a remote Streamable-HTTP MCP server on the Worker (`server/src/mcp`), behind Better Auth's OAuth provider with
+dynamic client registration (Claude registers itself; no API key to copy). AI writes go through **proposals**: Claude
+calls MCP tools to read training data and create a proposal; the owner reviews and applies it in the app (or turns on
+auto-apply). A connection is never approved automatically — see "Claude's connection" below.
 
 ## Quick start
 
 ```sh
-# 1. Local Supabase stack (Docker via colima; writes supabase/.env.local, gitignored)
-scripts/supabase-up.sh
+# 1. The local API: one Cloudflare Worker with a local D1 and R2 (no Docker, no Cloudflare account)
+cp server/.dev.vars.example server/.dev.vars
+sed -i '' "s/^BETTER_AUTH_SECRET=.*/BETTER_AUTH_SECRET=$(openssl rand -hex 24)/" server/.dev.vars
+scripts/server-up.sh                          # http://127.0.0.1:8787; Ctrl-C stops it, the local data stays
 
 # 2. Generate the Xcode project and run the app (needs Xcode 26.3+, iOS 26 SDK)
 cd ios && xcodegen generate
 open GymRollins.xcodeproj   # run on the iPhone 17 Pro simulator, or see docs/release-readiness.md
                              # "How to install on your iPhone" for a physical device
 
-# 3. Run the tests that don't need Docker
+# 3. Run the tests that need no server
 scripts/ios-test.sh
 ```
 
-Cloud sync isn't required to use the app — SwiftData is the offline source of truth and the app
-works fully offline. `Local.xcconfig` (gitignored, `ios/Config/`) overrides the local-stack
-defaults in `Base.xcconfig` with a signing team and, later, cloud Supabase credentials; see
-`docs/cloud-checklist.md`.
+Sync isn't required to use the app — SwiftData is the offline source of truth and the app works fully offline.
+`Local.xcconfig` (gitignored, `ios/Config/`) overrides the defaults in `Base.xcconfig`: a signing team and, once the
+owner deploys the Worker, its https `API_URL` (see `docs/cloudflare-checklist.md`).
 
 ## Test
 
 | Suite | Command |
 |---|---|
-| Everything (Docker suites opt-in: `SYNC_E2E=1`, `MCP_E2E=1`, `PHOTO_E2E=1`, `GYM_E2E=1`) | `scripts/test-all.sh` |
+| Everything (opt-in end-to-end suites, each on a throwaway local Worker: `SYNC_E2E=1`, `MCP_E2E=1`, `PHOTO_E2E=1`, `GYM_E2E=1`) | `scripts/test-all.sh` |
+| API server (Vitest in workerd with in-memory D1 and R2: sync, gyms, photos, moderation, account deletion, the MCP tools, Claude's OAuth and `/connect`, the domain-limits drift test) | `cd server && npx vitest run && npx tsc --noEmit` |
 | GymCore unit tests | `cd ios/Packages/GymCore && swift test` |
 | GymCore coverage (≥ 90%) | `scripts/coverage-gymcore.sh` |
 | Equipment requirements mapping (writes `equipment-requirements.json` and its review file) | `node --test scripts/map-equipment-requirements.test.mjs && node scripts/map-equipment-requirements.mjs` |
 | GymData unit tests | `cd ios/Packages/GymData && swift test` |
-| GymSync unit tests (fake transport) | `cd ios/Packages/GymSync && swift test --filter GymSyncTests` |
+| GymSync unit tests (fake transport, stub URL protocol) | `cd ios/Packages/GymSync && swift test --filter GymSyncTests` |
 | iOS app unit + UI tests | `scripts/ios-test.sh` |
 | GymHealth unit tests (fake Health store) | `cd ios/Packages/GymHealth && swift test` |
 | GymWatchLink unit tests (messages, crown, Health dedupe rules, watch view model) | `cd ios/Packages/GymWatchLink && swift test` |
 | Apple Watch app builds (watchOS simulator + device, unsigned; no watchOS runtime needed) | `scripts/watch-build.sh` |
-| MCP validator, tools and endpoint (deno, `FakeDb`; includes the domain-limits drift guard, `_shared/domain-limits-drift.test.ts`) | `cd supabase/functions && deno test --allow-read _shared/ mcp/` |
-| OAuth consent server unit tests | `node --test web/consent/server.test.mjs` |
 | Workout link page (no requests, content security policy, Apple's domain file) | `node --test web/share/share.test.mjs` |
 | Exercise photo matcher (free-exercise-db mapping) | `node --test scripts/map-exercise-photos.test.mjs` |
 | wger photo + other-language name mapper (per-item CC licenses, provenance policy; review: `docs/import/wger-review.md`) | `node --test scripts/map-wger.test.mjs` |
 | Strong / Hevy / FitNotes alias tables (ids exist, no key collisions, every override explained; review: `docs/import/other-apps-alias-review.md`) | `node --test scripts/other-apps-alias-report.test.mjs` |
 | Body-map extractor (react-native-body-highlighter paths → `Resources/body-map.json`) | `node --test scripts/build-body-map.test.mjs` |
-| Strength-standards builder (OpenPowerlifting CSV → `Resources/strength-standards.json` + the MCP copy; regenerate: `docs/licenses/openpowerlifting.md`) | `node --test scripts/build-strength-standards.test.mjs` |
+| Strength-standards builder (OpenPowerlifting CSV → `Resources/strength-standards.json` + the server's copy in `server/src/shared/`; regenerate: `docs/licenses/openpowerlifting.md`) | `node --test scripts/build-strength-standards.test.mjs` |
 | Photo prompts + Gemini photo generator (mocked fetch, no API calls; how to run it: `docs/media/README.md`) | `node --test scripts/build-photo-prompts.test.mjs scripts/generate-photos.test.mjs` |
-| Photo uploader to Supabase Storage (mocked Storage API) | `node --test scripts/upload-photos.test.mjs` |
-| Photo hosting E2E (local Supabase Storage: upload script -> manifest -> app provider; needs Docker) | `scripts/test-photo-hosting.sh` |
-| Database tests (pgTAP; **resets the local `gymrollins` DB**) — needs the local stack up (`scripts/supabase-up.sh`) | `scripts/test-db.sh` |
-| MCP HTTP e2e + OAuth consent e2e in headless Chromium — needs Docker/local stack (starts `supabase functions serve mcp` and `consent-server.mjs` itself if not already running; one-time `cd web/consent && npm ci && npx playwright install chromium`) | `scripts/test-mcp.sh` |
-| GymSync integration tests (`GymSyncIntegrationTests`) against the local stack — needs `scripts/supabase-up.sh` already run (`supabase/.env.local` present); verifies account deletion leaves no rows | `scripts/test-sync-integration.sh` |
-| Shared gyms E2E: two users and an anonymous client, photo upload rules over real HTTP, and a check that "This phone only" stays off the server — needs `scripts/supabase-up.sh` already run | `scripts/test-gym-e2e.sh` |
-| iOS sync E2E UI tests (`SyncUITests`, `ProposalSyncUITests`) — starts the local stack itself, needs the iOS 26 simulator (`iPhone 17 Pro`) | `scripts/ios-test-sync.sh` |
+| Photo uploader (a fake Worker and a fake wrangler; no network) | `node --test scripts/upload-photos.test.mjs` |
+| Seed generators (the D1 seeds match the bundled JSON) | `node --test scripts/gen-equipment-seed.test.mjs && node scripts/gen-equipment-seed.mjs --check && node scripts/gen-exercise-seed.mjs --check` |
+| Store comparison for the server-move check | `node --test scripts/compare-stores.test.mjs` |
+| GymSync integration tests on a throwaway local Worker (port 8788, its own state, removed afterwards); verifies account deletion leaves no rows | `scripts/test-sync-integration.sh` |
+| Shared gyms E2E: two users, photo rules, and a check that "This phone only" stays off the server, on a throwaway Worker | `scripts/test-gym-e2e.sh` |
+| Photo hosting E2E (upload script → local R2 → manifest → app provider) | `scripts/test-photo-hosting.sh` |
+| Claude's connection over HTTP (discovery, registration, `/connect`, approval, tokens, MCP, refresh, Disconnect) on a throwaway Worker | `scripts/test-mcp.sh` |
+| iOS sync and Claude UI tests (`SyncUITests`, `ProposalSyncUITests`) on a throwaway Worker | `scripts/ios-test-sync.sh` |
+| The server-move check with a copy of a phone's store (kept outside the repo) | `scripts/server-move-check.sh <phone-backup-dir> <work-dir>` |
 | Performance baselines (not in test-all; GymData repository timings + iOS launch/scroll metrics, release build + simulator) | `scripts/test-perf.sh [data\|ui]` — see `docs/testing/performance.md` |
 
 ## Apple Watch
@@ -200,45 +206,30 @@ Available Apps → GymRollins → Install (or run the `GymRollinsWatch` scheme o
 the watch once to allow Health access. Without `GYM_EMBED_WATCH=YES` the project builds and tests without the watchOS
 platform (Xcode refuses to build a scheme with an embedded watch app when it's missing).
 
-## OAuth (Claude connector)
+## Claude's connection
 
-Claude connects to GymRollins as an OAuth 2.1 client of Supabase's built-in authorization server
-(`[auth.oauth_server]` in `supabase/config.toml`). Supabase rewrites Edge Function HTML responses to `text/plain`
-(`docs/research/2026-09-26-mcp-on-supabase.md` §5), so the consent screen users approve/deny on can't be the `mcp`
-Edge Function itself — it's a static site instead.
+Claude connects to GymRollins as an OAuth 2.1 client of the Worker (Better Auth's `@better-auth/mcp` plugin):
 
-- **`web/consent/`** — the consent page (`index.html`, `consent.js`, `style.css`). Reads `authorization_id` from
-  the query string, signs the user in if needed (email/password locally; Apple only when the cloud build sets
-  `window.GYM_APPLE_ENABLED`), calls `supabase.auth.oauth.getAuthorizationDetails`, shows the client name, the
-  full redirect URI (monospace) and a first-time warning, then Approve/Deny → `approveAuthorization`/`denyAuthorization` → follows the returned
-  `redirect_url`. Loads `supabase-js` from `https://esm.sh/@supabase/supabase-js@2.117.2` (pinned).
-- **`scripts/consent-server.mjs`** — serves `web/consent/*` on `http://127.0.0.1:55430` (binds to `127.0.0.1`
-  only), maps `/oauth/consent` (and `/`) to `index.html`, and generates `/config.js`
-  (`window.GYM_CONFIG = { url, anonKey }`, `Cache-Control: no-store`) from `supabase/.env.local` — **never** the
-  service-role key. Assets are referenced root-relative (`/style.css`, `/config.js`, `/consent.js`). Sets a strict
-  CSP (`default-src 'self'; script-src 'self' https://esm.sh; style-src 'self'`, no `'unsafe-inline'`,
-  `connect-src` scoped to exactly the local API URL) and `X-Content-Type-Options: nosniff`, and blocks directory
-  traversal. Run it directly with `node scripts/consent-server.mjs`.
-- **`scripts/oauth-local-smoke.sh`** — automates the whole local OAuth handshake except the human's "Approve"
-  click: Dynamic Client Registration, PKCE, hits the authorize endpoint, starts a tiny listener on
-  `127.0.0.1:8976` to catch the callback, prints the consent URL to open, then exchanges the code and calls the
-  MCP endpoint's `tools/list` with the resulting token. It starts `consent-server.mjs` and
-  `supabase functions serve mcp` if they aren't already running, and stops only what it started. Run:
-  `scripts/oauth-local-smoke.sh` (set `SMOKE_TIMEOUT=<seconds>` to change how long it waits for the click,
-  default 300).
+1. Claude calls `/mcp`, gets a 401 that points at `/.well-known/oauth-protected-resource/mcp`, and reads the
+   authorization server's metadata.
+2. It registers itself (dynamic client registration) and opens the authorize step with PKCE.
+3. The browser lands on `/connect`, a plain HTML page from the Worker (strict Content-Security-Policy, no script). It
+   shows a code, `XXXX-XXXX`, and which Claude is asking.
+4. In the app: Settings › Claude › **Approve a connection**, type the code, check the client and its address, then
+   Approve or Deny. Codes expire in 10 minutes and work once, each account gets 5 wrong tries per 10 minutes, and only
+   the browser that showed the code can continue.
+5. The page returns to Claude with an authorization code. Claude's tokens are opaque and checked in D1 on every call,
+   and refresh tokens rotate. **Disconnect Claude** removes every grant and token at once.
 
-### Auth config changes need a stack restart
+Locally, with `scripts/server-up.sh` running:
 
-`GET /auth/v1/oauth/authorize` redirects to `[auth] site_url` (`http://127.0.0.1:55430`, where
-`consent-server.mjs` listens) + `/oauth/consent?authorization_id=...`. The auth container reads `config.toml` only
-when it starts: restart the stack after `config.toml` changes (`npx --yes supabase@2.118.0 stop`, then
-`scripts/supabase-up.sh`) and check with `docker exec supabase_auth_gymrollins env | grep SITE_URL`.
+```sh
+node scripts/claude-local.mjs smoke                 # the whole flow as Claude would run it
+claude mcp add --transport http --scope local gymrollins-local http://127.0.0.1:8787/mcp   # Claude Code
+node scripts/claude-local.mjs approve XXXX-XXXX     # approve the code /connect shows, as the dev account
+```
 
-The whole flow including the click runs automated in headless Chromium: `web/consent/e2e.test.mjs` (DCR →
-authorize → consent page → sign in → Approve → redirect with `code` → PKCE token exchange), part of
-`scripts/test-mcp.sh` (one-time setup: `cd web/consent && npm ci && npx playwright install chromium`).
-The full "add custom connector" flow inside the claude.ai/Desktop app needs public HTTPS and can't be tested
-locally; see `docs/release-readiness.md` ("Needs the cloud project") and `docs/cloud-checklist.md`.
+claude.ai needs the deployed Worker's https address: `docs/cloudflare-checklist.md`, step 11.
 
 ## License
 

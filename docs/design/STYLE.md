@@ -36,7 +36,7 @@ Tokens:
 - Bench history: 12 Sep 3×6 @130 lb; 19 Sep 3×10 @130 lb. Best Nov 2025 era unknown → placeholder.
 - Split: Push + Arms / Pull + Shoulders + Triceps / Upper weak points (Legs paused). Progression: double progression (hit top of rep range on all sets → +5 lb); miss twice → drop 5%.
 - CSV import: file "WorkoutExport.csv", 2,605 rows, Aug 2025 → Sep 2026, columns Date, Exercise, Reps, Weight(kg), Duration(s), Distance(m), Incline, Resistance, isWarmup, Note, multiplier. Use placeholders for counts you don't know, e.g. `[N] workouts`.
-- Claude: connects via a custom connector URL `https://[project].supabase.co/functions/v1/mcp`, signs in with OAuth ("Allow Claude to access GymRollins"). Claude's plan edits arrive as PROPOSALS the user applies or dismisses, each a before → after change with a reason.
+- Claude: connects via a custom connector URL `https://gymrollins.[subdomain].workers.dev/mcp`, signs in by OAuth, approved in the app with the code its sign-in page shows (Settings › Claude › Approve a connection). Claude's plan edits arrive as PROPOSALS the user applies or dismisses, each a before → after change with a reason.
 - Exercise library: 1,324 exercises, filters by body part and equipment.
 
 ## Screen names (link targets that exist on the canvas)

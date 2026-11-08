@@ -11,7 +11,7 @@
   GymRollins only reads the CSV with its own script.
 - What GymRollins uses: `scripts/build-strength-standards.mjs` reduces the CSV to percentile curves (raw
   equipment, one best result per lifter per lift, sex × age group × 5 kg bodyweight bins, smoothed) in
-  `ios/GymRollins/Resources/strength-standards.json` (a copy in `supabase/functions/_shared/` for the MCP
+  `ios/GymRollins/Resources/strength-standards.json` (a copy in `server/src/shared/` for the MCP
   server). No lifter names or individual rows are shipped. Filters and method: the JSON's `method` field and
   `docs/plans/2026-09-29-plan-14-strength-levels.md`.
 - Attribution (not required, requested by the project): Settings → Credits (`ios/GymRollins/Resources/CREDITS.md`)
