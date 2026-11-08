@@ -2824,6 +2824,21 @@ git add server/src/gyms server/src/sync/gym-links.ts server/test/gym-fixtures.ts
 git commit -m "feat(server): gym and listing links for workouts"
 ```
 
+- [ ] **Step 7: The review follow-up (added after review): a test for every rule**
+
+The review found the rules faithful to Postgres. It also found clauses that no test would miss if deleted, so `gym-links.test.ts` gains 8 tests:
+- an admin sees any public listing;
+- a flagged listing is shown to whoever added it;
+- items that are flagged or removed hide their listings;
+- a previous link to a blocked author's listing is dropped;
+- a previous link is dropped once its gym or item is removed, or when it points at another account's private listing;
+- an admin still can't see another account's private gym or listing;
+- a block applies only to whoever made it;
+- a different new listing replaces the previous one, and a listing shared by two entries is read once;
+- stored links: one to another account's private gym is dropped, and one to a flagged gym with no creator is kept.
+
+With them: `Tests  132 passed (132)`. Removing the admin clause makes a test fail. Commit: `test(server): cover every gym and listing visibility rule`.
+
 ### Task 8: Workouts
 
 `POST /v1/sync/workouts` is `upsert_workout`. `GET /v1/sync/workouts` and `/v1/sync/workouts/:id` answer workouts with `entries[]` and `sets[]` nested, as the app decodes them.
@@ -3342,7 +3357,7 @@ syncRoutes.get('/workouts/:id', async (c) => c.json(await fetchWorkout(c.env.DB,
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  10 passed (10)`, `Tests  138 passed (138)`.
+Expected: `Test Files  10 passed (10)`, `Tests  146 passed (146)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3575,7 +3590,7 @@ v1.route('/account', accountRoutes)
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  11 passed (11)`, `Tests  141 passed (141)`.
+Expected: `Test Files  11 passed (11)`, `Tests  149 passed (149)`.
 
 - [ ] **Step 5: Commit**
 
@@ -3701,7 +3716,7 @@ node scripts/gen-exercise-seed.mjs --check && node scripts/gen-equipment-seed.mj
 ```
 
 Expected:
-- `Test Files  11 passed (11)`, `Tests  141 passed (141)`.
+- `Test Files  11 passed (11)`, `Tests  149 passed (149)`.
 - The seed tests: `# pass 5`, and both checks match.
 - The Deno suite is unchanged: `159 passed … 1 ignored`. This plan doesn't touch it.
 
