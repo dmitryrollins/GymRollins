@@ -7,8 +7,13 @@ This list is the owner's. **Every step below touches the Cloudflare account, the
 one runs only with the owner's approval, given for that step** (spec `docs/specs/2026-11-07-cloudflare-backend-design.md`,
 section 9). Work through it in order: the rate limits come before anything else.
 
-`<origin>` below is the Worker's https address: `https://gymrollins.<subdomain>.workers.dev`, or the custom domain
-step 1 picks.
+**The account.** GymRollins lives on the **VIPPIE LLC** Cloudflare account. Wrangler sees five accounts on this Mac,
+so every `wrangler` command against it, the scripts' included, runs with
+`CLOUDFLARE_ACCOUNT_ID=<account-id>` (an account id, not a secret): `export` it in the shell first,
+as section 2 does.
+
+`<origin>` below is the Worker's https address: `https://api.gymrollins.com`, the custom domain the owner chose
+(section 1, option A).
 
 ## 0. Before anything is created (local)
 
@@ -39,28 +44,30 @@ every one of these paths gets a per-IP rule from Cloudflare, before anything els
 - `/v1/*`: the app's reads and pushes,
 - `/mcp`: Claude's calls (the Worker already allows 60 a minute per account).
 
-**A decision for the owner.** Cloudflare's rate-limiting rules belong to a zone, which is a domain on the account. The
-free `*.workers.dev` address isn't one, so no rule can be put on it. Pick one:
+**The owner chose A, a custom domain** (2026-11-08): the Worker answers on `https://api.gymrollins.com`, with the
+per-IP rules below. Cloudflare's rate-limiting rules belong to a zone, which is a domain on the account. The free
+`*.workers.dev` address isn't one, so no rule can be put on it. The two options were:
 - **A. A custom domain.**
-  - Add the domain to the account, route the Worker to it (`routes` in `server/wrangler.jsonc`), and set
-    `"workers_dev": false`.
+  - Add the domain to the account, route the Worker to `api.gymrollins.com` (`routes` in `server/wrangler.jsonc`),
+    and set `"workers_dev": false`.
   - Add rate-limiting rules (Security › WAF › Rate limiting rules), counted per IP:
     - one for registration, with a low limit: `(http.request.uri.path eq "/api/auth/oauth2/register")`
     - one for the rest, with this expression:
       `(starts_with(http.request.uri.path, "/api/auth/") or starts_with(http.request.uri.path, "/connect") or starts_with(http.request.uri.path, "/v1/") or starts_with(http.request.uri.path, "/mcp"))`
   - Check the free plan's limits for these rules on that page (how many rules, which time windows). If it allows one
     rule only, use the one for the rest and let the registration path share it.
-  - `<origin>` is then the custom domain.
+  - `<origin>` is then the custom domain, `https://api.gymrollins.com`.
 - **B. Stay on `workers.dev`, and limit inside the Worker** with Workers' rate-limiting binding.
   - That is a code change: a plan of its own, tested locally like plans 26–29, before step 2.
   - Check that the binding is available on the free plan, and that its limits (a fixed window per binding, counted
     per Cloudflare location) are enough for the registration path.
-  - Plan 30 left this open: whether the Worker needs a custom domain is the owner's question.
+  - Not taken: the owner chose A.
 
 ## 2. Create the resources (owner's approval)
 
 ```bash
 cd server
+export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC (the top of this list)
 npx wrangler login                                  # the owner's Cloudflare account, in the browser
 npx wrangler d1 create gymrollins                   # prints the database_id
 npx wrangler r2 bucket create gym-photos
@@ -127,15 +134,28 @@ If the metadata names `http://127.0.0.1:8787`, the deploy missed `--var PUBLIC_B
   bookmark noted before it (section 7). That also undoes every write made since.
 - Hold back the app build that needed the new Worker (the order above) until the Worker it needs is back.
 
-## 5. Usage caps (decide before step 2; build them in a plan of their own)
+## 5. Usage caps (plan 31 built them; decide what is open before step 2)
 
-- [ ] **Per-user row caps.**
-  - Today only private gyms (100) and private listings (1,000) are capped, besides the daily limits. Workouts,
-    entries, sets, body weights, routines and proposals aren't.
-  - One account could fill D1. The free plan's published limits are 5 GB, and 100,000 rows written a day.
-  - Pick caps, and build them as the gym caps are: a trigger or a conditional insert, with a test at the exact number.
-- [ ] **Tombstone caps.** A deleted row stays as a tombstone (`deleted_at`), so other devices learn of the deletion.
-      Pick a cap per account, or an age after which tombstones are purged.
+**Built** (plan 31, `server/migrations/0010_account_caps.sql`; the numbers are `DomainLimits`', in
+`ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift`):
+- Per account, deleted rows included: 10,000 workouts, 50,000 exercises and 250,000 sets logged in them, 20,000
+  weigh-ins, 200 routines, 1,000 custom exercises, 2,000 exercise preferences, 500 private gyms and 5,000 private
+  listings.
+  - **Deleted rows count.** A deletion stays as a tombstone (`deleted_at`), so other devices learn of it, and nothing
+    purges tombstones. So deleting frees nothing: an account that reaches a cap stays there. Only sets removed from a
+    workout free room.
+- Private gyms (100) and private listings (1,000) also keep their live caps (`0005_gyms_photos.sql`).
+- Claude: 100 proposals waiting for review at a time, and 5,000 in all.
+- One workout holds at most 50 exercises, and an exercise at most 50 sets in it. The app stops there, and the importers
+  split a bigger workout into several ("Push", "Push (2)").
+- A refused row stays on the phone. Account lists it under "N items couldn't sync", with the server's words, and it
+  isn't sent again until it is edited.
+- One account at the caps holds about 70 MB of sets; a free D1 database holds 500 MB in all.
+
+**Open** (plan 31, "Questions for the owner"):
+- [ ] Claude's audit rows: 90 days kept, up to 60 a minute.
+- [ ] A big workout re-saved again and again: about 10,000 rows written a save at both per-workout caps, against the
+      free plan's 100,000 a day. Section 1's rate limits are the only guard.
 - [ ] **Unused OAuth clients** (owner's approval for each run). Better Auth keeps every registration, and registration
       is open. Run this monthly. It removes clients older than a day that hold no token and no consent. Save the query
       in a file outside the repo, then run it:

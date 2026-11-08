@@ -39,6 +39,9 @@ Schema:
 - The two seeds, `0003` and `0004`, come from `scripts/gen-exercise-seed.mjs` and `scripts/gen-equipment-seed.mjs` at
   the repo root. `--check` there catches drift.
 - `0005_gyms_photos.sql` adds the catalogue's fold keys and the private caps (triggers).
+- `0010_account_caps.sql` caps what one account stores, deleted rows included: triggers, with the counts in
+  `account_rows`; the workout save moves the counts of logged exercises and sets itself (`src/sync/workouts.ts`). The
+  numbers are `DomainLimits`', and `test/domain-limits-drift.test.ts` checks them. The words are in `src/sync/caps.ts`.
 - `0007_claude_connect.sql` holds the approval codes and their tries, `0008_connect_session.sql` marks Claude's browser
   session (`claudeConnect`), and `0009_connect_opener.sql` keeps where the sign-in page was opened.
 

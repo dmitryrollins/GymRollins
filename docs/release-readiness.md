@@ -92,7 +92,7 @@ weren't folded into the fixes above.
 
 - **The deploy** — creating the Worker, D1 and the three R2 buckets per `docs/cloudflare-checklist.md`, each step
   approved separately, and deciding when the phone moves to it. Before it: how to rate-limit on `workers.dev`, and
-  the per-user row and tombstone caps (the checklist's sections 1 and 5).
+  the caps plan 31 left open (the checklist's sections 1 and 5).
 - **Exercise media — decided 2026-09-28: stopgap photos now, own AI media later.** The app shows
   public-domain start/end photos from `yuhonas/free-exercise-db` (Unlicense, pinned commit, see
   `docs/licenses/free-exercise-db.md`) for **300 / 1,324** library exercises (23 / 24 of the owner's
