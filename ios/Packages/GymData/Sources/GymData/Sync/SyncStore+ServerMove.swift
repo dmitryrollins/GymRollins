@@ -3,7 +3,8 @@ import SwiftData
 
 // The server move (docs/specs/2026-11-07-cloudflare-backend-design.md, section 4): when this build talks to another API
 // than the one the data last synced with, the local copy goes to the next account that signs in, and every record that
-// synced goes up again. Nothing is deleted except Claude's pending proposals, which only the old server could resolve.
+// synced goes up again. Nothing of the user's is deleted. What goes: Claude's pending proposals, which only the old
+// server could resolve, and the old server's shared catalogue (other people's listings, borrowed pictures, the outbox).
 extension SyncStore {
     private static let serverKey = "gymrollins.sync.server"
 
@@ -21,7 +22,8 @@ extension SyncStore {
     /// - the owner, the cursors and the recorded refusals are forgotten;
     /// - every record that syncs with the account loses its server version and goes dirty, keeping its edit time;
     /// - synced listings forget the old server's photo names, so pictures on this phone upload again;
-    /// - pending proposals go, and resolutions not yet sent count as sent.
+    /// - pending proposals go, and resolutions not yet sent count as sent;
+    /// - the shared catalogue forgets the old server (`forgetOldCatalogue`).
     /// Then `server` is recorded. The store is saved before anything in `defaults` changes, so a move that fails runs
     /// again at the next launch. Returns whether the move ran.
     @discardableResult
@@ -53,6 +55,7 @@ extension SyncStore {
             predicate: #Predicate { $0.visibilityRaw == synced })) {
             listing.remotePhotoPath = nil
         }
+        try forgetOldCatalogue()
         let pending = ProposalStatus.pending.rawValue
         for proposal in try context.fetch(FetchDescriptor<ProposalRecord>()) {
             if proposal.statusRaw == pending {
@@ -68,6 +71,39 @@ extension SyncStore {
             context.rollback() // leave no half-moved records in the context for a later save to commit
             throw error
         }
+    }
+
+    /// The shared catalogue's cache names the old server's rows: its gym ids, listings and pictures, and the outbox's
+    /// shares, confirmations, reports and blocks (for the old account). None of them is on the new server.
+    /// - The user's own shared listings, and those still waiting to be shared, become "This phone only", with their
+    ///   photos: they are the user's equipment, and sharing them again is the user's call.
+    /// - Other people's cached listings stay until the gym's next refresh, which the cleared stamp makes its next open.
+    ///   The new server doesn't know the old gym id, so that refresh drops them and their pictures, as it does when a
+    ///   moderator removed a gym; the maps gym keeps the old id until then, because that is how the refresh finds out.
+    /// - Items lose the catalogue picture they borrowed, and the outbox is emptied.
+    private func forgetOldCatalogue() throws {
+        let shared = GymVisibility.shared.rawValue
+        let uploaded = UploadState.uploaded.rawValue
+        let cached = try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.visibilityRaw == shared }))
+        for listing in cached where listing.isOwn || listing.uploadStateRaw != uploaded {
+            listing.visibilityRaw = GymVisibility.device.rawValue
+            listing.uploadStateRaw = UploadState.local.rawValue
+            listing.uploadError = nil
+            listing.duplicatesData = nil
+            listing.remoteId = nil
+            listing.remotePhotoPath = nil
+            listing.statusRaw = ListingStatus.active.rawValue
+            listing.confirmCount = 0
+            listing.confirmedByMe = false
+        }
+        for gym in try context.fetch(FetchDescriptor<GymRecord>()) where gym.mapsPlaceId != nil {
+            gym.catalogRefreshedAt = nil
+        }
+        for item in try context.fetch(FetchDescriptor<EquipmentItemRecord>()) where item.catalogPhotoPath != nil {
+            item.catalogPhotoPath = nil
+            item.catalogPhotoListingId = nil
+        }
+        for row in try context.fetch(FetchDescriptor<ShareOutboxRecord>()) { context.delete(row) }
     }
 
     /// Every record that syncs with the account: the aggregate roots, and the gyms and listings synced to it ("This
