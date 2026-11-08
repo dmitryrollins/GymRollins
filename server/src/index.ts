@@ -15,6 +15,13 @@ const MAX_BODY_BYTES = 1024 * 1024
 const app = new Hono<AppEnv>()
 app.onError(onError)
 app.notFound((c) => c.json(errorBody('not_found', 'No such route.'), 404))
+/** Sign-in bodies are a token and a nonce, or an email and password. */
+const MAX_AUTH_BODY_BYTES = 16 * 1024
+
+app.use('/api/auth/*', bodyLimit({
+  maxSize: MAX_AUTH_BODY_BYTES,
+  onError: (c) => c.json(errorBody('too_large', 'The request body is too large.'), 413),
+}))
 app.on(['GET', 'POST'], '/api/auth/*', authHandler)
 
 const v1 = new Hono<AppEnv>()

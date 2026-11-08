@@ -21,7 +21,19 @@ export async function authHandler(c: Context<AppEnv>): Promise<Response> {
   if (route === 'POST /api/auth/sign-in/social' && !(await hasIdTokenAndNonce(c.req.raw))) {
     return c.json(errorBody('bad_request', 'Sign in with Apple needs the id token and its nonce.'), 400)
   }
-  return createAuth(c.env).handler(c.req.raw)
+  const res = await createAuth(c.env).handler(c.req.raw)
+  return res.status >= 400 ? inErrorShape(res) : res
+}
+
+/** Better Auth's error as the API's {"error": {"code", "message"}}, with its code lowercased (invalid_token, …). */
+async function inErrorShape(res: Response): Promise<Response> {
+  const body = await res.clone().json().catch(() => null) as { code?: unknown; message?: unknown } | null
+  const code = typeof body?.code === 'string' && body.code !== '' ? body.code.toLowerCase() : 'auth_failed'
+  const message = typeof body?.message === 'string' && body.message !== '' ? body.message : 'Sign-in failed.'
+  const headers = new Headers(res.headers)
+  headers.set('content-type', 'application/json')
+  headers.delete('content-length')
+  return new Response(JSON.stringify(errorBody(code, message)), { status: res.status, headers })
 }
 
 /**

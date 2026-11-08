@@ -14,7 +14,7 @@ export interface PullQuery {
   readonly limit: number
 }
 
-/** The app pushes at most 200 rows at a time. */
+/** The app pushes at most 200 rows at a time; this leaves room. */
 export const MAX_PUSH_ROWS = 500
 export const DEFAULT_PULL_LIMIT = 500
 export const MAX_PULL_LIMIT = 1000

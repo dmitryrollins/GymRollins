@@ -1,9 +1,10 @@
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
+import app from '../src/index.ts'
 import { storedRow } from '../src/sync/columns.ts'
 import { ENTITIES } from '../src/sync/entities.ts'
 import { upsertSql } from '../src/sync/table-sync.ts'
-import { request, signUp } from './helpers.ts'
+import { ORIGIN, request, signUp } from './helpers.ts'
 import { BAD, KEY, pulled, type Row, SAMPLES, T0, T1, T2 } from './samples.ts'
 
 interface Ack {
@@ -156,6 +157,17 @@ describe('the sync routes', () => {
       expect(res.status).toBe(401)
       expect(await res.json()).toEqual({ error: { code: 'signed_out', message: 'Sign in required.' } })
     }
+  })
+
+  it('ignore a session cookie without a bearer token', async () => {
+    // Better Auth's own signed session cookie, as a browser would hold it.
+    const signedUp = await request('POST', '/api/auth/sign-up/email', {
+      body: { email: `c-${crypto.randomUUID()}@test.local`, password: 'correct-horse-battery', name: 'Cookie' },
+    })
+    const cookie = signedUp.headers.get('set-cookie')!.split(';')[0]!
+    const res = await app.fetch(new Request(`${ORIGIN}/v1/sync/routines`, { headers: { cookie } }), env)
+    expect(res.status).toBe(401)
+    expect(await res.json()).toMatchObject({ error: { code: 'signed_out' } })
   })
 
   it('answer an unknown table with 404', async () => {

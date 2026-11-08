@@ -8,6 +8,10 @@ if [[ ! -f .dev.vars ]]; then
   echo "Missing server/.dev.vars: copy server/.dev.vars.example and set BETTER_AUTH_SECRET." >&2
   exit 1
 fi
+if grep -q '^BETTER_AUTH_SECRET=replace-with' .dev.vars; then
+  echo "Set BETTER_AUTH_SECRET in server/.dev.vars: it still has the example value." >&2
+  exit 1
+fi
 [[ -d node_modules ]] || npm ci
 npx wrangler d1 migrations apply gymrollins --local < /dev/null
 exec npx wrangler dev --local

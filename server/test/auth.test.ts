@@ -110,6 +110,33 @@ describe('Sign in with Apple, with the id token the app gets', () => {
     expect(res.headers.get('set-auth-token')).toBeNull()
   })
 
+  it('refuses a sign-in body over 16 KB', async () => {
+    const res = await signInWithApple('x'.repeat(17 * 1024), 'n')
+    expect(res.status).toBe(413)
+    expect(await res.json()).toMatchObject({ error: { code: 'too_large' } })
+  })
+
+  it("answers Better Auth's errors in the API's error shape", async () => {
+    const keys = await mockAppleKeys()
+    const wrongAudience = await appleIdToken(keys, {
+      aud: 'com.other.app',
+      sub: 'apple-5',
+      nonce: await sha256Hex('n'),
+    })
+    const shape = { error: { code: expect.stringMatching(/^[a-z_]+$/), message: expect.any(String) } }
+    const refused = await signInWithApple(wrongAudience, 'n')
+    expect(refused.status).toBe(401)
+    const refusedBody = await refused.json()
+    expect(refusedBody).toMatchObject(shape)
+    const email = `dup-${crypto.randomUUID()}@test.local`
+    const body = { email, password: 'correct-horse-battery', name: 'Dup' }
+    expect((await request('POST', '/api/auth/sign-up/email', { body })).status).toBe(200)
+    const again = await request('POST', '/api/auth/sign-up/email', { body })
+    expect(again.status).toBeGreaterThanOrEqual(400)
+    const againBody = await again.json()
+    expect(againBody).toMatchObject(shape)
+  })
+
   it('refuses a social sign-in without an id token', async () => {
     const res = await request('POST', '/api/auth/sign-in/social', { body: { provider: 'apple' } })
     expect(res.status).toBe(400)
