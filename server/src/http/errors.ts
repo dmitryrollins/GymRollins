@@ -1,7 +1,7 @@
 import type { Context } from 'hono'
 
 /** The statuses the API answers errors with (spec section 6). */
-export type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500
+export type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500 | 503
 
 /**
  * An error the app is told about, as `{"error": {"code", "message"}}`. Codes keep the strings the app already maps

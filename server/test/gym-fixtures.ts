@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers'
 import { foldKey } from '../src/gyms/text.ts'
+import { NOW_SQL } from '../src/sync/time.ts'
 
 // Gym rows written straight into D1. Plan 28 adds the routes that create them.
 
@@ -132,4 +133,34 @@ export async function uploadedPhoto(
     await (bucket === 'gym-photos' ? env.GYM_PHOTOS : env.GYM_PHOTOS_PRIVATE).put(name, JPEG)
   }
   return name
+}
+
+/** A timestamp two days back: outside every daily limit. */
+export const DAYS_AGO = '2020-01-01T00:00:00.000000Z'
+
+/** `count` public gyms the account created just now, as find_or_create_gym would have. */
+export async function gymsCreatedToday(userId: string, count: number) {
+  const ids = Array.from({ length: count }, () => crypto.randomUUID())
+  await env.DB.prepare(
+    `INSERT INTO gyms (id, visibility, name, maps_place_id, created_by, status, client_updated_at, created_at, updated_at)
+     SELECT value, 'public', 'Earlier gym', 'place-' || value, ?2, 'active', ${NOW_SQL}, ${NOW_SQL}, ${NOW_SQL}
+     FROM json_each(?1)`,
+  ).bind(JSON.stringify(ids), userId).run()
+  return ids
+}
+
+/** `count` active public listings at a gym, added just now by `addedBy`, as share_listing would have. */
+export async function listingsSharedToday(gym: string, addedBy: string, count: number) {
+  const ids = Array.from({ length: count }, () => crypto.randomUUID())
+  await env.DB.prepare(
+    `INSERT INTO gym_equipment (id, gym_id, item_id, visibility, added_by, status, client_updated_at, created_at,
+       updated_at)
+     SELECT value, ?2, ?3, 'public', ?4, 'active', ${NOW_SQL}, ${NOW_SQL}, ${NOW_SQL} FROM json_each(?1)`,
+  ).bind(JSON.stringify(ids), gym, await genericItem(), addedBy).run()
+  return ids
+}
+
+/** Moves every row the account wrote to `table` (by `column`) two days back. */
+export async function agedRows(table: string, column: string, userId: string) {
+  await env.DB.prepare(`UPDATE ${table} SET created_at = ?2 WHERE ${column} = ?1`).bind(userId, DAYS_AGO).run()
 }

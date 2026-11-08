@@ -9,6 +9,9 @@ const PATTERN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?
  */
 export const NOW_SQL = `(strftime('%Y-%m-%dT%H:%M:%f', 'now') || '000Z')`
 
+/** A day before the server's clock, in the stored form: the start of every rolling daily limit. */
+export const DAY_AGO_SQL = `(strftime('%Y-%m-%dT%H:%M:%f', 'now', '-1 day') || '000Z')`
+
 /**
  * The updated_at an update stores: `now`, or a microsecond past `stored` when the millisecond clock hasn't moved past
  * it. Every accepted write then changes a row's stamp, which the app's conflict check (exact equality with the version
