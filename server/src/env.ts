@@ -1,6 +1,12 @@
 /** The Worker's bindings and vars (wrangler.jsonc; secrets in server/.dev.vars locally). */
 export interface Env {
   DB: D1Database
+  /** gym-photos: shared listing photos, read by anyone through /photos/shared. */
+  GYM_PHOTOS: R2Bucket
+  /** gym-photos-private: private listing photos, their owner only. */
+  GYM_PHOTOS_PRIVATE: R2Bucket
+  /** exercise-photos: GymRollins' own photos and manifest.json, read by anyone through /photos/exercises. */
+  EXERCISE_PHOTOS: R2Bucket
   BETTER_AUTH_SECRET: string
   /** The audience of Apple's id tokens for the app. */
   APPLE_BUNDLE_ID: string

@@ -1,4 +1,4 @@
-// The GymRollins API: one Worker with D1 (R2 comes in plan 28). Local only: `wrangler dev --local` and
+// The GymRollins API: one Worker with D1 and three R2 buckets. Local only: `wrangler dev --local` and
 // `wrangler d1 migrations apply gymrollins --local` need no Cloudflare account. The deploy (owner's approval) replaces
 // database_id and sets BETTER_AUTH_SECRET with `wrangler secret put`.
 {
@@ -18,6 +18,14 @@
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
+  ],
+  "r2_buckets": [
+    // Shared listing photos: anyone reads them through the Worker (/photos/shared/<name>).
+    { "binding": "GYM_PHOTOS", "bucket_name": "gym-photos" },
+    // Private listing photos: their owner only, through /v1/photos/private/<name>.
+    { "binding": "GYM_PHOTOS_PRIVATE", "bucket_name": "gym-photos-private" },
+    // GymRollins' own exercise and kind photos and manifest.json: anyone reads them (/photos/exercises/<name>).
+    { "binding": "EXERCISE_PHOTOS", "bucket_name": "exercise-photos" }
   ],
   "dev": { "ip": "127.0.0.1", "port": 8787 }
 }
