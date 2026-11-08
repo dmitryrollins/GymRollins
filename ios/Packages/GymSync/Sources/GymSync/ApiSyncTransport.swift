@@ -10,9 +10,9 @@ import GymData
 /// - A workout goes up alone, with its entries, sets and base version, and is answered `{"status", "updated_at"}`.
 ///   Pulled workouts carry `entries[].sets[]`, so their pages are smaller.
 ///
-/// Private gyms, their listings and their photos are on the API since plan 28 (`ApiSyncTransport+Gyms.swift`). Claude's
-/// proposals aren't until plan 29, so `servesProposals` is false and the engine leaves them out; Claude's last use and
-/// grants keep the protocol's defaults (never used, nothing to revoke).
+/// Private gyms, their listings and their photos are on the API since plan 28 (`ApiSyncTransport+Gyms.swift`).
+/// Claude's proposals, last use, grants and approval codes are on `/v1/claude` since plan 29
+/// (`ApiSyncTransport+Claude.swift`).
 public struct ApiSyncTransport: SyncTransport {
     public static let defaultPageSize = 500
     /// A workout page carries every entry and set. The owner averages 6 entries and 18 sets a workout, so 50 workouts
@@ -35,7 +35,7 @@ public struct ApiSyncTransport: SyncTransport {
     }
 
     public var servesGyms: Bool { true }
-    public var servesProposals: Bool { false }
+    public var servesProposals: Bool { true }
 
     // MARK: Push
 
@@ -113,17 +113,6 @@ public struct ApiSyncTransport: SyncTransport {
         } catch let error as ApiError where error.status == 404 {
             return nil
         }
-    }
-
-    // MARK: Not on the API yet (plan 29)
-
-    /// Never called while `servesProposals` is false.
-    public func pendingProposals() async throws -> [PulledProposal] { [] }
-
-    /// Never called while `servesProposals` is false; if it were, the resolution would stay unsent rather than count
-    /// as sent.
-    public func resolveProposal(id: UUID, status: String, appliedChangeIds: [String], at: Date) async throws {
-        throw ApiError(status: 404, code: "not_found", message: "Proposals aren't on this server yet.")
     }
 
     // MARK: - Helpers

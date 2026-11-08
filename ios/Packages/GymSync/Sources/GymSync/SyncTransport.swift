@@ -54,6 +54,11 @@ public protocol SyncTransport: Sendable {
     /// Revokes every OAuth grant the signed-in user has given (the Claude connector is GymRollins' only OAuth
     /// client); returns how many were revoked.
     func revokeOAuthGrants() async throws -> Int
+    /// A Claude sign-in waiting for this account's approval, by the code its page shows. Throws `ConnectCodeError`
+    /// when no sign-in waits with that code.
+    func connectRequest(code: String) async throws -> ConnectRequest
+    /// Approves or denies that sign-in. The browser that showed the code then returns to Claude.
+    func decideConnect(code: String, decision: ConnectDecision) async throws
 }
 
 extension SyncTransport {
@@ -78,6 +83,10 @@ extension SyncTransport {
     public func lastMcpUse() async throws -> Date? { nil }
 
     public func revokeOAuthGrants() async throws -> Int { 0 }
+
+    /// Supabase and the test doubles have no approval codes: Claude signs in on their own consent page.
+    public func connectRequest(code: String) async throws -> ConnectRequest { throw URLError(.unsupportedURL) }
+    public func decideConnect(code: String, decision: ConnectDecision) async throws { throw URLError(.unsupportedURL) }
 }
 
 /// A synced listing named a photo the private bucket doesn't have (the server's `photo_missing`). The phone uploads it

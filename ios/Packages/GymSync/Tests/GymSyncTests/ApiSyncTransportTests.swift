@@ -212,11 +212,9 @@ import Testing
         }
     }
 
-    @Test func itServesGymsButNotProposalsYet() async throws {
+    @Test func itServesGymsAndProposals() {
         let server = StubServer { _ in .json(500, "{}") }
         let transport = ApiSyncTransport(api: server.client())
-        #expect(transport.servesGyms && !transport.servesProposals)
-        #expect(try await transport.pendingProposals().isEmpty)
-        #expect(server.requests.isEmpty)
+        #expect(transport.servesGyms && transport.servesProposals)
     }
 }

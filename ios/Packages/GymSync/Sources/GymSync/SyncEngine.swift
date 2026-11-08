@@ -157,6 +157,15 @@ public final class SyncEngine {
         try await transport.revokeOAuthGrants()
     }
 
+    /// The Claude sign-in waiting with `code` (Approve a connection).
+    public func connectRequest(code: String) async throws -> ConnectRequest {
+        try await transport.connectRequest(code: code)
+    }
+
+    public func decideConnect(code: String, decision: ConnectDecision) async throws {
+        try await transport.decideConnect(code: code, decision: decision)
+    }
+
     func noteRemoteChanges() { remoteChangeCount += 1 }
 
     private var settledStatus: SyncStatus {
