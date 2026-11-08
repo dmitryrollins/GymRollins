@@ -84,3 +84,33 @@ export async function block(blocker: string, blocked: string) {
   await env.DB.prepare('INSERT INTO user_blocks (blocker_id, blocked_id, created_at) VALUES (?1, ?2, ?3)')
     .bind(blocker, blocked, T).run()
 }
+
+/** A photo object the account still owns (plan 28 writes these on upload). */
+export async function insertPhoto(owner: string, bucket: 'gym-photos' | 'gym-photos-private' = 'gym-photos-private') {
+  const name = `${crypto.randomUUID()}.jpg`
+  await env.DB.prepare('INSERT INTO photo_objects (bucket, name, owner_id, created_at) VALUES (?1, ?2, ?3, ?4)')
+    .bind(bucket, name, owner, T).run()
+  return name
+}
+
+/** A confirmation and its count on the listing, as confirm_listing and its trigger left them. */
+export async function confirm(listing: string, userId: string) {
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO equipment_confirmations (listing_id, user_id, created_at) VALUES (?1, ?2, ?3)')
+      .bind(listing, userId, T),
+    env.DB.prepare('UPDATE gym_equipment SET confirm_count = confirm_count + 1 WHERE id = ?1').bind(listing),
+  ])
+}
+
+export async function insertReport(r: {
+  reporter: string
+  targetType: 'gym' | 'item' | 'listing'
+  targetId: string
+  note: string
+}): Promise<string> {
+  const id = crypto.randomUUID()
+  await env.DB.prepare(
+    "INSERT INTO reports (id, target_type, target_id, reporter_id, reason, note, created_at) VALUES (?1, ?2, ?3, ?4, 'other', ?5, ?6)",
+  ).bind(id, r.targetType, r.targetId, r.reporter, r.note, T).run()
+  return id
+}
