@@ -25,6 +25,9 @@ echo "==> iOS app unit + UI tests"
 echo "==> MCP validator, tools and endpoint (deno test, FakeDb; HTTP e2e: MCP_E2E=1)"
 (cd "$ROOT/supabase/functions" && deno test --allow-read _shared/ mcp/)
 
+echo "==> API server (Cloudflare Worker: vitest in workerd, in-memory D1)"
+(cd "$ROOT/server" && { [[ -d node_modules ]] || npm ci; } && npx vitest run && npx tsc --noEmit)
+
 echo "==> OAuth consent server (node test)"
 node --test "$ROOT/web/consent/server.test.mjs"
 
@@ -46,9 +49,10 @@ node --test "$ROOT/scripts/build-photo-prompts.test.mjs" "$ROOT/scripts/generate
 echo "==> Exercise photo uploader (node test, mocked Storage API)"
 node --test "$ROOT/scripts/upload-photos.test.mjs"
 
-echo "==> Equipment seed generator (node test, drift against the migration)"
+echo "==> Seed generators (node test; drift against the Postgres and D1 migrations)"
 node --test "$ROOT/scripts/gen-equipment-seed.test.mjs"
 node "$ROOT/scripts/gen-equipment-seed.mjs" --check
+node "$ROOT/scripts/gen-exercise-seed.mjs" --check
 
 # E2E sync against the local Supabase stack (needs Docker): opt in with SYNC_E2E=1.
 if [[ "${SYNC_E2E:-0}" == "1" ]]; then
