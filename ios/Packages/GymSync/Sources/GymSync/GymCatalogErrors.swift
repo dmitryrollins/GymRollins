@@ -2,8 +2,8 @@ import Foundation
 import GymData
 import Supabase
 
-/// Turns what PostgREST, Storage and Auth throw into the few cases `ShareOutbox` reacts to: offline and signed-out
-/// stop the queue, the rest settle one row. The server's own words are the function's `raise exception` messages.
+/// Turns what the API (and, until plan 30, PostgREST, Storage and Supabase Auth) throws into the few cases
+/// `ShareOutbox` reacts to: offline and signed-out stop the queue, the rest settle one row. The server's own words are the function's `raise exception` messages.
 enum GymCatalogErrors {
     private static let authCodes: Set<String> = ["PGRST301", "PGRST302", "PGRST303"]
     /// PostgREST's own "the database isn't reachable or is busy" answers, and Postgres classes 08 (connection) and
@@ -21,6 +21,7 @@ enum GymCatalogErrors {
     static func map(_ error: Error, hasSession: Bool = false) -> GymCatalogError {
         switch error {
         case let known as GymCatalogError: known
+        case let failure as ApiError: map(api: failure, hasSession: hasSession)
         case let failure as PostgrestError: map(message: failure.message, code: failure.code, hasSession: hasSession)
         case let failure as StorageError: mapStorage(failure)
         case is AuthError: .signedOut
@@ -66,6 +67,30 @@ enum GymCatalogErrors {
             if busyCodes.contains(code) || code.hasPrefix("08") || code.hasPrefix("53") { return .offline }
         }
         return .rejected(message)
+    }
+
+    /// The API's refusals (server/src/gyms/refusals.ts, spec section 6): the code first, then the status. The codes are
+    /// the strings the Postgres functions raised, so each reaches the same case, and the app the same message.
+    private static func map(api failure: ApiError, hasSession: Bool) -> GymCatalogError {
+        switch failure.code {
+        case "daily_limit": return .dailyLimit
+        case "gym_not_shareable": return .gymNotShareable
+        case "photo_missing": return .photoMissing
+        case "gym_full": return .gymFull
+        case "photo_in_use": return .photoInUse
+        case "unknown_target": return .unknownTarget
+        case "place_taken": return .placeTaken
+        // A CHECK or clean_text refused the text (23514): on a report, its note.
+        case "row_rejected": return .noteRefused
+        case _ where failure.code.hasPrefix("photo_"): return .photoRefused
+        default: break
+        }
+        switch failure.status {
+        case 401: return .signedOut
+        case 403: return hasSession ? .notAllowed : .signedOut
+        case _ where failure.isTemporary: return .offline
+        default: return .rejected(failure.message)
+        }
     }
 
     /// The trigger on the buckets refuses an upload with a row-level-security error: the daily photo limit, or a

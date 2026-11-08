@@ -76,15 +76,17 @@ public struct ApiClient: Sendable {
         return try SyncJSON.decoder.decode(Response.self, from: body)
     }
 
-    /// One exchange; the body and response of a 2xx answer.
+    /// One exchange; the body and response of a 2xx answer. `contentType` names `body`: JSON, or `image/jpeg` for a
+    /// photo upload.
     func data(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil,
+              contentType: String = "application/json",
               bearer: Bearer = .stored) async throws -> (body: Data, response: HTTPURLResponse) {
         var request = URLRequest(url: try url(path, query: query))
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }
         let token: String? = switch bearer {
         case .stored: sessions.load()?.token
