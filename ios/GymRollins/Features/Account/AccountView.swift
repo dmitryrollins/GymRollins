@@ -115,8 +115,11 @@ struct AccountSection: View {
                         Text(line.title).font(.subheadline.weight(.semibold))
                         Text(line.message).font(.caption).foregroundStyle(Theme.textSecondary)
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(line.spokenLabel)
                 }
-                Text(SyncStatusText.failuresFooter).font(.caption).foregroundStyle(Theme.textTertiary)
+                Text(SyncStatusText.failuresFooter(env.sync.syncFailures)).font(.caption)
+                    .foregroundStyle(Theme.textTertiary)
             } label: {
                 Text(SyncStatusText.failures(env.sync.syncFailures.count))
                     .foregroundStyle(Theme.destructive)

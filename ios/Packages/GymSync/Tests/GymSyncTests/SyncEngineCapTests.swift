@@ -32,6 +32,7 @@ import Testing
         let failures = f.store.syncFailures()
         #expect(failures.map(\.id) == [refused.id.uuidString])
         #expect(failures.map(\.message) == [FakeTransport.bodyweightCapWords])
+        #expect(failures.map(\.code) == ["too_many_body_weights"])
         #expect(try f.store.dirtyBodyweight().map(\.value.id) == [refused.id])
         #expect(try f.body.hasRecord(id: refused.id))
 

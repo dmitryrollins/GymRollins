@@ -54,6 +54,18 @@ import Testing
         #expect(f.store.syncFailures().isEmpty)
     }
 
+    /// The server's code is kept beside its words, so Account can tell a storage cap from a value an edit can fix.
+    /// Failures stored before the code was kept read back without one.
+    @Test func aFailureKeepsTheServersCode() throws {
+        defer { f.tearDown() }
+        f.store.recordSyncFailure(SyncFailure(entity: .bodyweight, id: "w1", clientUpdatedAt: f.clock.now,
+                                              message: "full", code: "too_many_body_weights"))
+        #expect(f.store.syncFailures().map(\.code) == ["too_many_body_weights"])
+        let stored = Data(#"[{"entity":"bodyweight","id":"w1","clientUpdatedAt":0,"message":"x"}]"#.utf8)
+        let decoded = try JSONDecoder().decode([SyncFailure].self, from: stored)
+        #expect(decoded.map(\.code) == [nil] && decoded.map(\.message) == ["x"])
+    }
+
     @Test func resetClearsFailures() throws {
         defer { f.tearDown() }
         f.store.recordSyncFailure(SyncFailure(entity: .workouts, id: UUID().uuidString, clientUpdatedAt: f.clock.now,

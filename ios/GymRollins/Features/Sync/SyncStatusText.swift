@@ -26,16 +26,30 @@ struct SyncBannerState: Equatable {
     }
 }
 
-/// One line of Account's refused rows: what they are, with how many when more than one, and the server's words.
+/// One line of Account's refused rows: what they are, how many, and the server's words.
 struct SyncFailureLine: Equatable, Identifiable {
     struct Key: Hashable {
         let entity: SyncEntity
         let message: String
     }
 
-    let title: String
+    let entity: SyncEntity
+    let count: Int
     let message: String
-    var id: String { "\(title)\n\(message)" }
+
+    /// "Weigh-in", or "Weigh-in · 300" for more than one.
+    var title: String {
+        let name = SyncStatusText.entityName(entity)
+        return count == 1 ? name : "\(name) \u{00B7} \(count)"
+    }
+
+    /// What VoiceOver reads for the line: "Weigh-in, <words>", or "300 weigh-ins, <words>".
+    var spokenLabel: String {
+        let what = count == 1 ? SyncStatusText.entityName(entity) : "\(count) \(SyncStatusText.entityPlural(entity))"
+        return "\(what), \(message)"
+    }
+
+    var id: String { "\(entity.rawValue)\n\(message)" }
 }
 
 /// Account-screen wording for sync state.
@@ -69,19 +83,29 @@ enum SyncStatusText {
         count == 1 ? "1 item couldn't sync" : "\(count) items couldn't sync"
     }
 
-    /// Under the refused rows: they stay on this phone, and an edit sends one again.
-    static let failuresFooter = "They stay on this iPhone. Editing one tries again."
+    /// The account caps' codes (server/src/sync/caps.ts, migrations/0010_account_caps.sql). Deleted rows count toward
+    /// them (plan 31, decision 4), so a row refused at one is refused again however it is edited.
+    static let accountCapCodes: Set<String> = [
+        "too_many_workouts", "too_many_body_weights", "too_many_routines", "too_many_custom_exercises",
+        "too_many_exercise_prefs", "too_many_gyms_total", "too_many_listings_total", "too_many_logged_exercises",
+        "too_many_logged_sets",
+    ]
+
+    /// Under the refused rows: they stay on this phone, and an edit sends one again, unless every one was refused at
+    /// an account cap, where an edit is refused again.
+    static func failuresFooter(_ failures: [SyncFailure]) -> String {
+        let capped = !failures.isEmpty && failures.allSatisfy { $0.code.map(accountCapCodes.contains) ?? false }
+        return capped ? "They stay on this iPhone." : "They stay on this iPhone. Editing one tries again."
+    }
 
     /// Account's refused rows, one line per kind of row and reason, in the store's order. At an account limit every
     /// refused row has the same words, so 300 weigh-ins past it read as one line, not 300.
     static func failureLines(_ failures: [SyncFailure]) -> [SyncFailureLine] {
         let keys = failures.map { SyncFailureLine.Key(entity: $0.entity, message: $0.message) }
         let counts = Dictionary(keys.map { ($0, 1) }, uniquingKeysWith: +)
-        let distinct = keys.reduce(into: [SyncFailureLine.Key]()) { if !$0.contains($1) { $0.append($1) } }
-        return distinct.map { key in
-            let name = entityName(key.entity)
-            let count = counts[key, default: 1]
-            return SyncFailureLine(title: count == 1 ? name : "\(name) \u{00B7} \(count)", message: key.message)
+        var seen = Set<SyncFailureLine.Key>()
+        return keys.filter { seen.insert($0).inserted }.map { key in
+            SyncFailureLine(entity: key.entity, count: counts[key, default: 1], message: key.message)
         }
     }
 
@@ -98,6 +122,23 @@ enum SyncStatusText {
         case .bodyweight: "Weigh-in"
         case .workouts: "Workout"
         case .proposals: "Claude proposal"
+        }
+    }
+
+    /// `entityName`'s plural, as VoiceOver reads a count of them ("300 weigh-ins").
+    static func entityPlural(_ entity: SyncEntity) -> String {
+        switch entity {
+        case .profile: "profiles"
+        case .customExercises: "custom exercises"
+        case .exercisePreferences: "exercise preferences"
+        case .routines: "routines"
+        case .weekSchedule: "week schedule days"
+        case .muscleTargets: "weekly targets"
+        case .gyms: "gyms"
+        case .gymListings: "equipment listings"
+        case .bodyweight: "weigh-ins"
+        case .workouts: "workouts"
+        case .proposals: "Claude proposals"
         }
     }
 

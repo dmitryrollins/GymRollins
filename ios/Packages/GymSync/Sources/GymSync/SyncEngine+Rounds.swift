@@ -139,7 +139,7 @@ extension SyncEngine {
     func recordRejection(_ rejected: SyncRecordRejected, entity: SyncEntity, id: String,
                                  clientUpdatedAt: Date) {
         store.recordSyncFailure(SyncFailure(entity: entity, id: id, clientUpdatedAt: clientUpdatedAt,
-                                            message: rejected.message))
+                                            message: rejected.message, code: rejected.code))
     }
 
     // MARK: Pull

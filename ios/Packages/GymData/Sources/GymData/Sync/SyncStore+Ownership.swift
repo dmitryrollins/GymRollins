@@ -8,12 +8,15 @@ public struct SyncFailure: Codable, Sendable, Equatable {
     public let id: String
     public let clientUpdatedAt: Date
     public let message: String
+    /// The server's code (e.g. `too_many_body_weights`); nil for failures stored before it was kept.
+    public let code: String?
 
-    public init(entity: SyncEntity, id: String, clientUpdatedAt: Date, message: String) {
+    public init(entity: SyncEntity, id: String, clientUpdatedAt: Date, message: String, code: String? = nil) {
         self.entity = entity
         self.id = id
         self.clientUpdatedAt = clientUpdatedAt
         self.message = message
+        self.code = code
     }
 
     var key: String { SyncFailure.key(entity, id) }
