@@ -81,4 +81,14 @@ describe('the D1 schema', () => {
     expect(await count('SELECT count(*) AS n FROM profiles WHERE user_id = ?1', userId)).toBe(0)
     expect(await count('SELECT count(*) AS n FROM session WHERE userId = ?1', userId)).toBe(0)
   })
+
+  it("indexes a workout's entries and an entry's sets", async () => {
+    const { results } = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all<{ name: string }>()
+    const names = results.map((r) => r.name)
+    expect(names).toContain('workout_entries_workout')
+    expect(names).toContain('workout_sets_entry')
+    const plan = await env.DB.prepare("EXPLAIN QUERY PLAN DELETE FROM workout_entries WHERE workout_id = 'x'")
+      .all<{ detail: string }>()
+    expect(plan.results.map((r) => r.detail).join('\n')).toMatch(/USING (COVERING )?INDEX workout_entries_workout/)
+  })
 })

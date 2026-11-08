@@ -280,6 +280,7 @@ CREATE TABLE workout_entries (
   gym_equipment_id TEXT REFERENCES gym_equipment(id) ON DELETE SET NULL CHECK (length(gym_equipment_id) = 36)
 );
 CREATE INDEX workout_entries_user_exercise ON workout_entries (user_id, exercise_id);
+CREATE INDEX workout_entries_workout ON workout_entries (workout_id);
 
 CREATE TABLE workout_sets (
   id TEXT PRIMARY KEY CHECK (length(id) = 36),
@@ -298,6 +299,7 @@ CREATE TABLE workout_sets (
   CONSTRAINT workout_sets_min_range CHECK (min BETWEEN 0 AND 1440),
   CONSTRAINT workout_sets_dist_m_range CHECK (dist_m BETWEEN 0 AND 1000000)
 );
+CREATE INDEX workout_sets_entry ON workout_sets (entry_id);
 
 -- Body ----------------------------------------------------------------------------------------------------------
 CREATE TABLE bodyweight (

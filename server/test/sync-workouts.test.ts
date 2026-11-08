@@ -219,3 +219,69 @@ describe("a workout's gym and listings", () => {
     expect(stored.entries[0].gym_equipment_id).toBe(listing)
   })
 })
+
+describe('workout saves under load and in shape', () => {
+  const pad = (i: number) => String(i).padStart(2, '0')
+
+  it('lets exactly one of two saves at once win, without mixing their entries', async () => {
+    const { token } = await signUp()
+    const w = workoutSample()
+    let base = (await save(token, w)).updated_at
+    for (let i = 0; i < 10; i++) {
+      const a = {
+        ...w, name: `A${i}`, client_updated_at: `2026-11-07T11:00:${pad(i)}.000000Z`, base_updated_at: base,
+        entries: [{ id: appUUID(), exercise_id: 'a', position: 0, sets: [] }],
+      }
+      const b = {
+        ...w, name: `B${i}`, client_updated_at: `2026-11-07T11:00:${pad(i)}.500000Z`, base_updated_at: base,
+        entries: [0, 1].map((position) => ({ id: appUUID(), exercise_id: 'b', position, sets: [] })),
+      }
+      const answers = await Promise.all([save(token, a), save(token, b)])
+      expect(answers.map((r) => r.status).sort()).toEqual(['ok', 'stale'])
+      const stored = await fetchOne(token, w.id)
+      const winner = stored.name === `A${i}` ? { exercise: 'a', count: 1 } : { exercise: 'b', count: 2 }
+      expect(stored.name).toBe(`${winner.exercise.toUpperCase()}${i}`)
+      expect(stored.entries.map((e) => e.exercise_id)).toEqual(Array(winner.count).fill(winner.exercise))
+      expect(answers.find((r) => r.status === 'stale')!.updated_at).toBe(stored.updated_at)
+      base = stored.updated_at
+    }
+  })
+
+  it("answers pulled workouts with only the app's keys", async () => {
+    const { token } = await signUp()
+    await save(token, workoutSample())
+    const [w] = await pullPage(token, '')
+    const keys = (o: Record<string, unknown>) => Object.keys(o).sort()
+    expect(keys(w)).toEqual([
+      'id', 'started_at', 'ended_at', 'paused_sec', 'routine_id', 'name', 'source', 'note', 'vol_kg', 'records',
+      'gym_id', 'client_updated_at', 'deleted_at', 'updated_at', 'entries',
+    ].sort())
+    expect(keys(w.entries[0])).toEqual(
+      ['id', 'exercise_id', 'position', 'note', 'superset_group', 'gym_equipment_id', 'sets'].sort(),
+    )
+    expect(keys(w.entries[0].sets[0])).toEqual([
+      'id', 'position', 'w_kg', 'r', 'sec', 'min', 'dist_m', 'done', 'warmup', 'rir', 'rpe', 'multiplier', 'completed_at',
+    ].sort())
+  })
+
+  it('orders entries and sets by position', async () => {
+    const { token } = await signUp()
+    const set = (position: number) => ({ id: appUUID(), position, w_kg: 20, r: 5 })
+    const entries = [2, 0, 1].map((position) => ({
+      id: appUUID(), exercise_id: `x${position}`, position, sets: [set(2), set(0), set(1)],
+    }))
+    const w = workoutSample({ entries })
+    await save(token, w)
+    const stored = await fetchOne(token, w.id)
+    expect(stored.entries.map((e) => e.position)).toEqual([0, 1, 2])
+    expect(stored.entries.map((e) => e.exercise_id)).toEqual(['x0', 'x1', 'x2'])
+    expect(stored.entries.every((e) => e.sets.map((s: Record<string, unknown>) => s.position).join() === '0,1,2')).toBe(true)
+  })
+
+  it('fetches a deleted workout', async () => {
+    const { token } = await signUp()
+    const w = workoutSample({ deleted_at: T1 })
+    await save(token, w)
+    expect((await fetchOne(token, w.id)).deleted_at).toBe(T1)
+  })
+})
