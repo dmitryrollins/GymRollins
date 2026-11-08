@@ -16,9 +16,8 @@ struct SignedInGymRig {
 
     static func make() throws -> SignedInGymRig {
         let (stream, continuation) = AsyncStream<AuthEvent>.makeStream()
-        let client = SupabaseConfig(url: URL(string: "http://127.0.0.1:9")!, anonKey: "anon")
-            .makeClient(storage: InMemoryAuthStorage())
-        let auth = AuthService(client: client, events: stream)
+        let api = ApiClient(baseURL: URL(string: "http://127.0.0.1:9")!, sessions: InMemorySessionStore())
+        let auth = AuthService(api: api, events: stream)
         let rig = try GymTestRig.make { store, now in
             SyncCoordinator(auth: auth, store: store, now: now, makeTransport: { _ in nil })
         }

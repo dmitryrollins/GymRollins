@@ -5,10 +5,10 @@ import GymCore
 enum SyncBackend: Equatable {
     /// No auth, no network: the default for `-uiTesting`, so UI tests stay hermetic.
     case disabled
-    /// The Supabase project from Info.plist (in DEBUG, `SUPABASE_URL`/`SUPABASE_ANON_KEY` env vars win).
+    /// The API from Info.plist's `API_URL` (in DEBUG, an `API_URL` environment variable wins).
     case configured
-    /// DEBUG/UI-test only (`-uiTesting -uiTestingBackend local`): like `configured`, but the auth session is kept
-    /// in a test-only store that `-resetStore` wipes, so a relaunch can simulate a fresh install.
+    /// DEBUG/UI-test only (`-uiTesting -uiTestingBackend local`): like `configured`, but the session is kept in a
+    /// test-only store that `-resetStore` wipes, so a relaunch can simulate a fresh install.
     case uiTestLocal
     /// DEBUG/UI-test only (`-seedConflict`): an in-process fake server that reports the first pushed workout as
     /// edited on another device, for the conflict UI (no auth, no network).
@@ -61,7 +61,8 @@ struct LaunchOptions {
     let syncBackend: SyncBackend
     /// DEBUG only: `GYM_SIMULATE_OFFLINE=1` in the environment makes every sync request fail as offline.
     let simulateOffline: Bool
-    /// The process environment (DEBUG builds read the Supabase URL/key overrides from it).
+    /// The process environment (DEBUG builds read `API_URL` from it, and the Supabase overrides that photo hosting and
+    /// Claude's connector still use).
     let environment: [String: String]
     /// `-uiTesting`: also used to default onboarding to already-complete, so the existing app UI test suite
     /// (which doesn't expect the onboarding flow) keeps working.

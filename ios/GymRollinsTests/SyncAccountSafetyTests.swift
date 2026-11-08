@@ -80,9 +80,8 @@ private actor ScriptedTransport: SyncTransport {
     private func signedInCoordinator(_ transport: ScriptedTransport)
         -> (SyncCoordinator, AsyncStream<AuthEvent>.Continuation) {
         let (events, continuation) = AsyncStream<AuthEvent>.makeStream()
-        let client = SupabaseConfig(url: URL(string: "http://127.0.0.1:9")!, anonKey: "anon")
-            .makeClient(storage: InMemoryAuthStorage())
-        let auth = AuthService(client: client, events: events)
+        let api = ApiClient(baseURL: URL(string: "http://127.0.0.1:9")!, sessions: InMemorySessionStore())
+        let auth = AuthService(api: api, events: events)
         let sync = SyncCoordinator(auth: auth, store: store, now: Date.init, makeTransport: { _ in transport })
         return (sync, continuation)
     }

@@ -2,7 +2,6 @@ import Foundation
 import GymCore
 import GymData
 import GymSync
-import Supabase
 import UIKit
 
 /// The shared catalogue's pieces on the phone: the server, the cache of other people's listings, the queue of shares
@@ -33,7 +32,9 @@ final class GymSharing {
     }
 }
 
-/// Stands in when the build has no Supabase config: reads find nothing, writes need an account.
+/// Stands in while there is no catalogue server: a build without a backend, or the API before plan 28 adds the
+/// catalogue. Reads find nothing and writes need an account. Neither holds any of the account's photos, so account
+/// deletion's photo steps have nothing to detach or remove.
 struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { throw GymCatalogError.offline }
     func publicListings(gymId: UUID) async throws -> PublicListings { throw GymCatalogError.offline }
@@ -44,8 +45,8 @@ struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func confirm(listingId: UUID) async throws -> Int { throw GymCatalogError.signedOut }
     func uploadSharedPhoto(_ data: Data, name: String) async throws -> String { throw GymCatalogError.signedOut }
     func deleteSharedPhoto(path: String) async throws { throw GymCatalogError.signedOut }
-    func deleteAllPhotos() async throws { throw GymCatalogError.signedOut }
-    func detachAllPhotos() async throws { throw GymCatalogError.signedOut }
+    func deleteAllPhotos() async throws {}
+    func detachAllPhotos() async throws {}
     func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
         throw GymCatalogError.signedOut
     }
@@ -73,8 +74,8 @@ extension AppEnvironment {
                               photoData: photoData, now: now)
         }
         #endif
-        let transport: any GymCatalogTransport = sync.auth.map { SupabaseGymCatalogTransport(client: $0.client) }
-            ?? UnavailableGymCatalogTransport()
+        // The shared catalogue isn't on the API until plan 28, and the Supabase one can't use the API's session.
+        let transport: any GymCatalogTransport = UnavailableGymCatalogTransport()
         return GymSharing(repository: gyms, transport: transport, knownKinds: known,
                           photos: GymPhotoCache.live(store: photoStore), photoData: photoData, now: now)
     }
