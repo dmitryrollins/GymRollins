@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   block, confirm, genericItem, insertGym, insertItem, insertListing, insertPhoto, insertReport, makeAdmin,
 } from './gym-fixtures.ts'
+import { ApiError } from '../src/http/errors.ts'
+import { deleteAccount } from '../src/account/delete.ts'
 import { request, signUp } from './helpers.ts'
 import { SAMPLES, workoutSample } from './samples.ts'
 
@@ -83,5 +85,65 @@ describe('deleting an account', () => {
     expect(await row('SELECT confirm_count FROM gym_equipment WHERE id = ?1', theirListing)).toEqual({ confirm_count: 0 })
     expect(await row('SELECT reporter_id, note FROM reports WHERE id = ?1', report))
       .toEqual({ reporter_id: null, note: null })
+  })
+
+  it('stops everything when a photo appears after the first check', async () => {
+    const a = await signUp()
+    const b = await signUp()
+    const c = await signUp()
+    const gym = await insertGym({ visibility: 'public', createdBy: a.userId })
+    const mine = await insertItem({ brand: 'Acme', model: 'X1', createdBy: a.userId })
+    const myListing = await insertListing({ gym, item: mine, visibility: 'public', addedBy: a.userId, notes: 'By the window' })
+    const theirs = await insertListing({ gym, item: await genericItem(), visibility: 'public', addedBy: b.userId })
+    await confirm(theirs, a.userId)
+    await confirm(theirs, c.userId)
+    await insertPhoto(a.userId)
+
+    // The first check, and only it, misses the photo.
+    const blind = new Proxy(env.DB, {
+      get: (target, prop) => {
+        if (prop !== 'prepare') return (target as never)[prop]
+        return (sql: string) => sql.startsWith('SELECT 1 FROM photo_objects')
+          ? { bind: () => ({ first: async () => null }) }
+          : target.prepare(sql)
+      },
+    })
+
+    const error = await deleteAccount(blind, a.userId).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).code).toBe('photos_remain')
+    expect(await row('SELECT id FROM "user" WHERE id = ?1', a.userId)).toEqual({ id: a.userId })
+    expect(await row('SELECT notes, item_id FROM gym_equipment WHERE id = ?1', myListing))
+      .toEqual({ notes: 'By the window', item_id: mine })
+    expect(await row('SELECT id FROM equipment_items WHERE id = ?1', mine)).toEqual({ id: mine })
+    expect(await row('SELECT confirm_count FROM gym_equipment WHERE id = ?1', theirs)).toEqual({ confirm_count: 2 })
+  })
+
+  it('recounts a listing two people confirmed down to the one who stays', async () => {
+    const a = await signUp()
+    const b = await signUp()
+    const c = await signUp()
+    const gym = await insertGym({ visibility: 'public', createdBy: b.userId })
+    const listing = await insertListing({ gym, item: await genericItem(), visibility: 'public', addedBy: b.userId })
+    await confirm(listing, a.userId)
+    await confirm(listing, c.userId)
+    expect(await row('SELECT confirm_count FROM gym_equipment WHERE id = ?1', listing)).toEqual({ confirm_count: 2 })
+    expect((await request('DELETE', '/v1/account', { token: a.token })).status).toBe(204)
+    expect(await row('SELECT confirm_count FROM gym_equipment WHERE id = ?1', listing)).toEqual({ confirm_count: 1 })
+  })
+
+  it("leaves other people's listings and words alone", async () => {
+    const a = await signUp()
+    const b = await signUp()
+    const gym = await insertGym({ visibility: 'public', createdBy: a.userId })
+    const item = await insertItem({ brand: 'Bravo', model: 'B1', createdBy: b.userId })
+    const photo = `${crypto.randomUUID()}.jpg`
+    const listing = await insertListing({
+      gym, item, visibility: 'public', addedBy: b.userId, notes: 'Back corner', photo,
+    })
+    expect((await request('DELETE', '/v1/account', { token: a.token })).status).toBe(204)
+    expect(await row('SELECT item_id, notes, photo_path, added_by FROM gym_equipment WHERE id = ?1', listing))
+      .toEqual({ item_id: item, notes: 'Back corner', photo_path: photo, added_by: b.userId })
+    expect(await row('SELECT created_by FROM equipment_items WHERE id = ?1', item)).toEqual({ created_by: b.userId })
   })
 })
