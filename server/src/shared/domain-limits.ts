@@ -45,6 +45,22 @@ export const DomainLimits = {
   privateGymsMax: 100,
   privateListingsMax: 1_000,
   gymActiveListingsMax: 300,
+  // Storage per account, deleted rows included (migrations/0010_account_caps.sql)
+  workoutsMax: 10_000,
+  bodyweightsMax: 20_000,
+  routinesMax: 200,
+  customExercisesMax: 1_000,
+  pendingProposalsMax: 100,
+  proposalsMax: 5_000,
+  exercisePrefsMax: 2_000,
+  privateGymsTotalMax: 500,
+  privateListingsTotalMax: 5_000,
+  // Exercises and sets logged per account, deleted workouts included (src/sync/workouts.ts keeps the counts)
+  accountEntriesMax: 50_000,
+  accountSetsMax: 250_000,
+  // One workout, as each save stores it (src/sync/workouts.ts)
+  workoutEntriesMax: 50,
+  entrySetsMax: 50,
   // Daily limits per user, over a rolling 24 hours (src/gyms, src/moderation, src/photos)
   dailyGymCreations: 10,
   dailyShares: 30,

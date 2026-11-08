@@ -66,7 +66,7 @@ function swiftPlanChangeLimits(source: string): Record<string, Limit> {
 
 describe('domain limits', () => {
   it('finds the Swift constants (a parser that matched nothing would pass everything)', () => {
-    expect(Object.keys(swift).length).toBeGreaterThanOrEqual(40)
+    expect(Object.keys(swift).length).toBeGreaterThanOrEqual(53)
   })
 
   it('has every Swift limit in the server, with the same value, and no others', () => {

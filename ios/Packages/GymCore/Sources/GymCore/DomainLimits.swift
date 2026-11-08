@@ -1,8 +1,8 @@
 import Foundation
 
-/// Value limits shared by local validation and the database CHECK constraints
-/// (server/migrations/0002_app_schema.sql, 0005_gyms_photos.sql). Anything saved locally must fit these, or the row
-/// would be rejected when it syncs.
+/// Value limits shared by local validation and the database CHECK constraints and caps
+/// (server/migrations/0002_app_schema.sql, 0005_gyms_photos.sql, 0010_account_caps.sql). Anything saved locally must
+/// fit these, or the row would be rejected when it syncs.
 public enum DomainLimits {
     // Routines
     public static let routineNameMax = 40
@@ -44,6 +44,22 @@ public enum DomainLimits {
     public static let privateGymsMax = 100
     public static let privateListingsMax = 1_000
     public static let gymActiveListingsMax = 300
+    // Storage per account, deleted rows included (server/migrations/0010_account_caps.sql)
+    public static let workoutsMax = 10_000
+    public static let bodyweightsMax = 20_000
+    public static let routinesMax = 200
+    public static let customExercisesMax = 1_000
+    public static let pendingProposalsMax = 100
+    public static let proposalsMax = 5_000
+    public static let exercisePrefsMax = 2_000
+    public static let privateGymsTotalMax = 500
+    public static let privateListingsTotalMax = 5_000
+    // Exercises and sets logged per account, deleted workouts included (server/src/sync/workouts.ts keeps the counts)
+    public static let accountEntriesMax = 50_000
+    public static let accountSetsMax = 250_000
+    // One workout, as each save stores it (server/src/sync/workouts.ts)
+    public static let workoutEntriesMax = 50
+    public static let entrySetsMax = 50
     // Daily limits per user, enforced by the server functions
     public static let dailyGymCreations = 10
     public static let dailyShares = 30
