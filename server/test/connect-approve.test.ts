@@ -3,6 +3,7 @@
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { CONNECT_SESSION_SECONDS } from '../src/auth/connect-plugin.ts'
+import { ACCESS_TOKEN_PREFIX, hashToken } from '../src/auth/oauth.ts'
 import { WRONG_CODES_ALLOWED } from '../src/claude/connect-requests.ts'
 import {
   Browser,
@@ -14,7 +15,9 @@ import {
   metaRefresh,
   openConnect,
   registerClient,
+  RESOURCE,
   startFlow,
+  tokenRequest,
   type Tokens,
 } from './claude.ts'
 import { request, signUp } from './helpers.ts'
@@ -210,5 +213,138 @@ describe('codes', () => {
       expect((await request('POST', `/v1/claude/connect/${code}`, { token, body })).status).toBe(400)
     }
     expect((await preview(token, code)).status).toBe(200)
+  })
+})
+
+// Added after review: the browser's session and Claude's tokens are for the authorize step and /mcp only.
+// Before, the browser's cookie value as a bearer (or the raw token get-session gave for the cookie) worked on
+// /v1 as the owner, and any use as a bearer extended the 10-minute session to 60 days.
+describe("Claude's side never reaches the app (added after review)", () => {
+  const SESSION_COOKIE = 'better-auth.session_token'
+  const SIGNED_OUT = { error: { code: 'signed_out', message: 'Sign in required.' } }
+  const V1: [string, string][] = [
+    ['GET', '/v1/sync/routines'],
+    ['GET', '/v1/claude/connect/ZZZZ-ZZZZ'],
+    ['DELETE', '/v1/account'],
+  ]
+
+  /** After an approval: the page signed the browser in; `reentry` is the authorize step it goes to next. */
+  async function approved() {
+    const { token, flow, browser, code } = await waiting()
+    await decideCode(token, code, 'approve')
+    const [, reentry] = metaRefresh(await (await browser.get(flow.connectUrl)).text())!
+    const cookieValue = browser.cookies.get(SESSION_COOKIE)!
+    const signed = decodeURIComponent(cookieValue)
+    return { token, flow, browser, reentry: reentry!, cookieValue, signed, raw: signed.split('.')[0]! }
+  }
+
+  /** Claude's code from the authorize step the approved browser re-enters. */
+  async function claudeCode(s: { browser: Browser; reentry: string }): Promise<string> {
+    const back = await s.browser.get(s.reentry)
+    expect(back.status).toBe(302)
+    return new URL(back.headers.get('location')!).searchParams.get('code')!
+  }
+
+  /** Every form of the browser's session token a bearer could carry: as the cookie has it, decoded, raw. */
+  const bearers = (s: { cookieValue: string; signed: string; raw: string }) => [
+    s.cookieValue,
+    s.signed,
+    s.raw,
+  ]
+
+  const cookieHeader = (browser: Browser) => [...browser.cookies].map(([k, v]) => `${k}=${v}`).join('; ')
+
+  const sessionRow = (raw: string) =>
+    env.DB.prepare('SELECT id, expiresAt, claudeConnect FROM session WHERE token = ?1').bind(raw).first<
+      { id: string; expiresAt: string; claudeConnect: number | null }
+    >()
+
+  async function expectRefusedOnV1(bearer: string) {
+    for (const [method, path] of V1) {
+      const res = await request(method, path, { token: bearer })
+      expect(res.status, `${method} ${path} with ${bearer}`).toBe(401)
+      expect(await res.json()).toEqual(SIGNED_OUT)
+    }
+  }
+
+  it("marks the browser session as /connect's, and no other", async () => {
+    const { token, raw } = await approved()
+    expect((await sessionRow(raw))?.claudeConnect).toBe(1)
+    expect((await sessionRow(token))?.claudeConnect).toBe(0)
+  })
+
+  it("refuses the browser's session token on /v1 in every form, and never extends it", async () => {
+    const s = await approved()
+    const before = await sessionRow(s.raw)
+    for (const bearer of bearers(s)) await expectRefusedOnV1(bearer)
+    expect(await sessionRow(s.raw)).toEqual(before)
+    expect((await request('GET', '/v1/sync/routines', { token: s.token })).status).toBe(200)
+  })
+
+  it('gives the browser nothing on get-session: no cookies there, its token is no app session', async () => {
+    const s = await approved()
+    const before = await sessionRow(s.raw)
+    const byCookie = await call('/api/auth/get-session', { headers: { cookie: cookieHeader(s.browser) } })
+    expect(byCookie.status).toBe(200)
+    expect(await byCookie.json()).toBeNull()
+    for (const bearer of bearers(s)) {
+      const res = await request('GET', '/api/auth/get-session', { token: bearer })
+      expect(res.status, bearer).toBe(200)
+      expect(await res.json(), bearer).toBeNull()
+      expect(res.headers.get('set-auth-token')).toBeNull()
+      expect(res.headers.get('set-cookie')).toBeNull()
+    }
+    expect(await sessionRow(s.raw)).toEqual(before)
+  })
+
+  it('never extends the browser session on the authorize step, even without dont_remember', async () => {
+    const s = await approved()
+    const before = await sessionRow(s.raw)
+    await call(s.reentry, { headers: { accept: 'text/html', cookie: `${SESSION_COOKIE}=${s.cookieValue}` } })
+    await call(s.reentry, { headers: { accept: 'text/html', authorization: `Bearer ${s.signed}` } })
+    expect((await sessionRow(s.raw))?.expiresAt).toBe(before!.expiresAt)
+  })
+
+  it("keeps the app's bearer session working, with the browser's cookie sent beside it", async () => {
+    const s = await approved()
+    const headers = { authorization: `Bearer ${s.token}`, cookie: cookieHeader(s.browser) }
+    const session = await (await call('/api/auth/get-session', { headers })).json<{ user: { id: string } }>()
+    const own = await (await request('GET', '/api/auth/get-session', { token: s.token })).json<
+      { user: { id: string } }
+    >()
+    expect(session.user.id).toBe(own.user.id)
+    expect((await call('/v1/sync/routines', { headers })).status).toBe(200)
+  })
+
+  it('completes the OAuth flow; the code exchange ends the browser session, not the tokens', async () => {
+    const s = await approved()
+    const res = await exchangeCode(s.flow, await claudeCode(s))
+    expect(res.status).toBe(200)
+    const tokens = await res.json<Tokens>()
+    expect(await sessionRow(s.raw)).toBeNull()
+    const stored = await env.DB.prepare('SELECT sessionId, revoked FROM oauthAccessToken WHERE token = ?1')
+      .bind(await hashToken(tokens.access_token.slice(ACCESS_TOKEN_PREFIX.length))).first()
+    expect(stored).toEqual({ sessionId: null, revoked: null })
+    // No second code without a new approval: authorize sends the browser back to /connect.
+    const again = await s.browser.get(s.reentry)
+    expect(again.status).toBe(302)
+    expect(again.headers.get('location')).toMatch(/^\/connect\?/)
+    const refreshed = await tokenRequest({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: s.flow.clientId,
+      resource: RESOURCE,
+    })
+    expect(refreshed.status).toBe(200)
+  })
+
+  it("refuses Claude's access and refresh tokens on /v1 and get-session", async () => {
+    const s = await approved()
+    const tokens = await (await exchangeCode(s.flow, await claudeCode(s))).json<Tokens>()
+    for (const token of [tokens.access_token, tokens.refresh_token]) {
+      await expectRefusedOnV1(token)
+      expect(await (await request('GET', '/api/auth/get-session', { token })).json()).toBeNull()
+    }
+    expect((await request('GET', '/v1/sync/routines', { token: s.token })).status).toBe(200)
   })
 })

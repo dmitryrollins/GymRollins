@@ -78,7 +78,10 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
      - writes the `oauthConsent` row,
      - and re-enters `GET /api/auth/oauth2/authorize`. It drops `prompt`, because the approval in the app is the login and the consent, and adds `offline_access`.
    - The authorize step finds the session and the consent, and redirects to Claude with `code`, `state` and `iss`.
-   - **The browser's session lasts 10 minutes.** It is a "don't remember me" session that Better Auth never extends. The code exchange needs it (Better Auth refuses a code whose session has gone); the tokens don't.
+   - **The browser's session lasts 10 minutes at most, and only the OAuth routes take it** (added after review). It is a "don't remember me" session, marked `session.claudeConnect`:
+     - `/v1` refuses it, whatever form of its token a bearer carries, and `get-session` answers `null` for it. The app's own auth routes never see a `Cookie` header.
+     - A trigger keeps its expiry. Better Auth renews any session it reads without the `dont_remember` cookie, a bearer for one, which made it last 60 days.
+     - The code exchange needs it (Better Auth refuses a code whose session has gone), so the exchange ends it: a successful token response deletes it in SQL. The tokens don't need it; their `sessionId` goes null.
 3. **Tokens are opaque and checked in D1 on every call. A revoke is immediate.**
    - With `disableJwtPlugin: true`, Better Auth issues opaque access tokens even with a `resource`.
    - It stores every code and token as `storeTokens.hash`, which here is SHA-256 in base64url.
@@ -94,7 +97,7 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
    - **Disconnect Claude** deletes, in one batch:
      - the account's access tokens, refresh tokens and consents,
      - its unredeemed codes,
-     - the `/connect` browser sessions and requests.
+     - the `/connect` browser sessions and requests. Since Task 6's review a session is gone once its code is swapped, and any left is `claudeConnect = 1`.
 4. **Registration.** Dynamic client registration (RFC 7591) is open. `src/auth/routes.ts` only lets through:
    - **Claude's redirect URLs:** `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback`, and `http://localhost` or `http://127.0.0.1` with any port and path (Claude Code). The authorize step checks again, through `validateRedirectUri`.
    - **At most 30 new clients an hour,** across everyone. `OAUTH_REGISTRATIONS_PER_HOUR` overrides it; the tests set 1000, because a test file's D1 keeps every client it registered.
@@ -159,7 +162,7 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
     - `POST /v1/claude/connect/:code` with `{decision: "approve" | "deny"}` → `{status: "approved" | "denied"}`.
     - `POST /v1/claude/revoke` → `{revoked: <connections removed>}`, as `revokeOAuthGrants()` returned a count.
     - Error codes: `unknown_code` (404), `too_many_attempts` (429), `row_rejected` (422), `bad_request` (400).
-12. **Migrations** `0006_oauth_provider.sql` (generated) and `0007_claude_connect.sql`, after plan 28's `0005_gyms_photos.sql`.
+12. **Migrations** `0006_oauth_provider.sql` (generated) and `0007_claude_connect.sql`, after plan 28's `0005_gyms_photos.sql`. `0008_connect_session.sql` was added after Task 6's review: the `session.claudeConnect` column and the trigger that keeps a marked session's expiry.
     - **Deleting an account** (plans 26 and 28) needs no change. Every OAuth and connect table that holds an account's rows references `user` with `ON DELETE CASCADE`, so they go with it.
     - A test checks it (Task 8).
 13. **Proved before this plan was written,** in a scratch copy of `server/` outside the repo. It used the same pinned packages and was never committed.
@@ -183,6 +186,7 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
 | `server/scripts/gen-oauth-schema.mjs` | Writes `migrations/0006_oauth_provider.sql` from Better Auth's schema |
 | `server/migrations/0006_oauth_provider.sql` | Better Auth's OAuth tables (generated) |
 | `server/migrations/0007_claude_connect.sql` | `connect_requests`, `connect_attempts` |
+| `server/migrations/0008_connect_session.sql` | Added after review: `session.claudeConnect`, and the trigger that keeps a marked session's expiry |
 | `server/src/shared/{insights,plan-validation,strength-levels}.ts`, `strength-standards.json` | Copied (plan 28 wrote `domain-limits.ts`) |
 | `server/test/domain-limits-drift.test.ts` | Plan 28's; gains the `PlanChangeLimits` check |
 | `server/src/gyms/visibility.ts` | Plan 28's; gains Claude's two listing rules |
@@ -190,8 +194,9 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
 | `server/src/mcp/d1-db.ts` | Claude's `Db` on D1: toggles, the two writes, audit, the rate limit |
 | `server/src/mcp/app.ts` | `/mcp`: bearer → rate-limit slot → MCP Streamable HTTP (ported from `app.ts`) |
 | `server/src/auth/oauth.ts` | The `mcp` plugin's options, Claude's redirect URLs, token hashing |
-| `server/src/auth/connect-plugin.ts` | The server-only sign-in `/connect` uses |
-| `server/src/auth/auth.ts`, `routes.ts` | The plugins; the OAuth routes Claude uses and the registration checks |
+| `server/src/auth/connect-plugin.ts` | The server-only sign-in `/connect` uses; marks its session (`claudeConnect`, added after review) |
+| `server/src/auth/auth.ts`, `routes.ts` | The plugins; the OAuth routes Claude uses and the registration checks. Added after review: the app's routes without cookies, `get-session` null for the browser session, and the code exchange ending it |
+| `server/src/auth/session.ts` | `requireUser` (plans 26 and 28); refuses the `/connect` browser session (added after review) |
 | `server/src/http/cors.ts` | CORS for `/mcp` and discovery |
 | `server/src/claude/well-known.ts` | `/.well-known/*` |
 | `server/src/claude/connect-code.ts`, `connect-requests.ts`, `connect-page.ts` | Codes, their D1 rows, `GET /connect` |
@@ -3012,6 +3017,7 @@ git commit -m "feat(server): /connect shows Claude's approval code under a stric
 - Create: `server/src/auth/connect-plugin.ts`, `server/src/claude/routes.ts`
 - Modify: `server/src/auth/auth.ts`, `server/src/claude/connect-page.ts`, `server/src/index.ts`, `server/test/claude.ts`
 - Test: `server/test/connect-approve.test.ts`
+- Added after review (Step 9): create `server/migrations/0008_connect_session.sql`; modify `server/src/auth/connect-plugin.ts`, `session.ts`, `routes.ts` and `server/test/connect-approve.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3666,6 +3672,332 @@ git commit -m "feat(server): approve Claude's connection in the app; /connect re
   - It lasts 10 minutes and isn't extended.
   - The re-entered query is the signed one with `prompt` dropped and `offline_access` added, and nothing else changed.
   - `connectSignIn` isn't reachable over HTTP (`POST /api/auth/connect/sign-in` → 404, Task 4's test).
+
+**The review found one HIGH (fixed in Step 9).** The browser's session reached `/v1` once its token was put in the `Authorization` header:
+- the cookie's value as a bearer on `/v1/sync/routines` answered 200;
+- `get-session` with the cookie gave the raw session token, which also worked as a bearer.
+
+So someone who tricked the owner into approving their code got the owner's app (sync, account deletion), not only an MCP grant. The spec allows a Claude-side credential nowhere on `/v1` or `/api`. Fixing it also showed that any use as a bearer renewed the 10-minute session to 60 days (Better Auth renews a session read without its `dont_remember` cookie).
+
+- [ ] **Step 9: The browser's session and Claude's tokens never reach the app (added after review)**
+
+**Choice: a mark on the session, not a `connect_requests.session_id` lookup.**
+- Better Auth 1.7.18 supports a plugin's own session field cleanly:
+  - the field is the plugin's `schema.session.fields`,
+  - `internalAdapter.createSession(…, overrideAll)` keeps its value,
+  - `getSession` returns it,
+  - `getMigrations` compiles its column, so `test/auth.test.ts`'s schema check covers it.
+- **The mark lives on the session itself.** A `connect_requests` row is deleted a day after its code expires, and the session could outlive that by being renewed to 60 days.
+- **No extra query:** `requireUser` reads the mark from the session it already loads.
+- **Disconnect Claude** can find every such session by `claudeConnect = 1`.
+
+**The session's life.** It can't end at the redirect to Claude: Better Auth's token endpoint refuses a code whose session has gone ("session no longer exists"). So it ends at the code exchange instead:
+- A successful `POST /api/auth/oauth2/token` deletes the marked session its access token names.
+- The delete is plain SQL. Better Auth's own `deleteSession` would run the OAuth plugin's back-channel logout hook, which revokes the access token just issued.
+- D1's `ON DELETE SET NULL` clears the tokens' `sessionId`, so a refresh's tokens have no session.
+- A trigger keeps a marked session's expiry, whatever reads it.
+
+**OAuth tokens on the app.** The OAuth plugin creates no session of its own: its tokens name the browser's, which the exchange now ends. A `gra_` access token or `grr_` refresh token as a bearer finds no session, so `/v1` answers 401 and `get-session` answers `null`. The tests below check both.
+
+`server/migrations/0008_connect_session.sql`:
+
+```sql
+-- Plan 29, added after review: the browser session /connect gives an approved browser is marked
+-- (src/auth/connect-plugin.ts), so /v1 and the app's get-session refuse it. The column is Better Auth's
+-- schema compiler's own SQL for the plugin's field (test/auth.test.ts checks it); older sessions get 0.
+alter table "session" add column "claudeConnect" integer default 0;
+
+-- A marked session keeps the 10-minute expiry it was made with. Better Auth renews any session it reads
+-- without its dont_remember cookie (a bearer does that), which would make this one last 60 days. Only an
+-- extension is undone, so the trigger's own UPDATE doesn't run it again.
+CREATE TRIGGER session_connect_expiry AFTER UPDATE OF "expiresAt" ON "session"
+  WHEN OLD."claudeConnect" = 1 AND NEW."expiresAt" > OLD."expiresAt"
+BEGIN
+  UPDATE "session" SET "expiresAt" = OLD."expiresAt" WHERE "id" = OLD."id";
+END;
+```
+
+In `server/src/auth/connect-plugin.ts`, the header comment's last line becomes `// with a code. That session is marked (session.claudeConnect), so the app's routes never take it.`, and after `union`:
+
+```ts
+/**
+ * True for the browser session connectSignIn made: it is for Claude's authorize step only, so /v1 and the
+ * app's get-session refuse it (added after review). Every other session has it false. Any truthy value
+ * counts, so a 1 that Better Auth didn't turn into true still refuses.
+ */
+export const isConnectSession = (session: { claudeConnect?: unknown }): boolean =>
+  Boolean(session.claudeConnect)
+
+export const connectPlugin = {
+  id: 'gymrollins-connect',
+  // Added after review. The column is migrations/0008_connect_session.sql, whose trigger also keeps a marked
+  // session's expiry: Better Auth would extend it to 60 days whenever it is sent without the dont_remember
+  // cookie (as a bearer, say). Not an input: no request can set it.
+  schema: {
+    session: {
+      fields: {
+        claudeConnect: { type: 'boolean', required: false, defaultValue: false, input: false },
+      },
+    },
+  },
+  endpoints: {
+    …
+```
+
+and the session is created with the mark:
+
+```ts
+// dontRememberMe: a browser-session cookie; overrideAll keeps this expiry and the mark.
+const session = await ctx.context.internalAdapter.createSession(
+  user.id,
+  true,
+  { expiresAt, claudeConnect: true },
+  true,
+)
+```
+
+`server/src/auth/session.ts`:
+
+```ts
+import type { MiddlewareHandler } from 'hono'
+import type { AppEnv } from '../env.ts'
+import { ApiError } from '../http/errors.ts'
+import { createAuth } from './auth.ts'
+import { isConnectSession } from './connect-plugin.ts'
+
+/**
+ * The app's routes: the user of the Better Auth session in `Authorization: Bearer <token>`, or 401 signed_out.
+ * Cookies are never accepted: the app sends none, and a browser's cookie must not drive these routes. Better Auth's
+ * bearer plugin falls back to the Cookie header when a bearer fails its signature check, so getSession sees the
+ * authorization header alone.
+ * Added after review: the browser session /connect gives an approved browser is refused too, whatever form of its
+ * token the bearer carries. It is for Claude's authorize step, never the app's.
+ */
+export const requireUser: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const authorization = c.req.header('authorization') ?? ''
+  if (!/^Bearer \S+$/.test(authorization)) throw new ApiError(401, 'signed_out', 'Sign in required.')
+  const session = await createAuth(c.env).api.getSession({ headers: new Headers({ authorization }) })
+  if (!session || isConnectSession(session.session)) throw new ApiError(401, 'signed_out', 'Sign in required.')
+  c.set('userId', session.user.id)
+  await next()
+}
+```
+
+In `server/src/auth/routes.ts`, the imports gain `isConnectSession` and `ACCESS_TOKEN_PREFIX, hashToken`, and `authHandler`'s end and `oauthHandler` become:
+
+```ts
+export async function authHandler(c: Context<AppEnv>): Promise<Response> {
+  …
+  const res = await createAuth(c.env).handler(withoutCookies(c.req.raw))
+  if (res.status >= 400) return await inErrorShape(res)
+  return route === 'GET /api/auth/get-session' ? await appSessionOnly(res) : res
+}
+
+/**
+ * Added after review: the app's routes see no Cookie header. The app sends none, so a browser's cookie (the
+ * /connect session's) can't sign it in, out or ask who it is. The OAuth routes keep cookies: authorize needs
+ * the browser's.
+ */
+function withoutCookies(request: Request): Request {
+  const headers = new Headers(request.headers)
+  headers.delete('cookie')
+  return new Request(request, { headers })
+}
+
+/**
+ * Added after review: get-session answers null for the /connect browser session, as for no session, so its
+ * token (sent as a bearer) learns nothing and gets no new one.
+ */
+async function appSessionOnly(res: Response): Promise<Response> {
+  const body = await res.clone().json().catch(() => null) as { session?: { claudeConnect?: unknown } } | null
+  if (!body?.session || !isConnectSession(body.session)) return res
+  return Response.json(null, { headers: { 'cache-control': 'no-store' } })
+}
+
+/** OAuth answers keep RFC 6749's error shape ({error, error_description}), which Claude reads. */
+async function oauthHandler(c: Context<AppEnv>, route: string): Promise<Response> {
+  let request = c.req.raw
+  if (route === 'POST /api/auth/oauth2/register') {
+    const checked = await checkedRegistration(c)
+    if (checked instanceof Response) return checked
+    request = checked
+  }
+  const res = await createAuth(c.env).handler(request)
+  if (route === 'POST /api/auth/oauth2/token' && res.ok) {
+    // The session expires within 10 minutes anyway: a failed delete mustn't cost Claude the tokens.
+    await endConnectSession(c.env.DB, res).catch((error) => console.error('connect session not ended', error))
+  }
+  return res
+}
+
+/**
+ * Added after review: swapping the code for tokens is the /connect browser session's last use, so it ends
+ * there. It can't end at the redirect to Claude: Better Auth refuses a code whose session has gone.
+ * Deleted in SQL, not through Better Auth, whose session hook would revoke the access token just issued;
+ * the tokens' sessionId goes null (ON DELETE SET NULL). A refresh's tokens have no session: nothing to do.
+ */
+async function endConnectSession(db: D1Database, res: Response): Promise<void> {
+  const body = await res.clone().json().catch(() => null) as { access_token?: unknown } | null
+  const token = body?.access_token
+  if (typeof token !== 'string' || !token.startsWith(ACCESS_TOKEN_PREFIX)) return
+  await db.prepare(
+    'DELETE FROM session WHERE claudeConnect = 1 AND id = ' +
+      '(SELECT sessionId FROM oauthAccessToken WHERE token = ?1)',
+  ).bind(await hashToken(token.slice(ACCESS_TOKEN_PREFIX.length))).run()
+}
+```
+
+Append to `server/test/connect-approve.test.ts` (and import `ACCESS_TOKEN_PREFIX`, `hashToken` from `../src/auth/oauth.ts`, `RESOURCE` and `tokenRequest` from `./claude.ts`):
+
+```ts
+// Added after review: the browser's session and Claude's tokens are for the authorize step and /mcp only.
+// Before, the browser's cookie value as a bearer (or the raw token get-session gave for the cookie) worked on
+// /v1 as the owner, and any use as a bearer extended the 10-minute session to 60 days.
+describe("Claude's side never reaches the app (added after review)", () => {
+  const SESSION_COOKIE = 'better-auth.session_token'
+  const SIGNED_OUT = { error: { code: 'signed_out', message: 'Sign in required.' } }
+  const V1: [string, string][] = [
+    ['GET', '/v1/sync/routines'],
+    ['GET', '/v1/claude/connect/ZZZZ-ZZZZ'],
+    ['DELETE', '/v1/account'],
+  ]
+
+  /** After an approval: the page signed the browser in; `reentry` is the authorize step it goes to next. */
+  async function approved() {
+    const { token, flow, browser, code } = await waiting()
+    await decideCode(token, code, 'approve')
+    const [, reentry] = metaRefresh(await (await browser.get(flow.connectUrl)).text())!
+    const cookieValue = browser.cookies.get(SESSION_COOKIE)!
+    const signed = decodeURIComponent(cookieValue)
+    return { token, flow, browser, reentry: reentry!, cookieValue, signed, raw: signed.split('.')[0]! }
+  }
+
+  /** Claude's code from the authorize step the approved browser re-enters. */
+  async function claudeCode(s: { browser: Browser; reentry: string }): Promise<string> {
+    const back = await s.browser.get(s.reentry)
+    expect(back.status).toBe(302)
+    return new URL(back.headers.get('location')!).searchParams.get('code')!
+  }
+
+  /** Every form of the browser's session token a bearer could carry: as the cookie has it, decoded, raw. */
+  const bearers = (s: { cookieValue: string; signed: string; raw: string }) => [
+    s.cookieValue,
+    s.signed,
+    s.raw,
+  ]
+
+  const cookieHeader = (browser: Browser) => [...browser.cookies].map(([k, v]) => `${k}=${v}`).join('; ')
+
+  const sessionRow = (raw: string) =>
+    env.DB.prepare('SELECT id, expiresAt, claudeConnect FROM session WHERE token = ?1').bind(raw).first<
+      { id: string; expiresAt: string; claudeConnect: number | null }
+    >()
+
+  async function expectRefusedOnV1(bearer: string) {
+    for (const [method, path] of V1) {
+      const res = await request(method, path, { token: bearer })
+      expect(res.status, `${method} ${path} with ${bearer}`).toBe(401)
+      expect(await res.json()).toEqual(SIGNED_OUT)
+    }
+  }
+
+  it("marks the browser session as /connect's, and no other", async () => {
+    const { token, raw } = await approved()
+    expect((await sessionRow(raw))?.claudeConnect).toBe(1)
+    expect((await sessionRow(token))?.claudeConnect).toBe(0)
+  })
+
+  it("refuses the browser's session token on /v1 in every form, and never extends it", async () => {
+    const s = await approved()
+    const before = await sessionRow(s.raw)
+    for (const bearer of bearers(s)) await expectRefusedOnV1(bearer)
+    expect(await sessionRow(s.raw)).toEqual(before)
+    expect((await request('GET', '/v1/sync/routines', { token: s.token })).status).toBe(200)
+  })
+
+  it('gives the browser nothing on get-session: no cookies there, its token is no app session', async () => {
+    const s = await approved()
+    const before = await sessionRow(s.raw)
+    const byCookie = await call('/api/auth/get-session', { headers: { cookie: cookieHeader(s.browser) } })
+    expect(byCookie.status).toBe(200)
+    expect(await byCookie.json()).toBeNull()
+    for (const bearer of bearers(s)) {
+      const res = await request('GET', '/api/auth/get-session', { token: bearer })
+      expect(res.status, bearer).toBe(200)
+      expect(await res.json(), bearer).toBeNull()
+      expect(res.headers.get('set-auth-token')).toBeNull()
+      expect(res.headers.get('set-cookie')).toBeNull()
+    }
+    expect(await sessionRow(s.raw)).toEqual(before)
+  })
+
+  it('never extends the browser session on the authorize step, even without dont_remember', async () => {
+    const s = await approved()
+    const before = await sessionRow(s.raw)
+    await call(s.reentry, { headers: { accept: 'text/html', cookie: `${SESSION_COOKIE}=${s.cookieValue}` } })
+    await call(s.reentry, { headers: { accept: 'text/html', authorization: `Bearer ${s.signed}` } })
+    expect((await sessionRow(s.raw))?.expiresAt).toBe(before!.expiresAt)
+  })
+
+  it("keeps the app's bearer session working, with the browser's cookie sent beside it", async () => {
+    const s = await approved()
+    const headers = { authorization: `Bearer ${s.token}`, cookie: cookieHeader(s.browser) }
+    const session = await (await call('/api/auth/get-session', { headers })).json<{ user: { id: string } }>()
+    const own = await (await request('GET', '/api/auth/get-session', { token: s.token })).json<
+      { user: { id: string } }
+    >()
+    expect(session.user.id).toBe(own.user.id)
+    expect((await call('/v1/sync/routines', { headers })).status).toBe(200)
+  })
+
+  it('completes the OAuth flow; the code exchange ends the browser session, not the tokens', async () => {
+    const s = await approved()
+    const res = await exchangeCode(s.flow, await claudeCode(s))
+    expect(res.status).toBe(200)
+    const tokens = await res.json<Tokens>()
+    expect(await sessionRow(s.raw)).toBeNull()
+    const stored = await env.DB.prepare('SELECT sessionId, revoked FROM oauthAccessToken WHERE token = ?1')
+      .bind(await hashToken(tokens.access_token.slice(ACCESS_TOKEN_PREFIX.length))).first()
+    expect(stored).toEqual({ sessionId: null, revoked: null })
+    // No second code without a new approval: authorize sends the browser back to /connect.
+    const again = await s.browser.get(s.reentry)
+    expect(again.status).toBe(302)
+    expect(again.headers.get('location')).toMatch(/^\/connect\?/)
+    const refreshed = await tokenRequest({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: s.flow.clientId,
+      resource: RESOURCE,
+    })
+    expect(refreshed.status).toBe(200)
+  })
+
+  it("refuses Claude's access and refresh tokens on /v1 and get-session", async () => {
+    const s = await approved()
+    const tokens = await (await exchangeCode(s.flow, await claudeCode(s))).json<Tokens>()
+    for (const token of [tokens.access_token, tokens.refresh_token]) {
+      await expectRefusedOnV1(token)
+      expect(await (await request('GET', '/api/auth/get-session', { token })).json()).toBeNull()
+    }
+    expect((await request('GET', '/v1/sync/routines', { token: s.token })).status).toBe(200)
+  })
+})
+```
+
+Run: `cd server && npx vitest run test/connect-approve.test.ts && npx vitest run && npx tsc --noEmit`
+
+Before the fix, 5 of the 7 new tests fail. The cookie value as a bearer gets 200 on `/v1/sync/routines`, and `get-session` returns the session. An authorize step without `dont_remember` moves the expiry 60 days on, and the session outlives the code exchange. Claude's tokens are already refused.
+
+Expected after:
+- `Tests  20 passed (20)`,
+- then `Test Files  40 passed (40)`, `Tests  543 passed (543)`,
+- no `tsc` output.
+
+```bash
+git add server/migrations/0008_connect_session.sql server/src/auth/connect-plugin.ts server/src/auth/session.ts \
+  server/src/auth/routes.ts server/test/connect-approve.test.ts docs/plans/2026-11-08-plan-29-claude-mcp-oauth.md
+git commit -m "fix(server): Claude's browser session and OAuth tokens never reach /v1 or the app's auth routes"
+```
 
 ### Task 7: Proposals and last use for the app
 

@@ -2,7 +2,8 @@ import type { Context } from 'hono'
 import type { AppEnv, Env } from '../env.ts'
 import { errorBody } from '../http/errors.ts'
 import { createAuth } from './auth.ts'
-import { isAllowedRedirectUri } from './oauth.ts'
+import { isConnectSession } from './connect-plugin.ts'
+import { ACCESS_TOKEN_PREFIX, hashToken, isAllowedRedirectUri } from './oauth.ts'
 
 /**
  * The Better Auth routes the app and Claude use. Every other route Better Auth serves (its web redirect flow,
@@ -41,8 +42,30 @@ export async function authHandler(c: Context<AppEnv>): Promise<Response> {
     const refusal = await appleNonceRefusal(c.req.raw)
     if (refusal !== null) return c.json(errorBody('bad_request', refusal), 400)
   }
-  const res = await createAuth(c.env).handler(c.req.raw)
-  return res.status >= 400 ? inErrorShape(res) : res
+  const res = await createAuth(c.env).handler(withoutCookies(c.req.raw))
+  if (res.status >= 400) return await inErrorShape(res)
+  return route === 'GET /api/auth/get-session' ? await appSessionOnly(res) : res
+}
+
+/**
+ * Added after review: the app's routes see no Cookie header. The app sends none, so a browser's cookie (the
+ * /connect session's) can't sign it in, out or ask who it is. The OAuth routes keep cookies: authorize needs
+ * the browser's.
+ */
+function withoutCookies(request: Request): Request {
+  const headers = new Headers(request.headers)
+  headers.delete('cookie')
+  return new Request(request, { headers })
+}
+
+/**
+ * Added after review: get-session answers null for the /connect browser session, as for no session, so its
+ * token (sent as a bearer) learns nothing and gets no new one.
+ */
+async function appSessionOnly(res: Response): Promise<Response> {
+  const body = await res.clone().json().catch(() => null) as { session?: { claudeConnect?: unknown } } | null
+  if (!body?.session || !isConnectSession(body.session)) return res
+  return Response.json(null, { headers: { 'cache-control': 'no-store' } })
 }
 
 /** OAuth answers keep RFC 6749's error shape ({error, error_description}), which Claude reads. */
@@ -53,7 +76,28 @@ async function oauthHandler(c: Context<AppEnv>, route: string): Promise<Response
     if (checked instanceof Response) return checked
     request = checked
   }
-  return await createAuth(c.env).handler(request)
+  const res = await createAuth(c.env).handler(request)
+  if (route === 'POST /api/auth/oauth2/token' && res.ok) {
+    // The session expires within 10 minutes anyway: a failed delete mustn't cost Claude the tokens.
+    await endConnectSession(c.env.DB, res).catch((error) => console.error('connect session not ended', error))
+  }
+  return res
+}
+
+/**
+ * Added after review: swapping the code for tokens is the /connect browser session's last use, so it ends
+ * there. It can't end at the redirect to Claude: Better Auth refuses a code whose session has gone.
+ * Deleted in SQL, not through Better Auth, whose session hook would revoke the access token just issued;
+ * the tokens' sessionId goes null (ON DELETE SET NULL). A refresh's tokens have no session: nothing to do.
+ */
+async function endConnectSession(db: D1Database, res: Response): Promise<void> {
+  const body = await res.clone().json().catch(() => null) as { access_token?: unknown } | null
+  const token = body?.access_token
+  if (typeof token !== 'string' || !token.startsWith(ACCESS_TOKEN_PREFIX)) return
+  await db.prepare(
+    'DELETE FROM session WHERE claudeConnect = 1 AND id = ' +
+      '(SELECT sessionId FROM oauthAccessToken WHERE token = ?1)',
+  ).bind(await hashToken(token.slice(ACCESS_TOKEN_PREFIX.length))).run()
 }
 
 const oauthError = (error: string, description: string, status: 400 | 429) =>

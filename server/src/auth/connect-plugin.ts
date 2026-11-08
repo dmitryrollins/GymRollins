@@ -1,7 +1,7 @@
 // The one Better Auth endpoint this app adds, callable only from the server (auth.api.connectSignIn): when
 // the owner approved a code in the app, /connect gives the browser that showed it a short Better Auth session
 // for the owner and records Claude's consent, so the authorize step it re-enters goes straight back to Claude
-// with a code.
+// with a code. That session is marked (session.claudeConnect), so the app's routes never take it.
 import type { BetterAuthPlugin } from 'better-auth'
 import { APIError, createAuthEndpoint } from 'better-auth/api'
 import { setSessionCookie } from 'better-auth/cookies'
@@ -21,8 +21,26 @@ interface Consent {
 
 const union = (a: readonly string[], b: readonly string[]) => [...new Set([...a, ...b])]
 
+/**
+ * True for the browser session connectSignIn made: it is for Claude's authorize step only, so /v1 and the
+ * app's get-session refuse it (added after review). Every other session has it false. Any truthy value
+ * counts, so a 1 that Better Auth didn't turn into true still refuses.
+ */
+export const isConnectSession = (session: { claudeConnect?: unknown }): boolean =>
+  Boolean(session.claudeConnect)
+
 export const connectPlugin = {
   id: 'gymrollins-connect',
+  // Added after review. The column is migrations/0008_connect_session.sql, whose trigger also keeps a marked
+  // session's expiry: Better Auth would extend it to 60 days whenever it is sent without the dont_remember
+  // cookie (as a bearer, say). Not an input: no request can set it.
+  schema: {
+    session: {
+      fields: {
+        claudeConnect: { type: 'boolean', required: false, defaultValue: false, input: false },
+      },
+    },
+  },
   endpoints: {
     connectSignIn: createAuthEndpoint('/connect/sign-in', {
       method: 'POST',
@@ -59,9 +77,13 @@ export const connectPlugin = {
         })
       }
       const expiresAt = new Date(now.getTime() + CONNECT_SESSION_SECONDS * 1000)
-      // dontRememberMe: a browser-session cookie that Better Auth never extends; overrideAll keeps this
-      // expiry.
-      const session = await ctx.context.internalAdapter.createSession(user.id, true, { expiresAt }, true)
+      // dontRememberMe: a browser-session cookie; overrideAll keeps this expiry and the mark.
+      const session = await ctx.context.internalAdapter.createSession(
+        user.id,
+        true,
+        { expiresAt, claudeConnect: true },
+        true,
+      )
       await setSessionCookie(ctx, { session, user }, true)
       return ctx.json({ sessionId: session.id })
     }),
