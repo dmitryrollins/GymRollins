@@ -96,4 +96,29 @@ describe('Sign in with Apple, with the id token the app gets', () => {
     const stranger = await appleKeyPair()
     expect(await status(await appleIdToken(stranger, { ...claims, aud: env.APPLE_BUNDLE_ID }), 'n')).toBe(401)
   })
+
+  it('refuses a sign-in that leaves the nonce out', async () => {
+    const keys = await mockAppleKeys()
+    const idToken = await appleIdToken(keys, {
+      aud: env.APPLE_BUNDLE_ID,
+      sub: 'apple-4',
+      nonce: await sha256Hex('n'),
+    })
+    const res = await request('POST', '/api/auth/sign-in/social', { body: { provider: 'apple', idToken: { token: idToken } } })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: { code: 'bad_request' } })
+    expect(res.headers.get('set-auth-token')).toBeNull()
+  })
+
+  it('refuses a social sign-in without an id token', async () => {
+    const res = await request('POST', '/api/auth/sign-in/social', { body: { provider: 'apple' } })
+    expect(res.status).toBe(400)
+  })
+
+  it("answers Better Auth routes the app doesn't use with 404", async () => {
+    const { token } = await signUp()
+    expect((await request('GET', '/api/auth/callback/apple')).status).toBe(404)
+    expect((await request('POST', '/api/auth/link-social', { token, body: { provider: 'apple' } })).status).toBe(404)
+    expect((await request('POST', '/api/auth/update-user', { token, body: { name: 'x' } })).status).toBe(404)
+  })
 })
