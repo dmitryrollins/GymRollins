@@ -53,11 +53,12 @@ export async function insertListing(l: {
   status?: Status
   notes?: string
   photo?: string
+  createdAt?: string
 }): Promise<string> {
   const id = crypto.randomUUID()
   await env.DB.prepare(
     'INSERT INTO gym_equipment (id, gym_id, item_id, visibility, owner_id, photo_path, notes, added_by, status, ' +
-      'client_updated_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?10)',
+      'client_updated_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?10)',
   ).bind(
     id,
     l.gym,
@@ -69,6 +70,7 @@ export async function insertListing(l: {
     l.addedBy ?? null,
     l.status ?? 'active',
     T,
+    l.createdAt ?? T,
   ).run()
   return id
 }
