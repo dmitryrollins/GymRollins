@@ -6,6 +6,7 @@ import { accountRoutes } from './account/routes.ts'
 import { authHandler } from './auth/routes.ts'
 import { requireUser } from './auth/session.ts'
 import { connectPage } from './claude/connect-page.ts'
+import { claudeRoutes } from './claude/routes.ts'
 import { wellKnownRoutes } from './claude/well-known.ts'
 import type { AppEnv } from './env.ts'
 import { catalogueRoutes } from './gyms/routes.ts'
@@ -42,6 +43,7 @@ v1.use('*', bodyLimit({
 v1.use('*', requireUser)
 v1.route('/sync', syncRoutes)
 v1.route('/account', accountRoutes)
+v1.route('/claude', claudeRoutes)
 v1.route('/', catalogueRoutes)
 v1.route('/', moderationRoutes)
 v1.route('/photos', photoRoutes)

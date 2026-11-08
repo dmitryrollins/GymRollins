@@ -113,3 +113,50 @@ export async function openConnect(
   if (code === null) throw new Error(`no code on /connect: ${res.status} ${html}`)
   return { res, html, code }
 }
+
+export function decideCode(token: string, code: string, decision: 'approve' | 'deny'): Promise<Response> {
+  return request('POST', `/v1/claude/connect/${code}`, { token, body: { decision } })
+}
+
+/**
+ * After the owner approved: the page signs the browser in and re-enters authorize, which returns Claude's
+ * code.
+ */
+export async function finishInBrowser(browser: Browser, flow: Flow): Promise<string> {
+  const page = await browser.get(flow.connectUrl)
+  const refresh = metaRefresh(await page.text())
+  if (page.status !== 200 || !refresh?.[1]) throw new Error(`no way back to authorize: ${page.status}`)
+  const back = await browser.get(refresh[1])
+  const location = new URL(back.headers.get('location') ?? 'http://none/')
+  if (back.status !== 302 || `${location.origin}${location.pathname}` !== flow.redirectUri) {
+    throw new Error(`authorize did not return to Claude: ${back.status} ${location}`)
+  }
+  if (location.searchParams.get('state') !== flow.state) throw new Error('state changed')
+  return location.searchParams.get('code')!
+}
+
+export interface Tokens {
+  access_token: string
+  refresh_token: string
+  scope: string
+  expires_in: number
+}
+
+export function tokenRequest(params: Record<string, string>): Promise<Response> {
+  return call('/api/auth/oauth2/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params),
+  })
+}
+
+export function exchangeCode(flow: Flow, code: string, verifier = flow.verifier): Promise<Response> {
+  return tokenRequest({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: flow.redirectUri,
+    client_id: flow.clientId,
+    code_verifier: verifier,
+    resource: RESOURCE,
+  })
+}
