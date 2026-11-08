@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Builds the strength-level percentile tables (squat, bench press, deadlift) from OpenPowerlifting's bulk CSV
 // (public domain, see docs/licenses/openpowerlifting.md) into ios/GymRollins/Resources/strength-standards.json,
-// and a byte-identical copy for the MCP server (supabase/functions/_shared/strength-standards.json).
+// and a byte-identical copy for the MCP server (server/src/shared/strength-standards.json).
 // Build time only: the app and the server ship the compact percentile curves, never raw rows. Only the DATA is
 // used — no OpenPowerlifting code (AGPLv3) is copied or linked.
 //
@@ -26,7 +26,7 @@ import { createHash } from 'node:crypto'
 
 const ROOT = resolve(import.meta.dirname, '..')
 export const OUT_APP = resolve(ROOT, 'ios/GymRollins/Resources/strength-standards.json')
-export const OUT_SERVER = resolve(ROOT, 'supabase/functions/_shared/strength-standards.json')
+export const OUT_SERVER = resolve(ROOT, 'server/src/shared/strength-standards.json')
 
 export const LIFTS = ['squat', 'bench', 'deadlift']
 const LIFT_COLUMN = { squat: 'Best3SquatKg', bench: 'Best3BenchKg', deadlift: 'Best3DeadliftKg' }
