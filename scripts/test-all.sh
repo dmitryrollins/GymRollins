@@ -54,6 +54,9 @@ node --test "$ROOT/scripts/gen-equipment-seed.test.mjs"
 node "$ROOT/scripts/gen-equipment-seed.mjs" --check
 node "$ROOT/scripts/gen-exercise-seed.mjs" --check
 
+echo "==> Store comparison for the server-move check (node test)"
+node --test "$ROOT/scripts/compare-stores.test.mjs"
+
 # Sync against a throwaway local Worker (no Docker; needs server/.dev.vars): opt in with SYNC_E2E=1.
 if [[ "${SYNC_E2E:-0}" == "1" ]]; then
   echo "==> GymSync integration and iOS sync E2E (throwaway local Worker on :8788)"
