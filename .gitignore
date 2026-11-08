@@ -13,9 +13,6 @@ ios/GymRollinsWatch/Info.plist
 # Swift Package Manager
 .build/
 .swiftpm/
-# Supabase
-supabase/.branches/
-supabase/.temp/
 .env
 .env.*
 !.env.example
@@ -29,7 +26,7 @@ node_modules/
 # photo generation run log (scripts/generate-photos.mjs)
 docs/media/*.jsonl
 
-# Generated exercise photos live outside the app bundle; they are served from Supabase Storage.
+# Generated exercise photos live outside the app bundle; they are served from R2 behind the Worker.
 /media/
 .claude/
 

@@ -2716,6 +2716,10 @@ Copy the two folders one by one: copying the container's root fails on a system 
 - [ ] This project's local containers of the old backend are still running: plans 26–30 never stopped them.
   - Stopping them is a separate decision for the owner.
   - They are the ones whose names end in `_gymrollins`: `docker ps --format '{{.Names}}' | grep '_gymrollins$'`.
+  - Task 3 deleted `supabase/config.toml`, the only record of how to address them. Its `project_id` was `gymrollins`.
+    Later, stop them without it by running `docker stop` on the containers named `supabase_*_gymrollins`, or with the
+    Supabase CLI's `--project-id gymrollins` (`npx supabase stop --project-id gymrollins`, which works without a
+    config file).
   - Containers of other projects are never touched, and the data volumes stay until the owner removes them.
 - [ ] Once the phone has moved, `OldServerKeychain` can go, with its one exception in `scripts/check-old-backend.sh`, in
       a change of their own. During the move it deletes the old sign-in SDK's Keychain items.
