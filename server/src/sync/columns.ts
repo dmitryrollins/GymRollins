@@ -47,7 +47,7 @@ function convert(kind: Kind, raw: unknown): unknown {
     case 'text':
       return typeof raw === 'string' ? raw : undefined
     case 'int':
-      return Number.isInteger(raw) ? raw : undefined
+      return Number.isSafeInteger(raw) ? raw : undefined
     case 'real':
       return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
     case 'bool':

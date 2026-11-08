@@ -30,7 +30,10 @@ export function normalizeTimestamp(raw: string): string | null {
   const offset = offsetSeconds(m[8])
   if (offset === null) return null
   const micros = BigInt(`${m[7] ?? ''}000000`.slice(0, 6))
-  const seconds = BigInt(Date.UTC(year, month - 1, day, hour, minute, second) / 1000) - BigInt(offset)
+  const civil = new Date(0)
+  civil.setUTCFullYear(year, month - 1, day)
+  civil.setUTCHours(hour, minute, second, 0)
+  const seconds = BigInt(civil.getTime() / 1000) - BigInt(offset)
   return format(seconds * 1_000_000n + micros)
 }
 

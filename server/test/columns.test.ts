@@ -20,6 +20,7 @@ describe('storedValue', () => {
     expect(stored(col('int'), 3)).toBe(3)
     expect(() => stored(col('int'), 2.5)).toThrow(RowError)
     expect(() => stored(col('int'), '3')).toThrow(RowError)
+    expect(() => stored(col('int'), 2 ** 60)).toThrow(RowError)
     expect(stored(col('real'), 2.5)).toBe(2.5)
     expect(() => stored(col('real'), '2.5')).toThrow(RowError)
   })
