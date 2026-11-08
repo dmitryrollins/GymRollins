@@ -100,6 +100,32 @@ describe('Claude on /mcp', () => {
     expect(statuses.filter((s) => s === 429)).toHaveLength(10)
   })
 
+  // Added after review: a token is for /mcp only with the mcp scope. Before, a client that asked for
+  // offline_access alone got a token without it, and /mcp served it.
+  it('refuses a token without the mcp scope', async () => {
+    const { token: appToken } = await signUp()
+    const flow = await startFlow(await registerClient(), undefined, 'offline_access')
+    const browser = new Browser()
+    const { code } = await openConnect(browser, flow)
+    expect((await decideCode(appToken, code, 'approve')).status).toBe(200)
+    const tokens = await (await exchangeCode(flow, await finishInBrowser(browser, flow))).json<Tokens>()
+    expect(tokens.scope).toBe('offline_access')
+    const res = await mcp(tokens.access_token, 'tools/list')
+    expect(res.status).toBe(401)
+    await res.body?.cancel()
+  })
+
+  it('refuses a token whose stored scopes lost mcp, or are not a list', async () => {
+    const c = await connectClaude()
+    for (const scopes of ['["offline_access"]', '"mcp"', 'mcp', '[]']) {
+      await env.DB.prepare('UPDATE oauthAccessToken SET scopes = ?2 WHERE userId = ?1').bind(c.userId, scopes)
+        .run()
+      const res = await mcp(c.tokens.access_token, 'tools/list')
+      expect(res.status, scopes).toBe(401)
+      await res.body?.cancel()
+    }
+  })
+
   // Added after review: the body limit runs before /mcp reads the body, so a chunked body (no Content-Length)
   // is bounded too, and an oversized one takes no rate-limit slot and runs no tool.
   it('refuses a body over 256 KiB with 413, chunked or not, before it takes a slot', async () => {
@@ -246,6 +272,47 @@ describe('Disconnect Claude', () => {
     expect([await browserSessions(), await codes()]).toEqual([{ n: 0 }, { n: 0 }])
     expect((await exchangeCode(flow, claudeCode)).status).toBe(400)
     expect((await request('GET', '/v1/claude/last-use', { token: appToken })).status).toBe(200)
+  })
+
+  // Added after review: Better Auth marks a refresh token rotated, then inserts the new pair in another
+  // statement, so a Disconnect landing between the two leaves a pair it never saw. /mcp also needs the
+  // consent Disconnect deletes, so that pair is refused.
+  it('refuses a token whose consent is gone, and the pair a refresh mints after', async () => {
+    const c = await connectClaude()
+    expect((await mcp(c.tokens.access_token, 'tools/list')).status).toBe(200)
+    await env.DB.prepare('DELETE FROM oauthConsent WHERE userId = ?1').bind(c.userId).run()
+    expect((await mcp(c.tokens.access_token, 'tools/list')).status).toBe(401)
+    // Better Auth's refresh doesn't look at consents: the pair it mints is the one a racing refresh leaves.
+    const late = await refresh(c.clientId, c.tokens.refresh_token)
+    expect(late.status).toBe(200)
+    expect((await mcp((await late.json<Tokens>()).access_token, 'tools/list')).status).toBe(401)
+  })
+
+  // Added after review: Claude reuses its client id, so approving it again recreates the consent. A pair left
+  // by that race must not come back to life with it.
+  it('keeps a pair that outlived its consent dead when the owner approves the client again', async () => {
+    const c = await connectClaude()
+    await env.DB.prepare('DELETE FROM oauthConsent WHERE userId = ?1').bind(c.userId).run()
+    const flow = await startFlow(c.clientId)
+    const browser = new Browser()
+    const { code } = await openConnect(browser, flow)
+    expect((await decideCode(c.appToken, code, 'approve')).status).toBe(200)
+    const again = await (await exchangeCode(flow, await finishInBrowser(browser, flow))).json<Tokens>()
+    expect((await mcp(again.access_token, 'tools/list')).status).toBe(200)
+    expect((await mcp(c.tokens.access_token, 'tools/list')).status).toBe(401)
+    expect((await refresh(c.clientId, c.tokens.refresh_token)).status).toBe(400)
+  })
+
+  it("needs its own account's consent: another account's for the same client doesn't do", async () => {
+    const mine = await connectClaude()
+    const other = await signUp()
+    await env.DB.prepare(
+      'INSERT INTO oauthConsent (id, clientId, userId, scopes, createdAt, updatedAt) ' +
+        `VALUES (?1, ?2, ?3, '["mcp"]', '2026-11-08T00:00:00.000Z', '2026-11-08T00:00:00.000Z')`,
+    ).bind(crypto.randomUUID(), mine.clientId, other.userId).run()
+    expect((await mcp(mine.tokens.access_token, 'tools/list')).status).toBe(200)
+    await env.DB.prepare('DELETE FROM oauthConsent WHERE userId = ?1').bind(mine.userId).run()
+    expect((await mcp(mine.tokens.access_token, 'tools/list')).status).toBe(401)
   })
 
   it("leaves another account's Claude connected", async () => {

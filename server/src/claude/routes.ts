@@ -64,6 +64,10 @@ async function withAttempt<T>(
   return found
 }
 
+/**
+ * Added after review: when and where the page showing the code was opened (null where unknown), so the owner
+ * can tell a code that isn't on their own screen.
+ */
 function connectView(r: ConnectRequest) {
   return {
     code: displayCode(r.code),
@@ -71,6 +75,10 @@ function connectView(r: ConnectRequest) {
     redirect_host: r.redirect_host,
     known_host: CLAUDE_HOSTS.has(r.redirect_host),
     expires_at: r.expires_at,
+    opened_at: r.created_at,
+    country: r.opener_country,
+    city: r.opener_city,
+    user_agent: r.opener_user_agent,
   }
 }
 

@@ -167,6 +167,12 @@ async function smoke() {
   ok(`/connect shows ${code} under a strict CSP`)
 
   const session = await appSession()
+  // Added after review: the app sees when and where the page was opened (no place locally).
+  const preview = await json(await app(session, 'GET', `/v1/claude/connect/${code}`), 'preview')
+  if (preview.client_name !== 'claude-local smoke' || !preview.opened_at || !('country' in preview)) {
+    fail(`the app's view of ${code}: ${JSON.stringify(preview)}`)
+  }
+  ok(`the app sees ${code}: opened ${preview.opened_at}, browser ${JSON.stringify(preview.user_agent)}`)
   const decided = await app(session, 'POST', `/v1/claude/connect/${code}`, { decision: 'approve' })
   if (decided.status !== 200) fail(`approve: ${decided.status} ${await decided.text()}`)
   ok(`approved ${code} as ${EMAIL}`)
@@ -196,6 +202,17 @@ async function smoke() {
     fail(`token: ${exchanged.status} ${JSON.stringify(tokens)}`)
   }
   ok(`tokens: scope "${tokens.scope}", access token valid ${tokens.expires_in} s`)
+
+  // Added after review: the app's session alone never gets a code, even for the client just approved.
+  const replay = await fetch(`${BASE}/api/auth/oauth2/authorize?${query}`, {
+    redirect: 'manual',
+    headers: { accept: 'text/html', authorization: `Bearer ${session}` },
+  })
+  const replayTo = await location(replay)
+  if (replayTo?.pathname !== '/connect' || replayTo.searchParams.has('code')) {
+    fail(`authorize took the app's session: ${replay.status} ${replayTo}`)
+  }
+  ok("authorize with the app's session alone goes to /connect, with no code")
 
   const init = await rpc(
     await mcp(tokens.access_token, 'initialize', {

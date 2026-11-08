@@ -52,7 +52,7 @@ export interface Flow {
 /**
  * What Claude sends to the authorize endpoint: PKCE, its state, the resource, scope mcp and prompt=consent.
  */
-export async function startFlow(clientId: string, redirectUri = LOOPBACK): Promise<Flow> {
+export async function startFlow(clientId: string, redirectUri = LOOPBACK, scope = 'mcp'): Promise<Flow> {
   const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)).buffer)
   const challenge = base64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
   const state = crypto.randomUUID()
@@ -63,7 +63,7 @@ export async function startFlow(clientId: string, redirectUri = LOOPBACK): Promi
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
-    scope: 'mcp',
+    scope,
     resource: RESOURCE,
     prompt: 'consent',
   })
@@ -79,9 +79,12 @@ export async function startFlow(clientId: string, redirectUri = LOOPBACK): Promi
 export class Browser {
   readonly cookies = new Map<string, string>()
 
-  async get(path: string): Promise<Response> {
+  /** `headers` go beside the cookies: the browser's User-Agent, or the cf-* headers Cloudflare adds. */
+  async get(path: string, headers: Record<string, string> = {}): Promise<Response> {
     const cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ')
-    const res = await call(path, { headers: { accept: 'text/html', ...(cookie ? { cookie } : {}) } })
+    const res = await call(path, {
+      headers: { accept: 'text/html', ...headers, ...(cookie ? { cookie } : {}) },
+    })
     for (const set of res.headers.getSetCookie()) {
       const [pair, ...attributes] = set.split(';')
       const [name, value] = [pair!.slice(0, pair!.indexOf('=')), pair!.slice(pair!.indexOf('=') + 1)]
@@ -106,8 +109,9 @@ export function metaRefresh(html: string): [number, string | null] | null {
 export async function openConnect(
   browser: Browser,
   flow: Flow,
+  headers: Record<string, string> = {},
 ): Promise<{ res: Response; html: string; code: string }> {
-  const res = await browser.get(flow.connectUrl)
+  const res = await browser.get(flow.connectUrl, headers)
   const html = await res.text()
   const code = shownCode(html)
   if (code === null) throw new Error(`no code on /connect: ${res.status} ${html}`)
@@ -174,13 +178,15 @@ export interface Connection {
   userId: string
   /** The owner's app session. */
   appToken: string
+  /** The same session as Better Auth's signed cookie value. */
+  appCookie: string
   clientId: string
   tokens: Tokens
 }
 
 /** The whole approval flow, from registration to Claude's tokens, for a new account. */
 export async function connectClaude(): Promise<Connection> {
-  const { token: appToken, userId } = await signUp()
+  const { token: appToken, userId, cookie: appCookie } = await signUp()
   const clientId = await registerClient()
   const flow = await startFlow(clientId)
   const browser = new Browser()
@@ -189,7 +195,7 @@ export async function connectClaude(): Promise<Connection> {
   if (decided.status !== 200) throw new Error(`approve failed: ${decided.status} ${await decided.text()}`)
   const res = await exchangeCode(flow, await finishInBrowser(browser, flow))
   if (res.status !== 200) throw new Error(`token exchange failed: ${res.status} ${await res.text()}`)
-  return { userId, appToken, clientId, tokens: await res.json<Tokens>() }
+  return { userId, appToken, appCookie, clientId, tokens: await res.json<Tokens>() }
 }
 
 export const ACCEPT = 'application/json, text/event-stream'

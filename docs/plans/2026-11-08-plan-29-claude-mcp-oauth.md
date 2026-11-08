@@ -82,6 +82,7 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
      - `/v1` refuses it, whatever form of its token a bearer carries, and `get-session` answers `null` for it. The app's own auth routes never see a `Cookie` header.
      - A trigger keeps its expiry. Better Auth renews any session it reads without the `dont_remember` cookie, a bearer for one, which made it last 60 days.
      - The code exchange needs it (Better Auth refuses a code whose session has gone), so the exchange ends it: a successful token response deletes it in SQL. The tokens don't need it; their `sessionId` goes null.
+   - **The authorize step takes that session and no other** (added after the whole-flow review, Task 6 Step 10). Its `Authorization` header is dropped, and so is a `Cookie` whose session isn't marked. Before, the bearer plugin turned the app's `Bearer <session>` into a session there, so the app's token alone got a code for any client the owner had approved before. Registration reads no session at all (Task 4 Step 10).
 3. **Tokens are opaque and checked in D1 on every call. A revoke is immediate.**
    - With `disableJwtPlugin: true`, Better Auth issues opaque access tokens even with a `resource`.
    - It stores every code and token as `storeTokens.hash`, which here is SHA-256 in base64url.
@@ -90,7 +91,9 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
      - expiry,
      - `revoked`,
      - the client not disabled,
-     - the resource.
+     - the resource,
+     - the `mcp` scope (added after review): `offline_access` alone earns a refresh token, not the tools,
+     - its account's consent for the client (added after review). Better Auth's refresh marks the old token rotated and inserts the new pair in a separate statement, so a Disconnect landing in between would leave a pair it never saw. Disconnect deletes the consents, so that pair is refused, and approving the same client again first deletes any tokens left without a consent, so the new consent can't revive it (Task 8 Step 9).
    - Lifetimes are Better Auth's defaults: access 1 hour, refresh 30 days, code 10 minutes.
    - **Refresh rotates.** A retry of the old refresh token within 30 seconds gets the same new pair. Reuse after that is refused, and the whole token family dies.
    - A second use of a code is refused, and the tokens it bought are deleted.
@@ -102,13 +105,15 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
    - **Claude's redirect URLs:** `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback`, and `http://localhost` or `http://127.0.0.1` with any port and path (Claude Code). The authorize step checks again, through `validateRedirectUri`.
    - **At most 30 new clients an hour,** across everyone. `OAUTH_REGISTRATIONS_PER_HOUR` overrides it; the tests set 1000, because a test file's D1 keeps every client it registered.
    - **A client that names no grant types** gets `authorization_code` and `refresh_token`.
+   - **A `client_name` the app can show** (added after review): at most 64 characters, none of them `\p{C}` (control, format and bidi characters) or refused by plan 28's `clean_text`, and not only spaces. Anything else is `400 invalid_client_metadata`. A client may give no name.
+   - **No session.** Registration is Claude's servers: the `Authorization` and `Cookie` headers are dropped, so no client becomes an account's own (added after review).
 
    Client ID Metadata Documents (`@better-auth/cimd` 1.7.18) are left off. With them, the server fetches the client's document from claude.ai, which can't happen locally and isn't needed: Claude and Claude Code both register dynamically.
 
    **Decided by the controller, 2026-11-08:**
    - Dynamic registration only, for now. Revisit Client ID Metadata Documents at the deploy step, if claude.ai needs them.
    - Keep the caps: 30 new clients an hour overall, and 20 sign-ins per client per 10 minutes.
-   - The deploy checklist (Task 10) notes that the global cap can be used up by others, so Cloudflare rate-limit rules come first.
+   - The deploy checklist (Task 10) notes that the global cap can be used up by others, so Cloudflare per-IP rate-limit rules on `/api/auth/oauth2/register`, `/connect` and `/mcp` come first.
 5. **Scopes** are `mcp` and `offline_access`. Any other scope is refused (`invalid_scope`); the controller confirmed this on 2026-11-08.
    - Refresh tokens need `offline_access`. `/connect` always adds it, whatever Claude asked for.
    - The resource metadata advertises `mcp`. Claude's tools aren't split by scope: the toggles decide.
@@ -158,11 +163,11 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
       - It follows last-write-wins, as `lww_guard` did: an older edit changes nothing and answers the stored row.
       - A bad value answers `422 row_rejected`, and another account's id answers 404.
     - `GET /v1/claude/last-use` → `{at}`, the newest `mcp_audit.at` or null.
-    - `GET /v1/claude/connect/:code` → `{code, client_name, redirect_host, known_host, expires_at}`.
+    - `GET /v1/claude/connect/:code` → `{code, client_name, redirect_host, known_host, expires_at, opened_at, country, city, user_agent}`. The last four were added after review (Task 6 Step 11): when the page was opened, and Cloudflare's `cf-ipcountry` and `cf-ipcity` and the browser's `User-Agent` as it was opened, each null when absent (always, locally).
     - `POST /v1/claude/connect/:code` with `{decision: "approve" | "deny"}` → `{status: "approved" | "denied"}`.
     - `POST /v1/claude/revoke` → `{revoked: <connections removed>}`, as `revokeOAuthGrants()` returned a count.
     - Error codes: `unknown_code` (404), `too_many_attempts` (429), `row_rejected` (422), `bad_request` (400).
-12. **Migrations** `0006_oauth_provider.sql` (generated) and `0007_claude_connect.sql`, after plan 28's `0005_gyms_photos.sql`. `0008_connect_session.sql` was added after Task 6's review: the `session.claudeConnect` column and the trigger that keeps a marked session's expiry.
+12. **Migrations** `0006_oauth_provider.sql` (generated) and `0007_claude_connect.sql`, after plan 28's `0005_gyms_photos.sql`. `0008_connect_session.sql` was added after Task 6's review: the `session.claudeConnect` column and the trigger that keeps a marked session's expiry. `0009_connect_opener.sql` was added after the whole-flow review: where the page showing a code was opened.
     - **Deleting an account** (plans 26 and 28) needs no change. Every OAuth and connect table that holds an account's rows references `user` with `ON DELETE CASCADE`, so they go with it.
     - A test checks it (Task 8).
 13. **Proved before this plan was written,** in a scratch copy of `server/` outside the repo. It used the same pinned packages and was never committed.
@@ -187,6 +192,7 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
 | `server/migrations/0006_oauth_provider.sql` | Better Auth's OAuth tables (generated) |
 | `server/migrations/0007_claude_connect.sql` | `connect_requests`, `connect_attempts` |
 | `server/migrations/0008_connect_session.sql` | Added after review: `session.claudeConnect`, and the trigger that keeps a marked session's expiry |
+| `server/migrations/0009_connect_opener.sql` | Added after review: the opener's country, city and browser on `connect_requests` |
 | `server/src/shared/{insights,plan-validation,strength-levels}.ts`, `strength-standards.json` | Copied (plan 28 wrote `domain-limits.ts`) |
 | `server/test/domain-limits-drift.test.ts` | Plan 28's; gains the `PlanChangeLimits` check |
 | `server/src/gyms/visibility.ts` | Plan 28's; gains Claude's two listing rules |
@@ -195,13 +201,13 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
 | `server/src/mcp/app.ts` | `/mcp`: bearer → rate-limit slot → MCP Streamable HTTP (ported from `app.ts`) |
 | `server/src/auth/oauth.ts` | The `mcp` plugin's options, Claude's redirect URLs, token hashing |
 | `server/src/auth/connect-plugin.ts` | The server-only sign-in `/connect` uses; marks its session (`claudeConnect`, added after review) |
-| `server/src/auth/auth.ts`, `routes.ts` | The plugins; the OAuth routes Claude uses and the registration checks. Added after review: the app's routes without cookies, `get-session` null for the browser session, and the code exchange ending it |
+| `server/src/auth/auth.ts`, `routes.ts` | The plugins; the OAuth routes Claude uses and the registration checks. Added after review: the app's routes without cookies, `get-session` null for the browser session, and the code exchange ending it; then authorize taking only the `/connect` session, registration no session, and `client_name` checked |
 | `server/src/auth/session.ts` | `requireUser` (plans 26 and 28); refuses the `/connect` browser session (added after review) |
 | `server/src/http/cors.ts` | CORS for `/mcp` and discovery |
 | `server/src/claude/well-known.ts` | `/.well-known/*` |
 | `server/src/claude/connect-code.ts`, `connect-requests.ts`, `connect-page.ts` | Codes, their D1 rows, `GET /connect` |
 | `server/src/claude/routes.ts`, `proposals.ts`, `revoke.ts` | `/v1/claude/*` |
-| `server/src/claude/tokens.ts`, `mcp-route.ts` | A Claude token's caller from D1; `/mcp` wired to D1 |
+| `server/src/claude/tokens.ts`, `mcp-route.ts` | A Claude token's caller from D1 (the `mcp` scope and a live consent added after review); `/mcp` wired to D1 |
 | `server/src/env.ts`, `src/index.ts`, `vitest.config.ts` | The registration cap var; the routes (inserted beside plan 28's); the tests' cap |
 | `server/test/assert.ts` | The `@std/assert` functions on Vitest |
 | `server/test/shared/*`, `test/mcp/**` | Copied tests, the FakeDb, the JSON-RPC helpers, the ported app tests |
@@ -1760,6 +1766,7 @@ git commit -m "feat(server): Claude's Db on D1, gated by the Settings toggles, w
 - Modify: `server/package.json`, `server/package-lock.json`, `server/src/auth/auth.ts`, `server/src/auth/routes.ts`, `server/src/env.ts`, `server/src/index.ts`, `server/vitest.config.ts`
 - Create: `server/src/auth/oauth.ts`, `server/src/http/cors.ts`, `server/src/claude/well-known.ts`, `server/scripts/gen-oauth-schema.mjs`, `server/migrations/0006_oauth_provider.sql` (generated), `server/test/claude.ts`
 - Test: `server/test/oauth-discovery.test.ts`
+- Added after review (Step 10): modify `server/src/auth/routes.ts`, `server/test/helpers.ts` and `server/test/oauth-discovery.test.ts`
 
 - [ ] **Step 1: Install Better Auth's OAuth provider and MCP plugins**
 
@@ -2467,12 +2474,156 @@ git commit -m "feat(server): Claude's OAuth with Better Auth's mcp plugin: disco
   - Confirm the authorize step refuses a redirect that isn't registered.
   - Confirm `/oauth2/consent`, `/continue`, `/introspect`, `/userinfo` and client CRUD stay closed.
 
+- [ ] **Step 10: Registration takes no session, and only a name the app can show (added after review)**
+
+The whole-flow security review after Task 9 found two problems in this task's registration:
+- **MEDIUM, approval-code phishing.** `checkedRegistration` checked only the redirect URLs. A 5,041-character `client_name` with `\n` and U+202E (a right-to-left override) was registered, and `GET /v1/claude/connect/:code` returned it as it was. Someone who adds this server as a connector in their own claude.ai account gets the redirect host `claude.ai`, so the app shows no warning, and then asks the owner to "type this code". The name is the one thing on the sheet they choose. Task 6 Step 11 adds where the code's page was opened, and Task 12 a caution, for the rest.
+- **Registration read a session.** With the app's bearer, Better Auth made the new client that account's own (`oauthClient.userId`).
+
+In `server/src/auth/routes.ts`, import `isCleanText` from `../gyms/text.ts`, and add before `checkedRegistration`:
+
+```ts
+/** The longest client_name taken, in characters (added after review). */
+export const CLIENT_NAME_MAX = 64
+
+/** Control, format (bidi and zero width among them), surrogate, private use and unassigned characters. */
+const INVISIBLE = /\p{C}/u
+
+/**
+ * Added after review: the name the app shows before Approve, so short and visible. At most CLIENT_NAME_MAX
+ * characters, none of them \p{C}, nor any clean_text refuses (plan 28's src/gyms/text.ts adds the line
+ * separators, fillers and variation selectors), and not only spaces. A client may give none.
+ */
+function isClientName(name: unknown): boolean {
+  if (name === undefined) return true
+  return typeof name === 'string' && [...name].length <= CLIENT_NAME_MAX && !INVISIBLE.test(name) &&
+    isCleanText(name) && name.trim() !== ''
+}
+```
+
+`checkedRegistration`'s doc comment ends `… (RFC 7591's default is the first). Added after review: its client_name is checked (isClientName).`, and after its JSON-object check it adds:
+
+```ts
+  if (!isClientName(body.client_name)) {
+    return oauthError(
+      'invalid_client_metadata',
+      `client_name must be at most ${CLIENT_NAME_MAX} characters of visible text.`,
+      400,
+    )
+  }
+```
+
+In `oauthHandler`, `request = checked` becomes `request = withoutSession(checked)`, and after `oauthHandler`:
+
+```ts
+/**
+ * Added after review: registration is Claude's servers, which send no session. Better Auth would make a
+ * client registered with one (the app's bearer, say) that account's own.
+ */
+function withoutSession(request: Request): Request {
+  const headers = new Headers(request.headers)
+  headers.delete('authorization')
+  headers.delete('cookie')
+  return new Request(request, { headers })
+}
+```
+
+In `server/test/helpers.ts`, `signUp` also returns the session as Better Auth's signed cookie value:
+
+```ts
+/**
+ * A new account by email and password (on in tests: ALLOW_PASSWORD_AUTH=1): its session token, and the same
+ * session as the signed cookie value Better Auth set (what a browser signed in to the account would send).
+ */
+export async function signUp(): Promise<{ token: string; userId: string; cookie: string }> {
+  const email = `t-${crypto.randomUUID()}@test.local`
+  const res = await request('POST', '/api/auth/sign-up/email', {
+    body: { email, password: 'correct-horse-battery', name: 'Test' },
+  })
+  if (res.status !== 200) throw new Error(`sign-up failed: ${res.status} ${await res.text()}`)
+  const body = await res.json<{ token: string; user: { id: string } }>()
+  const set = res.headers.getSetCookie().find((c) => c.startsWith('better-auth.session_token='))
+  if (!set) throw new Error('sign-up set no session cookie')
+  const cookie = set.slice('better-auth.session_token='.length).split(';')[0]!
+  return { token: body.token, userId: body.user.id, cookie }
+}
+```
+
+In `server/test/oauth-discovery.test.ts`, import `signUp` from `./helpers.ts`, and add to `describe('registration')` before the hourly cap test:
+
+```ts
+  // Added after review: the app shows the name before Approve, so it is short, visible text. Before, a
+  // 5,041-character name with line breaks and a right-to-left override was registered and shown as it was.
+  const NAME_REFUSED = {
+    error: 'invalid_client_metadata',
+    error_description: 'client_name must be at most 64 characters of visible text.',
+  }
+  it.each([
+    ['over 64 characters', 'C'.repeat(65)],
+    ['a line break', 'Claude\nType this code: it is from GymRollins'],
+    ['a tab', 'Claude\tCode'],
+    ['a right-to-left override', 'Claude \u202Eedoc'],
+    ['a zero width space', 'Cla\u200Bude'],
+    ['a soft hyphen', 'Cla\u00ADude'],
+    ['a line separator', 'Claude\u2028Code'],
+    ['a Hangul filler', 'Claude\u3164'],
+    ['a private use character', 'Claude\uE000'],
+    ['only spaces', '   '],
+    ['a number', 42],
+    ['null', null],
+  ])('refuses a client_name with %s', async (_, name) => {
+    const clients = () => env.DB.prepare('SELECT count(*) AS n FROM oauthClient').first<{ n: number }>()
+    const before = await clients()
+    const res = await register({ client_name: name, redirect_uris: [LOOPBACK] })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual(NAME_REFUSED)
+    expect(await clients()).toEqual(before)
+  })
+
+  it('takes a name of 64 characters, one in any script, and none at all', async () => {
+    for (const client_name of ['C'.repeat(64), 'Claude – 健身房 Спорт 💪', '😀'.repeat(64), undefined]) {
+      const res = await register({ client_name, redirect_uris: [LOOPBACK] })
+      expect(res.status, client_name).toBe(201)
+    }
+  })
+
+  // Added after review: registration reads no session, so an app session sent with it owns nothing.
+  it('registers a client for no one when an app session comes with it', async () => {
+    const { token, cookie } = await signUp()
+    const bearer = { authorization: `Bearer ${token}` }
+    const sessionCookie = { cookie: `better-auth.session_token=${cookie}` }
+    for (const session of [bearer, sessionCookie, { ...bearer, ...sessionCookie }]) {
+      const res = await call('/api/auth/oauth2/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...session },
+        body: JSON.stringify({
+          client_name: 'Claude',
+          redirect_uris: [LOOPBACK],
+          token_endpoint_auth_method: 'none',
+        }),
+      })
+      expect(res.status, JSON.stringify(session)).toBe(201)
+      const { client_id } = await res.json<{ client_id: string }>()
+      const row = await env.DB.prepare('SELECT userId FROM oauthClient WHERE clientId = ?1').bind(client_id)
+        .first()
+      expect(row, JSON.stringify(session)).toEqual({ userId: null })
+    }
+  })
+```
+
+Run: `cd server && npx vitest run test/oauth-discovery.test.ts`
+
+Before the fix, 13 of the 14 new tests fail: each refused name is registered (201), and the bearer's client has the account's `userId`. A 64-character name, any script and no name already pass.
+
+Expected after: `Tests  47 passed (47)`. This review's fixes are one commit, at the end of Task 8 Step 9.
+
 ### Task 5: The sign-in page `/connect`
 
 **Files:**
 - Create: `server/migrations/0007_claude_connect.sql`, `server/src/claude/connect-code.ts`, `server/src/claude/connect-requests.ts`, `server/src/claude/connect-page.ts`
 - Modify: `server/src/index.ts`, `server/test/claude.ts`
 - Test: `server/test/connect-page.test.ts`
+- Added after review (in Task 6, Step 11, since it needs Task 6's route and comes after its `0008`): `connect-requests.ts` and `connect-page.ts` record where the page was opened
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3011,6 +3162,9 @@ git commit -m "feat(server): /connect shows Claude's approval code under a stric
   - A changed or expired query is refused.
   - A client's name can't inject markup.
   - The per-client cap holds.
+
+**Added after the whole-flow review:** `/connect` also records where it was opened (the opener's country, city and browser), for the app to show before Approve. The code is in Task 6 Step 11: it needs Task 6's route, and its migration `0009` comes after Task 6's `0008`.
+
 ### Task 6: Approve a connection
 
 **Files:**
@@ -3018,6 +3172,7 @@ git commit -m "feat(server): /connect shows Claude's approval code under a stric
 - Modify: `server/src/auth/auth.ts`, `server/src/claude/connect-page.ts`, `server/src/index.ts`, `server/test/claude.ts`
 - Test: `server/test/connect-approve.test.ts`
 - Added after review (Step 9): create `server/migrations/0008_connect_session.sql`; modify `server/src/auth/connect-plugin.ts`, `session.ts`, `routes.ts` and `server/test/connect-approve.test.ts`
+- Added after the whole-flow review (Steps 10 and 11): create `server/migrations/0009_connect_opener.sql`; modify `server/src/auth/routes.ts`, `server/src/claude/connect-requests.ts`, `connect-page.ts`, `routes.ts`, `server/test/claude.ts` and `server/test/connect-approve.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3999,6 +4154,337 @@ git add server/migrations/0008_connect_session.sql server/src/auth/connect-plugi
 git commit -m "fix(server): Claude's browser session and OAuth tokens never reach /v1 or the app's auth routes"
 ```
 
+- [ ] **Step 10: The authorize step takes only the /connect browser session (added after review)**
+
+**The whole-flow review after Task 9 found one MEDIUM here.** `GET /api/auth/oauth2/authorize` reached Better Auth with its `Authorization` header still on, and the bearer plugin turned `Bearer <app session>` into a session. For a client the owner had approved before, authorize then answered `302 …?code=`, and the exchange gave Claude tokens: the app's session token alone bought them, with no code typed. The app session's cookie did the same.
+
+**The fix:** before Better Auth sees an authorize request, its `Authorization` header goes. Its `Cookie` stays only if Better Auth's `getSession` (with `disableRefresh`, so nothing is renewed) finds a marked `claudeConnect` session in it; otherwise the cookie goes too, and the browser is sent to `/connect` as one with no session is. Registration reads no session at all (Task 4 Step 10). The token and revocation endpoints keep their headers: a confidential client authenticates with `Authorization: Basic`, and neither reads a session.
+
+In `server/src/auth/routes.ts`, `oauthHandler` becomes:
+
+```ts
+/** OAuth answers keep RFC 6749's error shape ({error, error_description}), which Claude reads. */
+async function oauthHandler(c: Context<AppEnv>, route: string): Promise<Response> {
+  let request = c.req.raw
+  if (route === 'POST /api/auth/oauth2/register') {
+    const checked = await checkedRegistration(c)
+    if (checked instanceof Response) return checked
+    request = withoutSession(checked)
+  }
+  if (route === 'GET /api/auth/oauth2/authorize') request = await withConnectSessionOnly(c.env, request)
+  const res = await createAuth(c.env).handler(request)
+  if (route === 'POST /api/auth/oauth2/token' && res.ok) {
+    // The session expires within 10 minutes anyway: a failed delete mustn't cost Claude the tokens.
+    await endConnectSession(c.env.DB, res).catch((error) => console.error('connect session not ended', error))
+  }
+  return res
+}
+```
+
+and after Task 4 Step 10's `withoutSession`:
+
+```ts
+/**
+ * Added after review: the authorize step takes the /connect browser session only. Its `Authorization` header
+ * goes (the bearer plugin would turn the app's `Bearer <session>` into a session, and authorize would then
+ * return a code for any client the owner approved before, with no code typed), and so does a Cookie whose
+ * session isn't /connect's. Either way, the browser goes to /connect as one with no session does.
+ */
+async function withConnectSessionOnly(env: Env, request: Request): Promise<Request> {
+  const headers = new Headers(request.headers)
+  headers.delete('authorization')
+  const cookie = headers.get('cookie')
+  if (cookie !== null && !(await isConnectCookie(env, cookie))) headers.delete('cookie')
+  return new Request(request, { headers })
+}
+
+/** True when the Cookie header signs in with a /connect browser session (Better Auth reads it, unrenewed). */
+async function isConnectCookie(env: Env, cookie: string): Promise<boolean> {
+  const session = await createAuth(env).api.getSession({
+    headers: new Headers({ cookie }),
+    query: { disableRefresh: true },
+  })
+  return session !== null && isConnectSession(session.session)
+}
+```
+
+Append to `server/test/connect-approve.test.ts` (and import `connectClaude` and `LOOPBACK` from `./claude.ts`):
+
+```ts
+// Added after review: the authorize step takes the /connect browser session only. Before, the bearer plugin
+// turned `Authorization: Bearer <app session>` into a session there, so the app's token alone got Claude a
+// code (and then tokens) for any client the owner had approved before, with no code typed.
+describe('the authorize step takes only the /connect browser session (added after review)', () => {
+  const SESSION_COOKIE = 'better-auth.session_token'
+
+  /** Authorize as the re-entry asks it (no prompt) for a client the owner already approved. */
+  function authorizeAgain(clientId: string, headers: Record<string, string>): Promise<Response> {
+    const query = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: LOOPBACK,
+      state: 'again',
+      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+      code_challenge_method: 'S256',
+      scope: 'mcp offline_access',
+      resource: RESOURCE,
+    })
+    return call(`/api/auth/oauth2/authorize?${query}`, { headers: { accept: 'text/html', ...headers } })
+  }
+
+  const codesFor = (userId: string) =>
+    env.DB.prepare(
+      "SELECT count(*) AS n FROM verification WHERE json_valid(value) AND json_extract(value, '$.type') = " +
+        "'authorization_code' AND json_extract(value, '$.userId') = ?1",
+    ).bind(userId).first()
+
+  it("sends the app's session to /connect, as a bearer or a cookie, for an approved client", async () => {
+    const c = await connectClaude()
+    const appCookie = `${SESSION_COOKIE}=${c.appCookie}`
+    const sessions: Record<string, string>[] = [
+      { authorization: `Bearer ${c.appToken}` },
+      { authorization: `Bearer ${decodeURIComponent(c.appCookie)}` },
+      { cookie: appCookie },
+      { authorization: `Bearer ${c.appToken}`, cookie: appCookie },
+    ]
+    for (const headers of sessions) {
+      const res = await authorizeAgain(c.clientId, headers)
+      expect(res.status, JSON.stringify(headers)).toBe(302)
+      expect(res.headers.get('location'), JSON.stringify(headers)).toMatch(/^\/connect\?/)
+    }
+    expect(await codesFor(c.userId)).toEqual({ n: 0 })
+  })
+
+  it("still returns the approved browser to Claude, with the app's bearer beside its cookie", async () => {
+    const { token } = await signUp()
+    const flow = await startFlow(await registerClient())
+    const browser = new Browser()
+    const { code } = await openConnect(browser, flow)
+    await decideCode(token, code, 'approve')
+    const [, reentry] = metaRefresh(await (await browser.get(flow.connectUrl)).text())!
+    const cookie = `${SESSION_COOKIE}=${browser.cookies.get(SESSION_COOKIE)}`
+    const back = await call(reentry!, {
+      headers: { accept: 'text/html', cookie, authorization: `Bearer ${token}` },
+    })
+    expect(back.status).toBe(302)
+    const location = new URL(back.headers.get('location')!)
+    expect(`${location.origin}${location.pathname}`).toBe(flow.redirectUri)
+    expect((await exchangeCode(flow, location.searchParams.get('code')!)).status).toBe(200)
+  })
+})
+```
+
+Step 9's test `never extends the browser session on the authorize step, even without dont_remember` still passes; its bearer is now dropped before Better Auth reads it.
+
+Run: `cd server && npx vitest run test/connect-approve.test.ts`
+
+Before the fix, the first new test fails: the app's bearer gets `http://127.0.0.1:33418/callback?code=…&state=again`. The second, the approved browser with the app's bearer beside its cookie, passes before and after.
+
+- [ ] **Step 11: The app sees when and where the code's page was opened (added after review)**
+
+The rest of the phishing finding (Task 4 Step 10): the code was on someone else's screen, and nothing the sheet showed said so. `/connect` now records where it was opened, and the app shows it before Approve, with a caution (Task 12): "Opened 2 min ago · Toronto, CA · Safari".
+- `opened_at` is the row's `created_at`, which `/connect` already stored.
+- `country` and `city` are Cloudflare's `cf-ipcountry` and `cf-ipcity` (its visitor location headers; the deploy checklist turns them on), and `user_agent` is the browser's `User-Agent`.
+- `user_agent` is whatever the opener's browser says, so someone phishing can make it read "Safari"; the place is Cloudflare's, and it is the real signal.
+- Each loses its `\p{C}` characters, is trimmed and cut short (8, 64 and 256 characters, the migration's CHECKs), and is null when absent or empty. Locally the two `cf-` headers are always absent.
+
+`server/migrations/0009_connect_opener.sql`:
+
+```sql
+-- Plan 29, added after review: where the /connect page that shows a code was opened, so the app's Approve a
+-- connection sheet can show "Opened 2 min ago · Toronto, CA · Safari" (created_at is when). Cloudflare's
+-- cf-ipcountry and cf-ipcity headers and the browser's User-Agent, without control characters and cut to
+-- these lengths (src/claude/connect-requests.ts); null when a header is absent, as the cf- ones are locally.
+ALTER TABLE connect_requests ADD COLUMN opener_country TEXT CHECK (length(opener_country) <= 8);
+ALTER TABLE connect_requests ADD COLUMN opener_city TEXT CHECK (length(opener_city) <= 64);
+ALTER TABLE connect_requests ADD COLUMN opener_user_agent TEXT CHECK (length(opener_user_agent) <= 256);
+```
+
+In `server/src/claude/connect-requests.ts`, add after `ConnectStatus`:
+
+```ts
+/**
+ * Added after review: where the page was opened, as Cloudflare and the browser said (migrations/0009). Each
+ * is null when its header is absent, as Cloudflare's always are locally.
+ */
+export interface Opener {
+  country: string | null
+  city: string | null
+  userAgent: string | null
+}
+
+/** The longest of each opener detail kept, in characters (the migration's CHECKs). */
+export const OPENER_LIMITS = { country: 8, city: 64, userAgent: 256 } as const
+
+/** Control and format characters: dropped from what the headers said. */
+const INVISIBLE = /\p{C}/gu
+
+/** A header's value without control or format characters, cut to `max` characters; null if none are left. */
+export function openerText(value: string | null | undefined, max: number): string | null {
+  if (value === null || value === undefined) return null
+  const text = [...value.replace(INVISIBLE, '').trim()].slice(0, max).join('').trim()
+  return text === '' ? null : text
+}
+```
+
+`ConnectRequest` gains `created_at: string` (doc: `/** When /connect was opened and the code made. */`) before `expires_at`, and `opener_country`, `opener_city` and `opener_user_agent`, each `string | null`, after `live`. `createRequest` and `SELECT_REQUEST` become:
+
+```ts
+export async function createRequest(
+  db: D1Database,
+  r: { browserHash: string; clientId: string; redirectHost: string; query: string; opener: Opener },
+): Promise<string | null> {
+  const { country, city, userAgent } = r.opener
+  for (let attempt = 0;; attempt++) {
+    const code = newCode()
+    try {
+      const [, , inserted] = await db.batch([
+        db.prepare(`DELETE FROM connect_requests WHERE expires_at < ${STALE_SQL}`),
+        db.prepare(`DELETE FROM connect_attempts WHERE at < ${STALE_SQL}`),
+        db.prepare(
+          'INSERT INTO connect_requests (code, browser_hash, client_id, redirect_host, query, status, ' +
+            'created_at, expires_at, opener_country, opener_city, opener_user_agent) ' +
+            `SELECT ?1, ?2, ?3, ?4, ?5, 'waiting', ${NOW_SQL}, ${EXPIRES_SQL}, ?7, ?8, ?9 ` +
+            'WHERE (SELECT count(*) FROM connect_requests WHERE client_id = ?3 ' +
+            `AND created_at > ${WINDOW_START_SQL}) < ?6 RETURNING code`,
+        ).bind(
+          code,
+          r.browserHash,
+          r.clientId,
+          r.redirectHost,
+          r.query,
+          SIGN_INS_PER_CLIENT,
+          country,
+          city,
+          userAgent,
+        ),
+      ])
+      return inserted!.results.length === 1 ? code : null
+    } catch (error) {
+      if (attempt >= 2 || !/UNIQUE constraint failed: connect_requests\.code/.test(String(error))) throw error
+    }
+  }
+}
+```
+
+```ts
+const SELECT_REQUEST =
+  'SELECT r.code, r.client_id, c.name AS client_name, r.redirect_host, r.query, r.status, r.created_at, ' +
+  `r.expires_at, r.expires_at > ${NOW_SQL} AS live, r.opener_country, r.opener_city, r.opener_user_agent ` +
+  'FROM connect_requests r LEFT JOIN oauthClient c ON c.clientId = r.client_id'
+```
+
+In `server/src/claude/connect-page.ts`, import `type Opener`, `OPENER_LIMITS` and `openerText` from `./connect-requests.ts`, pass `opener: openerOf(c)` to `createRequest`, and add after `connectPage`:
+
+```ts
+/**
+ * Added after review: where this page was opened, for the app to show before Approve: Cloudflare's visitor
+ * location headers and the browser's User-Agent, cleaned and cut short (openerText).
+ */
+function openerOf(c: Context<AppEnv>): Opener {
+  return {
+    country: openerText(c.req.header('cf-ipcountry'), OPENER_LIMITS.country),
+    city: openerText(c.req.header('cf-ipcity'), OPENER_LIMITS.city),
+    userAgent: openerText(c.req.header('user-agent'), OPENER_LIMITS.userAgent),
+  }
+}
+```
+
+In `server/src/claude/routes.ts`, `connectView` becomes:
+
+```ts
+/**
+ * Added after review: when and where the page showing the code was opened (null where unknown), so the owner
+ * can tell a code that isn't on their own screen.
+ */
+function connectView(r: ConnectRequest) {
+  return {
+    code: displayCode(r.code),
+    client_name: r.client_name,
+    redirect_host: r.redirect_host,
+    known_host: CLAUDE_HOSTS.has(r.redirect_host),
+    expires_at: r.expires_at,
+    opened_at: r.created_at,
+    country: r.opener_country,
+    city: r.opener_city,
+    user_agent: r.opener_user_agent,
+  }
+}
+```
+
+In `server/test/claude.ts`, `Browser.get` and `openConnect` take the browser's own headers:
+
+```ts
+  /** `headers` go beside the cookies: the browser's User-Agent, or the cf-* headers Cloudflare adds. */
+  async get(path: string, headers: Record<string, string> = {}): Promise<Response> {
+    const cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ')
+    const res = await call(path, {
+      headers: { accept: 'text/html', ...headers, ...(cookie ? { cookie } : {}) },
+    })
+```
+
+```ts
+export async function openConnect(
+  browser: Browser,
+  flow: Flow,
+  headers: Record<string, string> = {},
+): Promise<{ res: Response; html: string; code: string }> {
+  const res = await browser.get(flow.connectUrl, headers)
+```
+
+In `server/test/connect-approve.test.ts`, add to `describe('the app sees the request')` after its first test:
+
+```ts
+  // Added after review: when and from where the page was opened, so the owner can tell a code that isn't on
+  // their own screen. Cloudflare adds cf-ipcountry and cf-ipcity; locally there are none, and the test's
+  // browser sends no User-Agent.
+  it('with when it was opened, and no place or browser when none was sent', async () => {
+    const { token, code } = await waiting()
+    const body = await (await preview(token, code)).json<Record<string, unknown>>()
+    expect(body).toMatchObject({ country: null, city: null, user_agent: null })
+    expect(body.opened_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/)
+    const opened = Date.parse(body.opened_at as string)
+    expect(Math.abs(opened - Date.now())).toBeLessThan(5000)
+    expect(Date.parse(body.expires_at as string) - opened).toBe(10 * 60 * 1000)
+  })
+
+  it("with the opener's country, city and browser as the headers said, cleaned and cut short", async () => {
+    const { token } = await signUp()
+    const flow = await startFlow(await registerClient())
+    const safari =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+      'Version/26.1 Safari/605.1.15'
+    const { code } = await openConnect(new Browser(), flow, {
+      'cf-ipcountry': 'CA',
+      'cf-ipcity': 'Toronto',
+      'user-agent': safari,
+    })
+    expect(await (await preview(token, code)).json()).toMatchObject({
+      country: 'CA',
+      city: 'Toronto',
+      user_agent: safari,
+    })
+    const long = await openConnect(new Browser(), flow, {
+      'cf-ipcountry': 'C\u0001A',
+      'cf-ipcity': `T\u0085${'o'.repeat(100)}`,
+      'user-agent': 'x'.repeat(300),
+    })
+    expect(await (await preview(token, long.code)).json()).toMatchObject({
+      country: 'CA',
+      city: `T${'o'.repeat(63)}`,
+      user_agent: 'x'.repeat(256),
+    })
+    const blank = await openConnect(new Browser(), flow, { 'cf-ipcountry': '\u0001', 'user-agent': ' ' })
+    expect(await (await preview(token, blank.code)).json()).toMatchObject({ country: null, user_agent: null })
+  })
+```
+
+Run: `cd server && npx vitest run test/connect-approve.test.ts test/connect-page.test.ts`
+
+Before the fix, both new tests fail: the answer has no `opened_at`, `country`, `city` or `user_agent`.
+
+Expected after: `Tests  35 passed (35)` (24 and 11). This review's fixes are one commit, at the end of Task 8 Step 9.
+
 ### Task 7: Proposals and last use for the app
 
 **Files:**
@@ -4291,6 +4777,7 @@ git commit -m "feat(server): the app's Claude proposals and last use"
 - Create: `server/src/mcp/app.ts`, `server/src/claude/tokens.ts`, `server/src/claude/mcp-route.ts`, `server/src/claude/revoke.ts`
 - Modify: `server/src/claude/routes.ts`, `server/src/index.ts`, `server/test/claude.ts`
 - Test: `server/test/mcp/app.test.ts` (ported from `app_test.ts`), `server/test/claude-connection.test.ts`
+- Added after the whole-flow review (Step 9): modify `server/src/auth/connect-plugin.ts`, `server/src/auth/oauth.ts`, `server/src/claude/tokens.ts`, `server/test/claude.ts` and `server/test/claude-connection.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -4999,6 +5486,212 @@ git commit -m "feat(server): Claude's MCP server on /mcp with tokens checked in 
   - `revokeClaude` leaves nothing that can buy a token: no access token, refresh token, consent, unredeemed code or `/connect` session.
   - Unexpected errors never reach Claude (the ported test).
 
+- [ ] **Step 9: `/mcp` needs the `mcp` scope and a live consent (added after review)**
+
+The whole-flow review after Task 9 found two LOWs in `claudeCaller`:
+- **No scope check.** A client that asked for `offline_access` alone got a token without `mcp` (`/connect` keeps the scopes asked for, within `MCP_SCOPES`), and `/mcp` answered 200.
+- **Disconnect could lose a race with a refresh in flight.** Better Auth marks the old refresh token rotated, then inserts the new pair in a separate statement. A Disconnect landing in between deletes everything but that pair, which lived on. Disconnect deletes the account's consents in the same batch (`revoke.ts`), so `/mcp` now also needs the consent for (client, user), and that pair is refused.
+- **And it must stay refused** (found by the security review of this fix). Claude reuses its client id, so approving it again recreates the consent, which would revive that pair: its access token, and its refresh token, which the token endpoint doesn't check against consents. So `connectSignIn`, when it finds no consent, first deletes every token left for that client and account. With no consent there, they can only be such a pair.
+
+A malformed stored `scopes` or `resources` list is now refused too; before, a `resources` that wasn't JSON threw (503).
+
+In `server/src/auth/oauth.ts`, `MCP_SCOPES` becomes:
+
+```ts
+/** The resource's own scope: /mcp serves only a token that has it (added after review). */
+export const MCP_SCOPE = 'mcp'
+/** `mcp`, and `offline_access`, which is what earns a refresh token. */
+export const MCP_SCOPES = [MCP_SCOPE, 'offline_access']
+```
+
+In `server/src/auth/connect-plugin.ts`, `connectSignIn`'s `else` branch (no consent yet) becomes:
+
+```ts
+      } else {
+        // Added after review: with no consent, any tokens left for this client and account are a pair a
+        // refresh minted while Disconnect Claude ran (/mcp refuses them for want of a consent). Claude reuses
+        // its client id, so they go before the new consent would revive them. Access tokens first: they name
+        // their refresh.
+        const pair = [{ field: 'clientId', value: clientId }, { field: 'userId', value: userId }]
+        await ctx.context.adapter.deleteMany({ model: 'oauthAccessToken', where: pair })
+        await ctx.context.adapter.deleteMany({ model: 'oauthRefreshToken', where: pair })
+        await ctx.context.adapter.create({
+          model: 'oauthConsent',
+          data: { clientId, userId, scopes, resources, createdAt: now, updatedAt: now },
+        })
+      }
+```
+
+`server/src/claude/tokens.ts` becomes:
+
+```ts
+// The caller of a Claude access token, read from D1 on every /mcp call (spec section 4, "Tokens"): Better
+// Auth stores each opaque token's SHA-256, so a token that Disconnect Claude deleted, or that expired, stops
+// working at once.
+import { ACCESS_TOKEN_PREFIX, hashToken, MCP_SCOPE, mcpResource } from '../auth/oauth.ts'
+import type { Env } from '../env.ts'
+import type { McpCaller } from '../mcp/app.ts'
+
+/** Ours are the prefix and 32 letters; anything much longer isn't worth hashing. */
+const MAX_TOKEN_LENGTH = 128
+
+interface TokenRow {
+  userId: string
+  clientId: string
+  expiresAt: string
+  resources: string | null
+  scopes: string
+  revoked: string | null
+}
+
+/** A stored JSON list, or null when the text isn't one. */
+function storedList(text: string): unknown[] | null {
+  try {
+    const value: unknown = JSON.parse(text)
+    return Array.isArray(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The user and client of a live Claude access token, or null. An app session token never matches (it isn't in
+ * oauthAccessToken), nor does a token for another resource. A token issued without a `resource` is accepted:
+ * this server is the only resource its issuer serves.
+ * Added after review:
+ * - The token's scopes must include `mcp`.
+ * - Its account's consent for the client must still exist. Disconnect Claude deletes consents with the
+ *   tokens, but Better Auth's refresh marks the old token rotated and inserts the new pair in separate
+ *   statements, so a pair inserted after the Disconnect would otherwise live on.
+ */
+export async function claudeCaller(env: Env, token: string): Promise<McpCaller | null> {
+  if (!token.startsWith(ACCESS_TOKEN_PREFIX) || token.length > MAX_TOKEN_LENGTH) return null
+  const row = await env.DB.prepare(
+    'SELECT t.userId, t.clientId, t.expiresAt, t.resources, t.scopes, t.revoked FROM oauthAccessToken t ' +
+      'JOIN oauthClient c ON c.clientId = t.clientId ' +
+      'WHERE t.token = ?1 AND t.userId IS NOT NULL AND coalesce(c.disabled, 0) = 0 AND EXISTS ' +
+      '(SELECT 1 FROM oauthConsent k WHERE k.clientId = t.clientId AND k.userId = t.userId)',
+  ).bind(await hashToken(token.slice(ACCESS_TOKEN_PREFIX.length))).first<TokenRow>()
+  if (!row || row.revoked !== null || !(Date.parse(row.expiresAt) > Date.now())) return null
+  if (!storedList(row.scopes)?.includes(MCP_SCOPE)) return null
+  const resources = row.resources === null ? [] : storedList(row.resources)
+  if (resources === null || (resources.length > 0 && !resources.includes(mcpResource(env)))) return null
+  return { userId: row.userId, clientId: row.clientId, token }
+}
+```
+
+In `server/test/claude.ts`, `startFlow` takes the scope Claude asks for: `startFlow(clientId: string, redirectUri = LOOPBACK, scope = 'mcp')`, and its query has `scope,` for `scope: 'mcp',`. `Connection` gains `appCookie: string` (the same session as Better Auth's signed cookie value), from Task 4 Step 10's `signUp`.
+
+In `server/test/claude-connection.test.ts`, add to `describe('Claude on /mcp')` before the body limit test:
+
+```ts
+  // Added after review: a token is for /mcp only with the mcp scope. Before, a client that asked for
+  // offline_access alone got a token without it, and /mcp served it.
+  it('refuses a token without the mcp scope', async () => {
+    const { token: appToken } = await signUp()
+    const flow = await startFlow(await registerClient(), undefined, 'offline_access')
+    const browser = new Browser()
+    const { code } = await openConnect(browser, flow)
+    expect((await decideCode(appToken, code, 'approve')).status).toBe(200)
+    const tokens = await (await exchangeCode(flow, await finishInBrowser(browser, flow))).json<Tokens>()
+    expect(tokens.scope).toBe('offline_access')
+    const res = await mcp(tokens.access_token, 'tools/list')
+    expect(res.status).toBe(401)
+    await res.body?.cancel()
+  })
+
+  it('refuses a token whose stored scopes lost mcp, or are not a list', async () => {
+    const c = await connectClaude()
+    for (const scopes of ['["offline_access"]', '"mcp"', 'mcp', '[]']) {
+      await env.DB.prepare('UPDATE oauthAccessToken SET scopes = ?2 WHERE userId = ?1').bind(c.userId, scopes)
+        .run()
+      const res = await mcp(c.tokens.access_token, 'tools/list')
+      expect(res.status, scopes).toBe(401)
+      await res.body?.cancel()
+    }
+  })
+```
+
+and to `describe('Disconnect Claude')` before `leaves another account's Claude connected`:
+
+```ts
+  // Added after review: Better Auth marks a refresh token rotated, then inserts the new pair in another
+  // statement, so a Disconnect landing between the two leaves a pair it never saw. /mcp also needs the
+  // consent Disconnect deletes, so that pair is refused.
+  it('refuses a token whose consent is gone, and the pair a refresh mints after', async () => {
+    const c = await connectClaude()
+    expect((await mcp(c.tokens.access_token, 'tools/list')).status).toBe(200)
+    await env.DB.prepare('DELETE FROM oauthConsent WHERE userId = ?1').bind(c.userId).run()
+    expect((await mcp(c.tokens.access_token, 'tools/list')).status).toBe(401)
+    // Better Auth's refresh doesn't look at consents: the pair it mints is the one a racing refresh leaves.
+    const late = await refresh(c.clientId, c.tokens.refresh_token)
+    expect(late.status).toBe(200)
+    expect((await mcp((await late.json<Tokens>()).access_token, 'tools/list')).status).toBe(401)
+  })
+
+  // Added after review: Claude reuses its client id, so approving it again recreates the consent. A pair left
+  // by that race must not come back to life with it.
+  it('keeps a pair that outlived its consent dead when the owner approves the client again', async () => {
+    const c = await connectClaude()
+    await env.DB.prepare('DELETE FROM oauthConsent WHERE userId = ?1').bind(c.userId).run()
+    const flow = await startFlow(c.clientId)
+    const browser = new Browser()
+    const { code } = await openConnect(browser, flow)
+    expect((await decideCode(c.appToken, code, 'approve')).status).toBe(200)
+    const again = await (await exchangeCode(flow, await finishInBrowser(browser, flow))).json<Tokens>()
+    expect((await mcp(again.access_token, 'tools/list')).status).toBe(200)
+    expect((await mcp(c.tokens.access_token, 'tools/list')).status).toBe(401)
+    expect((await refresh(c.clientId, c.tokens.refresh_token)).status).toBe(400)
+  })
+
+  it("needs its own account's consent: another account's for the same client doesn't do", async () => {
+    const mine = await connectClaude()
+    const other = await signUp()
+    await env.DB.prepare(
+      'INSERT INTO oauthConsent (id, clientId, userId, scopes, createdAt, updatedAt) ' +
+        `VALUES (?1, ?2, ?3, '["mcp"]', '2026-11-08T00:00:00.000Z', '2026-11-08T00:00:00.000Z')`,
+    ).bind(crypto.randomUUID(), mine.clientId, other.userId).run()
+    expect((await mcp(mine.tokens.access_token, 'tools/list')).status).toBe(200)
+    await env.DB.prepare('DELETE FROM oauthConsent WHERE userId = ?1').bind(mine.userId).run()
+    expect((await mcp(mine.tokens.access_token, 'tools/list')).status).toBe(401)
+  })
+```
+
+Run: `cd server && npx vitest run test/claude-connection.test.ts`
+
+Before the fix, all 5 new tests fail with 200 where 401 is expected. Better Auth's refresh doesn't look at consents, so the refresh after the consent is deleted still mints a pair (200); only `/mcp` refuses it. In the last test, before `connectSignIn` deletes the leftover pair, the old access token answers 200 again once the client is approved again.
+
+Expected after: `Tests  18 passed (18)`.
+
+**Then the whole review's fixes together** (Task 4 Step 10, Task 6 Steps 10 and 11, this step, and Task 9's two smoke checks):
+
+Run: `cd server && npx vitest run && npx tsc --noEmit`
+
+Expected: `Test Files  43 passed (43)`, `Tests  601 passed (601)` (578 before this review), no `tsc` output.
+
+Then Task 9's smoke against a throwaway Worker on port 8789, so `server/.wrangler/state` is never touched. From `server/`, with `T` a new temporary folder:
+
+```bash
+npx wrangler d1 migrations apply gymrollins --local --persist-to "$T" < /dev/null   # 0001–0009 ✅
+npx wrangler dev --local --persist-to "$T" --port 8789 --ip 127.0.0.1 --var PUBLIC_BASE_URL:http://127.0.0.1:8789
+# in another terminal, from the repo root:
+API_BASE=http://127.0.0.1:8789 node scripts/claude-local.mjs smoke
+```
+
+Expected: Task 9 Step 2's 12 `ok` lines. Stop the Worker by its PIDs (npm, wrangler, esbuild, workerd), then delete `$T`.
+
+**Left as is.** Until the owner approves the client again, a refresh token such a race left still rotates at the token endpoint (which doesn't check consents). Each access token it mints is refused at `/mcp`, and the next approval deletes the whole family.
+
+```bash
+git add server/migrations/0009_connect_opener.sql server/src/auth/connect-plugin.ts server/src/auth/oauth.ts \
+  server/src/auth/routes.ts \
+  server/src/claude/connect-page.ts server/src/claude/connect-requests.ts server/src/claude/routes.ts \
+  server/src/claude/tokens.ts server/test/claude-connection.test.ts server/test/claude.ts \
+  server/test/connect-approve.test.ts server/test/helpers.ts server/test/oauth-discovery.test.ts \
+  scripts/claude-local.mjs docs/plans/2026-11-08-plan-29-claude-mcp-oauth.md
+git commit -m "fix(server): authorize ignores app sessions; checked client names and opener details; mcp scope; revoke beats a racing refresh"
+```
+
 ### Task 9: Claude Code connects to the local Worker
 
 **Files:**
@@ -5178,6 +5871,12 @@ async function smoke() {
   ok(`/connect shows ${code} under a strict CSP`)
 
   const session = await appSession()
+  // Added after review: the app sees when and where the page was opened (no place locally).
+  const preview = await json(await app(session, 'GET', `/v1/claude/connect/${code}`), 'preview')
+  if (preview.client_name !== 'claude-local smoke' || !preview.opened_at || !('country' in preview)) {
+    fail(`the app's view of ${code}: ${JSON.stringify(preview)}`)
+  }
+  ok(`the app sees ${code}: opened ${preview.opened_at}, browser ${JSON.stringify(preview.user_agent)}`)
   const decided = await app(session, 'POST', `/v1/claude/connect/${code}`, { decision: 'approve' })
   if (decided.status !== 200) fail(`approve: ${decided.status} ${await decided.text()}`)
   ok(`approved ${code} as ${EMAIL}`)
@@ -5207,6 +5906,17 @@ async function smoke() {
     fail(`token: ${exchanged.status} ${JSON.stringify(tokens)}`)
   }
   ok(`tokens: scope "${tokens.scope}", access token valid ${tokens.expires_in} s`)
+
+  // Added after review: the app's session alone never gets a code, even for the client just approved.
+  const replay = await fetch(`${BASE}/api/auth/oauth2/authorize?${query}`, {
+    redirect: 'manual',
+    headers: { accept: 'text/html', authorization: `Bearer ${session}` },
+  })
+  const replayTo = await location(replay)
+  if (replayTo?.pathname !== '/connect' || replayTo.searchParams.has('code')) {
+    fail(`authorize took the app's session: ${replay.status} ${replayTo}`)
+  }
+  ok("authorize with the app's session alone goes to /connect, with no code")
 
   const init = await rpc(
     await mcp(tokens.access_token, 'initialize', {
@@ -5272,7 +5982,7 @@ Run: `chmod +x scripts/claude-local.mjs`
 - [ ] **Step 2: The scripted check**
 
 Run:
-- `scripts/server-up.sh` in the background (Bash `run_in_background`). It applies 7 migrations, `0001`–`0007` ✅, then serves `http://127.0.0.1:8787`. `server/.dev.vars` must have `ALLOW_PASSWORD_AUTH=1`, as `.dev.vars.example` does.
+- `scripts/server-up.sh` in the background (Bash `run_in_background`). It applies the migrations, `0001`–`0009` ✅ since the reviews of Task 6 and the whole flow, then serves `http://127.0.0.1:8787`. `server/.dev.vars` must have `ALLOW_PASSWORD_AUTH=1`, as `.dev.vars.example` does.
 - Then: `node scripts/claude-local.mjs smoke`
 
 Expected, with your own ids, code and times:
@@ -5281,9 +5991,11 @@ Expected, with your own ids, code and times:
 ok   discovery: 401 on /mcp points at the resource metadata
 ok   registered client …
 ok   /connect shows XXXX-XXXX under a strict CSP
+ok   the app sees XXXX-XXXX: opened 2026-…Z, browser "node"
 ok   approved XXXX-XXXX as claude-dev@test.local
 ok   the browser went back to the callback with a code
 ok   tokens: scope "mcp offline_access", access token valid 3600 s
+ok   authorize with the app's session alone goes to /connect, with no code
 ok   MCP: initialize, 15 tools, get_profile
 ok   last use 2026-…Z
 ok   refresh rotated the tokens
@@ -5291,6 +6003,8 @@ ok   Disconnect Claude removed 1 connection(s); the next call got 401
 ```
 
 Node's `fetch` marks requests `sec-fetch-mode: cors`. For those, Better Auth answers the authorize step with `{"redirect": true, "url"}` instead of a 302, and the script follows either. A browser's navigation gets the 302.
+
+The two lines about the app's view and the app's session alone were added after the whole-flow review (Task 4 Step 10, Task 6 Steps 10 and 11, Task 8 Step 9).
 
 - [ ] **Step 3: Claude Code, by hand**
 
@@ -5383,7 +6097,7 @@ Run:
 ```
 
 Expected:
-- `Test Files  43 passed (43)`, `Tests  524 passed (524)`, no `tsc` output.
+- `Test Files  43 passed (43)`, `Tests  601 passed (601)`, no `tsc` output. (524 when this plan was written; the reviews of Tasks 6 and 8 and of the whole flow added tests.)
 - The Deno suite is unchanged: `159 passed … 1 ignored`.
 
 - [ ] **Step 4: Commit**
@@ -5407,7 +6121,11 @@ git commit -m "docs(server): Claude on the Worker in the README and the suite"
 
    Under "Before any deploy", add for plan 30's checklist:
    - `PUBLIC_BASE_URL` as the https origin, because the MCP resource and the issuer are built from it,
-   - a Cloudflare rate-limit rule on `/connect` and `/api/auth/oauth2/*`, set up before anything else. The registration cap (30 new clients an hour) is global, so anyone can use it up and keep Claude from registering; the rule comes first,
+   - **Cloudflare per-IP rate-limit rules on `/api/auth/oauth2/register`, `/connect` and `/mcp`, set up before anything else** (updated after the whole-flow review). The Worker's own caps aren't per IP:
+     - the registration cap (30 new clients an hour) is global, so anyone can use it up and keep Claude from registering,
+     - `/connect`'s 20 sign-ins per 10 minutes are per client, and anyone can register more clients,
+     - `/mcp`'s 60 calls a minute are per account, and a refused token still costs a D1 lookup,
+   - Cloudflare's "Add visitor location headers" managed transform on, so `/connect` gets `cf-ipcity` (added after review: the app shows the opener's city and country). Then check that a `cf-ipcity` or `cf-ipcountry` the client sends itself is replaced, not passed through; if it is passed through, read `request.cf.city` and `request.cf.country` instead,
    - deleting clients that never got a token,
    - the claude.ai connection test (spec section 9, step 4).
 
@@ -5441,6 +6159,7 @@ The app's half of plan 29, after plan 28's iOS tasks.
    - The sheet looks the code up once all 8 are in. A refused code isn't sent again until it changes, because each wrong code uses one of the account's 5 tries.
 4. **The sheet:**
    - **Shows:** the client's name, the redirect host, and a warning when `known_host` is false.
+   - **And where the code's page was opened** (added after the server's whole-flow review): one line, "Opened 2 min ago · Toronto, CA · Safari", leaving out what the server doesn't know, then the fixed caution "Approve only a code that's on your own screen, from a connection you started just now." Both show for every request: someone can add this server as a connector in their own claude.ai account, so the host is `claude.ai` and there is no warning, and then ask the owner to type their code.
    - **Then Approve and Deny,** each its own row in one section. A Form row fires every button it holds, so neither shares a row.
    - **Refusals** read as the owner needs them: a wrong or used code, too many tries, signed out, offline.
    - **The logic** sits in `ApproveConnectionModel`, which tests drive without a server.
@@ -5452,7 +6171,7 @@ The app's half of plan 29, after plan 28's iOS tasks.
 8. **Proved ahead,** in a scratch copy of the three packages at plan 27's tip (`509cbf1`), never committed:
    - **GymSync** with Task 11's code: `Test run with 201 tests in 26 suites passed`.
    - **Task 13's 5 integration tests** passed against the plan 29 server, run with `wrangler dev --local --port 8791 --var PUBLIC_BASE_URL:http://127.0.0.1:8791` from the server spike.
-   - **`ApproveConnectionModel` and its 5 tests** ran on macOS beside GymSync's tests, with a stand-in `SyncUnavailableError`.
+   - **`ApproveConnectionModel` and its 5 tests** ran on macOS beside GymSync's tests, with a stand-in `SyncUnavailableError`. The opened line, the caution and their 2 tests, added after the server's whole-flow review, weren't proved ahead; nor were Task 11's four new `ConnectRequest` fields.
    - **`ApproveConnectionView` and the UI tests** were typechecked for the iOS 26.2 simulator: `swiftc -typecheck` with GymSync's types, plus stubs for `Theme` and `SyncUnavailableError`, and the UI tests with XCTest and `ClaudeTestClient.swift`.
    - **Not run ahead:** the app target and the UI tests themselves. The app on the API is plan 27 Task 7, which wasn't in the tree yet.
 
@@ -5549,13 +6268,17 @@ import Testing
 
     @Test func aCodeLooksUpItsWaitingSignIn() async throws {
         let answer = #"{"code": "ABCD-EFGH", "client_name": "Claude", "redirect_host": "claude.ai", "#
-            + #""known_host": true, "expires_at": "2026-11-08T10:10:00.000000Z"}"#
+            + #""known_host": true, "expires_at": "2026-11-08T10:10:00.000000Z", "#
+            + #""opened_at": "2026-11-08T10:00:00.000000Z", "country": "CA", "city": "Toronto", "#
+            + #""user_agent": null}"#
         let server = StubServer { _ in .json(200, answer) }
 
         let request = try await ApiSyncTransport(api: server.client()).connectRequest(code: "ABCDEFGH")
 
         #expect(request == ConnectRequest(code: "ABCD-EFGH", clientName: "Claude", redirectHost: "claude.ai",
-                                          knownHost: true, expiresAt: SyncDate.parse("2026-11-08T10:10:00Z")!))
+                                          knownHost: true, expiresAt: SyncDate.parse("2026-11-08T10:10:00Z")!,
+                                          openedAt: SyncDate.parse("2026-11-08T10:00:00Z")!, country: "CA",
+                                          city: "Toronto", userAgent: nil))
         #expect(server.requests.first?.path == "/v1/claude/connect/ABCDEFGH")
     }
 
@@ -5653,18 +6376,31 @@ public struct ConnectRequest: Decodable, Equatable, Sendable {
     /// True for Claude's own hosts (claude.ai, claude.com). For any other, the sheet warns before Approve.
     public let knownHost: Bool
     public let expiresAt: Date
+    /// Added after review: when the browser opened the page that shows the code.
+    public let openedAt: Date
+    /// Added after review: where it was opened, as Cloudflare saw it: a country code ("CA") and a city. Nil when
+    /// unknown, as both always are against a local Worker.
+    public let country: String?
+    public let city: String?
+    /// Added after review: the opening browser's User-Agent (at most 256 characters); nil when it sent none.
+    public let userAgent: String?
 
-    public init(code: String, clientName: String?, redirectHost: String, knownHost: Bool, expiresAt: Date) {
+    public init(code: String, clientName: String?, redirectHost: String, knownHost: Bool, expiresAt: Date,
+                openedAt: Date, country: String? = nil, city: String? = nil, userAgent: String? = nil) {
         self.code = code
         self.clientName = clientName
         self.redirectHost = redirectHost
         self.knownHost = knownHost
         self.expiresAt = expiresAt
+        self.openedAt = openedAt
+        self.country = country
+        self.city = city
+        self.userAgent = userAgent
     }
 
     enum CodingKeys: String, CodingKey {
         case code, clientName = "client_name", redirectHost = "redirect_host", knownHost = "known_host"
-        case expiresAt = "expires_at"
+        case expiresAt = "expires_at", openedAt = "opened_at", country, city, userAgent = "user_agent"
     }
 }
 
@@ -5874,7 +6610,7 @@ git commit -m "feat(sync): Claude's proposals, last use, revoke and approval cod
 - [ ] **Step 7: Review**
 
 - **Spec:** sections 3 (`/v1/claude/*`) and 6: the codes `unknown_code` and `too_many_attempts`, and a 401 still signing out through `ApiClient`.
-- **Quality:** the `code-reviewer` and `swift` agents. The fields are exactly server Decision 11's, and `PulledProposal` still decodes row by row.
+- **Quality:** the `code-reviewer` and `swift` agents. The fields are exactly server Decision 11's (with `opened_at`, `country`, `city` and `user_agent`, added after the server's whole-flow review), and `PulledProposal` still decodes row by row.
 - **Security:** no code or token is logged. The code goes in the path only after `ConnectCode` reduced it to 8 alphabet characters (Task 12 passes `complete` only).
 
 ### Task 12: Approve a connection in the app
@@ -5898,9 +6634,11 @@ import Testing
 /// refusal or a decision leaves on screen.
 @MainActor
 @Suite struct ApproveConnectionModelTests {
+    private static let opened = Date(timeIntervalSince1970: 1_799_999_400)
     private static let request = ConnectRequest(code: "ABCD-EFGH", clientName: "Claude Code",
                                                 redirectHost: "127.0.0.1:53682", knownHost: false,
-                                                expiresAt: Date(timeIntervalSince1970: 1_800_000_000))
+                                                expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
+                                                openedAt: opened)
 
     private final class Calls {
         var lookedUp: [String] = []
@@ -5976,6 +6714,39 @@ import Testing
         await model.lookUp()
         await model.decide(.approve)
         #expect(model.request == Self.request && model.error?.hasPrefix("Couldn't reach") == true)
+    }
+
+    // Added after the server's whole-flow review: when and where the code's page was opened, in one line.
+    @Test func theOpenedLineSaysWhenWhereAndWhichBrowserLeavingOutWhatIsUnknown() {
+        let safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like "
+            + "Gecko) Version/26.1 Mobile/15E148 Safari/604.1"
+        let full = ConnectRequest(code: "ABCD-EFGH", clientName: "Claude", redirectHost: "claude.ai", knownHost: true,
+                                  expiresAt: Self.opened + 600, openedAt: Self.opened, country: "CA",
+                                  city: "Toronto", userAgent: safari)
+        #expect(ApproveConnectionModel.openedLine(for: full, now: Self.opened + 150)
+            == "Opened 2 min ago \u{00B7} Toronto, CA \u{00B7} Safari")
+        let countryOnly = ConnectRequest(code: "ABCD-EFGH", clientName: nil, redirectHost: "claude.ai",
+                                         knownHost: true, expiresAt: Self.opened + 600, openedAt: Self.opened,
+                                         country: "CA")
+        #expect(ApproveConnectionModel.openedLine(for: countryOnly, now: Self.opened + 60)
+            == "Opened 1 min ago \u{00B7} CA")
+        #expect(ApproveConnectionModel.openedLine(for: Self.request, now: Self.opened + 20) == "Opened just now")
+        #expect(ApproveConnectionModel.openedLine(for: Self.request, now: Self.opened - 30) == "Opened just now")
+    }
+
+    @Test func theBrowserIsNamedFromItsUserAgent() {
+        let chrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+            + "Chrome/131.0.0.0 Safari/537.36"
+        #expect(ApproveConnectionModel.browserName(chrome) == "Chrome")
+        #expect(ApproveConnectionModel.browserName(chrome + " Edg/131.0.0.0") == "Edge")
+        #expect(ApproveConnectionModel.browserName("Mozilla/5.0 (iPhone) Mobile/15E148 FxiOS/133.0 Safari/605.1.15")
+            == "Firefox")
+        #expect(ApproveConnectionModel.browserName("Mozilla/5.0 (iPhone) CriOS/131.0 Mobile Safari/604.1")
+            == "Chrome")
+        #expect(ApproveConnectionModel.browserName("curl/8.7.1") == "curl")
+        #expect(ApproveConnectionModel.browserName("node") == "node")
+        #expect(ApproveConnectionModel.caution
+            == "Approve only a code that's on your own screen, from a connection you started just now.")
     }
 }
 ```
@@ -6102,6 +6873,33 @@ final class ApproveConnectionModel {
 
     static let signInFirst = "Sign in to GymRollins first, with the account Claude should use."
 
+    /// Added after the server's whole-flow review: shown under every request, whatever its host. Someone can add
+    /// this server to their own claude.ai account (host `claude.ai`, no warning) and ask the owner to type the code.
+    static let caution = "Approve only a code that's on your own screen, from a connection you started just now."
+
+    /// Added after review: "Opened 2 min ago · Toronto, CA · Safari", leaving out what the server doesn't know.
+    /// A code lasts 10 minutes, so minutes are enough; a phone clock behind the server's reads "just now".
+    static func openedLine(for request: ConnectRequest, now: Date) -> String {
+        let minutes = Int(now.timeIntervalSince(request.openedAt) / 60)
+        let when = minutes < 1 ? "Opened just now" : "Opened \(minutes) min ago"
+        let place = [request.city, request.country].compactMap { $0 }.joined(separator: ", ")
+        let browser = request.userAgent.map(browserName)
+        return [when, place, browser ?? ""].filter { !$0.isEmpty }.joined(separator: " \u{00B7} ")
+    }
+
+    /// The browser a User-Agent names, most specific first (Edge's and Chrome's also say Safari); else its first
+    /// product name ("curl", "node"), at most 24 characters.
+    static func browserName(_ userAgent: String) -> String {
+        let known: [(name: String, markers: [String])] = [
+            ("Edge", ["Edg/", "EdgiOS/", "EdgA/"]), ("Opera", ["OPR/", "OPT/"]), ("Firefox", ["Firefox/", "FxiOS/"]),
+            ("Chrome", ["CriOS/", "Chrome/"]), ("Safari", ["Safari/"]),
+        ]
+        if let match = known.first(where: { entry in entry.markers.contains { userAgent.contains($0) } }) {
+            return match.name
+        }
+        return String(userAgent.prefix { $0 != "/" && $0 != " " }.prefix(24))
+    }
+
     static func message(for error: Error) -> String {
         switch error {
         case ConnectCodeError.unknownCode:
@@ -6130,8 +6928,8 @@ import SwiftUI
 
 /// Settings › Claude › Approve a connection (spec section 5). Claude's sign-in page in the browser shows a code; the
 /// owner types it here, sees which app asks and where an approval sends the browser (with a warning when that isn't
-/// Claude's), then approves or denies. Approve and Deny each sit on their own row: a Form row fires every button it
-/// holds.
+/// Claude's), when and where the page was opened, and a caution (added after the server's whole-flow review), then
+/// approves or denies. Approve and Deny each sit on their own row: a Form row fires every button it holds.
 struct ApproveConnectionView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: ApproveConnectionModel
@@ -6189,12 +6987,21 @@ struct ApproveConnectionView: View {
         Section("Asking for access") {
             row("App", request.clientName ?? "An app with no name", id: "connect.client")
             row("Returns to", request.redirectHost, id: "connect.host")
+            // Added after review: when and where the page was opened, kept current while the sheet is open.
+            TimelineView(.everyMinute) { context in
+                Text(ApproveConnectionModel.openedLine(for: request, now: context.date))
+                    .foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("connect.opened")
+            }
             if !request.knownHost {
                 Text("This isn't Claude's address. Approve only if you started this connection yourself, for example "
                      + "in Claude Code on your computer.")
                     .font(.footnote).foregroundStyle(Theme.destructive)
                     .accessibilityIdentifier("connect.warning")
             }
+            Text(ApproveConnectionModel.caution)
+                .font(.footnote)
+                .accessibilityIdentifier("connect.caution")
         }
     }
 
@@ -6327,7 +7134,7 @@ xcrun xcresulttool get test-results summary --path "$(ls -td build/TestResults-o
 ```
 
 Expected:
-- 8 tests passed and 0 failed: `ApproveConnectionModelTests` 5, `ConnectorURLTests` 1, `ClaudeConnectionBadgeTests` 2.
+- 10 tests passed and 0 failed: `ApproveConnectionModelTests` 7 (2 added after the server's whole-flow review), `ConnectorURLTests` 1, `ClaudeConnectionBadgeTests` 2.
 - Then the same command with `-only-testing:GymRollinsUITests/AccessibilityAuditUITests/testClaudeConnectionAudit` passes. Its audit of the Claude screen now meets the new row.
 
 - [ ] **Step 7: Commit**
@@ -6342,6 +7149,7 @@ git commit -m "feat(app): Approve a connection in Settings › Claude; the conne
 - **Spec:** section 5, item by item:
   - the code field `XXXX-XXXX`, case-insensitive,
   - the client's name and host, with the warning,
+  - the opened line and the caution, for every request (added after the server's whole-flow review),
   - Approve and Deny on their own rows,
   - the connector address.
 - **Quality:** the `swiftui-expert-skill` and `code-reviewer` agents: the model's phases, a code changed while being looked up, the sheet's state per opening.
@@ -6349,6 +7157,7 @@ git commit -m "feat(app): Approve a connection in Settings › Claude; the conne
   - the sheet never shows the account's data,
   - it never approves without an explicit tap,
   - the warning shows for every host but claude.ai and claude.com,
+  - the opened line and the caution show for every host, claude.ai's too, and the line shows only what the server sent,
   - nothing logs the code.
 
 ### Task 13: The Claude integration suites on the Worker

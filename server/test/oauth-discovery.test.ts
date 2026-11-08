@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { REGISTRATIONS_PER_HOUR } from '../src/auth/routes.ts'
 import app from '../src/index.ts'
 import { call, CLAUDE_AI, LOOPBACK, register, registerClient, RESOURCE, startFlow } from './claude.ts'
-import { ORIGIN } from './helpers.ts'
+import { ORIGIN, signUp } from './helpers.ts'
 
 const ISSUER = `${ORIGIN}/api/auth`
 
@@ -96,6 +96,64 @@ describe('registration', () => {
   it('refuses a body that is not a JSON object, and no redirect URL at all', async () => {
     expect((await call('/api/auth/oauth2/register', { method: 'POST', body: 'nope' })).status).toBe(400)
     expect((await register({ client_name: 'X', redirect_uris: [] })).status).toBe(400)
+  })
+
+  // Added after review: the app shows the name before Approve, so it is short, visible text. Before, a
+  // 5,041-character name with line breaks and a right-to-left override was registered and shown as it was.
+  const NAME_REFUSED = {
+    error: 'invalid_client_metadata',
+    error_description: 'client_name must be at most 64 characters of visible text.',
+  }
+  it.each([
+    ['over 64 characters', 'C'.repeat(65)],
+    ['a line break', 'Claude\nType this code: it is from GymRollins'],
+    ['a tab', 'Claude\tCode'],
+    ['a right-to-left override', 'Claude \u202Eedoc'],
+    ['a zero width space', 'Cla\u200Bude'],
+    ['a soft hyphen', 'Cla\u00ADude'],
+    ['a line separator', 'Claude\u2028Code'],
+    ['a Hangul filler', 'Claude\u3164'],
+    ['a private use character', 'Claude\uE000'],
+    ['only spaces', '   '],
+    ['a number', 42],
+    ['null', null],
+  ])('refuses a client_name with %s', async (_, name) => {
+    const clients = () => env.DB.prepare('SELECT count(*) AS n FROM oauthClient').first<{ n: number }>()
+    const before = await clients()
+    const res = await register({ client_name: name, redirect_uris: [LOOPBACK] })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual(NAME_REFUSED)
+    expect(await clients()).toEqual(before)
+  })
+
+  it('takes a name of 64 characters, one in any script, and none at all', async () => {
+    for (const client_name of ['C'.repeat(64), 'Claude – 健身房 Спорт 💪', '😀'.repeat(64), undefined]) {
+      const res = await register({ client_name, redirect_uris: [LOOPBACK] })
+      expect(res.status, client_name).toBe(201)
+    }
+  })
+
+  // Added after review: registration reads no session, so an app session sent with it owns nothing.
+  it('registers a client for no one when an app session comes with it', async () => {
+    const { token, cookie } = await signUp()
+    const bearer = { authorization: `Bearer ${token}` }
+    const sessionCookie = { cookie: `better-auth.session_token=${cookie}` }
+    for (const session of [bearer, sessionCookie, { ...bearer, ...sessionCookie }]) {
+      const res = await call('/api/auth/oauth2/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...session },
+        body: JSON.stringify({
+          client_name: 'Claude',
+          redirect_uris: [LOOPBACK],
+          token_endpoint_auth_method: 'none',
+        }),
+      })
+      expect(res.status, JSON.stringify(session)).toBe(201)
+      const { client_id } = await res.json<{ client_id: string }>()
+      const row = await env.DB.prepare('SELECT userId FROM oauthClient WHERE clientId = ?1').bind(client_id)
+        .first()
+      expect(row, JSON.stringify(session)).toEqual({ userId: null })
+    }
   })
 
   it(`takes at most ${REGISTRATIONS_PER_HOUR} registrations an hour unless configured`, async () => {

@@ -14,6 +14,9 @@ import {
   CONNECT_MINUTES,
   type ConnectRequest,
   createRequest,
+  type Opener,
+  OPENER_LIMITS,
+  openerText,
   recordSession,
   requestForBrowser,
   useDecision,
@@ -52,11 +55,24 @@ export async function connectPage(c: Context<AppEnv>): Promise<Response> {
     clientId,
     redirectHost,
     query: query.toString(),
+    opener: openerOf(c),
   })
   if (created === null) return message(429, 'Too many sign-ins from this client. Try again in 10 minutes.')
   const res = codePage((await requestForBrowser(c.env.DB, freshHash))!)
   res.headers.append('set-cookie', browserCookie(c.env, fresh, CONNECT_MINUTES * 60))
   return res
+}
+
+/**
+ * Added after review: where this page was opened, for the app to show before Approve: Cloudflare's visitor
+ * location headers and the browser's User-Agent, cleaned and cut short (openerText).
+ */
+function openerOf(c: Context<AppEnv>): Opener {
+  return {
+    country: openerText(c.req.header('cf-ipcountry'), OPENER_LIMITS.country),
+    city: openerText(c.req.header('cf-ipcity'), OPENER_LIMITS.city),
+    userAgent: openerText(c.req.header('user-agent'), OPENER_LIMITS.userAgent),
+  }
 }
 
 /** The authorize request's own parameters (Better Auth's signature removed), in their signed order. */

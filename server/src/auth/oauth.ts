@@ -4,8 +4,10 @@
 import { mcp } from '@better-auth/mcp'
 import type { Env } from '../env.ts'
 
-/** `mcp` is the resource's own scope; `offline_access` is what earns a refresh token. */
-export const MCP_SCOPES = ['mcp', 'offline_access']
+/** The resource's own scope: /mcp serves only a token that has it (added after review). */
+export const MCP_SCOPE = 'mcp'
+/** `mcp`, and `offline_access`, which is what earns a refresh token. */
+export const MCP_SCOPES = [MCP_SCOPE, 'offline_access']
 
 /** Prefixes on the tokens Claude gets (not stored): /mcp tells a Claude token apart before touching D1. */
 export const ACCESS_TOKEN_PREFIX = 'gra_'

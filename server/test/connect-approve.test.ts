@@ -9,9 +9,11 @@ import {
   Browser,
   call,
   CLAUDE_AI,
+  connectClaude,
   decideCode,
   exchangeCode,
   finishInBrowser,
+  LOOPBACK,
   metaRefresh,
   openConnect,
   registerClient,
@@ -50,6 +52,49 @@ describe('the app sees the request', () => {
       redirect_host: 'claude.ai',
       known_host: true,
     })
+  })
+
+  // Added after review: when and from where the page was opened, so the owner can tell a code that isn't on
+  // their own screen. Cloudflare adds cf-ipcountry and cf-ipcity; locally there are none, and the test's
+  // browser sends no User-Agent.
+  it('with when it was opened, and no place or browser when none was sent', async () => {
+    const { token, code } = await waiting()
+    const body = await (await preview(token, code)).json<Record<string, unknown>>()
+    expect(body).toMatchObject({ country: null, city: null, user_agent: null })
+    expect(body.opened_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/)
+    const opened = Date.parse(body.opened_at as string)
+    expect(Math.abs(opened - Date.now())).toBeLessThan(5000)
+    expect(Date.parse(body.expires_at as string) - opened).toBe(10 * 60 * 1000)
+  })
+
+  it("with the opener's country, city and browser as the headers said, cleaned and cut short", async () => {
+    const { token } = await signUp()
+    const flow = await startFlow(await registerClient())
+    const safari =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+      'Version/26.1 Safari/605.1.15'
+    const { code } = await openConnect(new Browser(), flow, {
+      'cf-ipcountry': 'CA',
+      'cf-ipcity': 'Toronto',
+      'user-agent': safari,
+    })
+    expect(await (await preview(token, code)).json()).toMatchObject({
+      country: 'CA',
+      city: 'Toronto',
+      user_agent: safari,
+    })
+    const long = await openConnect(new Browser(), flow, {
+      'cf-ipcountry': 'C\u0001A',
+      'cf-ipcity': `T\u0085${'o'.repeat(100)}`,
+      'user-agent': 'x'.repeat(300),
+    })
+    expect(await (await preview(token, long.code)).json()).toMatchObject({
+      country: 'CA',
+      city: `T${'o'.repeat(63)}`,
+      user_agent: 'x'.repeat(256),
+    })
+    const blank = await openConnect(new Browser(), flow, { 'cf-ipcountry': '\u0001', 'user-agent': ' ' })
+    expect(await (await preview(token, blank.code)).json()).toMatchObject({ country: null, user_agent: null })
   })
 
   it('as typed: lower case, without the dash', async () => {
@@ -346,5 +391,67 @@ describe("Claude's side never reaches the app (added after review)", () => {
       expect(await (await request('GET', '/api/auth/get-session', { token })).json()).toBeNull()
     }
     expect((await request('GET', '/v1/sync/routines', { token: s.token })).status).toBe(200)
+  })
+})
+
+// Added after review: the authorize step takes the /connect browser session only. Before, the bearer plugin
+// turned `Authorization: Bearer <app session>` into a session there, so the app's token alone got Claude a
+// code (and then tokens) for any client the owner had approved before, with no code typed.
+describe('the authorize step takes only the /connect browser session (added after review)', () => {
+  const SESSION_COOKIE = 'better-auth.session_token'
+
+  /** Authorize as the re-entry asks it (no prompt) for a client the owner already approved. */
+  function authorizeAgain(clientId: string, headers: Record<string, string>): Promise<Response> {
+    const query = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: LOOPBACK,
+      state: 'again',
+      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+      code_challenge_method: 'S256',
+      scope: 'mcp offline_access',
+      resource: RESOURCE,
+    })
+    return call(`/api/auth/oauth2/authorize?${query}`, { headers: { accept: 'text/html', ...headers } })
+  }
+
+  const codesFor = (userId: string) =>
+    env.DB.prepare(
+      "SELECT count(*) AS n FROM verification WHERE json_valid(value) AND json_extract(value, '$.type') = " +
+        "'authorization_code' AND json_extract(value, '$.userId') = ?1",
+    ).bind(userId).first()
+
+  it("sends the app's session to /connect, as a bearer or a cookie, for an approved client", async () => {
+    const c = await connectClaude()
+    const appCookie = `${SESSION_COOKIE}=${c.appCookie}`
+    const sessions: Record<string, string>[] = [
+      { authorization: `Bearer ${c.appToken}` },
+      { authorization: `Bearer ${decodeURIComponent(c.appCookie)}` },
+      { cookie: appCookie },
+      { authorization: `Bearer ${c.appToken}`, cookie: appCookie },
+    ]
+    for (const headers of sessions) {
+      const res = await authorizeAgain(c.clientId, headers)
+      expect(res.status, JSON.stringify(headers)).toBe(302)
+      expect(res.headers.get('location'), JSON.stringify(headers)).toMatch(/^\/connect\?/)
+    }
+    expect(await codesFor(c.userId)).toEqual({ n: 0 })
+  })
+
+  it("still returns the approved browser to Claude, with the app's bearer beside its cookie", async () => {
+    const { token } = await signUp()
+    const flow = await startFlow(await registerClient())
+    const browser = new Browser()
+    const { code } = await openConnect(browser, flow)
+    await decideCode(token, code, 'approve')
+    const [, reentry] = metaRefresh(await (await browser.get(flow.connectUrl)).text())!
+    const cookie = `${SESSION_COOKIE}=${browser.cookies.get(SESSION_COOKIE)}`
+    const back = await call(reentry!, {
+      headers: { accept: 'text/html', cookie, authorization: `Bearer ${token}` },
+    })
+    expect(back.status).toBe(302)
+    const location = new URL(back.headers.get('location')!)
+    expect(`${location.origin}${location.pathname}`).toBe(flow.redirectUri)
+    expect((await exchangeCode(flow, location.searchParams.get('code')!)).status).toBe(200)
   })
 })

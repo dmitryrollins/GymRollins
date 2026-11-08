@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import type { AppEnv, Env } from '../env.ts'
+import { isCleanText } from '../gyms/text.ts'
 import { errorBody } from '../http/errors.ts'
 import { createAuth } from './auth.ts'
 import { isConnectSession } from './connect-plugin.ts'
@@ -74,14 +75,49 @@ async function oauthHandler(c: Context<AppEnv>, route: string): Promise<Response
   if (route === 'POST /api/auth/oauth2/register') {
     const checked = await checkedRegistration(c)
     if (checked instanceof Response) return checked
-    request = checked
+    request = withoutSession(checked)
   }
+  if (route === 'GET /api/auth/oauth2/authorize') request = await withConnectSessionOnly(c.env, request)
   const res = await createAuth(c.env).handler(request)
   if (route === 'POST /api/auth/oauth2/token' && res.ok) {
     // The session expires within 10 minutes anyway: a failed delete mustn't cost Claude the tokens.
     await endConnectSession(c.env.DB, res).catch((error) => console.error('connect session not ended', error))
   }
   return res
+}
+
+/**
+ * Added after review: registration is Claude's servers, which send no session. Better Auth would make a
+ * client registered with one (the app's bearer, say) that account's own.
+ */
+function withoutSession(request: Request): Request {
+  const headers = new Headers(request.headers)
+  headers.delete('authorization')
+  headers.delete('cookie')
+  return new Request(request, { headers })
+}
+
+/**
+ * Added after review: the authorize step takes the /connect browser session only. Its `Authorization` header
+ * goes (the bearer plugin would turn the app's `Bearer <session>` into a session, and authorize would then
+ * return a code for any client the owner approved before, with no code typed), and so does a Cookie whose
+ * session isn't /connect's. Either way, the browser goes to /connect as one with no session does.
+ */
+async function withConnectSessionOnly(env: Env, request: Request): Promise<Request> {
+  const headers = new Headers(request.headers)
+  headers.delete('authorization')
+  const cookie = headers.get('cookie')
+  if (cookie !== null && !(await isConnectCookie(env, cookie))) headers.delete('cookie')
+  return new Request(request, { headers })
+}
+
+/** True when the Cookie header signs in with a /connect browser session (Better Auth reads it, unrenewed). */
+async function isConnectCookie(env: Env, cookie: string): Promise<boolean> {
+  const session = await createAuth(env).api.getSession({
+    headers: new Headers({ cookie }),
+    query: { disableRefresh: true },
+  })
+  return session !== null && isConnectSession(session.session)
 }
 
 /**
@@ -106,15 +142,39 @@ const oauthError = (error: string, description: string, status: 400 | 429) =>
     headers: { 'cache-control': 'no-store' },
   })
 
+/** The longest client_name taken, in characters (added after review). */
+export const CLIENT_NAME_MAX = 64
+
+/** Control, format (bidi and zero width among them), surrogate, private use and unassigned characters. */
+const INVISIBLE = /\p{C}/u
+
+/**
+ * Added after review: the name the app shows before Approve, so short and visible. At most CLIENT_NAME_MAX
+ * characters, none of them \p{C}, nor any clean_text refuses (plan 28's src/gyms/text.ts adds the line
+ * separators, fillers and variation selectors), and not only spaces. A client may give none.
+ */
+function isClientName(name: unknown): boolean {
+  if (name === undefined) return true
+  return typeof name === 'string' && [...name].length <= CLIENT_NAME_MAX && !INVISIBLE.test(name) &&
+    isCleanText(name) && name.trim() !== ''
+}
+
 /**
  * A registration only for Claude's redirect URLs, within the hourly cap. Every client gets refresh tokens: a
  * client that names no grant types is registered for authorization_code and refresh_token (RFC 7591's default
- * is the first).
+ * is the first). Added after review: its client_name is checked (isClientName).
  */
 async function checkedRegistration(c: Context<AppEnv>): Promise<Request | Response> {
   const body = await c.req.raw.clone().json().catch(() => null) as Record<string, unknown> | null
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     return oauthError('invalid_client_metadata', 'The body must be a JSON object.', 400)
+  }
+  if (!isClientName(body.client_name)) {
+    return oauthError(
+      'invalid_client_metadata',
+      `client_name must be at most ${CLIENT_NAME_MAX} characters of visible text.`,
+      400,
+    )
   }
   const uris = body.redirect_uris
   if (

@@ -71,6 +71,13 @@ export const connectPlugin = {
           },
         })
       } else {
+        // Added after review: with no consent, any tokens left for this client and account are a pair a
+        // refresh minted while Disconnect Claude ran (/mcp refuses them for want of a consent). Claude reuses
+        // its client id, so they go before the new consent would revive them. Access tokens first: they name
+        // their refresh.
+        const pair = [{ field: 'clientId', value: clientId }, { field: 'userId', value: userId }]
+        await ctx.context.adapter.deleteMany({ model: 'oauthAccessToken', where: pair })
+        await ctx.context.adapter.deleteMany({ model: 'oauthRefreshToken', where: pair })
         await ctx.context.adapter.create({
           model: 'oauthConsent',
           data: { clientId, userId, scopes, resources, createdAt: now, updatedAt: now },

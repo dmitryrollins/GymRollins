@@ -15,6 +15,29 @@ const STALE_SQL = later('-1 day')
 
 export type ConnectStatus = 'waiting' | 'approved' | 'denied' | 'used'
 
+/**
+ * Added after review: where the page was opened, as Cloudflare and the browser said (migrations/0009). Each
+ * is null when its header is absent, as Cloudflare's always are locally.
+ */
+export interface Opener {
+  country: string | null
+  city: string | null
+  userAgent: string | null
+}
+
+/** The longest of each opener detail kept, in characters (the migration's CHECKs). */
+export const OPENER_LIMITS = { country: 8, city: 64, userAgent: 256 } as const
+
+/** Control and format characters: dropped from what the headers said. */
+const INVISIBLE = /\p{C}/gu
+
+/** A header's value without control or format characters, cut to `max` characters; null if none are left. */
+export function openerText(value: string | null | undefined, max: number): string | null {
+  if (value === null || value === undefined) return null
+  const text = [...value.replace(INVISIBLE, '').trim()].slice(0, max).join('').trim()
+  return text === '' ? null : text
+}
+
 export interface ConnectRequest {
   code: string
   client_id: string
@@ -22,9 +45,14 @@ export interface ConnectRequest {
   redirect_host: string
   query: string
   status: ConnectStatus
+  /** When /connect was opened and the code made. */
+  created_at: string
   expires_at: string
   /** 1 while expires_at is in the future. */
   live: number
+  opener_country: string | null
+  opener_city: string | null
+  opener_user_agent: string | null
 }
 
 /** Sign-ins one client may start per CONNECT_MINUTES: /connect is public, so its writes are capped. */
@@ -36,8 +64,9 @@ export const SIGN_INS_PER_CLIENT = 20
  */
 export async function createRequest(
   db: D1Database,
-  r: { browserHash: string; clientId: string; redirectHost: string; query: string },
+  r: { browserHash: string; clientId: string; redirectHost: string; query: string; opener: Opener },
 ): Promise<string | null> {
+  const { country, city, userAgent } = r.opener
   for (let attempt = 0;; attempt++) {
     const code = newCode()
     try {
@@ -46,10 +75,21 @@ export async function createRequest(
         db.prepare(`DELETE FROM connect_attempts WHERE at < ${STALE_SQL}`),
         db.prepare(
           'INSERT INTO connect_requests (code, browser_hash, client_id, redirect_host, query, status, ' +
-            `created_at, expires_at) SELECT ?1, ?2, ?3, ?4, ?5, 'waiting', ${NOW_SQL}, ${EXPIRES_SQL} ` +
+            'created_at, expires_at, opener_country, opener_city, opener_user_agent) ' +
+            `SELECT ?1, ?2, ?3, ?4, ?5, 'waiting', ${NOW_SQL}, ${EXPIRES_SQL}, ?7, ?8, ?9 ` +
             'WHERE (SELECT count(*) FROM connect_requests WHERE client_id = ?3 ' +
             `AND created_at > ${WINDOW_START_SQL}) < ?6 RETURNING code`,
-        ).bind(code, r.browserHash, r.clientId, r.redirectHost, r.query, SIGN_INS_PER_CLIENT),
+        ).bind(
+          code,
+          r.browserHash,
+          r.clientId,
+          r.redirectHost,
+          r.query,
+          SIGN_INS_PER_CLIENT,
+          country,
+          city,
+          userAgent,
+        ),
       ])
       return inserted!.results.length === 1 ? code : null
     } catch (error) {
@@ -59,9 +99,9 @@ export async function createRequest(
 }
 
 const SELECT_REQUEST =
-  'SELECT r.code, r.client_id, c.name AS client_name, r.redirect_host, r.query, r.status, ' +
-  `r.expires_at, r.expires_at > ${NOW_SQL} AS live FROM connect_requests r ` +
-  'LEFT JOIN oauthClient c ON c.clientId = r.client_id'
+  'SELECT r.code, r.client_id, c.name AS client_name, r.redirect_host, r.query, r.status, r.created_at, ' +
+  `r.expires_at, r.expires_at > ${NOW_SQL} AS live, r.opener_country, r.opener_city, r.opener_user_agent ` +
+  'FROM connect_requests r LEFT JOIN oauthClient c ON c.clientId = r.client_id'
 
 /** The request this browser's cookie belongs to, in any state. */
 export async function requestForBrowser(db: D1Database, browserHash: string): Promise<ConnectRequest | null> {
