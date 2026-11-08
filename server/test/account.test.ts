@@ -1,11 +1,11 @@
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import {
-  block, confirm, genericItem, insertGym, insertItem, insertListing, insertPhoto, insertReport, makeAdmin,
+  block, confirm, genericItem, insertGym, insertItem, insertListing, insertPhoto, insertReport, JPEG, makeAdmin,
 } from './gym-fixtures.ts'
 import { ApiError } from '../src/http/errors.ts'
 import { deleteAccount } from '../src/account/delete.ts'
-import { request, signUp } from './helpers.ts'
+import { request, signUp, upload } from './helpers.ts'
 import { SAMPLES, workoutSample } from './samples.ts'
 
 /** Every column that names an account. After the deletion, none may name it. */
@@ -145,5 +145,26 @@ describe('deleting an account', () => {
     expect(await row('SELECT item_id, notes, photo_path, added_by FROM gym_equipment WHERE id = ?1', listing))
       .toEqual({ item_id: item, notes: 'Back corner', photo_path: photo, added_by: b.userId })
     expect(await row('SELECT created_by FROM equipment_items WHERE id = ?1', item)).toEqual({ created_by: b.userId })
+  })
+
+  it('refuses while photos uploaded through the routes are left, then goes once they are deleted', async () => {
+    const { token, userId } = await signUp()
+    const names = [`${crypto.randomUUID()}.jpg`, `${crypto.randomUUID()}.jpg`]
+    expect((await upload(token, `/v1/photos/private/${names[0]}`, JPEG)).status).toBe(200)
+    expect((await upload(token, `/v1/photos/shared/${names[1]}`, JPEG)).status).toBe(200)
+    const refused = await request('DELETE', '/v1/account', { token })
+    expect(refused.status).toBe(422)
+    expect(await refused.json()).toMatchObject({ error: { code: 'photos_remain' } })
+    const listed = await request('GET', '/v1/photos/mine', { token })
+    const { rows } = await listed.json<{ rows: { bucket_id: string; name: string }[] }>()
+    expect(rows).toHaveLength(2)
+    for (const { bucket_id, name } of rows) {
+      const bucket = bucket_id === 'gym-photos' ? 'shared' : 'private'
+      expect((await request('DELETE', `/v1/photos/${bucket}/${name}`, { token })).status).toBe(204)
+    }
+    expect((await request('DELETE', '/v1/account', { token })).status).toBe(204)
+    expect(await env.GYM_PHOTOS_PRIVATE.head(names[0])).toBeNull()
+    expect(await env.GYM_PHOTOS.head(names[1])).toBeNull()
+    for (const [table, column] of OWNED) expect(await rowsNaming(table, column, userId), `${table}.${column}`).toBe(0)
   })
 })
