@@ -248,6 +248,52 @@ describe('exercises and sets logged, deleted workouts included', () => {
       expect(await counts(userId)).toEqual([2, 8])
     })
 
+  /** One save after the first, made from the workout and the answer before it, and the counts it leaves. */
+  type Step = readonly [body: (w: WorkoutJSON, last: Saved) => Row, counts: readonly [number, number]]
+  /** Each starts from `sized(3, 4)` saved at T2. Every step is answered `ok`. */
+  const SAVES: readonly { readonly name: string; readonly steps: readonly Step[] }[] = [
+    {
+      name: 'a force save over an older version',
+      steps: [[(w) => ({ ...sized(5, 2), id: w.id, client_updated_at: T3, base_updated_at: null, force: true }),
+        [5, 10]]],
+    },
+    {
+      name: 'a force save over a newer stored edit',
+      steps: [[(w) => ({ ...sized(2, 3), id: w.id, client_updated_at: T1, base_updated_at: null, force: true }),
+        [2, 6]]],
+    },
+    {
+      name: 'the retry of a save whose answer was lost (no base, the same edit time)',
+      steps: [[(w) => ({ ...w, base_updated_at: null }), [3, 12]], [(w) => ({ ...w, base_updated_at: null }), [3, 12]]],
+    },
+    {
+      name: 'a bigger re-save below the cap',
+      steps: [[(w, last) => ({ ...sized(5, 5), id: w.id, client_updated_at: T3, base_updated_at: last.updated_at }),
+        [5, 25]]],
+    },
+    {
+      name: 'reviving a tombstone with a different number of entries',
+      steps: [
+        [(w, last) => ({ ...w, deleted_at: T3, client_updated_at: T3, base_updated_at: last.updated_at }), [3, 12]],
+        [(w, last) => ({
+          ...sized(1, 2), id: w.id, deleted_at: null, client_updated_at: T4, base_updated_at: last.updated_at,
+        }), [1, 2]],
+      ],
+    },
+  ]
+
+  it.each(SAVES)('equal count(*) after $name', async ({ steps }) => {
+    const { token, userId } = await signUp()
+    const w = { ...sized(3, 4), client_updated_at: T2 }
+    let last = await (await save(token, w)).json<Saved>()
+    expect(await counts(userId)).toEqual([3, 12])
+    for (const [body, after] of steps) {
+      last = await (await save(token, body(w, last))).json<Saved>()
+      expect(last.status).toBe('ok')
+      expect(await counts(userId)).toEqual(after)
+    }
+  })
+
   interface Logged {
     readonly table: LoggedTable
     readonly max: number

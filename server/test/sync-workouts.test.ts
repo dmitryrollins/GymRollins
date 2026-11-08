@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { WORKOUT_CAPS } from '../src/sync/caps.ts'
+import { countOf } from './cap-fixtures.ts'
 import { genericItem, insertGym, insertListing } from './gym-fixtures.ts'
 import { request, signUp } from './helpers.ts'
 import { appUUID, T0, T1, T2, type WorkoutJSON, workoutSample } from './samples.ts'
@@ -224,8 +225,8 @@ describe("a workout's gym and listings", () => {
 describe('workout saves under load and in shape', () => {
   const pad = (i: number) => String(i).padStart(2, '0')
 
-  it('lets exactly one of two saves at once win, without mixing their entries', async () => {
-    const { token } = await signUp()
+  it('lets exactly one of two saves at once win, without mixing their entries or their counts', async () => {
+    const { token, userId } = await signUp()
     const w = workoutSample()
     let base = (await save(token, w)).updated_at
     for (let i = 0; i < 10; i++) {
@@ -244,6 +245,9 @@ describe('workout saves under load and in shape', () => {
       expect(stored.name).toBe(`${winner.exercise.toUpperCase()}${i}`)
       expect(stored.entries.map((e) => e.exercise_id)).toEqual(Array(winner.count).fill(winner.exercise))
       expect(answers.find((r) => r.status === 'stale')!.updated_at).toBe(stored.updated_at)
+      // The losing save moved no count: account_rows still equals what is stored (countOf checks both).
+      expect(await countOf('workout_entries', userId)).toBe(winner.count)
+      expect(await countOf('workout_sets', userId)).toBe(0)
       base = stored.updated_at
     }
   })
