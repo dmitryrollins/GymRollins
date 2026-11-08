@@ -890,7 +890,7 @@ Expected: FAIL. `seedD1` is not exported (`SyntaxError: The requested module …
 
 - [ ] **Step 3: Write the app schema**
 
-Create `server/migrations/0002_app_schema.sql` with exactly this content. It was translated from the final state of each Postgres table, and checked in `sqlite3` with foreign keys on: every seed row applies and `foreign_key_check` is empty.
+Create `server/migrations/0002_app_schema.sql` with exactly this content. It was translated from the final state of each Postgres table, and checked in `sqlite3` with foreign keys on and D1's pattern limit (`.limit like_pattern_length 50`): every seed row applies and `foreign_key_check` is empty. D1 refuses any LIKE or GLOB pattern over 50 bytes (`LIKE or GLOB pattern too complex`), so the timestamp and photo-name checks are split into short `substr(…) GLOB` pieces.
 
 ```sql
 -- GymRollins app schema for Cloudflare D1 (SQLite), translated from supabase/migrations/*.sql (the final state of
@@ -923,8 +923,8 @@ CREATE TABLE profiles (
   mcp_read_body INTEGER NOT NULL DEFAULT 1 CHECK (mcp_read_body IN (0,1)),
   mcp_propose INTEGER NOT NULL DEFAULT 1 CHECK (mcp_propose IN (0,1)),
   mcp_auto_apply INTEGER NOT NULL DEFAULT 0 CHECK (mcp_auto_apply IN (0,1)),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   mcp_read_plan INTEGER NOT NULL DEFAULT 1 CHECK (mcp_read_plan IN (0,1)),
   sex TEXT CHECK (sex IN ('male','female')),
   birth_year INTEGER CHECK (birth_year BETWEEN 1900 AND 2100),
@@ -948,9 +948,9 @@ CREATE TABLE custom_exercises (
   bp TEXT NOT NULL, eq TEXT NOT NULL, tg TEXT NOT NULL,
   mode TEXT NOT NULL DEFAULT 'reps' CHECK (mode IN ('reps','time','cardio')),
   bilateral INTEGER NOT NULL DEFAULT 0 CHECK (bilateral IN (0,1)),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  deleted_at TEXT CHECK (deleted_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  deleted_at TEXT CHECK (substr(deleted_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(deleted_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(deleted_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 
 -- Plan ----------------------------------------------------------------------------------------------------------
@@ -964,17 +964,17 @@ CREATE TABLE routines (
   paused INTEGER NOT NULL DEFAULT 0 CHECK (paused IN (0,1)),
   exercises TEXT NOT NULL DEFAULT '[]'
     CHECK (json_valid(exercises) AND json_type(exercises) = 'array' AND json_array_length(exercises) <= 20),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  deleted_at TEXT CHECK (deleted_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  deleted_at TEXT CHECK (substr(deleted_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(deleted_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(deleted_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 
 CREATE TABLE week_schedule (
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
   weekday INTEGER NOT NULL CHECK (weekday BETWEEN 1 AND 7),
   routine_id TEXT REFERENCES routines(id) ON DELETE SET NULL CHECK (length(routine_id) = 36),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   PRIMARY KEY (user_id, weekday)
 );
 
@@ -985,8 +985,8 @@ CREATE TABLE muscle_targets (
     'glutes','quads','hamstrings','calves','adductors','abductors')),
   min_sets INTEGER NOT NULL CHECK (min_sets BETWEEN 0 AND 50),
   max_sets INTEGER NOT NULL CHECK (max_sets BETWEEN 0 AND 50),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   PRIMARY KEY (user_id, muscle),
   CONSTRAINT muscle_targets_range CHECK (min_sets <= max_sets)
 );
@@ -996,8 +996,8 @@ CREATE TABLE exercise_prefs (
   -- pg: exercise_id ~ '^[A-Za-z0-9_-]{1,80}$' (translated exactly with GLOB)
   exercise_id TEXT NOT NULL CHECK (length(exercise_id) BETWEEN 1 AND 80 AND exercise_id NOT GLOB '*[^A-Za-z0-9_-]*'),
   pref TEXT NOT NULL CHECK (pref IN ('more','normal','less','never')),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   PRIMARY KEY (user_id, exercise_id)
 );
 -- Pull cursor: rows changed since the last pull, keyset-ordered by (updated_at, exercise_id).
@@ -1010,25 +1010,25 @@ CREATE TABLE equipment_kinds (
   name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
   category TEXT NOT NULL CHECK (category IN ('machine','cable','free-weight','bench','rack','cardio','accessory')),
   load_type TEXT NOT NULL CHECK (load_type IN ('stack','plate-loaded','fixed-set','bodyweight','none')),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 
 CREATE TABLE exercise_requirements (
   exercise_id TEXT PRIMARY KEY REFERENCES exercises(id) ON DELETE CASCADE,
   -- All groups are needed, any one kind per group; [] means no equipment.
   groups TEXT NOT NULL CHECK (json_valid(groups) AND json_type(groups) = 'array'),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 
 CREATE TABLE app_admins (
   user_id TEXT NOT NULL PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 
 CREATE TABLE user_blocks (
   blocker_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(blocker_id) = 36),
   blocked_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(blocked_id) = 36),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   PRIMARY KEY (blocker_id, blocked_id)
 );
 
@@ -1046,10 +1046,10 @@ CREATE TABLE gyms (
     OR (length(maps_place_id) BETWEEN 1 AND 200 AND maps_place_id NOT GLOB '*[^A-Za-z0-9._:+/=-]*')),
   created_by TEXT REFERENCES "user"(id) ON DELETE SET NULL CHECK (length(created_by) = 36),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','flagged','removed')),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  deleted_at TEXT CHECK (deleted_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  deleted_at TEXT CHECK (substr(deleted_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(deleted_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(deleted_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   CONSTRAINT gyms_private_has_owner CHECK ((visibility = 'private') = (owner_id IS NOT NULL)),
   CONSTRAINT gyms_public_is_a_place CHECK ((visibility = 'public') = (maps_place_id IS NOT NULL))
 );
@@ -1065,8 +1065,8 @@ CREATE TABLE equipment_items (
   model TEXT CHECK (model IS NULL OR (length(model) BETWEEN 1 AND 80 AND model NOT GLOB ('*[' || char(1) || '-' || char(31) || ']*'))),
   created_by TEXT REFERENCES "user"(id) ON DELETE SET NULL CHECK (length(created_by) = 36),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','flagged','removed')),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 CREATE UNIQUE INDEX equipment_items_identity
   ON equipment_items (kind_id, lower(coalesce(brand, '')), lower(coalesce(model, '')));
@@ -1080,7 +1080,7 @@ CREATE TABLE gym_equipment (
   owner_id TEXT REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(owner_id) = 36),
   -- A bare random name: a folder per user would give every reader the uploader's id.
   -- pg: photo_path ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$' (exact, as GLOB)
-  photo_path TEXT CHECK (photo_path IS NULL OR photo_path GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].jpg'),
+  photo_path TEXT CHECK (photo_path IS NULL OR length(photo_path) = 36+4 AND substr(photo_path,1,4) GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f]' AND substr(photo_path,5,4) GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f]' AND substr(photo_path,10,4) GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f]' AND substr(photo_path,15,4) GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f]' AND substr(photo_path,20,4) GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f]' AND substr(photo_path,25,6) GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]' AND substr(photo_path,31,6) GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]' AND substr(photo_path,9,1)||substr(photo_path,14,1)||substr(photo_path,19,1)||substr(photo_path,24,1)||substr(photo_path,37) = '----.jpg'),
   -- pg: gym_private.valid_loads(loads). Only the structural part is kept: an object, a known type, compact JSON.
   -- Keys, number ranges and the 24-char number form are validated in TypeScript.
   loads TEXT NOT NULL DEFAULT '{"type":"none"}'
@@ -1095,10 +1095,10 @@ CREATE TABLE gym_equipment (
   added_by TEXT REFERENCES "user"(id) ON DELETE SET NULL CHECK (length(added_by) = 36),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','flagged','removed')),
   confirm_count INTEGER NOT NULL DEFAULT 0,
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  deleted_at TEXT CHECK (deleted_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  deleted_at TEXT CHECK (substr(deleted_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(deleted_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(deleted_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   CONSTRAINT gym_equipment_private_has_owner CHECK ((visibility = 'private') = (owner_id IS NOT NULL)),
   CONSTRAINT gym_equipment_private_text
     CHECK (visibility = 'private' OR (private_brand IS NULL AND private_model IS NULL))
@@ -1113,7 +1113,7 @@ CREATE INDEX gym_equipment_added_by ON gym_equipment (added_by, created_at) WHER
 CREATE TABLE equipment_confirmations (
   listing_id TEXT NOT NULL REFERENCES gym_equipment(id) ON DELETE CASCADE CHECK (length(listing_id) = 36),
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   PRIMARY KEY (listing_id, user_id)
 );
 CREATE INDEX equipment_confirmations_user ON equipment_confirmations (user_id, created_at);
@@ -1127,15 +1127,15 @@ CREATE TABLE reports (
   reason TEXT NOT NULL CHECK (reason IN ('wrong-info','not-here-anymore','duplicate','inappropriate-photo',
                                          'person-in-photo','spam','other')),
   note TEXT CHECK (note IS NULL OR (length(note) <= 280 AND note NOT GLOB ('*[' || char(1) || '-' || char(9) || char(11) || char(12) || char(14) || '-' || char(31) || ']*'))),
-  resolved_at TEXT CHECK (resolved_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  resolved_at TEXT CHECK (substr(resolved_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(resolved_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(resolved_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   UNIQUE (target_type, target_id, reporter_id)
 );
 
 -- gym_private.unblocks in Postgres. Logs each "unblock all" so it can be rate limited (3 a day).
 CREATE TABLE gym_unblocks (
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 CREATE INDEX gym_unblocks_user ON gym_unblocks (user_id, created_at);
 
@@ -1143,8 +1143,8 @@ CREATE INDEX gym_unblocks_user ON gym_unblocks (user_id, created_at);
 CREATE TABLE workouts (
   id TEXT PRIMARY KEY CHECK (length(id) = 36),
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
-  started_at TEXT NOT NULL CHECK (started_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  ended_at TEXT CHECK (ended_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  started_at TEXT NOT NULL CHECK (substr(started_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(started_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(started_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  ended_at TEXT CHECK (substr(ended_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(ended_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(ended_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   paused_sec REAL NOT NULL DEFAULT 0 CHECK (paused_sec >= 0),
   routine_id TEXT CHECK (length(routine_id) = 36),
   name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
@@ -1152,9 +1152,9 @@ CREATE TABLE workouts (
   note TEXT,
   vol_kg REAL NOT NULL DEFAULT 0,
   records TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(records)),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  deleted_at TEXT CHECK (deleted_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  deleted_at TEXT CHECK (substr(deleted_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(deleted_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(deleted_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   gym_id TEXT REFERENCES gyms(id) ON DELETE SET NULL CHECK (length(gym_id) = 36),
   -- Set by each save (server/src/sync/workouts.ts): the save writes its entries and sets only while the row is still
   -- its own, so two phones saving at once can't mix their entries. Never sent to the app.
@@ -1189,7 +1189,7 @@ CREATE TABLE workout_sets (
   warmup INTEGER NOT NULL DEFAULT 0 CHECK (warmup IN (0,1)),
   rir REAL, rpe REAL,
   multiplier REAL NOT NULL DEFAULT 1 CHECK (multiplier BETWEEN 0 AND 10),
-  completed_at TEXT CHECK (completed_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  completed_at TEXT CHECK (substr(completed_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(completed_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(completed_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   CONSTRAINT workout_sets_min_range CHECK (min BETWEEN 0 AND 1440),
   CONSTRAINT workout_sets_dist_m_range CHECK (dist_m BETWEEN 0 AND 1000000)
 );
@@ -1198,13 +1198,13 @@ CREATE TABLE workout_sets (
 CREATE TABLE bodyweight (
   id TEXT PRIMARY KEY CHECK (length(id) = 36),
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
-  measured_at TEXT NOT NULL CHECK (measured_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  measured_at TEXT NOT NULL CHECK (substr(measured_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(measured_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(measured_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   w_kg REAL NOT NULL CHECK (w_kg BETWEEN 30 AND 300),
   bf_pct REAL CHECK (bf_pct BETWEEN 3 AND 60),
   t TEXT,
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  deleted_at TEXT CHECK (deleted_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  deleted_at TEXT CHECK (substr(deleted_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(deleted_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(deleted_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   source TEXT CHECK (source IS NULL OR source IN ('apple_health')),
   health_sample_id TEXT CHECK (length(health_sample_id) = 36),
   health_fat_sample_id TEXT CHECK (length(health_fat_sample_id) = 36)
@@ -1214,16 +1214,16 @@ CREATE TABLE bodyweight (
 CREATE TABLE proposals (
   id TEXT PRIMARY KEY CHECK (length(id) = 36),
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   source TEXT NOT NULL DEFAULT 'claude',
   summary TEXT NOT NULL CHECK (length(summary) BETWEEN 1 AND 500),
   changes TEXT NOT NULL
     CHECK (json_valid(changes) AND json_type(changes) = 'array' AND json_array_length(changes) BETWEEN 1 AND 25),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','applied','dismissed','partial')),
   applied_change_ids TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(applied_change_ids)),
-  resolved_at TEXT CHECK (resolved_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  client_updated_at TEXT NOT NULL CHECK (client_updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
-  updated_at TEXT NOT NULL CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  resolved_at TEXT CHECK (substr(resolved_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(resolved_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(resolved_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  client_updated_at TEXT NOT NULL CHECK (substr(client_updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(client_updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(client_updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  updated_at TEXT NOT NULL CHECK (substr(updated_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(updated_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(updated_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 
 -- MCP audit + rate limit ------------------------------------------------------------------------------------------
@@ -1234,14 +1234,14 @@ CREATE TABLE mcp_audit (
   tool TEXT NOT NULL,
   ok INTEGER NOT NULL CHECK (ok IN (0,1)),
   args_digest TEXT,
-  at TEXT NOT NULL CHECK (at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  at TEXT NOT NULL CHECK (substr(at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 CREATE INDEX mcp_audit_user_at ON mcp_audit (user_id, at DESC);
 
 CREATE TABLE mcp_calls (
   id INTEGER PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
-  at TEXT NOT NULL CHECK (at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z')
+  at TEXT NOT NULL CHECK (substr(at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z')
 );
 CREATE INDEX mcp_calls_user_at ON mcp_calls (user_id, at DESC);
 
@@ -1250,7 +1250,7 @@ CREATE TABLE photo_objects (
   bucket TEXT NOT NULL CHECK (bucket IN ('gym-photos','gym-photos-private')),
   name TEXT NOT NULL,
   owner_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(owner_id) = 36),
-  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
+  created_at TEXT NOT NULL CHECK (substr(created_at,1,10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND substr(created_at,11,9) GLOB 'T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' AND substr(created_at,20) GLOB '.[0-9][0-9][0-9][0-9][0-9][0-9]Z'),
   PRIMARY KEY (bucket, name)
 );
 CREATE INDEX photo_objects_owner_created ON photo_objects (owner_id, created_at);
@@ -1401,7 +1401,7 @@ Run: `node --test scripts/gen-equipment-seed.test.mjs && node scripts/gen-exerci
 Expected: `# pass 5`, `# fail 0`, `Exercise seeds match the bundled JSON`, `Equipment seeds match the bundled JSON`.
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  4 passed (4)`, `Tests  19 passed (19)`.
+Expected: `Test Files  4 passed (4)`, `Tests  24 passed (24)`.
 
 - [ ] **Step 7: Commit**
 
@@ -1409,6 +1409,19 @@ Expected: `Test Files  4 passed (4)`, `Tests  19 passed (19)`.
 git add server/migrations scripts/gen-exercise-seed.mjs scripts/gen-equipment-seed.mjs scripts/gen-equipment-seed.test.mjs server/test/schema.test.ts
 git commit -m "feat(server): D1 schema and seeds"
 ```
+
+- [ ] **Step 8: Found while building, D1's 50-byte pattern limit**
+
+The first schema used one GLOB per timestamp check (about 100 bytes) and per photo name (about 190 bytes). It applied in `sqlite3` but not in workerd's D1. The checks are now split into pieces of at most 48 bytes.
+
+`schema.test.ts` adds:
+- a scan of every migration for a LIKE or GLOB literal over 50 bytes,
+- the photo-name check: one accepted, five refused,
+- three malformed timestamps.
+
+With them: `Tests  24 passed (24)`.
+
+Commit: `fix(server): D1's 50-byte GLOB limit in the photo name check, with tests`.
 
 ### Task 4: Timestamps and column values
 
@@ -1703,7 +1716,7 @@ export function wireRow(columns: readonly Column[], row: Record<string, unknown>
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  6 passed (6)`, `Tests  47 passed (47)`.
+Expected: `Test Files  6 passed (6)`, `Tests  52 passed (52)`.
 
 - [ ] **Step 6: Commit**
 
@@ -2301,7 +2314,7 @@ export default app
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
 Expected:
-- `Test Files  7 passed (7)` and `Tests  96 passed (96)`.
+- `Test Files  7 passed (7)` and `Tests  101 passed (101)`.
 - `sync-rows.test.ts` adds 49 tests: 35 for the seven tables and 14 more.
 
 - [ ] **Step 7: Commit**
@@ -2423,7 +2436,7 @@ and add these two fields to the `bodyweight` entry:
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  8 passed (8)`, `Tests  100 passed (100)`.
+Expected: `Test Files  8 passed (8)`, `Tests  105 passed (105)`.
 
 - [ ] **Step 5: Commit**
 
@@ -2768,7 +2781,7 @@ export async function entryListings(
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  9 passed (9)`, `Tests  110 passed (110)`.
+Expected: `Test Files  9 passed (9)`, `Tests  115 passed (115)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3295,7 +3308,7 @@ syncRoutes.get('/workouts/:id', async (c) => c.json(await fetchWorkout(c.env.DB,
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  10 passed (10)`, `Tests  124 passed (124)`.
+Expected: `Test Files  10 passed (10)`, `Tests  129 passed (129)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3528,7 +3541,7 @@ v1.route('/account', accountRoutes)
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  11 passed (11)`, `Tests  127 passed (127)`.
+Expected: `Test Files  11 passed (11)`, `Tests  132 passed (132)`.
 
 - [ ] **Step 5: Commit**
 
@@ -3654,7 +3667,7 @@ node scripts/gen-exercise-seed.mjs --check && node scripts/gen-equipment-seed.mj
 ```
 
 Expected:
-- `Test Files  11 passed (11)`, `Tests  127 passed (127)`.
+- `Test Files  11 passed (11)`, `Tests  132 passed (132)`.
 - The seed tests: `# pass 5`, and both checks match.
 - The Deno suite is unchanged: `159 passed … 1 ignored`. This plan doesn't touch it.
 
