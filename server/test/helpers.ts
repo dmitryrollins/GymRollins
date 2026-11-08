@@ -31,3 +31,9 @@ export async function signUp(): Promise<{ token: string; userId: string }> {
   const body = await res.json<{ token: string; user: { id: string } }>()
   return { token: body.token, userId: body.user.id }
 }
+
+/** A photo upload as the app sends it: the raw bytes with their content type. */
+export function upload(token: string, path: string, bytes: Uint8Array, contentType = 'image/jpeg'): Promise<Response> {
+  const headers = { authorization: `Bearer ${token}`, 'content-type': contentType }
+  return Promise.resolve(app.fetch(new Request(`${ORIGIN}${path}`, { method: 'PUT', headers, body: bytes }), env))
+}

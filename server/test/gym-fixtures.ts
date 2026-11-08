@@ -198,3 +198,12 @@ export async function unblocksToday(userId: string, count: number) {
     await env.DB.prepare(`INSERT INTO gym_unblocks (user_id, created_at) VALUES (?1, ${NOW_SQL})`).bind(userId).run()
   }
 }
+
+/** `count` photos the account uploaded just now (rows only), towards the daily limit. */
+export async function photosToday(owner: string, count: number, bucket: 'gym-photos' | 'gym-photos-private') {
+  const names = Array.from({ length: count }, () => `${crypto.randomUUID()}.jpg`)
+  await env.DB.prepare(
+    `INSERT INTO photo_objects (bucket, name, owner_id, created_at) SELECT ?2, value, ?3, ${NOW_SQL} FROM json_each(?1)`,
+  ).bind(JSON.stringify(names), bucket, owner).run()
+  return names
+}
