@@ -163,7 +163,7 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
       - It follows last-write-wins, as `lww_guard` did: an older edit changes nothing and answers the stored row.
       - A bad value answers `422 row_rejected`, and another account's id answers 404.
     - `GET /v1/claude/last-use` → `{at}`, the newest `mcp_audit.at` or null.
-    - `GET /v1/claude/connect/:code` → `{code, client_name, redirect_host, known_host, expires_at, opened_at, country, city, user_agent}`. The last four were added after review (Task 6 Step 11): when the page was opened, and Cloudflare's `cf-ipcountry` and `cf-ipcity` and the browser's `User-Agent` as it was opened, each null when absent (always, locally).
+    - `GET /v1/claude/connect/:code` → `{code, client_name, redirect_host, known_host, expires_at, opened_at, country, city, user_agent}`. The last four were added after review (Task 6 Step 11): when the page was opened, and Cloudflare's `request.cf.country` and `request.cf.city` and the browser's `User-Agent` as it was opened, each null when absent (always, locally).
     - `POST /v1/claude/connect/:code` with `{decision: "approve" | "deny"}` → `{status: "approved" | "denied"}`.
     - `POST /v1/claude/revoke` → `{revoked: <connections removed>}`, as `revokeOAuthGrants()` returned a count.
     - Error codes: `unknown_code` (404), `too_many_attempts` (429), `row_rejected` (422), `bad_request` (400).
@@ -4282,18 +4282,20 @@ Before the fix, the first new test fails: the app's bearer gets `http://127.0.0.
 
 - [ ] **Step 11: The app sees when and where the code's page was opened (added after review)**
 
+*Added after review: the location is read from `request.cf`, never from the `cf-ipcountry`/`cf-ipcity` headers, which a client can forge; the code and tests below were updated to match.*
+
 The rest of the phishing finding (Task 4 Step 10): the code was on someone else's screen, and nothing the sheet showed said so. `/connect` now records where it was opened, and the app shows it before Approve, with a caution (Task 12): "Opened 2 min ago · Toronto, CA · Safari".
 - `opened_at` is the row's `created_at`, which `/connect` already stored.
-- `country` and `city` are Cloudflare's `cf-ipcountry` and `cf-ipcity` (its visitor location headers; the deploy checklist turns them on), and `user_agent` is the browser's `User-Agent`.
+- `country` and `city` are Cloudflare's `request.cf.country` and `request.cf.city` (set by Cloudflare, so a client can't forge them; no zone setting needed; never the `cf-ipcountry`/`cf-ipcity` headers, which a client can send itself; changed after review), and `user_agent` is the browser's `User-Agent`.
 - `user_agent` is whatever the opener's browser says, so someone phishing can make it read "Safari"; the place is Cloudflare's, and it is the real signal.
-- Each loses its `\p{C}` characters, is trimmed and cut short (8, 64 and 256 characters, the migration's CHECKs), and is null when absent or empty. Locally the two `cf-` headers are always absent.
+- Each loses its `\p{C}` characters, is trimmed and cut short (8, 64 and 256 characters, the migration's CHECKs), and is null when absent or empty. Locally `request.cf` is absent.
 
 `server/migrations/0009_connect_opener.sql`:
 
 ```sql
 -- Plan 29, added after review: where the /connect page that shows a code was opened, so the app's Approve a
 -- connection sheet can show "Opened 2 min ago · Toronto, CA · Safari" (created_at is when). Cloudflare's
--- cf-ipcountry and cf-ipcity headers and the browser's User-Agent, without control characters and cut to
+-- request.cf (country and city) and the browser's User-Agent, without control characters and cut to
 -- these lengths (src/claude/connect-requests.ts); null when a header is absent, as the cf- ones are locally.
 ALTER TABLE connect_requests ADD COLUMN opener_country TEXT CHECK (length(opener_country) <= 8);
 ALTER TABLE connect_requests ADD COLUMN opener_city TEXT CHECK (length(opener_city) <= 64);
@@ -4383,8 +4385,8 @@ In `server/src/claude/connect-page.ts`, import `type Opener`, `OPENER_LIMITS` an
  */
 function openerOf(c: Context<AppEnv>): Opener {
   return {
-    country: openerText(c.req.header('cf-ipcountry'), OPENER_LIMITS.country),
-    city: openerText(c.req.header('cf-ipcity'), OPENER_LIMITS.city),
+    country: openerText(cfText(cf?.country), OPENER_LIMITS.country),
+    city: openerText(cfText(cf?.city), OPENER_LIMITS.city),
     userAgent: openerText(c.req.header('user-agent'), OPENER_LIMITS.userAgent),
   }
 }
@@ -4436,7 +4438,7 @@ In `server/test/connect-approve.test.ts`, add to `describe('the app sees the req
 
 ```ts
   // Added after review: when and from where the page was opened, so the owner can tell a code that isn't on
-  // their own screen. Cloudflare adds cf-ipcountry and cf-ipcity; locally there are none, and the test's
+  // their own screen. Cloudflare sets request.cf (country, city); locally there is none, and the test's
   // browser sends no User-Agent.
   it('with when it was opened, and no place or browser when none was sent', async () => {
     const { token, code } = await waiting()
@@ -4448,34 +4450,46 @@ In `server/test/connect-approve.test.ts`, add to `describe('the app sees the req
     expect(Date.parse(body.expires_at as string) - opened).toBe(10 * 60 * 1000)
   })
 
-  it("with the opener's country, city and browser as the headers said, cleaned and cut short", async () => {
+  it("with the opener's country, city and browser as Cloudflare's request.cf said, cleaned and cut short", async () => {
     const { token } = await signUp()
     const flow = await startFlow(await registerClient())
     const safari =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
       'Version/26.1 Safari/605.1.15'
-    const { code } = await openConnect(new Browser(), flow, {
-      'cf-ipcountry': 'CA',
-      'cf-ipcity': 'Toronto',
-      'user-agent': safari,
+    const { code } = await openConnect(new Browser(), flow, { 'user-agent': safari }, {
+      country: 'CA',
+      city: 'Toronto',
     })
     expect(await (await preview(token, code)).json()).toMatchObject({
       country: 'CA',
       city: 'Toronto',
       user_agent: safari,
     })
-    const long = await openConnect(new Browser(), flow, {
-      'cf-ipcountry': 'C\u0001A',
-      'cf-ipcity': `T\u0085${'o'.repeat(100)}`,
-      'user-agent': 'x'.repeat(300),
+    const long = await openConnect(new Browser(), flow, { 'user-agent': 'x'.repeat(300) }, {
+      country: 'C\u0001A',
+      city: `T\u0085${'o'.repeat(100)}`,
     })
     expect(await (await preview(token, long.code)).json()).toMatchObject({
       country: 'CA',
       city: `T${'o'.repeat(63)}`,
       user_agent: 'x'.repeat(256),
     })
-    const blank = await openConnect(new Browser(), flow, { 'cf-ipcountry': '\u0001', 'user-agent': ' ' })
-    expect(await (await preview(token, blank.code)).json()).toMatchObject({ country: null, user_agent: null })
+    const blank = await openConnect(new Browser(), flow, { 'user-agent': ' ' }, { country: '\u0001' })
+    expect(await (await preview(token, blank.code)).json()).toMatchObject({
+      country: null,
+      city: null,
+      user_agent: null,
+    })
+  })
+
+  it('never from cf-ipcountry or cf-ipcity, which a client can send itself', async () => {
+    const { token } = await signUp()
+    const flow = await startFlow(await registerClient())
+    const forged = { 'cf-ipcountry': 'XX', 'cf-ipcity': 'Nowhere' }
+    const bare = await openConnect(new Browser(), flow, forged)
+    expect(await (await preview(token, bare.code)).json()).toMatchObject({ country: null, city: null })
+    const real = await openConnect(new Browser(), flow, forged, { country: 'CA', city: 'Toronto' })
+    expect(await (await preview(token, real.code)).json()).toMatchObject({ country: 'CA', city: 'Toronto' })
   })
 ```
 
@@ -6125,7 +6139,7 @@ git commit -m "docs(server): Claude on the Worker in the README and the suite"
      - the registration cap (30 new clients an hour) is global, so anyone can use it up and keep Claude from registering,
      - `/connect`'s 20 sign-ins per 10 minutes are per client, and anyone can register more clients,
      - `/mcp`'s 60 calls a minute are per account, and a refused token still costs a D1 lookup,
-   - Cloudflare's "Add visitor location headers" managed transform on, so `/connect` gets `cf-ipcity` (added after review: the app shows the opener's city and country). Then check that a `cf-ipcity` or `cf-ipcountry` the client sends itself is replaced, not passed through; if it is passed through, read `request.cf.city` and `request.cf.country` instead,
+   - `/connect` reads the opener's city and country from `request.cf` (added after review: the app shows them), so no zone setting is needed; check on the deployed Worker that a `cf-ipcity` header the client sends is ignored,
    - deleting clients that never got a token,
    - the claude.ai connection test (spec section 9, step 4).
 

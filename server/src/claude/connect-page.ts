@@ -64,16 +64,21 @@ export async function connectPage(c: Context<AppEnv>): Promise<Response> {
 }
 
 /**
- * Added after review: where this page was opened, for the app to show before Approve: Cloudflare's visitor
- * location headers and the browser's User-Agent, cleaned and cut short (openerText).
+ * Added after review: where this page was opened, for the app to show before Approve: the location from
+ * request.cf, which only Cloudflare sets (never the cf-ip* headers, which a client can send itself), and the
+ * browser's User-Agent, cleaned and cut short (openerText).
  */
 function openerOf(c: Context<AppEnv>): Opener {
+  const cf = c.req.raw.cf
   return {
-    country: openerText(c.req.header('cf-ipcountry'), OPENER_LIMITS.country),
-    city: openerText(c.req.header('cf-ipcity'), OPENER_LIMITS.city),
+    country: openerText(cfText(cf?.country), OPENER_LIMITS.country),
+    city: openerText(cfText(cf?.city), OPENER_LIMITS.city),
     userAgent: openerText(c.req.header('user-agent'), OPENER_LIMITS.userAgent),
   }
 }
+
+/** request.cf values are typed unknown; only a string is a place. */
+const cfText = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 
 /** The authorize request's own parameters (Better Auth's signature removed), in their signed order. */
 function authorizeQuery(signed: string): URLSearchParams {

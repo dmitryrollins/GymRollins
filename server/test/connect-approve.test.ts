@@ -55,7 +55,7 @@ describe('the app sees the request', () => {
   })
 
   // Added after review: when and from where the page was opened, so the owner can tell a code that isn't on
-  // their own screen. Cloudflare adds cf-ipcountry and cf-ipcity; locally there are none, and the test's
+  // their own screen. Cloudflare sets request.cf (country, city); locally there is none, and the test's
   // browser sends no User-Agent.
   it('with when it was opened, and no place or browser when none was sent', async () => {
     const { token, code } = await waiting()
@@ -67,34 +67,46 @@ describe('the app sees the request', () => {
     expect(Date.parse(body.expires_at as string) - opened).toBe(10 * 60 * 1000)
   })
 
-  it("with the opener's country, city and browser as the headers said, cleaned and cut short", async () => {
+  it("with the opener's country, city and browser as Cloudflare's request.cf said, cleaned and cut short", async () => {
     const { token } = await signUp()
     const flow = await startFlow(await registerClient())
     const safari =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
       'Version/26.1 Safari/605.1.15'
-    const { code } = await openConnect(new Browser(), flow, {
-      'cf-ipcountry': 'CA',
-      'cf-ipcity': 'Toronto',
-      'user-agent': safari,
+    const { code } = await openConnect(new Browser(), flow, { 'user-agent': safari }, {
+      country: 'CA',
+      city: 'Toronto',
     })
     expect(await (await preview(token, code)).json()).toMatchObject({
       country: 'CA',
       city: 'Toronto',
       user_agent: safari,
     })
-    const long = await openConnect(new Browser(), flow, {
-      'cf-ipcountry': 'C\u0001A',
-      'cf-ipcity': `T\u0085${'o'.repeat(100)}`,
-      'user-agent': 'x'.repeat(300),
+    const long = await openConnect(new Browser(), flow, { 'user-agent': 'x'.repeat(300) }, {
+      country: 'C\u0001A',
+      city: `T\u0085${'o'.repeat(100)}`,
     })
     expect(await (await preview(token, long.code)).json()).toMatchObject({
       country: 'CA',
       city: `T${'o'.repeat(63)}`,
       user_agent: 'x'.repeat(256),
     })
-    const blank = await openConnect(new Browser(), flow, { 'cf-ipcountry': '\u0001', 'user-agent': ' ' })
-    expect(await (await preview(token, blank.code)).json()).toMatchObject({ country: null, user_agent: null })
+    const blank = await openConnect(new Browser(), flow, { 'user-agent': ' ' }, { country: '\u0001' })
+    expect(await (await preview(token, blank.code)).json()).toMatchObject({
+      country: null,
+      city: null,
+      user_agent: null,
+    })
+  })
+
+  it('never from cf-ipcountry or cf-ipcity, which a client can send itself', async () => {
+    const { token } = await signUp()
+    const flow = await startFlow(await registerClient())
+    const forged = { 'cf-ipcountry': 'XX', 'cf-ipcity': 'Nowhere' }
+    const bare = await openConnect(new Browser(), flow, forged)
+    expect(await (await preview(token, bare.code)).json()).toMatchObject({ country: null, city: null })
+    const real = await openConnect(new Browser(), flow, forged, { country: 'CA', city: 'Toronto' })
+    expect(await (await preview(token, real.code)).json()).toMatchObject({ country: 'CA', city: 'Toronto' })
   })
 
   it('as typed: lower case, without the dash', async () => {

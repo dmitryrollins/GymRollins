@@ -79,11 +79,15 @@ export async function startFlow(clientId: string, redirectUri = LOOPBACK, scope 
 export class Browser {
   readonly cookies = new Map<string, string>()
 
-  /** `headers` go beside the cookies: the browser's User-Agent, or the cf-* headers Cloudflare adds. */
-  async get(path: string, headers: Record<string, string> = {}): Promise<Response> {
+  /**
+   * `headers` go beside the cookies: the browser's User-Agent, or any header a client could forge. `cf` is
+   * request.cf, which only Cloudflare sets (the visitor's country and city).
+   */
+  async get(path: string, headers: Record<string, string> = {}, cf?: Record<string, unknown>): Promise<Response> {
     const cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ')
     const res = await call(path, {
       headers: { accept: 'text/html', ...headers, ...(cookie ? { cookie } : {}) },
+      ...(cf ? { cf } : {}),
     })
     for (const set of res.headers.getSetCookie()) {
       const [pair, ...attributes] = set.split(';')
@@ -110,8 +114,9 @@ export async function openConnect(
   browser: Browser,
   flow: Flow,
   headers: Record<string, string> = {},
+  cf?: Record<string, unknown>,
 ): Promise<{ res: Response; html: string; code: string }> {
-  const res = await browser.get(flow.connectUrl, headers)
+  const res = await browser.get(flow.connectUrl, headers, cf)
   const html = await res.text()
   const code = shownCode(html)
   if (code === null) throw new Error(`no code on /connect: ${res.status} ${html}`)
