@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Security
 
 /// The session in the Keychain: one generic-password item holding `StoredSession` as JSON. It is readable after the
@@ -7,6 +8,7 @@ import Security
 public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
     private let service: String
     private let lock = NSLock()
+    private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "keychain")
 
     /// `service` names the item; tests use their own.
     public init(service: String = "com.rollins.gymrollins.api-session") {
@@ -20,11 +22,13 @@ public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
     public func save(_ session: StoredSession) throws {
         let data = try JSONEncoder().encode(session)
         try lock.withLock {
-            SecItemDelete(query as CFDictionary)
-            var item = query
-            item[kSecValueData as String] = data
-            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            let status = SecItemAdd(item as CFDictionary, nil)
+            // Update first, so a failed write keeps the old session; add only when there is none yet.
+            let update = [kSecValueData as String: data,
+                          kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as [String: Any]
+            var status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+            if status == errSecItemNotFound {
+                status = SecItemAdd((query.merging(update) { $1 }) as CFDictionary, nil)
+            }
             guard status == errSecSuccess else { throw KeychainError(status: status) }
         }
     }
@@ -46,8 +50,11 @@ public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
         search[kSecReturnData as String] = true
         search[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
-        guard SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess, let data = result as? Data
-        else { return nil }
+        let status = SecItemCopyMatching(search as CFDictionary, &result)
+        if status != errSecSuccess, status != errSecItemNotFound {
+            Self.log.error("Could not read the session, OSStatus \(status, privacy: .public)")
+        }
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
         return try? JSONDecoder().decode(StoredSession.self, from: data)
     }
 }

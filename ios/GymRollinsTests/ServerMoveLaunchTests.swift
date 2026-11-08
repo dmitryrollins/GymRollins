@@ -7,7 +7,7 @@ import Testing
 
 /// The launch moves the data to the API it talks to, before any session is restored (spec section 4, "Server move").
 @MainActor
-@Suite struct ServerMoveLaunchTests {
+@Suite(.serialized) struct ServerMoveLaunchTests {
     let container: ModelContainer
     let suite = "server-move-launch-\(UUID())"
     let defaults: UserDefaults
@@ -43,5 +43,29 @@ import Testing
         #expect(!sync.isAvailable)
         #expect(store.ownerUserId == owner)
         #expect(store.syncedServer == "http://127.0.0.1:55421")
+    }
+
+    private func storedSession() -> StoredSession { StoredSession(token: "old.sig", userId: UUID(), email: nil) }
+
+    @Test func aMoveForgetsTheSessionTheOldServerGave() throws {
+        defer { defaults.removePersistentDomain(forName: suite); UITestSessionStore.wipe() }
+        UITestSessionStore.wipe()
+        try UITestSessionStore().save(storedSession())
+        store.ownerUserId = UUID()
+        store.syncedServer = "http://127.0.0.1:55421"
+        _ = launch(["-uiTesting", "-uiTestingBackend", "local"])
+        #expect(store.syncedServer == "http://127.0.0.1:9")
+        #expect(UITestSessionStore().load() == nil)
+    }
+
+    @Test func noMoveKeepsTheSession() throws {
+        defer { defaults.removePersistentDomain(forName: suite); UITestSessionStore.wipe() }
+        UITestSessionStore.wipe()
+        let session = storedSession()
+        try UITestSessionStore().save(session)
+        store.ownerUserId = session.userId
+        store.syncedServer = "http://127.0.0.1:9"
+        _ = launch(["-uiTesting", "-uiTestingBackend", "local"])
+        #expect(UITestSessionStore().load() == session)
     }
 }

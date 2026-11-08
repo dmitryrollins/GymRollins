@@ -3367,6 +3367,7 @@ A fresh reviewer reads `git diff HEAD~1`:
 ```swift
 import Foundation
 import GymSync
+import Security
 import Testing
 
 /// The app's session in the Keychain: saved, read back, replaced, and cleared only for the token a 401 answered.
@@ -3396,7 +3397,47 @@ import Testing
             other.clear()
         }
         try store.save(StoredSession(token: "mine", userId: UUID(), email: nil))
+        #expect(store.load() != nil)
         #expect(other.load() == nil)
+    }
+
+    @Test func theItemStaysOnThisDeviceAfterFirstUnlock() throws {
+        let service = "com.rollins.gymrollins.test-attributes-\(UUID().uuidString)"
+        let store = KeychainSessionStore(service: service)
+        defer { store.clear() }
+        try store.save(StoredSession(token: "t", userId: UUID(), email: nil))
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                    kSecAttrAccount as String: "session", kSecReturnAttributes as String: true,
+                                    kSecAttrSynchronizable as String: kSecAttrSynchronizableAny]
+        var result: CFTypeRef?
+        #expect(SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess)
+        let attributes = try #require(result as? [String: Any])
+        #expect(attributes[kSecAttrAccessible as String] as? String == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
+        let sync = attributes[kSecAttrSynchronizable as String]
+        #expect(sync == nil || (sync as? Bool) == false || (sync as? Int) == 0, "never iCloud Keychain")
+    }
+
+    @Test func forgettingTheOldSupabaseSessionDeletesItsItems() throws {
+        let account = "test-legacy-\(UUID().uuidString)"
+        let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                   kSecAttrService as String: LegacySupabaseKeychain.service,
+                                   kSecAttrAccount as String: account, kSecValueData as String: Data("refresh".utf8)]
+        defer { SecItemDelete(item.filter { $0.key != kSecValueData as String } as CFDictionary) }
+        #expect(SecItemAdd(item as CFDictionary, nil) == errSecSuccess)
+        let status = LegacySupabaseKeychain.forget()
+        #expect(status == errSecSuccess)
+        var probe = item
+        probe[kSecValueData as String] = nil
+        #expect(SecItemCopyMatching(probe as CFDictionary, nil) == errSecItemNotFound)
+        #expect(LegacySupabaseKeychain.forget() == errSecItemNotFound, "nothing left is fine")
+    }
+
+    @Test func savingOverAnExistingSessionReplacesItInPlace() throws {
+        defer { store.clear() }
+        let first = StoredSession(token: "t1", userId: UUID(), email: nil)
+        try store.save(first)
+        try store.save(StoredSession(token: "t2", userId: first.userId, email: nil))
+        #expect(store.load()?.token == "t2", "replaced in place")
     }
 }
 ```
@@ -3413,7 +3454,7 @@ import Testing
 
 /// The launch moves the data to the API it talks to, before any session is restored (spec section 4, "Server move").
 @MainActor
-@Suite struct ServerMoveLaunchTests {
+@Suite(.serialized) struct ServerMoveLaunchTests {
     let container: ModelContainer
     let suite = "server-move-launch-\(UUID())"
     let defaults: UserDefaults
@@ -3450,6 +3491,30 @@ import Testing
         #expect(store.ownerUserId == owner)
         #expect(store.syncedServer == "http://127.0.0.1:55421")
     }
+
+    private func storedSession() -> StoredSession { StoredSession(token: "old.sig", userId: UUID(), email: nil) }
+
+    @Test func aMoveForgetsTheSessionTheOldServerGave() throws {
+        defer { defaults.removePersistentDomain(forName: suite); UITestSessionStore.wipe() }
+        UITestSessionStore.wipe()
+        try UITestSessionStore().save(storedSession())
+        store.ownerUserId = UUID()
+        store.syncedServer = "http://127.0.0.1:55421"
+        _ = launch(["-uiTesting", "-uiTestingBackend", "local"])
+        #expect(store.syncedServer == "http://127.0.0.1:9")
+        #expect(UITestSessionStore().load() == nil)
+    }
+
+    @Test func noMoveKeepsTheSession() throws {
+        defer { defaults.removePersistentDomain(forName: suite); UITestSessionStore.wipe() }
+        UITestSessionStore.wipe()
+        let session = storedSession()
+        try UITestSessionStore().save(session)
+        store.ownerUserId = session.userId
+        store.syncedServer = "http://127.0.0.1:9"
+        _ = launch(["-uiTesting", "-uiTestingBackend", "local"])
+        #expect(UITestSessionStore().load() == session)
+    }
 }
 ```
 
@@ -3459,6 +3524,7 @@ import Testing
 
 ```swift
 import Foundation
+import os
 import Security
 
 /// The session in the Keychain: one generic-password item holding `StoredSession` as JSON. It is readable after the
@@ -3467,6 +3533,7 @@ import Security
 public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
     private let service: String
     private let lock = NSLock()
+    private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "keychain")
 
     /// `service` names the item; tests use their own.
     public init(service: String = "com.rollins.gymrollins.api-session") {
@@ -3480,11 +3547,13 @@ public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
     public func save(_ session: StoredSession) throws {
         let data = try JSONEncoder().encode(session)
         try lock.withLock {
-            SecItemDelete(query as CFDictionary)
-            var item = query
-            item[kSecValueData as String] = data
-            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            let status = SecItemAdd(item as CFDictionary, nil)
+            // Update first, so a failed write keeps the old session; add only when there is none yet.
+            let update = [kSecValueData as String: data,
+                          kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as [String: Any]
+            var status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+            if status == errSecItemNotFound {
+                status = SecItemAdd((query.merging(update) { $1 }) as CFDictionary, nil)
+            }
             guard status == errSecSuccess else { throw KeychainError(status: status) }
         }
     }
@@ -3506,8 +3575,11 @@ public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
         search[kSecReturnData as String] = true
         search[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
-        guard SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess, let data = result as? Data
-        else { return nil }
+        let status = SecItemCopyMatching(search as CFDictionary, &result)
+        if status != errSecSuccess, status != errSecItemNotFound {
+            Self.log.error("Could not read the session, OSStatus \(status, privacy: .public)")
+        }
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
         return try? JSONDecoder().decode(StoredSession.self, from: data)
     }
 }
@@ -3515,6 +3587,36 @@ public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
 /// The Keychain refused to store the session.
 public struct KeychainError: Error, Equatable, Sendable {
     public let status: OSStatus
+}
+```
+
+
+> Added after review: the move also deletes the old Supabase Keychain items (`LegacySupabaseKeychain.forget()`, new file
+> `ios/Packages/GymSync/Sources/GymSync/LegacySupabaseKeychain.swift`, below); `save` updates in place before adding;
+> `read` logs unexpected OSStatus values; tests cover the item's accessibility, the legacy delete, and that a move forgets
+> the session while no move keeps it.
+
+```swift
+import Foundation
+import os
+import Security
+
+/// The Keychain items the Supabase SDK left behind. After the server move the refresh token in them means nothing here,
+/// and a Keychain item travels in backups, so the move deletes them.
+public enum LegacySupabaseKeychain {
+    public static let service = "supabase.gotrue.swift"
+    private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "keychain")
+
+    /// Deletes every generic-password item under the Supabase SDK's service. Returns the status for tests; anything but
+    /// success or "none found" is logged (the status only, never an item's contents).
+    @discardableResult public static func forget() -> OSStatus {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess, status != errSecItemNotFound {
+            log.error("Could not delete the old Supabase session, OSStatus \(status, privacy: .public)")
+        }
+        return status
+    }
 }
 ```
 
@@ -3569,6 +3671,7 @@ extension SyncCoordinator {
         do {
             if try store.moveToServer(config.origin) {
                 sessions.clear() // a session the old server gave means nothing here
+                LegacySupabaseKeychain.forget() // nor does the Supabase refresh token; it would travel in backups
                 log.notice("Moved this phone's data to \(config.origin, privacy: .public); it uploads after the next sign-in")
             }
             return true

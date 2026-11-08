@@ -44,6 +44,7 @@ extension SyncCoordinator {
         do {
             if try store.moveToServer(config.origin) {
                 sessions.clear() // a session the old server gave means nothing here
+                LegacySupabaseKeychain.forget() // nor does the Supabase refresh token; it would travel in backups
                 log.notice("Moved this phone's data to \(config.origin, privacy: .public); it uploads after the next sign-in")
             }
             return true
