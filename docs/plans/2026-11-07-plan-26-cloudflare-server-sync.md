@@ -1449,6 +1449,8 @@ describe('normalizeTimestamp', () => {
     ['2026-11-07T00:30:00-01', '2026-11-07T01:30:00.000000Z'],
     ['2026-01-01T00:00:00.000001-00:30', '2026-01-01T00:30:00.000001Z'],
     ['1969-12-31T23:59:59.999999Z', '1969-12-31T23:59:59.999999Z'],
+    ['0050-01-01T00:00:00Z', '0050-01-01T00:00:00.000000Z'],
+    ['0001-01-01T00:00:00+01', '0000-12-31T23:00:00.000000Z'],
   ])('reads %s as %s', (raw, stored) => {
     expect(normalizeTimestamp(raw)).toBe(stored)
   })
@@ -1509,6 +1511,7 @@ describe('storedValue', () => {
     expect(stored(col('int'), 3)).toBe(3)
     expect(() => stored(col('int'), 2.5)).toThrow(RowError)
     expect(() => stored(col('int'), '3')).toThrow(RowError)
+    expect(() => stored(col('int'), 2 ** 60)).toThrow(RowError)
     expect(stored(col('real'), 2.5)).toBe(2.5)
     expect(() => stored(col('real'), '2.5')).toThrow(RowError)
   })
@@ -1604,7 +1607,10 @@ export function normalizeTimestamp(raw: string): string | null {
   const offset = offsetSeconds(m[8])
   if (offset === null) return null
   const micros = BigInt(`${m[7] ?? ''}000000`.slice(0, 6))
-  const seconds = BigInt(Date.UTC(year, month - 1, day, hour, minute, second) / 1000) - BigInt(offset)
+  const civil = new Date(0)
+  civil.setUTCFullYear(year, month - 1, day)
+  civil.setUTCHours(hour, minute, second, 0)
+  const seconds = BigInt(civil.getTime() / 1000) - BigInt(offset)
   return format(seconds * 1_000_000n + micros)
 }
 
@@ -1683,7 +1689,7 @@ function convert(kind: Kind, raw: unknown): unknown {
     case 'text':
       return typeof raw === 'string' ? raw : undefined
     case 'int':
-      return Number.isInteger(raw) ? raw : undefined
+      return Number.isSafeInteger(raw) ? raw : undefined
     case 'real':
       return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
     case 'bool':
@@ -1725,7 +1731,7 @@ export function wireRow(columns: readonly Column[], row: Record<string, unknown>
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  6 passed (6)`, `Tests  52 passed (52)`.
+Expected: `Test Files  6 passed (6)`, `Tests  54 passed (54)`.
 
 - [ ] **Step 6: Commit**
 
@@ -2323,7 +2329,7 @@ export default app
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
 Expected:
-- `Test Files  7 passed (7)` and `Tests  101 passed (101)`.
+- `Test Files  7 passed (7)` and `Tests  103 passed (103)`.
 - `sync-rows.test.ts` adds 49 tests: 35 for the seven tables and 14 more.
 
 - [ ] **Step 7: Commit**
@@ -2445,7 +2451,7 @@ and add these two fields to the `bodyweight` entry:
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  8 passed (8)`, `Tests  105 passed (105)`.
+Expected: `Test Files  8 passed (8)`, `Tests  107 passed (107)`.
 
 - [ ] **Step 5: Commit**
 
@@ -2790,7 +2796,7 @@ export async function entryListings(
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  9 passed (9)`, `Tests  115 passed (115)`.
+Expected: `Test Files  9 passed (9)`, `Tests  117 passed (117)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3317,7 +3323,7 @@ syncRoutes.get('/workouts/:id', async (c) => c.json(await fetchWorkout(c.env.DB,
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  10 passed (10)`, `Tests  129 passed (129)`.
+Expected: `Test Files  10 passed (10)`, `Tests  131 passed (131)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3550,7 +3556,7 @@ v1.route('/account', accountRoutes)
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  11 passed (11)`, `Tests  132 passed (132)`.
+Expected: `Test Files  11 passed (11)`, `Tests  134 passed (134)`.
 
 - [ ] **Step 5: Commit**
 
@@ -3676,7 +3682,7 @@ node scripts/gen-exercise-seed.mjs --check && node scripts/gen-equipment-seed.mj
 ```
 
 Expected:
-- `Test Files  11 passed (11)`, `Tests  132 passed (132)`.
+- `Test Files  11 passed (11)`, `Tests  134 passed (134)`.
 - The seed tests: `# pass 5`, and both checks match.
 - The Deno suite is unchanged: `159 passed … 1 ignored`. This plan doesn't touch it.
 
