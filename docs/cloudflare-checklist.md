@@ -83,6 +83,9 @@ openssl rand -base64 48 | npx wrangler secret put BETTER_AUTH_SECRET    # 48 ran
 ```
 
 - [ ] If wrangler offers to create the Worker for the secret, accept: the deploy in step 4 fills it.
+- [ ] `git check-ignore -q server/.dev.vars && echo ignored` prints `ignored`: the local secrets file never reaches git.
+- [ ] If the secret may have leaked, put a new one with the same command. Expect to sign in again, in the app and in
+      Claude.
 - [ ] `ALLOW_PASSWORD_AUTH` stays `"0"` in `server/wrangler.jsonc`, and no variable in the dashboard overrides it.
       Email and password sign-in is for local tests only.
 - [ ] `APPLE_BUNDLE_ID` stays `com.rollins.gymrollins`: Apple's id tokens carry it as their audience.
@@ -93,6 +96,8 @@ openssl rand -base64 48 | npx wrangler secret put BETTER_AUTH_SECRET    # 48 ran
 
 **Order.** The Worker is deployed before the app build that points at it, or with it, never after. The app relies on
 `404 no_such_proposal` for a missing proposal, and an older server answers differently.
+
+On every deploy after the first, note a Time Travel bookmark first (section 7), so a migration can be undone.
 
 ```bash
 npx wrangler d1 migrations apply gymrollins --remote
@@ -115,6 +120,12 @@ The opener's place on the approve sheet comes from `request.cf`, which Cloudflar
 setting or header is needed, and a `cf-ipcity` header a client sends is ignored (the code never reads client headers). Section 11 checks the place.
 
 If the metadata names `http://127.0.0.1:8787`, the deploy missed `--var PUBLIC_BASE_URL`. Deploy again with it.
+
+**If a deploy goes wrong** (owner's approval):
+- `npx wrangler deployments list` shows the versions, and `npx wrangler rollback <version-id>` puts an earlier one back.
+- A rollback leaves D1 as it is. If the bad deploy came with a migration the old Worker can't read, restore the
+  bookmark noted before it (section 7). That also undoes every write made since.
+- Hold back the app build that needed the new Worker (the order above) until the Worker it needs is back.
 
 ## 5. Usage caps (decide before step 2; build them in a plan of their own)
 
@@ -150,6 +161,8 @@ If the metadata names `http://127.0.0.1:8787`, the deploy missed `--var PUBLIC_B
 - [ ] To go back to a bookmark: `npx wrangler d1 time-travel restore gymrollins --bookmark=<bookmark>`.
 - [ ] After the move, export a copy outside the repo, because it holds the owner's personal data:
       `npx wrangler d1 export gymrollins --remote --output <a folder outside the repo>/gymrollins-$(date +%Y%m%d).sql`.
+- [ ] Time Travel covers D1 only. R2 has no way back: a deleted photo is gone. The exercise photos can be uploaded
+      again (section 8); private gym photos can't.
 
 ## 8. Exercise photos in the deployed bucket (owner's approval)
 

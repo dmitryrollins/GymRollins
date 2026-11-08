@@ -73,7 +73,7 @@ whole repo; every CRITICAL/HIGH/P0–P2 finding was fixed directly on this branc
 (notably `3c40fac` CSV formula-injection neutralization + 25 MB import cap, `71a5880` sign-out
 data-loss warning + Claude-disconnect confirmation, `63b6d5c` calendar-day goal dates,
 `e5aa5e2` Bar & Plates edit precision, `ebfb991` dropped the unused `ComingSoonView` dead code).
-No MEDIUM/LOW findings needed a `docs/reviews/backlog.md` — the reviews didn't surface any that
+No MEDIUM/LOW findings needed a separate backlog file — the reviews didn't surface any that
 weren't folded into the fixes above.
 
 **Performance, device measurements** (`docs/testing/performance.md`):
