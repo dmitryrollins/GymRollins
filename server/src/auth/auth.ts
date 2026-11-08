@@ -6,6 +6,22 @@ import type { Env } from '../env.ts'
 export const SESSION_EXPIRES_IN = 60 * 60 * 24 * 60
 export const SESSION_UPDATE_AGE = 60 * 60 * 24
 
+/** The hosts of a Worker on this machine (wrangler dev, the tests). */
+const LOCAL_HOSTS: ReadonlySet<string> = new Set(['127.0.0.1', 'localhost'])
+
+/**
+ * Email and password sign-in: ALLOW_PASSWORD_AUTH is "1" and the Worker is reached on this machine. A deployed Worker
+ * never takes passwords, even if the var is copied there by mistake.
+ */
+export function passwordAuthAllowed(env: Env): boolean {
+  if (env.ALLOW_PASSWORD_AUTH !== '1') return false
+  try {
+    return LOCAL_HOSTS.has(new URL(env.PUBLIC_BASE_URL).hostname)
+  } catch {
+    return false
+  }
+}
+
 /** Built per request, because the D1 binding only exists on `env`. Better Auth recognises D1 by its shape. */
 export function createAuth(env: Env) {
   return betterAuth({
@@ -13,7 +29,7 @@ export function createAuth(env: Env) {
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.PUBLIC_BASE_URL,
     basePath: '/api/auth',
-    emailAndPassword: { enabled: env.ALLOW_PASSWORD_AUTH === '1' },
+    emailAndPassword: { enabled: passwordAuthAllowed(env) },
     session: { expiresIn: SESSION_EXPIRES_IN, updateAge: SESSION_UPDATE_AGE },
     advanced: { database: { generateId: () => crypto.randomUUID() } },
     socialProviders: {

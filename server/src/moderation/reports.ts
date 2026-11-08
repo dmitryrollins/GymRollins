@@ -11,9 +11,15 @@ import { publicTarget, type Target, TARGET_TABLE } from './targets.ts'
 /** Unresolved reports from this many existing accounts hide a target until an admin decides. */
 export const FLAG_REPORTS = 3
 
-const FILE_REPORT = `INSERT INTO reports (id, target_type, target_id, reporter_id, reason, note, created_at)
+/**
+ * A report on a public target in `table` (?3) that isn't removed. The insert checks the target itself, so one removed
+ * after the first read gets no report.
+ */
+const fileReportSql = (table: string) => `INSERT INTO reports (id, target_type, target_id, reporter_id, reason, note,
+    created_at)
 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ${NOW_SQL}
 WHERE (SELECT count(*) FROM reports WHERE reporter_id = ?4 AND created_at > ${DAY_AGO_SQL}) < ${DomainLimits.dailyReports}
+  AND EXISTS (SELECT 1 FROM ${table} WHERE id = ?3 AND visibility = 'public' AND status <> 'removed')
 ON CONFLICT DO NOTHING`
 
 /**
@@ -45,13 +51,17 @@ export async function reportContent(
   if (typeof reason !== 'string') throw badRequest('reason must be text.')
   const note = trimmedOrNull(textOrNull(rawNote, 'note'))
   requireCleanText(note, 'note', true)
+  const table = TARGET_TABLE[target.type]
   const [, , mine] = await db.batch([
-    db.prepare(FILE_REPORT).bind(crypto.randomUUID(), target.type, target.id, me, reason, note),
-    db.prepare(flagSql(TARGET_TABLE[target.type])).bind(target.id, target.type),
+    db.prepare(fileReportSql(table)).bind(crypto.randomUUID(), target.type, target.id, me, reason, note),
+    db.prepare(flagSql(table)).bind(target.id, target.type),
     db.prepare(MY_REPORT).bind(target.type, target.id, me),
   ])
-  if (mine.results.length === 0) throw Refusals.dailyLimit()
-  return { status: 'reported' }
+  if (mine.results.length > 0) return { status: 'reported' }
+  // Nothing written: the target was removed since the read above (publicTarget throws if it is gone), or the day's
+  // 20 are used up.
+  if ((await publicTarget(db, target)).status === 'removed') throw Refusals.unknownTarget()
+  throw Refusals.dailyLimit()
 }
 
 const BLOCK = `INSERT INTO user_blocks (blocker_id, blocked_id, created_at)

@@ -37,6 +37,16 @@ describe('storedValue', () => {
     expect(() => stored(col('json'), 'text')).toThrow(RowError)
   })
 
+  it('refuses JSON holding a string or key with U+0000 or half of a UTF-16 pair, at any depth', () => {
+    expect(stored(col('json'), { n: 'Push day 💪', list: ['a', { deep: 'b' }] })).toBe(
+      '{"n":"Push day 💪","list":["a",{"deep":"b"}]}',
+    )
+    const bad = [{ n: 'a\uD800' }, ['ok', ['\uDC00']], { deep: { er: 'a\u0000b' } }, { ['k\uD800']: 1 }, { ['k\u0000']: 1 }]
+    for (const raw of bad) {
+      expect(() => stored(col('json'), raw), JSON.stringify(raw)).toThrow('rows[0].x is not a valid json')
+    }
+  })
+
   it('normalises timestamps, and takes dates as real YYYY-MM-DD days only', () => {
     expect(stored(col('ts'), '2026-11-07T10:00:00Z')).toBe('2026-11-07T10:00:00.000000Z')
     expect(() => stored(col('ts'), '2026-11-07')).toThrow('rows[0].x is not a valid ts')

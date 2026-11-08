@@ -142,6 +142,23 @@ describe('moderating', () => {
     expect(await answer(await report(reporters[0].token, 'listing', listing))).toEqual({ status: 'already' })
   })
 
+  it.each(['gym', 'listing'])('resolves the reports of a %s it restores while still active', async (type) => {
+    const author = await signUp()
+    const reporter = await signUp()
+    const boss = await admin()
+    const { gym, listing } = await reviewGym(author)
+    const id = type === 'gym' ? gym : listing
+    await answer(await report(reporter.token, type, id))
+    expect(await queueFor(boss.token, [id])).toHaveLength(1)
+    expect((await answer(await moderate(boss.token, type, id, 'restore'))).status).toBe('active')
+    const open = await env.DB.prepare('SELECT count(*) AS n FROM reports WHERE target_id = ?1 AND resolved_at IS NULL')
+      .bind(id).first<{ n: number }>()
+    expect(open!.n).toBe(0)
+    expect(await queueFor(boss.token, [id])).toEqual([])
+    const table = type === 'gym' ? 'gyms' : 'gym_equipment'
+    expect(await env.DB.prepare(`SELECT status FROM ${table} WHERE id = ?1`).bind(id).first()).toEqual({ status: 'active' })
+  })
+
   it('removes a listing and answers its photo; the name stays until the photo is deleted, and a retry answers it',
     async () => {
       const author = await signUp()

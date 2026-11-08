@@ -69,4 +69,11 @@ describe('trimming and folding', () => {
     expect(foldKey('СПОРТ')).toBe('спорт')
     expect(foldKey(null)).toBeNull()
   })
+
+  it("folds Greek final sigma as Postgres's lower() did: ΟΔΟΣ and οδοσ are one key", () => {
+    expect(foldKey('ΟΔΟΣ')).toBe('οδοσ')
+    expect(foldKey('οδος')).toBe('οδοσ')
+    expect(foldKey('ΟΔΟΣ')).toBe(foldKey('οδοσ'))
+    expect(foldKey('Σ Σ')).toBe('σ σ')
+  })
 })

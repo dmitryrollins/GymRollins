@@ -207,6 +207,18 @@ describe('the items of a kind', () => {
     expect(itemIn(await itemsOf(a.token, 'medicine-ball'), generic)).toMatchObject({ photo_path: null, gym_count: 0 })
   })
 
+  it('leave the list once the only gym that lists one is removed, except for its creator', async () => {
+    const a = await signUp()
+    const b = await signUp()
+    const item = await insertItem({ brand: 'Acme', model: 'K4', createdBy: a.userId, kind: 'kettlebells' })
+    const gym = await insertGym({ visibility: 'public', createdBy: a.userId })
+    await insertListing({ gym, item, visibility: 'public', addedBy: a.userId })
+    expect(itemIn(await itemsOf(b.token, 'kettlebells'), item)).toMatchObject({ gym_count: 1 })
+    await setStatus('gyms', gym, 'removed')
+    expect(itemIn(await itemsOf(b.token, 'kettlebells'), item)).toBeUndefined()
+    expect(itemIn(await itemsOf(a.token, 'kettlebells'), item)).toMatchObject({ is_mine: true, gym_count: 0 })
+  })
+
   it('count the distinct gyms that list one', async () => {
     const a = await signUp()
     const item = await insertItem({ brand: 'Acme', model: 'K3', createdBy: a.userId, kind: 'kettlebells' })

@@ -199,6 +199,29 @@ export async function unblocksToday(userId: string, count: number) {
   }
 }
 
+/**
+ * `db`, with `change` run just before its first batch: another request landing between a function's check and its
+ * write, made deterministic.
+ */
+export function changedBeforeBatch(db: D1Database, change: () => Promise<unknown>): D1Database {
+  let pending = true
+  return new Proxy(db, {
+    get(target, key) {
+      if (key === 'batch') {
+        return async (statements: D1PreparedStatement[]) => {
+          if (pending) {
+            pending = false
+            await change()
+          }
+          return target.batch(statements)
+        }
+      }
+      const value: unknown = Reflect.get(target, key, target)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+}
+
 /** `count` photos the account uploaded just now (rows only), towards the daily limit. */
 export async function photosToday(owner: string, count: number, bucket: 'gym-photos' | 'gym-photos-private') {
   const names = Array.from({ length: count }, () => `${crypto.randomUUID()}.jpg`)

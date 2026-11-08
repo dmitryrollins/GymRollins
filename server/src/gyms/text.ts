@@ -53,5 +53,9 @@ export function trimmedOrNull(text: string | null | undefined): string | null {
   return trimmed === '' ? null : trimmed
 }
 
-/** The catalogue's identity key for a brand or model (lower() as Postgres did it, for every script). */
-export const foldKey = (text: string | null) => (text === null ? null : text.toLowerCase())
+/**
+ * The catalogue's identity key for a brand or model (lower() as Postgres did it, for every script). JavaScript lowers
+ * a word-final Σ to ς, which Postgres didn't, so ς becomes σ: "ΟΔΟΣ" and "οδοσ" are one key.
+ */
+export const foldKey = (text: string | null): string | null =>
+  text === null ? null : text.toLowerCase().replaceAll('ς', 'σ')

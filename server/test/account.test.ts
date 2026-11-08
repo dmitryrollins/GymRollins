@@ -1,12 +1,14 @@
 import { env } from 'cloudflare:workers'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import {
   block, confirm, genericItem, insertGym, insertItem, insertListing, insertPhoto, insertReport, JPEG, makeAdmin,
 } from './gym-fixtures.ts'
 import { ApiError } from '../src/http/errors.ts'
 import { deleteAccount } from '../src/account/delete.ts'
 import { request, signUp, upload } from './helpers.ts'
-import { SAMPLES, workoutSample } from './samples.ts'
+import { SAMPLES, sampleNeeds, workoutSample } from './samples.ts'
+
+beforeAll(sampleNeeds)
 
 /** Every column that names an account. After the deletion, none may name it. */
 const OWNED: readonly [string, string][] = [

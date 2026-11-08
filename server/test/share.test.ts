@@ -1,8 +1,9 @@
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
+import { confirmListing } from '../src/gyms/share.ts'
 import {
-  agedRows, block, confirm, genericItem, gymsCreatedToday, insertGym, insertListing, listingsSharedToday, setStatus,
-  uploadedPhoto,
+  agedRows, block, changedBeforeBatch, confirm, genericItem, gymsCreatedToday, insertGym, insertItem, insertListing,
+  insertUser, listingsSharedToday, setStatus, uploadedPhoto,
 } from './gym-fixtures.ts'
 import { request, signUp } from './helpers.ts'
 
@@ -110,6 +111,16 @@ describe('share a listing', () => {
     }
     const items = await env.DB.prepare("SELECT brand FROM equipment_items WHERE brand_key = 'ärger fitness'").all()
     expect(items.results).toEqual([{ brand: 'Ärger Fitness' }])
+  })
+
+  it('finds a Greek brand whatever its sigma: ΟΔΟΣ and οδοσ are one item', async () => {
+    const a = await signUp()
+    const gym = await gymFor(a.token, { maps_place_id: place(), name: 'Gym' })
+    for (const brand of ['ΟΔΟΣ', 'οδοσ', 'Οδος']) {
+      await answer(await share(a.token, shareBody(gym, { brand, model: 'ΣΤΑΣΙΣ', force_new: true })))
+    }
+    const items = await env.DB.prepare("SELECT brand, model_key FROM equipment_items WHERE brand_key = 'οδοσ'").all()
+    expect(items.results).toEqual([{ brand: 'ΟΔΟΣ', model_key: 'στασισ' }])
   })
 
   it("leaves blocked authors' listings out of the duplicates", async () => {
@@ -242,4 +253,33 @@ describe('confirm a listing', () => {
     expect((await refusalOf(await confirmOf(b.token, listings[100]))).code).toBe('daily_limit')
     expect(await answer(await confirmOf(b.token, listings[0]))).toEqual({ confirm_count: 1 })
   })
+
+  it.each([
+    ['the listing is flagged', (l: Raced) => setStatus('gym_equipment', l.listing, 'flagged')],
+    ['the listing is removed', (l: Raced) => setStatus('gym_equipment', l.listing, 'removed')],
+    ['the gym is removed', (l: Raced) => setStatus('gyms', l.gym, 'removed')],
+    ['the item is removed', (l: Raced) => setStatus('equipment_items', l.item, 'removed')],
+    ['the author is blocked', (l: Raced) => block(l.me, l.author)],
+  ])('writes nothing when %s between the check and the write, and answers unknown_listing', async (_, change) => {
+    const author = await insertUser()
+    const me = await insertUser()
+    const gym = await insertGym({ visibility: 'public', createdBy: author })
+    const item = await insertItem({ brand: `Race ${crypto.randomUUID()}`, model: 'R1', createdBy: author })
+    const listing = await insertListing({ gym, item, visibility: 'public', addedBy: author })
+    const raced = changedBeforeBatch(env.DB, () => change({ author, me, gym, item, listing }))
+    await expect(confirmListing(raced, me, listing)).rejects.toMatchObject({ code: 'unknown_listing' })
+    const after = await env.DB.prepare(
+      'SELECT confirm_count, (SELECT count(*) FROM equipment_confirmations WHERE listing_id = ?1) AS n ' +
+        'FROM gym_equipment WHERE id = ?1',
+    ).bind(listing).first()
+    expect(after).toEqual({ confirm_count: 0, n: 0 })
+  })
 })
+
+interface Raced {
+  readonly author: string
+  readonly me: string
+  readonly gym: string
+  readonly item: string
+  readonly listing: string
+}

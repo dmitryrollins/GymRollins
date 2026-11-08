@@ -202,6 +202,38 @@ describe('private listings', () => {
     expect((await push(token, 'gym-listings', [{ ...base, id: appUUID() }])).status).toBe(200)
   })
 
+  it("don't count tombstones, and refuse reviving past the cap without reviving any", async () => {
+    const { token, userId, gymId } = await withGym()
+    const base = await listingRow(gymId)
+    const live = Array.from({ length: 1000 }, () => ({ ...base, id: appUUID() }))
+    const tombstones = Array.from({ length: 5 }, () => ({ ...base, id: appUUID(), deleted_at: T1 }))
+    expect((await push(token, 'gym-listings', live.slice(0, 500))).status).toBe(200)
+    expect((await push(token, 'gym-listings', live.slice(500))).status).toBe(200)
+    expect((await push(token, 'gym-listings', tombstones)).status).toBe(200)
+    const revived = tombstones.slice(0, 3).map((l) => ({ ...l, deleted_at: null, client_updated_at: T2 }))
+    expect(await refusal(await push(token, 'gym-listings', revived))).toEqual({
+      code: 'too_many_listings', message: "You've reached the limit of equipment on one account.",
+    })
+    const liveCount = 'SELECT count(*) AS n FROM gym_equipment WHERE owner_id = ?1 AND deleted_at IS NULL'
+    expect(await count(liveCount, userId)).toBe(1000)
+    const freed = live.slice(0, 3).map((l) => ({ ...l, deleted_at: T2, client_updated_at: T2 }))
+    expect((await push(token, 'gym-listings', freed)).status).toBe(200)
+    expect((await push(token, 'gym-listings', revived)).status).toBe(200)
+    expect(await count(liveCount, userId)).toBe(1000)
+  })
+
+  it('refuse a second listing naming a photo another listing holds, in a later push or the same one', async () => {
+    const { token, userId, gymId } = await withGym()
+    const photo = await uploadedPhoto(userId, 'gym-photos-private')
+    expect((await push(token, 'gym-listings', [await listingRow(gymId, { photo_path: photo })])).status).toBe(200)
+    const second = await refusal(await push(token, 'gym-listings', [await listingRow(gymId, { photo_path: photo })]))
+    expect(second.code).toBe('row_rejected')
+    const other = await uploadedPhoto(userId, 'gym-photos-private')
+    const both = [await listingRow(gymId, { photo_path: other }), await listingRow(gymId, { photo_path: other })]
+    expect((await refusal(await push(token, 'gym-listings', both))).code).toBe('row_rejected')
+    expect(await count('SELECT count(*) AS n FROM gym_equipment WHERE photo_path IN (?1, ?2)', photo, other)).toBe(1)
+  })
+
   it('refuse hidden characters in notes, brand and model, and a tab even in notes', async () => {
     const { token, gymId } = await withGym()
     for (const [column, value] of [['private_brand', 'Acme\u202E'], ['private_model', '\u{F0000}'], ['notes', 'a\tb']]) {

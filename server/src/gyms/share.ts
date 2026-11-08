@@ -226,17 +226,22 @@ async function whyNotShared(db: D1Database, me: string, input: ShareInput): Prom
 
 // ---- confirm_listing ----
 
-/** A public listing that is active under an active gym and item, by an author the caller (?2) hasn't blocked. */
-const CONFIRMABLE = `SELECT e.added_by, e.confirm_count FROM gym_equipment e
-WHERE e.id = ?1 AND e.visibility = 'public' AND e.status = 'active'
+/**
+ * A public listing (?1) that is active under an active gym and item, by an author the caller (?2) hasn't blocked. The
+ * confirm's insert repeats it, so a listing removed or an author blocked after the first read gets nothing written.
+ */
+const CONFIRMABLE_WHERE = `e.id = ?1 AND e.visibility = 'public' AND e.status = 'active'
   AND EXISTS (SELECT 1 FROM gyms g WHERE g.id = e.gym_id AND g.status = 'active')
   AND EXISTS (SELECT 1 FROM equipment_items i WHERE i.id = e.item_id AND i.status = 'active')
   AND NOT ${blockedAuthor('e.added_by', '?2')}`
+
+const CONFIRMABLE = `SELECT e.added_by, e.confirm_count FROM gym_equipment e WHERE ${CONFIRMABLE_WHERE}`
 
 const CONFIRM = `INSERT INTO equipment_confirmations (listing_id, user_id, created_at)
 SELECT ?1, ?2, ${NOW_SQL}
 WHERE (SELECT count(*) FROM equipment_confirmations WHERE user_id = ?2
   AND created_at > ${DAY_AGO_SQL}) < ${DomainLimits.dailyConfirmations}
+  AND EXISTS (SELECT 1 FROM gym_equipment e WHERE ${CONFIRMABLE_WHERE})
 ON CONFLICT DO NOTHING`
 
 /** gym_equipment_count_confirmations, which was a trigger; updated_at moves as set_updated_at moved it. */
@@ -245,9 +250,17 @@ const RECOUNT = `UPDATE gym_equipment SET
   updated_at = ${laterStamp('gym_equipment.updated_at', NOW_SQL)}
 WHERE id = ?1 AND confirm_count <> (SELECT count(*) FROM equipment_confirmations WHERE listing_id = ?1)`
 
+/** The count, whether the caller's confirmation is there, and, when it isn't, whether the listing still takes one. */
 const AFTER_CONFIRM = `SELECT confirm_count,
-  EXISTS (SELECT 1 FROM equipment_confirmations WHERE listing_id = ?1 AND user_id = ?2) AS confirmed
+  EXISTS (SELECT 1 FROM equipment_confirmations WHERE listing_id = ?1 AND user_id = ?2) AS confirmed,
+  EXISTS (SELECT 1 FROM gym_equipment e WHERE ${CONFIRMABLE_WHERE}) AS confirmable
 FROM gym_equipment WHERE id = ?1`
+
+interface AfterConfirm {
+  readonly confirm_count: number
+  readonly confirmed: number
+  readonly confirmable: number
+}
 
 /** "Yes, that's it (+1)". Idempotent; the author's own listing already counts for them. Answers the count. */
 export async function confirmListing(db: D1Database, me: string, listingId: string): Promise<number> {
@@ -260,7 +273,9 @@ export async function confirmListing(db: D1Database, me: string, listingId: stri
     db.prepare(RECOUNT).bind(listingId),
     db.prepare(AFTER_CONFIRM).bind(listingId, me),
   ])
-  const row = after.results[0] as { confirm_count: number; confirmed: number }
-  if (row.confirmed !== 1) throw Refusals.dailyLimit()
-  return row.confirm_count
+  const row = after.results[0] as AfterConfirm | undefined
+  if (row?.confirmed === 1) return row.confirm_count
+  // Nothing written: the listing stopped taking confirmations since the read above, or the day's 100 are used up.
+  if (row?.confirmable !== 1) throw Refusals.unknownListing()
+  throw Refusals.dailyLimit()
 }

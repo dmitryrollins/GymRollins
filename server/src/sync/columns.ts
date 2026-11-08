@@ -39,6 +39,26 @@ const UNSTORABLE = /\u0000|[\uD800-\uDFFF]/u
 /** Text D1 stores as it was sent. */
 export const isStorableText = (text: string) => !UNSTORABLE.test(text)
 
+/**
+ * Every string and key in a JSON value is storable text: JSON.stringify writes half a pair as \ud800, which D1 keeps,
+ * and the app's JSONDecoder then refuses the whole row. Walked with a stack, so deep nesting can't overflow it.
+ */
+export function isStorableJson(value: unknown): boolean {
+  const pending: unknown[] = [value]
+  while (pending.length > 0) {
+    const next = pending.pop()
+    if (typeof next === 'string') {
+      if (!isStorableText(next)) return false
+    } else if (typeof next === 'object' && next !== null) {
+      for (const [key, inner] of Object.entries(next)) {
+        if (!Array.isArray(next) && !isStorableText(key)) return false
+        pending.push(inner)
+      }
+    }
+  }
+  return true
+}
+
 /** `raw`, a value from the app's JSON, as D1 stores it; throws RowError naming `label.column` when it doesn't fit. */
 export function storedValue(column: Column, raw: unknown, label: string): unknown {
   if (raw === undefined || raw === null) {
@@ -62,7 +82,7 @@ function convert(kind: Kind, raw: unknown): unknown {
     case 'bool':
       return typeof raw === 'boolean' ? (raw ? 1 : 0) : undefined
     case 'json':
-      return typeof raw === 'object' ? JSON.stringify(raw) : undefined
+      return typeof raw === 'object' && isStorableJson(raw) ? JSON.stringify(raw) : undefined
     case 'ts':
       return typeof raw === 'string' ? (normalizeTimestamp(raw) ?? undefined) : undefined
     case 'date':

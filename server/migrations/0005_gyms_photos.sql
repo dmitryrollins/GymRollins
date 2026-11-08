@@ -14,6 +14,11 @@ CREATE UNIQUE INDEX equipment_items_identity
 -- The row itself is left out of the count, so an upsert of a live row adds nothing. D1 runs one statement at a time,
 -- and a trigger's count sees the rows its statement wrote before, so the cap holds without a lock. RAISE fails the whole
 -- statement; the server answers 422 with the message as the code (server/src/http/errors.ts).
+-- Each count reads an owner's live rows only, through these partial indexes: the owner_updated indexes hold tombstones
+-- too, and every pushed row runs its trigger, so a long history would make each push read all of it. A count's WHERE
+-- keeps `deleted_at IS NULL` as written here, or SQLite can't use them (test/schema.test.ts checks the plan).
+CREATE INDEX gyms_owner_live ON gyms (owner_id, id) WHERE deleted_at IS NULL;
+CREATE INDEX gym_equipment_owner_live ON gym_equipment (owner_id, id) WHERE deleted_at IS NULL;
 CREATE TRIGGER gyms_private_cap BEFORE INSERT ON gyms
   WHEN NEW.visibility = 'private' AND NEW.deleted_at IS NULL
     AND (SELECT count(*) FROM gyms WHERE owner_id = NEW.owner_id AND deleted_at IS NULL AND id <> NEW.id) >= 100

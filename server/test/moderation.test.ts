@@ -1,7 +1,9 @@
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
+import { reportContent } from '../src/moderation/reports.ts'
 import {
-  agedRows, blocksToday, DAYS_AGO, genericItem, insertGym, insertListing, reportsToday, setStatus, unblocksToday,
+  agedRows, blocksToday, changedBeforeBatch, DAYS_AGO, genericItem, insertGym, insertListing, insertUser, reportsToday,
+  setStatus, unblocksToday,
 } from './gym-fixtures.ts'
 import { request, signUp } from './helpers.ts'
 
@@ -123,6 +125,19 @@ describe('reports', () => {
     await agedRows('reports', 'reporter_id', b.userId)
     await answer(await report(b.token, (await shared(author.userId)).target))
   })
+
+  it.each(['gym', 'listing'] as const)(
+    'store nothing on a %s removed between the check and the write, and answer unknown_target',
+    async (type) => {
+      const author = await insertUser()
+      const me = await insertUser()
+      const { gym, listing } = await shared(author)
+      const id = type === 'gym' ? gym : listing
+      const raced = changedBeforeBatch(env.DB, () => setStatus(type === 'gym' ? 'gyms' : 'gym_equipment', id, 'removed'))
+      await expect(reportContent(raced, me, { type, id }, 'spam', null)).rejects.toMatchObject({ code: 'unknown_target' })
+      expect(await count('SELECT count(*) AS n FROM reports WHERE target_id = ?1', id)).toBe(0)
+    },
+  )
 })
 
 describe('blocks', () => {

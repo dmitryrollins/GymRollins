@@ -1,11 +1,13 @@
 import { env } from 'cloudflare:workers'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import app from '../src/index.ts'
 import { storedRow } from '../src/sync/columns.ts'
 import { ENTITIES } from '../src/sync/entities.ts'
 import { upsertSql } from '../src/sync/table-sync.ts'
 import { ORIGIN, request, signUp } from './helpers.ts'
-import { BAD, KEY, pulled, type Row, SAMPLES, T0, T1, T2 } from './samples.ts'
+import { BAD, KEY, pulled, type Row, SAMPLES, sampleNeeds, T0, T1, T2 } from './samples.ts'
+
+beforeAll(sampleNeeds)
 
 interface Ack {
   id: string
@@ -170,6 +172,23 @@ describe('the sync routes', () => {
     expect(await res.json()).toMatchObject({ error: { code: 'signed_out' } })
   })
 
+  it("ignore a session cookie next to a bearer token that fails its signature (Better Auth's cookie fallback)",
+    async () => {
+      const signedUp = await request('POST', '/api/auth/sign-up/email', {
+        body: { email: `c-${crypto.randomUUID()}@test.local`, password: 'correct-horse-battery', name: 'Cookie' },
+      })
+      const cookie = signedUp.headers.get('set-cookie')!.split(';')[0]!
+      const token = signedUp.headers.get('set-auth-token')!
+      const headers = (authorization: string) => ({ cookie, authorization })
+      for (const bearer of ['Bearer x.y', 'Bearer not-a-token', `Bearer ${token.split('.')[0]}.forged`]) {
+        const res = await app.fetch(new Request(`${ORIGIN}/v1/sync/routines`, { headers: headers(bearer) }), env)
+        expect(res.status, bearer).toBe(401)
+        expect(await res.json()).toMatchObject({ error: { code: 'signed_out' } })
+      }
+      const ok = await app.fetch(new Request(`${ORIGIN}/v1/sync/routines`, { headers: { authorization: `Bearer ${token}` } }), env)
+      expect(ok.status).toBe(200)
+    })
+
   it('answer an unknown table with 404', async () => {
     const { token } = await signUp()
     expect((await request('GET', '/v1/sync/nope', { token })).status).toBe(404)
@@ -239,6 +258,16 @@ describe('review follow-ups', () => {
     const res = await push(token, 'routines', [{ ...SAMPLES.routines(), name: 'x'.repeat(1024 * 1024 + 1) }])
     expect(res.status).toBe(413)
     expect(await res.json()).toMatchObject({ error: { code: 'too_large' } })
+  })
+
+  it('refuses a JSON column with half a UTF-16 pair inside, which the app could not decode back', async () => {
+    const { token } = await signUp()
+    const row = SAMPLES.routines()
+    const exercises = [{ ...(row.exercises as Row[])[0], exercise_id: 'bench\uD800' }]
+    const res = await push(token, 'routines', [{ ...row, exercises }])
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: { code: 'row_rejected', message: 'rows[0].exercises is not a valid json' } })
+    expect(await pull(token, 'routines')).toEqual([])
   })
 
   it('refuses a non-numeric after on the week', async () => {

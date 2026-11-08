@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers'
 import { getMigrations } from 'better-auth/db/migration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createAuth, SESSION_EXPIRES_IN } from '../src/auth/auth.ts'
+import { createAuth, passwordAuthAllowed, SESSION_EXPIRES_IN } from '../src/auth/auth.ts'
 import { appleIdToken, appleKeyPair, mockAppleKeys, sha256Hex } from './apple.ts'
 import { request, signUp } from './helpers.ts'
 
@@ -44,6 +44,32 @@ describe('email and password (debug builds and tests)', () => {
       }),
     )
     expect(res.status).toBe(400)
+  })
+
+  /** A sign-up straight to Better Auth, built for `baseURL` with ALLOW_PASSWORD_AUTH=1. */
+  const signUpAt = (baseURL: string) => createAuth({ ...env, ALLOW_PASSWORD_AUTH: '1', PUBLIC_BASE_URL: baseURL }).handler(
+    new Request(`${baseURL}/api/auth/sign-up/email`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: `base-${crypto.randomUUID()}@test.local`, password: 'correct-horse-battery', name: 'B' }),
+    }),
+  )
+
+  it('is on only where the base URL is this machine, whatever ALLOW_PASSWORD_AUTH says', async () => {
+    expect(passwordAuthAllowed({ ...env, ALLOW_PASSWORD_AUTH: '1', PUBLIC_BASE_URL: 'http://127.0.0.1:8787' })).toBe(true)
+    expect(passwordAuthAllowed({ ...env, ALLOW_PASSWORD_AUTH: '1', PUBLIC_BASE_URL: 'http://localhost' })).toBe(true)
+    expect(passwordAuthAllowed({ ...env, ALLOW_PASSWORD_AUTH: '0', PUBLIC_BASE_URL: 'http://localhost' })).toBe(false)
+    for (const base of ['https://api.gymrollins.app', 'http://localhost.example.com', 'http://127.0.0.1.nip.io',
+      'https://user@localhost.example.com', 'not a url', '']) {
+      expect(passwordAuthAllowed({ ...env, ALLOW_PASSWORD_AUTH: '1', PUBLIC_BASE_URL: base }), base).toBe(false)
+    }
+  })
+
+  it('refuses a sign-up when the base URL is not this machine, even with ALLOW_PASSWORD_AUTH=1', async () => {
+    expect((await signUpAt('http://127.0.0.1:8787')).status).toBe(200)
+    const remote = await signUpAt('https://api.gymrollins.app')
+    expect(remote.status).toBe(400)
+    expect(await remote.json()).toMatchObject({ code: 'EMAIL_PASSWORD_SIGN_UP_DISABLED' })
   })
 })
 
