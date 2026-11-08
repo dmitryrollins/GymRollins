@@ -1,5 +1,8 @@
+import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
+import { storedRow } from '../src/sync/columns.ts'
 import { ENTITIES } from '../src/sync/entities.ts'
+import { upsertSql } from '../src/sync/table-sync.ts'
 import { request, signUp } from './helpers.ts'
 import { BAD, KEY, pulled, type Row, SAMPLES, T0, T1, T2 } from './samples.ts'
 
@@ -124,7 +127,8 @@ describe('pulling', () => {
     expect(await pull(token, 'routines', '?limit=3')).toHaveLength(3)
   })
 
-  it.each(['?limit=0', '?limit=1001', '?limit=two', '?since=yesterday', '?after=x'])('refuses %s', async (query) => {
+  it.each(['?limit=0', '?limit=1001', '?limit=two', '?since=yesterday', '?after=x',
+    '?since=2026-11-07T10:00:00Z&after='])('refuses %s', async (query) => {
     const { token } = await signUp()
     const res = await request('GET', `/v1/sync/routines${query}`, { token })
     expect(res.status).toBe(400)
@@ -170,5 +174,64 @@ describe('the sync routes', () => {
   it('answer an empty push with no acks', async () => {
     const { token } = await signUp()
     expect(await acks(token, 'routines', [])).toEqual([])
+  })
+})
+
+describe('review follow-ups', () => {
+  it("the upsert's own WHERE keeps another account's row, without the pre-check", async () => {
+    const a = await signUp()
+    const b = await signUp()
+    const row = SAMPLES.routines()
+    await acks(a.token, 'routines', [row])
+    const hijack = storedRow(ENTITIES.routines.columns, { ...row, name: 'Hijacked', client_updated_at: T2 }, 'rows[0]')
+    const { results } = await env.DB.prepare(upsertSql(ENTITIES.routines)).bind(JSON.stringify([hijack]), b.userId).all()
+    expect(results).toEqual([])
+    const [mine] = await pull(a.token, 'routines')
+    expect(mine.name).toBe('Push')
+  })
+
+  it('takes the same key twice in one push, the later edit winning', async () => {
+    const { token } = await signUp()
+    const row = SAMPLES.routines()
+    const res = await push(token, 'routines', [
+      { ...row, name: 'A', client_updated_at: T1 },
+      { ...row, name: 'B', client_updated_at: T2 },
+    ])
+    expect(res.status).toBe(200)
+    const [stored] = await pull(token, 'routines')
+    expect(stored.name).toBe('B')
+    expect(stored.client_updated_at).toBe(T2)
+  })
+
+  it('pulls tombstones', async () => {
+    const { token } = await signUp()
+    await acks(token, 'routines', [{ ...SAMPLES.routines(), deleted_at: T1 }])
+    const [stored] = await pull(token, 'routines')
+    expect(stored.deleted_at).toBe(T1)
+  })
+
+  it('lets a day go back to a rest day, and point at a tombstoned routine of yours', async () => {
+    const { token } = await signUp()
+    const routine = SAMPLES.routines()
+    await acks(token, 'routines', [routine])
+    await acks(token, 'weekdays', [{ ...SAMPLES.weekdays(), weekday: 1, routine_id: routine.id }])
+    await acks(token, 'weekdays', [{ ...SAMPLES.weekdays(), weekday: 1, routine_id: null, client_updated_at: T2 }])
+    expect((await pull(token, 'weekdays'))[0].routine_id).toBeNull()
+    const gone: Row = { ...SAMPLES.routines(), deleted_at: T1 }
+    await acks(token, 'routines', [gone])
+    expect(await acks(token, 'weekdays', [{ ...SAMPLES.weekdays(), weekday: 2, routine_id: gone.id }])).toHaveLength(1)
+  })
+
+  it('answers 413 for a body over 1 MiB', async () => {
+    const { token } = await signUp()
+    const res = await push(token, 'routines', [{ ...SAMPLES.routines(), name: 'x'.repeat(1024 * 1024 + 1) }])
+    expect(res.status).toBe(413)
+    expect(await res.json()).toMatchObject({ error: { code: 'too_large' } })
+  })
+
+  it('refuses a non-numeric after on the week', async () => {
+    const { token } = await signUp()
+    const res = await request('GET', '/v1/sync/weekdays?since=2026-11-07T10:00:00Z&after=1x', { token })
+    expect(res.status).toBe(400)
   })
 })

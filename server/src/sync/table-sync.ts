@@ -56,7 +56,7 @@ async function refuseOthersRows(db: D1Database, userId: string, entity: Entity, 
   if (other) throw new ApiError(403, 'not_allowed', 'That row belongs to another account.')
 }
 
-function upsertSql(entity: Entity): string {
+export function upsertSql(entity: Entity): string {
   const names = entity.columns.map((c) => c.name)
   const updates = names.filter((n) => !entity.conflict.includes(n))
     .map((n) => `${n} = ${entity.onUpdate?.[n] ?? `excluded.${n}`}`)
@@ -86,8 +86,9 @@ export function parsePullQuery(query: Record<string, string | undefined>, tiebre
   let after: string | number | null = null
   if (query.after !== undefined) {
     if (since === null) throw bad('after needs since.')
+    if (query.after === '') throw bad('after must not be empty.')
+    if (tiebreak === 'int' && !/^\d+$/.test(query.after)) throw bad('after must be a whole number.')
     after = tiebreak === 'int' ? Number(query.after) : query.after
-    if (tiebreak === 'int' && !Number.isInteger(after)) throw bad('after must be a whole number.')
   }
   const limit = query.limit === undefined ? DEFAULT_PULL_LIMIT : Number(query.limit)
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PULL_LIMIT) throw bad(`limit must be 1 to ${MAX_PULL_LIMIT}.`)

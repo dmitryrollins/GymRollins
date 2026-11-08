@@ -8,8 +8,8 @@ import type { AppEnv } from './env.ts'
 import { errorBody, onError } from './http/errors.ts'
 import { syncRoutes } from './sync/routes.ts'
 
-/** A workout or 200 rows is far below this. */
-const MAX_BODY_BYTES = 4 * 1024 * 1024
+/** A workout or 200 rows is far below this, and one bound JSON value must stay under D1's ~2 MB. */
+const MAX_BODY_BYTES = 1024 * 1024
 
 const app = new Hono<AppEnv>()
 app.onError(onError)
