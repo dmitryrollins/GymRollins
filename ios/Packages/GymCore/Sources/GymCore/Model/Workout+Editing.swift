@@ -87,8 +87,11 @@ extension Workout {
         entries.first { $0.id == entryId }.map { $0.sets.count < DomainLimits.entrySetsMax } ?? false
     }
 
+    /// How many more exercises the workout can take (`DomainLimits.workoutEntriesMax`); 0 at or past the cap.
+    public var entriesLeft: Int { max(0, DomainLimits.workoutEntriesMax - entries.count) }
+
     /// Whether the workout can take one more exercise (`DomainLimits.workoutEntriesMax`).
-    public var canAddEntries: Bool { entries.count < DomainLimits.workoutEntriesMax }
+    public var canAddEntries: Bool { entriesLeft > 0 }
 
     public func appendingSet(entryId: UUID) -> Workout {
         guard canAddSet(entryId: entryId) else { return self }

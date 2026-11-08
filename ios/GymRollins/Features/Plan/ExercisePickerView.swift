@@ -11,6 +11,10 @@ struct ExercisePickerView: View {
     /// Hide "Don't recommend again" exercises from the unsearched list (false where any exercise must be pickable,
     /// e.g. matching an imported exercise name; they are then only listed last).
     var hidesNever = true
+    /// At most this many can be picked (multi-select), e.g. the room left in a workout (`Workout.entriesLeft`);
+    /// `limitNote` says why once that many are picked.
+    var maxSelected = Int.max
+    var limitNote: String?
     let onAdd: ([String]) -> Void
     @State private var query = ""
     @State private var selected: [String] = []
@@ -30,7 +34,15 @@ struct ExercisePickerView: View {
                         }
                     }
                 }
+                .disabled(isFull && !selected.contains(ex.id))
                 .accessibilityIdentifier("picker.row.\(ex.id)")
+            }
+            .safeAreaInset(edge: .bottom) {
+                if isFull, let limitNote {
+                    Text(limitNote).font(.footnote).foregroundStyle(Theme.textSecondary)
+                        .frame(maxWidth: .infinity).padding(12).background(.bar)
+                        .accessibilityIdentifier("picker.limit")
+                }
             }
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search exercises")
             .navigationTitle("Add Exercise")
@@ -51,7 +63,16 @@ struct ExercisePickerView: View {
         if singleSelect { onAdd([id]); dismiss() } else { toggle(id) }
     }
 
+    /// Multi-select with `maxSelected` picked: the other rows wait until one is unpicked.
+    private var isFull: Bool { !singleSelect && selected.count >= maxSelected }
+
     private func toggle(_ id: String) {
-        selected = selected.contains(id) ? selected.filter { $0 != id } : selected + [id]
+        selected = Self.toggling(id, in: selected, limit: maxSelected)
+    }
+
+    /// The selection after tapping `id`: unpicked when it was picked, else picked while fewer than `limit` are.
+    static func toggling(_ id: String, in selected: [String], limit: Int) -> [String] {
+        if selected.contains(id) { return selected.filter { $0 != id } }
+        return selected.count < limit ? selected + [id] : selected
     }
 }

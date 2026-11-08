@@ -126,4 +126,16 @@ import Testing
         #expect(crowded.appendingEntries([WorkoutEntry(exerciseId: "x", sets: [])]).entries.count == 50)
         #expect(w.canAddEntries)
     }
+
+    /// How many more exercises Add exercise may pick: the room under the cap, never negative.
+    @Test func entriesLeftIsTheRoomUnderTheCap() {
+        let sized = { (n: Int) in
+            Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push",
+                    entries: (0..<n).map { WorkoutEntry(exerciseId: "e\($0)", sets: []) })
+        }
+        #expect(sized(0).entriesLeft == DomainLimits.workoutEntriesMax)
+        #expect(sized(45).entriesLeft == 5 && sized(45).canAddEntries)
+        #expect(sized(50).entriesLeft == 0 && !sized(50).canAddEntries)
+        #expect(sized(60).entriesLeft == 0) // a workout stored before the cap
+    }
 }

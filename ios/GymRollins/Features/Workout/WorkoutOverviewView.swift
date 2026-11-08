@@ -41,7 +41,9 @@ struct WorkoutOverviewView: View {
             }
         }
         .sheet(isPresented: $showAddExercise) {
-            ExercisePickerView(excluded: Set(session.workout.entries.map(\.exerciseId))) { ids in
+            ExercisePickerView(excluded: Set(session.workout.entries.map(\.exerciseId)),
+                               maxSelected: session.workout.entriesLeft,
+                               limitNote: "A workout holds up to \(DomainLimits.workoutEntriesMax) exercises.") { ids in
                 session.addExercises(ids) { env.adHocEntry(exerciseId: $0) }
             }
         }

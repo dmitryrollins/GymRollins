@@ -36,6 +36,7 @@ struct ExerciseOptionsSheet: View {
             }
             .padding(12)
             .background(Theme.card, in: .rect(cornerRadius: 14))
+            .disabled(!session.workout.canAddSet(entryId: entryId))
             .accessibilityIdentifier("options.addWarmup")
 
             Button(role: .destructive) {

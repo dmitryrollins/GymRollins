@@ -289,4 +289,30 @@ extension WorkoutSessionTests {
         #expect(session.entry(entry.id)?.sets.count == DomainLimits.entrySetsMax)
         #expect(!model.canAddSet)
     }
+
+    /// At 45 exercises the picker takes at most 5 more, so Add exercise keeps every one picked (cap 50).
+    @Test func addExercisePicksAtMostTheRoomLeft() {
+        let session = make(Spy(), now: { Date(timeIntervalSince1970: 1_100) })
+        session.addExercises((2..<45).map { "e\($0)" }) { WorkoutEntry(exerciseId: $0) }
+        #expect(session.workout.entries.count == 45)
+        let room = session.workout.entriesLeft
+        #expect(room == 5)
+        let picked = (0..<10).reduce([String]()) { ExercisePickerView.toggling("p\($1)", in: $0, limit: room) }
+        #expect(picked == (0..<5).map { "p\($0)" })
+        #expect(ExercisePickerView.toggling("p0", in: picked, limit: room) == (1..<5).map { "p\($0)" })
+        session.addExercises(picked) { WorkoutEntry(exerciseId: $0) }
+        #expect(session.workout.entries.suffix(5).map(\.exerciseId) == picked)
+        #expect(session.workout.entriesLeft == 0)
+    }
+
+    /// Add warm-up set at 50 sets leaves the workout as it is; the sheet's button is disabled there.
+    @Test func addWarmupAtTheCapChangesNothing() {
+        let session = make(Spy(), now: { Date(timeIntervalSince1970: 1_100) })
+        let entry = session.workout.entries[0]
+        for _ in 0..<60 { session.addSet(entryId: entry.id) }
+        let full = session.workout
+        #expect(full.entries[0].sets.count == DomainLimits.entrySetsMax)
+        session.addWarmup(entryId: entry.id, barKg: 20)
+        #expect(session.workout == full)
+    }
 }
