@@ -9,7 +9,7 @@ echo "==> GymCore (swift test)"
 echo "==> GymData (swift test)"
 (cd "$ROOT/ios/Packages/GymData" && swift test)
 
-echo "==> GymSync (swift test, fake transport; integration tests: scripts/test-sync-integration.sh)"
+echo "==> GymSync (swift test, fake transport; integration tests: scripts/test-sync-integration.sh, on a throwaway local Worker)"
 (cd "$ROOT/ios/Packages/GymSync" && swift test --filter GymSyncTests)
 
 echo "==> GymHealth (swift test, fake Health store)"
@@ -54,9 +54,10 @@ node --test "$ROOT/scripts/gen-equipment-seed.test.mjs"
 node "$ROOT/scripts/gen-equipment-seed.mjs" --check
 node "$ROOT/scripts/gen-exercise-seed.mjs" --check
 
-# E2E sync against the local Supabase stack (needs Docker): opt in with SYNC_E2E=1.
+# Sync against a throwaway local Worker (no Docker; needs server/.dev.vars): opt in with SYNC_E2E=1.
 if [[ "${SYNC_E2E:-0}" == "1" ]]; then
-  echo "==> iOS sync E2E (local Supabase)"
+  echo "==> GymSync integration and iOS sync E2E (throwaway local Worker on :8788)"
+  "$ROOT/scripts/test-sync-integration.sh"
   "$ROOT/scripts/ios-test-sync.sh"
 fi
 
@@ -72,8 +73,7 @@ if [[ "${MCP_E2E:-0}" == "1" ]]; then
   "$ROOT/scripts/test-mcp.sh"
 fi
 
-# Gyms shared between two users and an anonymous client, against the local stack (needs Docker): opt in with GYM_E2E=1.
+# Gyms shared between two users: its Swift suite is parked until plan 28 moves the catalogue to the Worker.
 if [[ "${GYM_E2E:-0}" == "1" ]]; then
-  echo "==> Shared gym catalogue E2E (local Supabase)"
-  "$ROOT/scripts/test-gym-e2e.sh"
+  echo "==> Shared gym catalogue E2E: parked until plan 28"
 fi

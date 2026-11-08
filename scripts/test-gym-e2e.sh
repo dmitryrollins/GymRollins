@@ -4,6 +4,10 @@
 # Afterwards, admin SQL as postgres checks that "This phone only" text never reached a table and that every test
 # account and the gyms it created are gone.
 set -euo pipefail
+# Parked until plan 28: its Swift suite (GymCatalogE2ETests) signs in with the Supabase client, which the app no longer
+# has since plan 27 (ios/Packages/GymSync/Tests/GymSyncIntegrationTests/SupabaseParked).
+echo "Parked until plan 28 moves the shared gym catalogue to the Worker." >&2
+exit 1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="$ROOT/supabase/.env.local"
 DB_CONTAINER="supabase_db_gymrollins"

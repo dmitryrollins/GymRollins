@@ -33,3 +33,7 @@ Schema:
 - `0005_gyms_photos.sql` adds the catalogue's fold keys and the private caps (triggers).
 
 Exercise photos for the local Worker: `node ../scripts/upload-photos.mjs --target worker` while the server runs.
+
+The iOS integration and UI tests start a Worker of their own (`scripts/test-server.sh`): port 8788, a state folder that
+is removed afterwards, and email accounts each test makes fresh (`ALLOW_PASSWORD_AUTH=1` in `.dev.vars`). They never
+touch `.wrangler/state` or the Worker on 8787.
