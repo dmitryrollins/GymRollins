@@ -57,7 +57,7 @@ final class ProposalSyncUITests: XCTestCase {
         goBack(app, to: "Settings")
         syncNow(app)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
-        app.tabBars.buttons["Today"].tap()
+        tapTab(app, "Today")
         let chip = app.buttons["today.proposal"]
         XCTAssertTrue(chip.waitForExistence(timeout: 10))
         chip.tap()
@@ -69,7 +69,7 @@ final class ProposalSyncUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [heavier], timeout: 5), .completed)
 
         // 4. The resolution syncs; Claude sees it applied, and the server's plan has the new weight.
-        app.tabBars.buttons["Log"].tap()
+        tapTab(app, "Log")
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         syncNow(app)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
@@ -179,6 +179,19 @@ final class ProposalSyncUITests: XCTestCase {
         back.tap()
         XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "Back didn't reach \(title)",
                       file: file, line: line)
+    }
+
+    /// Added in plan 30: taps a tab even when iOS 26 has minimized the tab bar. Scrolling a list down minimizes it
+    /// (`RootView`'s `.tabBarMinimizeBehavior(.onScrollDown)`) to the selected tab alone, and the slow swipes `scroll`
+    /// makes don't bring it back. A quick swipe down does, as it does for a person.
+    private func tapTab(_ app: XCUIApplication, _ name: String, file: StaticString = #filePath, line: UInt = #line) {
+        let tab = app.tabBars.buttons[name]
+        for _ in 0..<3 where !tab.exists {
+            let list = app.collectionViews.firstMatch
+            (list.exists ? list : app).swipeDown()
+        }
+        XCTAssertTrue(tab.waitForExistence(timeout: 5), "The \(name) tab isn't in the tab bar", file: file, line: line)
+        tab.tap()
     }
 
     enum ListEnd { case top, bottom }
