@@ -5,24 +5,33 @@
 
 **Goal:** before the first deploy, one account can't fill D1. The Worker caps what one account stores, with the
 owner's numbers:
-- 10,000 workouts, 20,000 weigh-ins, 200 routines and 1,000 custom exercises per account, deleted rows included;
-- 100 Claude proposals waiting for review at a time;
-- 50 exercises in one workout, and 50 sets in one exercise of a workout.
+- per account, deleted rows included: 10,000 workouts, 50,000 exercises and 250,000 sets logged in them, 20,000
+  weigh-ins, 200 routines, 1,000 custom exercises, 2,000 exercise preferences, and 500 private gyms and 5,000 private
+  listings (beside today's 100 and 1,000 live ones, which stay);
+- Claude: 100 proposals waiting for review at a time, and 5,000 in all, resolved ones included;
+- one workout: 50 exercises, and 50 sets in one exercise.
 
-Each cap is tested at its exact number. An edit of a stored row is never refused. A refused row stays on the phone,
-isn't sent again in a loop, and Account shows the server's plain words for it. The phone stops at the per-workout caps
-too, so nothing made by hand is refused.
+Each cap is tested at its exact number. An edit of a stored row is never refused, and a save that would pass a cap is
+refused whole and writes nothing. A refused row stays on the phone, isn't sent again in a loop, and Account shows the
+server's plain words for it. The phone stops at the per-workout caps too, and the importers split a workout past them
+into several, so nothing the phone makes is refused.
 
 **Architecture:**
-- **One set of numbers.** Seven new constants in `DomainLimits.swift`, copied in `server/src/shared/domain-limits.ts`.
+- **One set of numbers.** Thirteen new constants in `DomainLimits.swift`, copied in `server/src/shared/domain-limits.ts`.
   The drift test checks the copy and the numbers in the triggers.
 - **Account caps are SQLite triggers,** as plan 28's gym caps are. A push stays one statement, and a refusal fails the
-  whole statement. A table the triggers keep, `account_rows`, holds each account's count, so a check reads one row.
+  whole statement. A table, `account_rows`, holds each account's counts, so a check reads one row.
+- **Logged exercises and sets** are counted by the workout save itself: one statement a count moves it by what the save
+  changes, in the save's batch, and a trigger on `account_rows` refuses a move past the cap.
 - **Pending proposals** are a live count (at most 100 rows) behind a partial index.
 - **Per-workout caps** are checked in TypeScript when a save is parsed, because a save rewrites exactly the entries and
   sets it carries.
+- **The importers** cut a workout past 50 exercises or 50 sets an exercise into consecutive pieces ("Push", "Push (2)").
 - **The app** already treats any 422 as a refused row: it keeps the row, parks it, and lists it in Account. This plan
   groups identical refusals into one line there, rewords the footer, and makes the phone stop at 50 and 50.
+
+**The owner's answers** (2026-11-08) amended this plan: account-wide totals on top of the first seven caps (decisions 1,
+5–7), and splitting oversized imports (decision 10). Questions they settle are gone from the list at the end.
 
 **Tech stack:** as plans 26–30. The Worker (Hono 4.13.17, Better Auth 1.7.18, D1 and R2 through wrangler 4.158.0,
 Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0 in workerd), Swift 6.2 (`swift test`, `xcodebuild`, XcodeGen).
@@ -35,15 +44,15 @@ Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0 in workerd), Swift 6.2 (`sw
 **Branch:** `feat-cloudflare`.
 - No push.
 - Local only: never run `wrangler login`, `wrangler deploy`, or any `wrangler` command without `--local`.
-- The owner's personal data never goes into the repo. Task 8 reads a copy kept outside it, numbers only.
+- The owner's personal data never goes into the repo. Task 1 reads a copy of the phone backup kept outside it, numbers
+  only, and never opens the backup's store in place.
 - Commit messages have no `Co-Authored-By`, `Generated with` or `Claude-Session` trailers; the owner forbids them.
 
 **Not in this plan:**
 - Purging tombstones, or any change to what sync sends (the owner's choice: deleted rows count).
-- A cap on sets per account, on gym and listing tombstones, on exercise preferences, on resolved proposals or on
-  Claude's audit rows ("Questions for the owner").
-- Splitting imported workouts that are past the per-workout caps (a question for the owner).
-- Indexes for the pulls (found while writing; decision 13).
+- A one-time split of workouts already on a phone past the caps (decision 10 keeps them on the phone).
+- A cap on Claude's audit rows (a question for the owner).
+- Indexes for the pulls (found while writing; decision 17; a later plan).
 - Any step of `docs/cloudflare-checklist.md` that touches Cloudflare, the phone or claude.ai.
 
 ---
@@ -59,7 +68,13 @@ Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0 in workerd), Swift 6.2 (`sw
    | `routinesMax` | 200 | trigger `routines_cap` |
    | `customExercisesMax` | 1,000 | trigger `custom_exercises_cap` |
    | `pendingProposalsMax` | 100 | trigger `proposals_pending_cap` (Claude's `propose_plan_changes`) |
-   | `workoutEntriesMax` | 50 | `parseWorkout` (`server/src/sync/workouts.ts`), and the phone's editing |
+   | `proposalsMax` | 5,000 | trigger `proposals_cap`, resolved proposals included |
+   | `exercisePrefsMax` | 2,000 | trigger `exercise_prefs_cap` |
+   | `privateGymsTotalMax` | 500 | trigger `gyms_total_cap`, beside `privateGymsMax` (100 live) |
+   | `privateListingsTotalMax` | 5,000 | trigger `gym_equipment_total_cap`, beside `privateListingsMax` (1,000 live) |
+   | `accountEntriesMax` | 50,000 | the workout save's count move, and trigger `account_rows_entries_cap` |
+   | `accountSetsMax` | 250,000 | the same, and trigger `account_rows_sets_cap` |
+   | `workoutEntriesMax` | 50 | `parseWorkout` (`server/src/sync/workouts.ts`), the phone's editing, the importers |
    | `entrySetsMax` | 50 | the same |
 
    - The drift test's `toEqual` (`server/test/domain-limits-drift.test.ts:72-74`) fails on any name or value that
@@ -72,52 +87,80 @@ Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0 in workerd), Swift 6.2 (`sw
      (`server/src/sync/table-sync.ts:20`, `:50`, `:68-83`).
    - "Insert only if under the cap" would skip rows silently. A skipped row gets no ack and stays dirty
      (`table-sync.ts:33-35`), so the phone would push it again on every round: the loop the owner ruled out.
-   - `RAISE(ABORT)` fails the whole statement instead, and the phone records the refusal (decision 8).
+   - `RAISE(ABORT)` fails the whole statement instead, and the phone records the refusal (decision 11).
    - A trigger holds for every writer. Claude's `insertBodyweight` (`server/src/mcp/d1-db.ts:528-536`) inserts
      weigh-ins outside sync.
-   - A workout save is one batch (`workouts.ts:144-150`). A `RAISE` in its first statement rolls back the whole batch,
-     entries and sets included (probe).
+   - A workout save is one batch (`workouts.ts:144-150`). A `RAISE` in any of its statements rolls back the whole
+     batch, entries and sets included (probe).
 
 3. **Only new rows count against the cap.**
-   - The trigger's condition starts `NOT EXISTS (SELECT 1 FROM <table> WHERE id = NEW.id)`.
+   - The trigger's condition starts `NOT EXISTS (SELECT 1 FROM <table> WHERE <key> = NEW.<key>)`: the id, or for
+     exercise preferences the account and the exercise id. Proposals are only ever inserted, so theirs has none.
    - SQLite runs `BEFORE INSERT` for an upsert row that turns into an update too (plan 28, decision 1; probe), so an
      edit, a deletion or a revival passes at the cap.
    - `AFTER INSERT` runs only for a row actually inserted (probe), so the count never grows on an update.
    - Another account's id is refused with 403 before the statement runs (`table-sync.ts:48`, `:59-66`;
      `workouts.ts:119-121`).
 
-4. **Deleted rows count, through a count the triggers keep: `account_rows (user_id, tbl, n)`.**
+4. **Deleted rows count, through counts kept in `account_rows (user_id, tbl, n)`.**
    - **Why not `count(*)`:** tombstones count, so no live-rows index helps (0005's `gyms_owner_live` serves live counts
-     only, `0005_gyms_photos.sql:20-21`). `bodyweight`, `routines` and `custom_exercises` have no index on `user_id` at
-     all (`0002_app_schema.sql:49-60`, `:62-75`, `:305-318`). A `count(*)` reads the whole table (probe: one count
-     reports `rows_read` 20,000), and every pushed row runs the trigger, up to 500 times a push.
-   - **The cost of `account_rows`:** two primary-key lookups per pushed row (probe: `SEARCH … USING INDEX
-     sqlite_autoindex_…`), and one more row written per new row. Edits cost nothing more.
-   - **Kept exact:** an `AFTER DELETE` trigger lowers the count, so `n` always equals `count(*)`. Today only an
-     account's deletion removes these rows (`server/src/account/delete.ts:31`, by cascade), and the account's
-     `account_rows` cascade with it.
+     only, `0005_gyms_photos.sql:20-21`). `bodyweight`, `routines`, `custom_exercises` and `proposals` have no index on
+     `user_id` at all (`0002_app_schema.sql:49-60`, `:62-75`, `:305-318`, `:321-333`). A `count(*)` reads the whole
+     table (probe: one count reports `rows_read` 20,000), and every pushed row runs the trigger, up to 500 times a push.
+   - **The cost:** two primary-key lookups per pushed row (probe: `SEARCH … USING INDEX sqlite_autoindex_…`), and one
+     more row written per new row. Edits cost nothing more.
+   - **Kept exact:** an `AFTER DELETE` trigger lowers a count, so `n` always equals `count(*)`. Today only an account's
+     deletion removes these rows (`server/src/account/delete.ts:31`, by cascade), and the account's `account_rows`
+     cascade with it.
    - **Rows from before the migration** are counted by the migration itself (the local dev D1 has some).
    - **At the cap an account stays full.** Deleting frees nothing, because its tombstone stays. The app's words say so
-     (decision 8).
+     (decision 11).
 
-5. **Pending proposals are a live count, plan 28's way.**
+5. **Logged exercises and sets: the workout save moves the counts, once a save.**
+   - A save deletes the workout's entries (and, by cascade, their sets) and writes the ones it carries
+     (`workouts.ts:68-72`, `:146-148`). Row triggers on `workout_entries` and `workout_sets` would write the count once
+     per row deleted and once per row inserted, on every save: about 5,100 more rows written for a re-save at both
+     per-workout caps.
+   - So the save's batch gets two statements before its delete, `MOVE_ENTRIES` and `MOVE_SETS`. Each moves the count by
+     the rows the save writes minus the rows it replaces, and writes nothing when that is 0. They run only while the
+     row is still this save's (`write_id`), like the entries and sets, so a stale save moves nothing.
+   - `account_rows_entries_cap` and `account_rows_sets_cap` (`BEFORE UPDATE OF n ON account_rows`) refuse a move that
+     raises a count past its cap. A move that keeps or lowers it always passes. The refusal fails the whole batch: the
+     workout row, its entries and sets stay as they were.
+   - **What counts:** a deleted workout keeps its entries and sets as stored rows, so they count. A set removed from a
+     workout is deleted outright, so removing sets frees room. Nothing else deletes these rows.
+   - **The cost:** 4 bound values a statement, and one or two rows read per entry and set the workout had. Measured in
+     workerd: no extra row written on a re-save that keeps the size, 3 on a first save (6 on an account's first save).
+   - **The catch:** the counts are exact while `pushWorkout` is the only writer of entries and sets. Task 3, Step 1
+     greps for others, and a comment on the statements says so.
+
+6. **Proposals: at most 100 waiting, and 5,000 in all.**
    - Claude's insert is the only writer, one row at a time (`d1-db.ts:497-510`), and it writes `pending` only
-     (`:502-503`).
-   - A resolved proposal never turns pending again: `parseResolution` refuses `pending` (`server/src/claude/proposals.ts:48-50`).
-   - So a `count(*)` over at most 100 rows, through a new partial index, is enough. The index `proposals_user_pending`
-     also serves the app's pull of pending proposals (`proposals.ts:21-26`), which read the whole table until now.
-   - Resolving one frees a slot: the owner chose "pending at a time".
+     (`:502-503`). A resolved proposal never turns pending again: `parseResolution` refuses `pending`
+     (`server/src/claude/proposals.ts:48-50`).
+   - **Waiting:** a `count(*)` over at most 100 rows, through a new partial index, is enough. The index
+     `proposals_user_pending` also serves the app's pull of pending proposals (`proposals.ts:21-26`), which read the
+     whole table until now. Resolving one frees a slot.
+   - **In all:** `proposals_cap` reads the count in `account_rows`; resolving frees nothing.
+   - Codes: `too_many_pending_proposals` and `too_many_proposals`. Claude hears words for each (decision 13).
 
-6. **The per-workout caps are checked in TypeScript, as the save is parsed** (`workouts.ts:92-103`).
-   - A save deletes the workout's entries and writes the ones it carries (`workouts.ts:68-72`, `:146-148`). So the body
-     is exactly what the save writes: checking it counts "only what the save writes".
+7. **Private gyms and listings: totals beside the live caps.**
+   - `gyms_total_cap` (500) and `gym_equipment_total_cap` (5,000) count the account's private rows (`owner_id`),
+     deleted ones included. Plan 28's live caps (`gyms_private_cap`, 100; `gym_equipment_private_cap`, 1,000) stay as
+     they are.
+   - Shared gyms and listings belong to the catalogue (no owner), and the daily limits already bound them (10 new gyms
+     and 30 shares a day). Nothing here counts them.
+   - Both caps are `BEFORE INSERT` triggers on the same table. When both would refuse, which code the account hears
+     isn't specified; the tests check the totals with the live counts far under their caps.
+
+8. **The per-workout caps are checked in TypeScript, as the save is parsed** (`workouts.ts:92-103`).
+   - The body is exactly what the save writes (decision 5), so checking it counts "only what the save writes".
    - A trigger would count once per inserted row, up to 2,500 sets of up to 50 reads each.
-   - `pushWorkout` is the only writer of entries and sets (Task 3, Step 1 greps for others).
    - The check runs before the stale check, so a save that is too big hears that first, and nothing is written.
    - A save at both caps (2,500 sets) stays under the 1 MB body limit (`server/src/index.ts:23`, `:49-52`). Task 3
      tests it.
 
-7. **The app allows more than 50 and 50 today, so the phone learns the caps too.**
+9. **The app allows more than 50 and 50 today, so the phone learns the caps too.**
    - **Nothing caps a workout's size on the phone.** `WorkoutRepository.save` checks nothing
      (`ios/Packages/GymData/Sources/GymData/Repositories/WorkoutRepository.swift:71-79`).
      - Add Set appends with no limit (`ios/Packages/GymCore/Sources/GymCore/Model/Workout+Editing.swift:84-90`, from
@@ -130,51 +173,88 @@ Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0 in workerd), Swift 6.2 (`sw
      at most 10 working sets (`Plan/PlanChange.swift:143`), with 2 warm-ups generated (`WarmupGenerator.swift:8`), or
      up to 5 on Today (`ios/GymRollins/Features/Today/TodaySetEdits.swift:9-10`). A shared link holds at most 20
      exercises of 1–10 sets.
-   - **The owner's data** averages 5.6 exercises and 3.2 sets per exercise (836 entries and 2,685 sets in 148 workouts,
-     plan 30's server-move check). Task 8 reads the largest values from the same copy.
-   - **So the owner's 50 and 50 stay,** and the phone stops there (Task 5): Add Set, warm-ups and Add exercise stop at
-     the cap, and their buttons are disabled.
-   - **Imports can still make a bigger workout.** It stays on the phone, and sync refuses it with the cap's words.
-     Splitting such workouts at import is a question for the owner.
+   - **The owner's data** (measured on a copy of the phone backup, 2026-11-08): at most 15 exercises in one workout
+     and 8 sets in one exercise, 45 sets in one workout. 144 of the 148 workouts are imports. Task 1, Step 2 measures
+     again before any code is written.
+   - **So the owner's 50 and 50 stay.** The phone stops there (Task 5): Add Set, warm-ups and Add exercise stop at the
+     cap, and their buttons are disabled. The importers split (decision 10).
 
-8. **The error: 422, the cap's code, and the app's words, as the gym caps** (`server/src/http/errors.ts:29-50`).
-   - **Codes:** `too_many_workouts`, `too_many_body_weights`, `too_many_routines`, `too_many_custom_exercises` (the
-     triggers), `too_many_workout_exercises`, `too_many_exercise_sets` (the save). `too_many_proposals` is raised only
-     under Claude's insert (decision 10).
-   - **Words:** "You've reached the limit of 20,000 weigh-ins on one account, deleted ones included. This one stays on
-     this iPhone." The numbers come from `DomainLimits`, so they can't drift. They live in `server/src/sync/caps.ts`.
-   - **How it reaches the app:**
-     - `mappingRejections` turns any 422 into `SyncRecordRejected(code, message)` with the server's words
-       (`ios/Packages/GymSync/Sources/GymSync/ApiSyncTransport.swift:156-166`).
-     - The engine records it per row: a refused workout at `SyncEngine+Rounds.swift:66-70`, a refused batch row by row
-       at `:96-110`, through `recordRejection` (`:139-143`).
-     - The row stays dirty, and that edit isn't pushed again (`ios/Packages/GymData/Sources/GymData/Sync/SyncStore+Ownership.swift:66-68`).
-       A later edit tries once more.
-     - Account lists it under "N items couldn't sync" (`ios/GymRollins/Features/Account/AccountView.swift:102-124`).
-     - That is how `too_many_gyms` shows today. No GymSync code changes; Task 6 pins the path with tests.
-   - **A batch with a new row past the cap** is refused whole, then sent again row by row (`SyncEngine+Rounds.swift:96-110`).
-     Edits in it go through; the new rows are refused, once each, then parked.
+10. **The importers split a workout past the caps into consecutive pieces** (`ImportSplit`, in GymCore, applied in
+    `ImportAssembler.result`, so all four importers do it).
+    - An exercise with more than 50 sets goes on as another entry of the same exercise, in runs of 50; the next run
+      goes into the next piece when this one is full. Exercises keep their order, and every set is kept.
+    - Each piece holds at most 50 entries. Piece 1 keeps the source's id, start, end, title and note. Piece k starts
+      k − 1 seconds after it, so the pieces sort next to each other in order; its id is made from the source's
+      (`ImportID`), the same on every import; it keeps the end time and note.
+    - **What the user sees:** "Push", "Push (2)", "Push (3)": the export's title, or the app's default ("FitNotes
+      workout"), then the number, within the 80-character name limit (`ImportSplit.name`).
+    - **Duplicates:** the pieces stay or go with their first piece (`ImportService.withoutDuplicates`). They start a
+      second apart, so otherwise a re-import would keep piece 1 (its id is known) and drop the rest as its duplicates.
+    - **Workouts already on a phone past the caps stay there.** Sync refuses them with the cap's words, and Account
+      lists them; nothing is lost on the phone. A one-time split on the phone was the other choice. It isn't taken:
+      - the phone holds the only live copy of the training data, and a split rewrites stored workouts (new ids, entries
+        moved between workouts, records and gym links recomputed) before the data has a server copy;
+      - the owner's data has none past the caps (decision 9), so the code would run for nobody today;
+      - a user who has one can re-import the export: piece 1 overwrites the old workout by id, and the rest come in
+        as new workouts.
 
-9. **Account shows identical refusals as one line.** At a cap every refused row carries the same words, and a Health
-   import past 20,000 would list thousands of identical rows. `SyncStatusText.failureLines` groups them by kind and
-   words ("Weigh-in · 300"). The footer "Edit the item to try again." becomes "They stay on this iPhone. Editing one
-   tries again.", which holds for a cap too. The stored `SyncFailure` doesn't change.
+11. **The error: 422, the cap's code, and the app's words, as the gym caps** (`server/src/http/errors.ts:29-50`).
+    - **Codes the app can meet:** `too_many_workouts`, `too_many_body_weights`, `too_many_routines`,
+      `too_many_custom_exercises`, `too_many_exercise_prefs`, `too_many_gyms_total`, `too_many_listings_total`,
+      `too_many_logged_exercises`, `too_many_logged_sets` (the triggers); `too_many_workout_exercises`,
+      `too_many_exercise_sets` (the save). The two proposal codes are raised only under Claude's insert (decision 13).
+    - **Words:** "You've reached the limit of 20,000 weigh-ins on one account, deleted ones included. This one stays on
+      this iPhone." The numbers come from `DomainLimits`, so they can't drift. They live in `server/src/sync/caps.ts`.
+    - **How it reaches the app:**
+      - `mappingRejections` turns any 422 into `SyncRecordRejected(code, message)` with the server's words
+        (`ios/Packages/GymSync/Sources/GymSync/ApiSyncTransport.swift:156-166`).
+      - The engine records it per row: a refused workout at `SyncEngine+Rounds.swift:66-70`, a refused batch row by
+        row at `:96-110`, through `recordRejection` (`:139-143`).
+      - The row stays dirty, and that edit isn't pushed again
+        (`ios/Packages/GymData/Sources/GymData/Sync/SyncStore+Ownership.swift:66-68`). A later edit tries once more.
+      - Account lists it under "N items couldn't sync" (`ios/GymRollins/Features/Account/AccountView.swift:102-124`).
+      - That is how `too_many_gyms` shows today. No GymSync code changes; Task 7 pins the path with tests.
+    - **A batch with a new row past the cap** is refused whole, then sent again row by row
+      (`SyncEngine+Rounds.swift:96-110`). Edits in it go through; the new rows are refused, once each, then parked.
 
-10. **Claude's refusals are words for Claude.** `runAudited` shows any error that isn't a `ToolError` as the internal
-    error (`server/src/mcp/tools/register.ts:251-257`). So `insertProposal` and `insertBodyweight` turn their cap's
-    `RAISE` into a `ToolError` with plain words, and the call is audited as failed.
+12. **Account shows identical refusals as one line.** At a cap every refused row carries the same words, and a Health
+    import past 20,000 would list thousands of identical rows. `SyncStatusText.failureLines` groups them by kind and
+    words ("Weigh-in · 300"). The footer "Edit the item to try again." becomes "They stay on this iPhone. Editing one
+    tries again.", which holds for a cap too. The stored `SyncFailure` doesn't change.
 
-11. **D1's limits.**
-    - No new bound values: the triggers bind nothing, and the push still binds two.
+13. **Claude's refusals are words for Claude.** `runAudited` shows any error that isn't a `ToolError` as the internal
+    error (`server/src/mcp/tools/register.ts:251-257`). So `insertProposal` (both proposal caps) and `insertBodyweight`
+    turn their caps' `RAISE` into a `ToolError` with plain words, and the call is audited as failed.
+
+14. **What a session costs in rows written** (the free plan allows 100,000 a day for the whole Worker). Measured in
+    workerd's local D1 (`meta.rows_written`, summed over the save's batch); Cloudflare's own counting may differ:
+
+    | One workout | First save, today | First save, plan 31 | Each re-save, today and plan 31 |
+    |---|---|---|---|
+    | 6 exercises × 3 sets (the owner's average is 5.6 × 3.2) | 81 | 87 (84 after the account's first) | 104 |
+    | 15 × 3 (the owner's largest) | 198 | 201 | 257 |
+    | 50 × 50 (both per-workout caps) | 7,703 | 7,706 | 10,252 |
+
+    - A normal session is one save when the workout ends (active workouts don't sync) and maybe an edit: about 90–260
+      rows written. The free plan's day holds about 400–1,100 such sessions.
+    - Re-saving a workout at both caps costs about 10,000 rows each time, so about 9 re-saves a day use the whole free
+      allowance. Only the per-IP rate limits (checklist, section 1) stand in the way: a question for the owner.
+
+15. **D1's limits.**
+    - No new bound values on pushes: the triggers bind nothing, and the push still binds two. The two count moves bind
+      four each.
     - No `LIKE` or `GLOB`; the schema test's 50-byte check (`server/test/schema.test.ts:45-56`) covers the new
       migration anyway.
     - A batch is one transaction (decision 2).
 
-12. **Tests at the exact number seed rows straight into D1,** with one `INSERT … SELECT … FROM json_each(?2)`. The
+16. **Tests at the exact number seed rows straight into D1,** with one `INSERT … SELECT … FROM json_each(?2)`. The
     seeded rows go through the same triggers, so `account_rows` counts them (probe: 19,998 rows in about 130 ms). Every
-    other seeded row is a tombstone, because deleted rows count. Pushes then take the account to N-1, N and N+1.
+    other seeded row is a tombstone, because deleted rows count; seeded gyms and listings are all tombstones, so the
+    live caps stay out of the way. Pushes then take the account to N-1, N and N+1. The logged counts are seeded as
+    counts (`seedCount`): their caps read only the count, and 250,000 real sets would be a 10 MB JSON value, past D1's
+    2 MB.
 
-13. **Found while writing: the pulls read whole tables.** `bodyweight`, `routines` and `custom_exercises` have no index
+17. **Found while writing: the pulls read whole tables.** `bodyweight`, `routines` and `custom_exercises` have no index
     that starts with `user_id`, and `workouts` has only `(user_id, started_at DESC)` (`0002_app_schema.sql:269`). So
     every pull of them scans, and rows read grow with every account's rows. Not changed here, apart from the proposals
     index: a later plan, before many accounts exist.
@@ -185,44 +265,48 @@ Checked on 2026-11-08 against `699f6a4`. Every probe lived in a scratch folder o
 
 | Check | Result |
 |---|---|
+| The owner's phone backup, a copy of the whole folder (Task 1, Step 2's query) | `15\|8\|148\|836\|2685\|23\|6\|42\|0\|4\|1\|1`: at most 15 exercises in a workout and 8 sets in an exercise; 148 workouts (144 imported, 0 deleted, 0 active), 836 entries, 2,685 sets, 23 weigh-ins, 6 routines, 42 custom exercises, 0 exercise preferences, 4 proposals, 1 gym and 1 listing on the phone; at most 45 sets in one workout |
 | `sqlite3` 3.51.0, a scratch table with logging triggers, a three-row upsert (`a`, `b`, `a`) and an update | `BEFORE INSERT` runs for every row, the upsert's update included, and sees `exists=1` for it; `AFTER INSERT` runs for `a` and `b` only; a skipped update (`WHERE false`) runs no update trigger; a statement failing on its second row rolls back the first row's count |
 | Same, deleting the user | the cascade runs each child's `AFTER DELETE`; the count rows go with the user |
 | workerd, through the server's Vitest with a scratch config: the counter triggers on `bodyweight` with a cap of 3 | an edit and a tombstone at the cap pass; a new row fails with `D1_ERROR: too_many_body_weights: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)`; in a batch the earlier `UPDATE` is rolled back; another account isn't counted |
-| workerd, a cap trigger on `workouts` in a two-statement batch | `D1_ERROR: too_many_workouts: …`; the account keeps 1 workout |
-| workerd, `applyD1Migrations` with this plan's `0010_account_caps.sql` | applies; 18 triggers; the 200th routine is stored and the 201st refused; an edit at the cap passes; the 101st pending proposal fails with `too_many_proposals`; `DELETE /v1/account` leaves 0 `account_rows` |
 | workerd, query plans | `SEARCH account_rows USING INDEX sqlite_autoindex_account_rows_1 (user_id=? AND tbl=?)`; `SEARCH custom_exercises USING COVERING INDEX sqlite_autoindex_custom_exercises_1 (id=?)`; pending count and pull both `SEARCH proposals USING COVERING INDEX proposals_user_pending (user_id=?)` |
 | workerd, seeding | 19,998 weigh-ins (half tombstones) through `json_each` in about 130 ms; one `count(*)` of them reports `rows_read` 20,000; 200 such counts take about 300 ms |
-| `sqlite3`, 0001–0009 with rows already stored, then 0010 | `account_rows`: bodyweight 2 (one of them deleted), workouts 1, custom_exercises 1 |
+| `sqlite3`, 0001–0009 with rows already stored, then a draft of 0010 | the backfill counts them: bodyweight 2 (one of them deleted), workouts 1, custom_exercises 1 |
 | `sqlite3`, 10,000 sets in 200 entries | about 276 bytes a set, its indexes and its share of the entry included |
+| workerd, rows written per workout save, today's code and this plan's | decision 14's table |
 | `cd server && npx vitest run` at `699f6a4` | `Test Files  43 passed (43)`, `Tests  602 passed (602)` |
-| Tasks 1–4's server steps, applied from this plan's text to a scratch copy of `server/` (with `fixtures/` and the two Swift files the drift test reads) | after Task 2 `Test Files  44 passed (44)`, `Tests  626 passed (626)`; after Task 3 `Tests  630 passed (630)`; after Task 4 `Test Files  45 passed (45)`, `Tests  635 passed (635)`; `tsc --noEmit` clean each time |
-| Tasks 1, 5 and 6's Swift package steps, applied to a scratch copy of `ios/Packages` | GymCore `--filter 'DomainLimitsTests\|WorkoutEditingTests'`: 17 tests in 2 suites passed; the whole of GymCore counts 535 tests in 64 suites (the ones reading the app's bundled `exercises.json` can't pass in the copy, which lacks it); GymSync `ApiSyncTransportCapTests` and `SyncEngineCapTests` 3 tests in 2 suites passed; `GymSyncTests` 217 tests in 28 suites passed |
-| Task 6's `failureLines`, compiled alone with stand-ins for `SyncEntity` and `SyncFailure` | 300 weigh-ins and 1 routine give `["Weigh-in · 300", "Routine"]` |
+| Tasks 1–4's server steps, applied from this plan's text to a scratch copy of `server/` (with `fixtures/` and the two Swift files the drift test reads) | after Task 2 `Test Files  44 passed (44)`, `Tests  636 passed (636)`; after Task 3 `Tests  646 passed (646)`; after Task 4 `Test Files  45 passed (45)`, `Tests  652 passed (652)`; `tsc --noEmit` clean each time |
+| Tasks 1, 5, 6 and 7's Swift package steps, applied to a scratch copy of `ios/Packages` | GymCore `--filter ImportSplitTests`: 6 tests in 1 suite passed, each importer's case among them; `--filter 'Importer\|ImportSplit'`: 67 tests in 6 suites passed; the whole of GymCore counts 541 tests in 65 suites (the ones reading the app's bundled `exercises.json` can't pass in the copy, which lacks it); GymSync `ApiSyncTransportCapTests` and `SyncEngineCapTests` 3 tests in 2 suites passed; `GymSyncTests` 217 tests in 28 suites passed |
+| Same, GymSync after a GymCore file was added | the incremental build couldn't find `ImportSplit` until `swift package clean` ("How to run things") |
+| Task 7's `failureLines`, compiled alone with stand-ins for `SyncEntity` and `SyncFailure` | 300 weigh-ins and 1 routine give `["Weigh-in · 300", "Routine"]` |
 | D1's limits (developers.cloudflare.com/d1/platform/limits and /pricing, 2026-11-08) | a database holds 500 MB on the free plan, 10 GB on Workers Paid; 100 bound parameters; 50-byte `LIKE`/`GLOB` patterns; free: 5 million rows read and 100,000 written a day; "Indexes will add an additional written row" |
 
 ## File map
 
 | File | Change | Task |
 |---|---|---|
-| `ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift` | The seven caps | 1 |
-| `ios/Packages/GymCore/Tests/GymCoreTests/DomainLimitsTests.swift` | Their values | 1 |
+| `ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift`, `Tests/GymCoreTests/DomainLimitsTests.swift` | The thirteen caps | 1 |
 | `server/src/shared/domain-limits.ts` | The copy | 1 |
-| `server/test/domain-limits-drift.test.ts` | 47 constants (Task 1); the trigger numbers (Task 2) | 1, 2 |
-| `server/migrations/0010_account_caps.sql` | Create: `account_rows`, the account caps, the pending-proposals cap and index | 2 |
+| `server/test/domain-limits-drift.test.ts` | 53 constants (Task 1); the trigger numbers (Task 2) | 1, 2 |
+| `server/migrations/0010_account_caps.sql` | Create: `account_rows`, every cap's trigger, the pending-proposals index | 2 |
 | `server/src/sync/caps.ts` | Create: the codes' words (Tasks 2–4) | 2, 3, 4 |
 | `server/src/http/errors.ts` | The new trigger codes | 2 |
-| `server/test/cap-fixtures.ts` | Create: `seedRows`, `countOf` | 2 |
-| `server/test/account-caps.test.ts` | Create: the four account caps | 2 |
-| `server/test/schema.test.ts`, `server/test/limits.test.ts` | Query plans; requests that arrive together | 2 |
+| `server/test/cap-fixtures.ts` | Create: `seedRows`, `countOf`, `seedCount`, `kept` | 2 |
+| `server/test/account-caps.test.ts` | Create: the account caps (Task 2); logged exercises and sets (Task 3) | 2, 3 |
+| `server/test/schema.test.ts`, `server/test/limits.test.ts` | Query plans; requests that arrive together | 2, 3 |
 | `scripts/test-sync-integration.sh` | `account_rows` in the deletion check | 2 |
-| `server/src/sync/workouts.ts`, `server/test/sync-workouts.test.ts` | The size of one workout | 3 |
+| `server/src/sync/workouts.ts`, `server/test/sync-workouts.test.ts` | One workout's size; the save moves the logged counts | 3 |
 | `server/src/mcp/d1-db.ts`, `server/test/claude-caps.test.ts` (create) | Claude's refusals | 4 |
 | `ios/Packages/GymCore/Sources/GymCore/Model/Workout+Editing.swift`, `Tests/GymCoreTests/WorkoutEditingTests.swift` | The phone stops at 50 and 50 | 5 |
 | `ios/GymRollins/Features/Workout/ExerciseScreenModel.swift`, `LoggingView.swift`, `WorkoutOverviewView.swift`, `ios/GymRollinsTests/WorkoutSessionTests.swift` | Add Set and Add exercise at the cap | 5 |
-| `ios/Packages/GymSync/Tests/GymSyncTests/ApiSyncTransportCapTests.swift`, `SyncEngineCapTests.swift` (create), `FakeTransport.swift` | The caps' path through GymSync | 6 |
-| `ios/GymRollins/Features/Sync/SyncStatusText.swift`, `ios/GymRollins/Features/Account/AccountView.swift`, `ios/GymRollinsTests/SyncSupportTests.swift` | One line per kind and reason | 6 |
-| `docs/cloudflare-checklist.md`, `docs/release-readiness.md`, `server/README.md` | The caps built; what is open | 7 |
-| this plan | `## Outcome` | 8 |
+| `ios/Packages/GymCore/Sources/GymCore/Import/ImportSplit.swift` (create), `ImportTypes.swift`, `ImportSupport.swift`, `Tests/GymCoreTests/ImportSplitTests.swift` (create) | The importers split | 6 |
+| `ios/GymRollins/Features/Import/ImportService.swift`, `ios/GymRollinsTests/ImportServiceTests.swift` | The pieces' titles and duplicates | 6 |
+| `ios/Packages/GymSync/Tests/GymSyncTests/ApiSyncTransportCapTests.swift`, `SyncEngineCapTests.swift` (create), `FakeTransport.swift` | The caps' path through GymSync | 7 |
+| `ios/GymRollins/Features/Sync/SyncStatusText.swift`, `ios/GymRollins/Features/Account/AccountView.swift`, `ios/GymRollinsTests/SyncSupportTests.swift` | One line per kind and reason | 7 |
+| `docs/cloudflare-checklist.md`, `docs/release-readiness.md`, `server/README.md` | The caps built; what is open | 8 |
+| this plan | `## Outcome` | 9 |
+
+GymData's code doesn't change: the caps reach it only as sync failures, which it already stores.
 
 ## How to run things
 
@@ -235,7 +319,10 @@ scripts/test-sync-integration.sh                           # GymSyncIntegrationT
 ```
 
 - Vitest ends with `Test Files  N passed (N)` and `Tests  M passed (M)`. `swift test` prints `Test run with N tests in M
-  suites passed`.
+  suites passed`; a parameterized test counts once.
+- **A new GymCore file and the packages that use it:** after Task 6 adds `ImportSplit.swift`, GymSync's (and GymData's)
+  incremental build may not see it ("cannot find 'ImportSplit' in scope"). Run `swift package clean` in that package
+  once, then test again.
 - **Counts.** Each step names the count this plan expects from the base: the server at `Test Files  43 passed (43)`,
   `Tests  602 passed (602)`; GymCore 533 tests in 64 suites, GymSync 214 in 26 (plan 30's Outcome). If Task 1, Step 1
   finds other base numbers, add this plan's new tests to those instead, and record both in the Outcome.
@@ -260,7 +347,9 @@ scripts/test-sync-integration.sh                           # GymSyncIntegrationT
 
 ---
 
-### Task 1: The numbers, in `DomainLimits` and the server's copy
+### Task 1: The owner's sizes, and the numbers in `DomainLimits`
+
+Read-only first: the caps and the import split are checked against the owner's real data before any code is written.
 
 **Files:**
 - Modify: `ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift`, `server/src/shared/domain-limits.ts`,
@@ -287,7 +376,30 @@ Expected:
   and change every `0010` in this plan with it.
 - `Test Files  43 passed (43)`, `Tests  602 passed (602)`.
 
-- [ ] **Step 2: Write the failing tests**
+- [ ] **Step 2: Measure the owner's data (read-only, numbers only)**
+
+The owner's phone backup is personal data, kept outside the repo. On 2026-11-08 it was the scratch folder
+`phone-backup-p25-1794090751`. Copy the whole folder, open only the copy, and remove the copy afterwards. Opening the
+backup's own `default.store` would rewrite its log, and it would stop being a copy of the phone.
+
+```bash
+BACKUP=<the owner's backup folder, outside the repo>
+READ="$(mktemp -d)"
+cp -R "$BACKUP" "$READ/"
+DB="$READ/$(basename "$BACKUP")/Library/Application Support/default.store"
+sqlite3 "$DB" "select (select max(n) from (select count(*) n from ZWORKOUTENTRYRECORD group by ZWORKOUT)), (select max(n) from (select count(*) n from ZSETRECORD group by ZENTRY)), (select count(*) from ZWORKOUTRECORD), (select count(*) from ZWORKOUTENTRYRECORD), (select count(*) from ZSETRECORD), (select count(*) from ZBODYWEIGHTRECORD), (select count(*) from ZROUTINERECORD), (select count(*) from ZCUSTOMEXERCISERECORD), (select count(*) from ZEXERCISEPREFERENCERECORD), (select count(*) from ZPROPOSALRECORD), (select count(*) from ZGYMRECORD), (select count(*) from ZGYMLISTINGRECORD)"
+rm -rf "$READ"
+```
+
+Expected: `15|8|148|836|2685|23|6|42|0|4|1|1` (2026-11-08), or a newer backup's numbers within every cap:
+- the largest exercises in one workout, then sets in one exercise: at most 50 each;
+- workouts, entries, sets, weigh-ins, routines, custom exercises, exercise preferences, proposals, gyms and listings:
+  far under 10,000, 50,000, 250,000, 20,000, 200, 1,000, 2,000, 5,000, 500 and 5,000.
+
+Write the line in the Outcome. If a largest value is over 50, or a count near its cap, stop and ask the owner: that
+data would be refused at the cutover (decision 10).
+
+- [ ] **Step 3: Write the failing tests**
 
 In `ios/Packages/GymCore/Tests/GymCoreTests/DomainLimitsTests.swift`, add inside `DomainLimitsTests`, after
 `routineNameAndExerciseCount`:
@@ -301,6 +413,12 @@ In `ios/Packages/GymCore/Tests/GymCoreTests/DomainLimitsTests.swift`, add inside
         #expect(DomainLimits.routinesMax == 200)
         #expect(DomainLimits.customExercisesMax == 1_000)
         #expect(DomainLimits.pendingProposalsMax == 100)
+        #expect(DomainLimits.proposalsMax == 5_000)
+        #expect(DomainLimits.exercisePrefsMax == 2_000)
+        #expect(DomainLimits.privateGymsTotalMax == 500)
+        #expect(DomainLimits.privateListingsTotalMax == 5_000)
+        #expect(DomainLimits.accountEntriesMax == 50_000)
+        #expect(DomainLimits.accountSetsMax == 250_000)
         #expect(DomainLimits.workoutEntriesMax == 50)
         #expect(DomainLimits.entrySetsMax == 50)
     }
@@ -315,18 +433,18 @@ In `server/test/domain-limits-drift.test.ts`, replace
 with
 
 ```ts
-    expect(Object.keys(swift).length).toBeGreaterThanOrEqual(47)
+    expect(Object.keys(swift).length).toBeGreaterThanOrEqual(53)
 ```
 
-- [ ] **Step 3: Run them to see them fail**
+- [ ] **Step 4: Run them to see them fail**
 
 Run: `(cd ios/Packages/GymCore && swift test --filter DomainLimitsTests)`
-Expected: the build fails with `type 'DomainLimits' has no member 'workoutsMax'` (and the six others).
+Expected: the build fails with `type 'DomainLimits' has no member 'workoutsMax'` (and the twelve others).
 
 Run: `(cd server && npx vitest run test/domain-limits-drift.test.ts)`
-Expected: FAIL in "finds the Swift constants": `expected 40 to be greater than or equal to 47`.
+Expected: FAIL in "finds the Swift constants": `expected 40 to be greater than or equal to 53`.
 
-- [ ] **Step 4: Add the caps to `DomainLimits.swift`**
+- [ ] **Step 5: Add the caps to `DomainLimits.swift`**
 
 Replace the doc comment's first two lines
 
@@ -352,6 +470,13 @@ and after `public static let gymActiveListingsMax = 300`, add:
     public static let routinesMax = 200
     public static let customExercisesMax = 1_000
     public static let pendingProposalsMax = 100
+    public static let proposalsMax = 5_000
+    public static let exercisePrefsMax = 2_000
+    public static let privateGymsTotalMax = 500
+    public static let privateListingsTotalMax = 5_000
+    // Exercises and sets logged per account, deleted workouts included (server/src/sync/workouts.ts keeps the counts)
+    public static let accountEntriesMax = 50_000
+    public static let accountSetsMax = 250_000
     // One workout, as each save stores it (server/src/sync/workouts.ts)
     public static let workoutEntriesMax = 50
     public static let entrySetsMax = 50
@@ -363,9 +488,9 @@ Run: `(cd ios/Packages/GymCore && swift test --filter DomainLimitsTests)`
 Expected: `Test run with 7 tests in 1 suite passed`.
 
 Run: `(cd server && npx vitest run test/domain-limits-drift.test.ts)`
-Expected: FAIL in "has every Swift limit in the server": the seven new names are missing from the server's copy.
+Expected: FAIL in "has every Swift limit in the server": the thirteen new names are missing from the server's copy.
 
-- [ ] **Step 5: Add them to the server's copy**
+- [ ] **Step 6: Add them to the server's copy**
 
 In `server/src/shared/domain-limits.ts`, after `gymActiveListingsMax: 300,`, add:
 
@@ -376,6 +501,13 @@ In `server/src/shared/domain-limits.ts`, after `gymActiveListingsMax: 300,`, add
   routinesMax: 200,
   customExercisesMax: 1_000,
   pendingProposalsMax: 100,
+  proposalsMax: 5_000,
+  exercisePrefsMax: 2_000,
+  privateGymsTotalMax: 500,
+  privateListingsTotalMax: 5_000,
+  // Exercises and sets logged per account, deleted workouts included (src/sync/workouts.ts keeps the counts)
+  accountEntriesMax: 50_000,
+  accountSetsMax: 250_000,
   // One workout, as each save stores it (src/sync/workouts.ts)
   workoutEntriesMax: 50,
   entrySetsMax: 50,
@@ -387,7 +519,7 @@ Expected: `Tests  5 passed (5)`; `tsc` prints nothing.
 Run: `(cd ios/Packages/GymCore && swift test)`
 Expected: `Test run with 534 tests in 64 suites passed`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift \
@@ -396,19 +528,19 @@ git add ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift \
 git commit -m "feat: the storage caps' numbers in DomainLimits and the server's copy"
 ```
 
-- [ ] **Step 7: Review**
+- [ ] **Step 8: Review**
 
 Ask **code-reviewer**:
-- the seven names and values against decision 1;
-- the drift test fails when one changes: `workoutsMax = 10_001` in a scratch copy of `DomainLimits.swift`, never
+- the thirteen names and values against decision 1;
+- the drift test fails when one changes: `accountSetsMax = 250_001` in a scratch copy of `DomainLimits.swift`, never
   committed.
 
 ---
 
 ### Task 2: The account caps in D1
 
-`0010_account_caps.sql` holds all of this plan's SQL: the count table, the four account caps, and the pending
-proposals' cap and index. Claude's side of the proposals cap is Task 4.
+`0010_account_caps.sql` holds all of this plan's SQL: the counts, every account cap, the two caps on the logged counts
+(their moves are Task 3), and the pending proposals' cap and index. Claude's side of the proposal caps is Task 4.
 
 **Files:**
 - Create: `server/migrations/0010_account_caps.sql`, `server/src/sync/caps.ts`, `server/test/cap-fixtures.ts`,
@@ -427,42 +559,108 @@ import { expect } from 'vitest'
 // Accounts near a storage cap (plan 31): rows written straight to D1, so a test can start a row or two short of
 // 20,000. They go through the same triggers as a push, so the account's count (account_rows) includes them.
 
-export type CappedTable = 'workouts' | 'bodyweight' | 'routines' | 'custom_exercises'
+export type CappedTable =
+  | 'workouts'
+  | 'bodyweight'
+  | 'routines'
+  | 'custom_exercises'
+  | 'exercise_prefs'
+  | 'gyms'
+  | 'gym_equipment'
+/** The two counts a workout save moves itself (src/sync/workouts.ts). */
+export type LoggedTable = 'workout_entries' | 'workout_sets'
+/** Every table account_rows counts. Proposals are seeded by test/claude-caps.test.ts. */
+export type CountedTable = CappedTable | LoggedTable | 'proposals'
 
 const T = '2026-11-07T10:00:00.000000Z'
+/** Every other seeded row is deleted: deleted rows count toward the caps too. */
+const HALF_DELETED = 'CASE WHEN key % 2 = 1 THEN ?3 END'
+const GENERIC_DUMBBELLS =
+  "(SELECT id FROM equipment_items WHERE kind_id = 'dumbbells' AND brand IS NULL AND model IS NULL)"
 
-/** What each table needs besides id, user_id and deleted_at: its columns and their SQL values (?3 is T). */
+/** Each table's columns, and their values over json_each: `value` a new key, ?1 the account, ?3 T, ?4 a gym. */
 const FILL: Readonly<Record<CappedTable, { readonly columns: string; readonly values: string }>> = {
-  workouts: { columns: 'started_at, name, client_updated_at, updated_at', values: "?3, 'Seeded', ?3, ?3" },
-  bodyweight: { columns: 'measured_at, w_kg, client_updated_at, updated_at', values: '?3, 80, ?3, ?3' },
-  routines: { columns: 'name, client_updated_at, updated_at', values: "'Seeded', ?3, ?3" },
+  workouts: {
+    columns: 'id, user_id, started_at, name, client_updated_at, updated_at, deleted_at',
+    values: `value, ?1, ?3, 'Seeded', ?3, ?3, ${HALF_DELETED}`,
+  },
+  bodyweight: {
+    columns: 'id, user_id, measured_at, w_kg, client_updated_at, updated_at, deleted_at',
+    values: `value, ?1, ?3, 80, ?3, ?3, ${HALF_DELETED}`,
+  },
+  routines: {
+    columns: 'id, user_id, name, client_updated_at, updated_at, deleted_at',
+    values: `value, ?1, 'Seeded', ?3, ?3, ${HALF_DELETED}`,
+  },
   custom_exercises: {
-    columns: 'n, bp, eq, tg, client_updated_at, updated_at',
-    values: "'Seeded', 'legs', 'machine', 'quads', ?3, ?3",
+    columns: 'id, user_id, n, bp, eq, tg, client_updated_at, updated_at, deleted_at',
+    values: `value, ?1, 'Seeded', 'legs', 'machine', 'quads', ?3, ?3, ${HALF_DELETED}`,
+  },
+  // No deleted_at: a preference is only ever set.
+  exercise_prefs: {
+    columns: 'user_id, exercise_id, pref, client_updated_at, updated_at',
+    values: "?1, value, 'more', ?3, ?3",
+  },
+  // All deleted, so the live caps (100 gyms, 1,000 listings) stay out of the way.
+  gyms: {
+    columns: 'id, visibility, owner_id, created_by, name, client_updated_at, created_at, updated_at, deleted_at',
+    values: "value, 'private', ?1, ?1, 'Seeded', ?3, ?3, ?3, ?3",
+  },
+  gym_equipment: {
+    columns:
+      'id, gym_id, item_id, visibility, owner_id, added_by, client_updated_at, created_at, updated_at, deleted_at',
+    values: `value, ?4, ${GENERIC_DUMBBELLS}, 'private', ?1, ?1, ?3, ?3, ?3, ?3`,
   },
 }
 
-const newId = (table: CappedTable) =>
-  table === 'custom_exercises' ? `custom-${crypto.randomUUID()}` : crypto.randomUUID()
-
-/** `count` rows of `table` for the account, every other one deleted: deleted rows count toward the caps too. */
-export async function seedRows(table: CappedTable, userId: string, count: number): Promise<void> {
-  const { columns, values } = FILL[table]
-  const ids = Array.from({ length: count }, () => newId(table))
-  await env.DB.prepare(
-    `INSERT INTO ${table} (id, user_id, ${columns}, deleted_at) ` +
-      `SELECT value, ?1, ${values}, CASE WHEN key % 2 = 1 THEN ?3 END FROM json_each(?2)`,
-  ).bind(userId, JSON.stringify(ids), T).run()
+const newKey = (table: CappedTable) => {
+  if (table === 'custom_exercises') return `custom-${crypto.randomUUID()}`
+  if (table === 'exercise_prefs') return `ex_${crypto.randomUUID()}`
+  return crypto.randomUUID()
 }
 
-/** The account's rows in `table`, deleted ones included; fails when the count the triggers keep disagrees. */
-export async function countOf(table: CappedTable, userId: string): Promise<number> {
+/** `count` rows of `table` for the account (listings at one private gym of their own, which counts as a gym). */
+export async function seedRows(table: CappedTable, userId: string, count: number): Promise<void> {
+  const { columns, values } = FILL[table]
+  const keys = JSON.stringify(Array.from({ length: count }, () => newKey(table)))
+  const insert = env.DB.prepare(`INSERT INTO ${table} (${columns}) SELECT ${values} FROM json_each(?2)`)
+  if (table !== 'gym_equipment') {
+    await insert.bind(userId, keys, T).run()
+    return
+  }
+  const gym = crypto.randomUUID()
+  await env.DB.prepare(
+    `INSERT INTO gyms (${FILL.gyms.columns}) VALUES (?2, 'private', ?1, ?1, 'Seeded', ?3, ?3, ?3, ?3)`,
+  ).bind(userId, gym, T).run()
+  await insert.bind(userId, keys, T, gym).run()
+}
+
+const OWNER: Readonly<Record<string, string>> = { gyms: 'owner_id', gym_equipment: 'owner_id' }
+
+/** The account's rows in `table`, deleted ones included; fails when the count kept in account_rows disagrees. */
+export async function countOf(table: CountedTable, userId: string): Promise<number> {
+  const owner = OWNER[table] ?? 'user_id'
   const row = (await env.DB.prepare(
-    `SELECT (SELECT count(*) FROM ${table} WHERE user_id = ?1) AS stored, ` +
+    `SELECT (SELECT count(*) FROM ${table} WHERE ${owner} = ?1) AS stored, ` +
       '(SELECT n FROM account_rows WHERE user_id = ?1 AND tbl = ?2) AS kept',
   ).bind(userId, table).first<{ stored: number; kept: number | null }>())!
   expect(row.kept ?? 0, `account_rows for ${table}`).toBe(row.stored)
   return row.stored
+}
+
+/** The count account_rows keeps for the account. */
+export async function kept(table: LoggedTable, userId: string): Promise<number> {
+  const row = await env.DB.prepare('SELECT n FROM account_rows WHERE user_id = ?1 AND tbl = ?2').bind(userId, table)
+    .first<{ n: number }>()
+  return row?.n ?? 0
+}
+
+/** Sets the account's count of logged entries or sets without writing the rows: the caps read only the count. */
+export async function seedCount(table: LoggedTable, userId: string, n: number): Promise<void> {
+  await env.DB.prepare(
+    'INSERT INTO account_rows (user_id, tbl, n) VALUES (?1, ?2, ?3) ' +
+      'ON CONFLICT (user_id, tbl) DO UPDATE SET n = excluded.n',
+  ).bind(userId, table, n).run()
 }
 ```
 
@@ -470,19 +668,30 @@ export async function countOf(table: CappedTable, userId: string): Promise<numbe
 
 ```ts
 import { env } from 'cloudflare:workers'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
 import { ACCOUNT_CAPS } from '../src/sync/caps.ts'
 import { type CappedTable, countOf, seedRows } from './cap-fixtures.ts'
 import { insertUser } from './gym-fixtures.ts'
 import { request, signUp } from './helpers.ts'
-import { KEY, type Row, SAMPLES, T1, T2, workoutSample } from './samples.ts'
+import { KEY, type Row, SAMPLES, sampleNeeds, T1, T2, workoutSample } from './samples.ts'
 
 // Each account cap at its exact number (plan 31): N-1 and N are stored, N+1 is refused with its code and the app's
 // words, and nothing of the refused push is stored. A stored row can still be edited, deleted and brought back at the
 // cap. A deletion frees nothing, because its tombstone counts. Another account's rows don't count.
 
+beforeAll(sampleNeeds)
+
 const T3 = '2026-11-07T12:00:00.000000Z'
+
+interface Saved {
+  status: 'ok' | 'stale'
+  updated_at: string
+}
+
+const push = (token: string, entity: string, rows: Row[]) =>
+  request('POST', `/v1/sync/${entity}`, { token, body: { rows } })
+const save = (token: string, workout: Row) => request('POST', '/v1/sync/workouts', { token, body: workout })
 
 async function refusedWith(res: Response, code: string): Promise<void> {
   expect(res.status).toBe(422)
@@ -495,9 +704,14 @@ describe('the words', () => {
       "You've reached the limit of 20,000 weigh-ins on one account, deleted ones included. " +
         'This one stays on this iPhone.',
     )
+    expect(ACCOUNT_CAPS.too_many_logged_sets).toBe(
+      "You've reached the limit of 250,000 sets logged on one account, deleted workouts included. " +
+        'This workout stays on this iPhone.',
+    )
     expect(Object.keys(ACCOUNT_CAPS).sort()).toEqual([
-      'too_many_body_weights', 'too_many_custom_exercises', 'too_many_proposals', 'too_many_routines',
-      'too_many_workouts',
+      'too_many_body_weights', 'too_many_custom_exercises', 'too_many_exercise_prefs', 'too_many_gyms_total',
+      'too_many_listings_total', 'too_many_logged_exercises', 'too_many_logged_sets', 'too_many_pending_proposals',
+      'too_many_proposals', 'too_many_routines', 'too_many_workouts',
     ])
   })
 })
@@ -519,7 +733,6 @@ const SYNCED: Synced[] = [
 ]
 
 describe.each(SYNCED)('$entity', ({ entity, table, max, code }) => {
-  const push = (token: string, rows: Row[]) => request('POST', `/v1/sync/${entity}`, { token, body: { rows } })
   const fresh = () => SAMPLES[entity]()
 
   /** The stored row's edit time, or undefined when the row isn't stored. */
@@ -532,12 +745,12 @@ describe.each(SYNCED)('$entity', ({ entity, table, max, code }) => {
   it('holds the cap, deleted rows included: N-1 and N are stored, N+1 is refused', async () => {
     const { token, userId } = await signUp()
     await seedRows(table, userId, max - 2)
-    expect((await push(token, [fresh()])).status).toBe(200)
+    expect((await push(token, entity, [fresh()])).status).toBe(200)
     expect(await countOf(table, userId)).toBe(max - 1)
-    expect((await push(token, [fresh()])).status).toBe(200)
+    expect((await push(token, entity, [fresh()])).status).toBe(200)
     expect(await countOf(table, userId)).toBe(max)
     const last = fresh()
-    await refusedWith(await push(token, [last]), code)
+    await refusedWith(await push(token, entity, [last]), code)
     expect(await countOf(table, userId)).toBe(max)
     expect(await storedEdit(last, userId)).toBeUndefined()
   })
@@ -547,35 +760,86 @@ describe.each(SYNCED)('$entity', ({ entity, table, max, code }) => {
       const { token, userId } = await signUp()
       await seedRows(table, userId, max - 1)
       const row = fresh()
-      expect((await push(token, [row])).status).toBe(200)
+      expect((await push(token, entity, [row])).status).toBe(200)
       const edit = { ...row, client_updated_at: T2 }
-      await refusedWith(await push(token, [edit, fresh()]), code)
+      await refusedWith(await push(token, entity, [edit, fresh()]), code)
       expect(await storedEdit(row, userId)).toBe(T1)
-      expect((await push(token, [edit])).status).toBe(200)
-      expect((await push(token, [{ ...edit, deleted_at: T2 }])).status).toBe(200)
-      expect((await push(token, [{ ...edit, client_updated_at: T3, deleted_at: null }])).status).toBe(200)
+      expect((await push(token, entity, [edit])).status).toBe(200)
+      expect((await push(token, entity, [{ ...edit, deleted_at: T2 }])).status).toBe(200)
+      expect((await push(token, entity, [{ ...edit, client_updated_at: T3, deleted_at: null }])).status).toBe(200)
       expect(await storedEdit(row, userId)).toBe(T3)
-      await refusedWith(await push(token, [fresh()]), code)
+      await refusedWith(await push(token, entity, [fresh()]), code)
       expect(await countOf(table, userId)).toBe(max)
     })
 
   it('counts a deletion the server never had as a new row', async () => {
     const { token, userId } = await signUp()
     await seedRows(table, userId, max)
-    await refusedWith(await push(token, [{ ...fresh(), deleted_at: T1 }]), code)
+    await refusedWith(await push(token, entity, [{ ...fresh(), deleted_at: T1 }]), code)
   })
 
   it("doesn't count another account's rows", async () => {
     await seedRows(table, await insertUser(), max)
     const { token, userId } = await signUp()
-    expect((await push(token, [fresh()])).status).toBe(200)
+    expect((await push(token, entity, [fresh()])).status).toBe(200)
     expect(await countOf(table, userId)).toBe(1)
+  })
+})
+
+describe('exercise preferences', () => {
+  const max = DomainLimits.exercisePrefsMax
+
+  it('hold 2,000 per account: N-1 and N are stored, N+1 is refused, and an edit at the cap goes through', async () => {
+    const { token, userId } = await signUp()
+    await seedRows('exercise_prefs', userId, max - 2)
+    const pref = SAMPLES['exercise-prefs']()
+    expect((await push(token, 'exercise-prefs', [pref])).status).toBe(200)
+    expect(await countOf('exercise_prefs', userId)).toBe(max - 1)
+    expect((await push(token, 'exercise-prefs', [SAMPLES['exercise-prefs']()])).status).toBe(200)
+    await refusedWith(await push(token, 'exercise-prefs', [SAMPLES['exercise-prefs']()]), 'too_many_exercise_prefs')
+    const edit = { ...pref, pref: 'never', client_updated_at: T2 }
+    expect((await push(token, 'exercise-prefs', [edit])).status).toBe(200)
+    expect(await countOf('exercise_prefs', userId)).toBe(max)
+  })
+
+  it("don't count another account's", async () => {
+    await seedRows('exercise_prefs', await insertUser(), max)
+    const { token } = await signUp()
+    expect((await push(token, 'exercise-prefs', [SAMPLES['exercise-prefs']()])).status).toBe(200)
+  })
+})
+
+const PRIVATE: Synced[] = [
+  { entity: 'gyms', table: 'gyms', max: DomainLimits.privateGymsTotalMax, code: 'too_many_gyms_total' },
+  {
+    entity: 'gym-listings', table: 'gym_equipment', max: DomainLimits.privateListingsTotalMax,
+    code: 'too_many_listings_total',
+  },
+]
+
+describe('private gyms and listings, deleted ones included', () => {
+  it.each(PRIVATE)('$entity: N-1 and N are stored, N+1 is refused under the live cap, and an edit goes through',
+    async ({ entity, table, max, code }) => {
+      const { token, userId } = await signUp()
+      await seedRows(table, userId, max - 2)
+      const first = SAMPLES[entity]()
+      expect((await push(token, entity, [first])).status).toBe(200)
+      expect(await countOf(table, userId)).toBe(max - 1)
+      expect((await push(token, entity, [SAMPLES[entity]()])).status).toBe(200)
+      await refusedWith(await push(token, entity, [SAMPLES[entity]()]), code)
+      expect((await push(token, entity, [{ ...first, client_updated_at: T2 }])).status).toBe(200)
+      expect(await countOf(table, userId)).toBe(max)
+    })
+
+  it.each(PRIVATE)("$entity: another account's don't count", async ({ entity, table, max }) => {
+    await seedRows(table, await insertUser(), max)
+    const { token } = await signUp()
+    expect((await push(token, entity, [SAMPLES[entity]()])).status).toBe(200)
   })
 })
 
 describe('workouts', () => {
   const max = DomainLimits.workoutsMax
-  const save = (token: string, workout: Row) => request('POST', '/v1/sync/workouts', { token, body: workout })
   const entriesOf = async (userId: string) => (await env.DB.prepare(
     'SELECT count(*) AS n FROM workout_entries WHERE user_id = ?1',
   ).bind(userId).first<{ n: number }>())!.n
@@ -597,9 +861,10 @@ describe('workouts', () => {
     const { token, userId } = await signUp()
     await seedRows('workouts', userId, max - 1)
     const w = workoutSample()
-    const first = await (await save(token, w)).json<{ status: string; updated_at: string }>()
-    const edited = await save(token, { ...w, name: 'Pull', client_updated_at: T2, base_updated_at: first.updated_at })
-    const second = await edited.json<{ status: string; updated_at: string }>()
+    const first = await (await save(token, w)).json<Saved>()
+    const second = await (await save(token, {
+      ...w, name: 'Pull', client_updated_at: T2, base_updated_at: first.updated_at,
+    })).json<Saved>()
     expect(second.status).toBe('ok')
     const deleted = await save(token, {
       ...w, deleted_at: T3, client_updated_at: T3, base_updated_at: second.updated_at,
@@ -620,9 +885,11 @@ describe('workouts', () => {
 describe('the counts', () => {
   it('go with the account when it is deleted', async () => {
     const { token, userId } = await signUp()
-    for (const table of ['workouts', 'bodyweight', 'routines', 'custom_exercises'] as const) {
+    for (const table of ['workouts', 'bodyweight', 'routines', 'custom_exercises', 'exercise_prefs', 'gyms',
+      'gym_equipment'] as const) {
       await seedRows(table, userId, 3)
     }
+    expect((await save(token, workoutSample())).status).toBe(200)
     expect((await request('DELETE', '/v1/account', { token })).status).toBe(204)
     const left = await env.DB.prepare('SELECT count(*) AS n FROM account_rows WHERE user_id = ?1').bind(userId)
       .first<{ n: number }>()
@@ -641,18 +908,30 @@ and inside `describe('domain limits', …)`, after "keeps the cap triggers at th
 
 ```ts
   it('keeps the account caps in their triggers at the same numbers', () => {
-    const caps = [
+    const counted = [
       ['workouts', DomainLimits.workoutsMax, 'too_many_workouts'],
       ['bodyweight', DomainLimits.bodyweightsMax, 'too_many_body_weights'],
       ['routines', DomainLimits.routinesMax, 'too_many_routines'],
       ['custom_exercises', DomainLimits.customExercisesMax, 'too_many_custom_exercises'],
+      ['exercise_prefs', DomainLimits.exercisePrefsMax, 'too_many_exercise_prefs'],
+      ['proposals', DomainLimits.proposalsMax, 'too_many_proposals'],
+      ['gyms', DomainLimits.privateGymsTotalMax, 'too_many_gyms_total'],
+      ['gym_equipment', DomainLimits.privateListingsTotalMax, 'too_many_listings_total'],
     ] as const
-    for (const [table, max, code] of caps) {
+    for (const [table, max, code] of counted) {
       const trigger = `tbl = '${table}'), 0) >= ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
       expect(accountCaps.split(trigger).length - 1, code).toBe(1)
     }
+    const logged = [
+      [DomainLimits.accountEntriesMax, 'too_many_logged_exercises'],
+      [DomainLimits.accountSetsMax, 'too_many_logged_sets'],
+    ] as const
+    for (const [max, code] of logged) {
+      const trigger = `NEW.n > OLD.n AND NEW.n > ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
+      expect(accountCaps.split(trigger).length - 1, code).toBe(1)
+    }
     const pending = `status = 'pending') >= ${DomainLimits.pendingProposalsMax}\nBEGIN\n` +
-      "  SELECT RAISE(ABORT, 'too_many_proposals');"
+      "  SELECT RAISE(ABORT, 'too_many_pending_proposals');"
     expect(accountCaps.split(pending).length - 1).toBe(1)
   })
 ```
@@ -661,23 +940,23 @@ In `server/test/schema.test.ts`, add inside `describe('the D1 schema', …)`, af
 triggers:
 
 ```ts
-  it.each(['workouts', 'bodyweight', 'routines', 'custom_exercises'])(
-    "finds %s_cap's row and the account's count through primary keys, never by counting",
-    async (table) => {
-      const { sql } = (await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?1")
-        .bind(`${table}_cap`).first<{ sql: string }>())!
-      expect(sql).not.toMatch(/count\(/)
-      const lookups = [...sql.matchAll(/\((SELECT (?:1|n) FROM \w+ WHERE [^)]*)\)/g)].map((m) => m[1]!)
-      expect(lookups, sql).toHaveLength(2)
-      for (const lookup of lookups) {
-        const query = lookup.replace(/NEW\.(?:user_)?id/g, '?1')
-        const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${query}`).bind(crypto.randomUUID())
-          .all<{ detail: string }>()
-        expect(plan.results.map((r) => r.detail).join('\n'), query)
-          .toMatch(/^SEARCH \w+ USING (COVERING )?INDEX sqlite_autoindex_\w+_1 \(/)
-      }
-    },
-  )
+  it.each([
+    'workouts_cap', 'bodyweight_cap', 'routines_cap', 'custom_exercises_cap', 'exercise_prefs_cap', 'proposals_cap',
+    'gyms_total_cap', 'gym_equipment_total_cap',
+  ])("%s finds the row and the account's count through primary keys, never by counting", async (name) => {
+    const { sql } = (await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?1")
+      .bind(name).first<{ sql: string }>())!
+    expect(sql).not.toMatch(/count\(/)
+    const lookups = [...sql.matchAll(/\((SELECT (?:1|n) FROM \w+ WHERE [^)]*)\)/g)].map((m) => m[1]!)
+    expect(lookups.length, sql).toBeGreaterThanOrEqual(1)
+    for (const lookup of lookups) {
+      const query = lookup.replace(/NEW\.\w+/g, '?1')
+      const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${query}`).bind(crypto.randomUUID())
+        .all<{ detail: string }>()
+      expect(plan.results.map((r) => r.detail).join('\n'), query)
+        .toMatch(/^SEARCH \w+ USING (COVERING )?INDEX sqlite_autoindex_\w+_1 \(/)
+    }
+  })
 
   it("counts an account's pending proposals in proposals_pending_cap through proposals_user_pending", async () => {
     const { sql } = (await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?1")
@@ -732,13 +1011,15 @@ Expected: FAIL. `account-caps.test.ts` can't load `../src/sync/caps.ts`; the dri
 -- Plan 31: storage caps per account (docs/plans/2026-11-08-plan-31-account-caps.md). The numbers are DomainLimits'
 -- (ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift); test/domain-limits-drift.test.ts checks each one here.
 
--- How many rows each account holds in the four capped tables, deleted rows included. A deletion keeps its row as a
--- tombstone (deleted_at), so it still counts, and deleting frees nothing. The triggers below keep the count, so a cap
--- reads one row. A count(*) would read every row the account ever had, for every pushed row: no live-rows index can
--- serve it, and these tables have no index on user_id (a count reads the whole table).
+-- How many rows each account holds in the capped tables, deleted rows included. A deletion keeps its row as a
+-- tombstone (deleted_at), so it still counts, and deleting frees nothing. The triggers below and the workout save
+-- (src/sync/workouts.ts, for entries and sets) keep the counts, so a cap reads one row. A count(*) would read every row
+-- the account ever had, for every pushed row: no live-rows index can serve it, and most of these tables have no index
+-- on user_id (a count reads the whole table). gyms and gym_equipment count the account's private rows (owner_id).
 CREATE TABLE account_rows (
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE CHECK (length(user_id) = 36),
-  tbl TEXT NOT NULL CHECK (tbl IN ('workouts','bodyweight','routines','custom_exercises')),
+  tbl TEXT NOT NULL CHECK (tbl IN ('workouts','bodyweight','routines','custom_exercises','exercise_prefs','proposals',
+    'gyms','gym_equipment','workout_entries','workout_sets')),
   n INTEGER NOT NULL,
   PRIMARY KEY (user_id, tbl)
 );
@@ -747,15 +1028,27 @@ INSERT INTO account_rows (user_id, tbl, n) SELECT user_id, 'bodyweight', count(*
 INSERT INTO account_rows (user_id, tbl, n) SELECT user_id, 'routines', count(*) FROM routines GROUP BY user_id;
 INSERT INTO account_rows (user_id, tbl, n)
   SELECT user_id, 'custom_exercises', count(*) FROM custom_exercises GROUP BY user_id;
+INSERT INTO account_rows (user_id, tbl, n)
+  SELECT user_id, 'exercise_prefs', count(*) FROM exercise_prefs GROUP BY user_id;
+INSERT INTO account_rows (user_id, tbl, n) SELECT user_id, 'proposals', count(*) FROM proposals GROUP BY user_id;
+INSERT INTO account_rows (user_id, tbl, n)
+  SELECT owner_id, 'gyms', count(*) FROM gyms WHERE owner_id IS NOT NULL GROUP BY owner_id;
+INSERT INTO account_rows (user_id, tbl, n)
+  SELECT owner_id, 'gym_equipment', count(*) FROM gym_equipment WHERE owner_id IS NOT NULL GROUP BY owner_id;
+INSERT INTO account_rows (user_id, tbl, n)
+  SELECT user_id, 'workout_entries', count(*) FROM workout_entries GROUP BY user_id;
+INSERT INTO account_rows (user_id, tbl, n)
+  SELECT user_id, 'workout_sets', count(*) FROM workout_sets GROUP BY user_id;
 
--- Per table: <table>_cap refuses a new row once the account holds the cap; <table>_counted and <table>_uncounted keep
--- the count.
--- - A row is new when its id isn't stored yet. SQLite runs BEFORE INSERT for an upsert's row that turns into an
---   update too, so the id check is what lets an edit, a deletion or a revival through at the cap.
+-- Per table: <table>_cap (gyms_total_cap, gym_equipment_total_cap) refuses a new row once the account holds the cap;
+-- <table>_counted and <table>_uncounted keep the count.
+-- - A row is new when its key isn't stored yet. SQLite runs BEFORE INSERT for an upsert's row that turns into an
+--   update too, so the key check is what lets an edit, a deletion or a revival through at the cap. Proposals are only
+--   ever inserted, so theirs has none.
 -- - AFTER INSERT runs only for a row actually inserted, never for an upsert's update.
 -- - RAISE fails the whole statement, and the whole batch around it (a workout save). The server answers 422 with the
---   message as the code (src/http/errors.ts).
--- - Only an account's deletion removes these rows today, and the count goes with the account (ON DELETE CASCADE).
+--   message as the code (src/http/errors.ts); under Claude's writes it becomes words for Claude (src/mcp/d1-db.ts).
+-- - Only an account's deletion removes these rows today, and the counts go with the account (ON DELETE CASCADE).
 CREATE TRIGGER workouts_cap BEFORE INSERT ON workouts
   WHEN NOT EXISTS (SELECT 1 FROM workouts WHERE id = NEW.id)
     AND coalesce((SELECT n FROM account_rows WHERE user_id = NEW.user_id AND tbl = 'workouts'), 0) >= 10000
@@ -816,17 +1109,98 @@ CREATE TRIGGER custom_exercises_uncounted AFTER DELETE ON custom_exercises
 BEGIN
   UPDATE account_rows SET n = n - 1 WHERE user_id = OLD.user_id AND tbl = 'custom_exercises';
 END;
+CREATE TRIGGER exercise_prefs_cap BEFORE INSERT ON exercise_prefs
+  WHEN NOT EXISTS (SELECT 1 FROM exercise_prefs WHERE user_id = NEW.user_id AND exercise_id = NEW.exercise_id)
+    AND coalesce((SELECT n FROM account_rows WHERE user_id = NEW.user_id AND tbl = 'exercise_prefs'), 0) >= 2000
+BEGIN
+  SELECT RAISE(ABORT, 'too_many_exercise_prefs');
+END;
+CREATE TRIGGER exercise_prefs_counted AFTER INSERT ON exercise_prefs
+BEGIN
+  INSERT INTO account_rows (user_id, tbl, n) VALUES (NEW.user_id, 'exercise_prefs', 1)
+    ON CONFLICT (user_id, tbl) DO UPDATE SET n = n + 1;
+END;
+CREATE TRIGGER exercise_prefs_uncounted AFTER DELETE ON exercise_prefs
+BEGIN
+  UPDATE account_rows SET n = n - 1 WHERE user_id = OLD.user_id AND tbl = 'exercise_prefs';
+END;
+CREATE TRIGGER proposals_cap BEFORE INSERT ON proposals
+  WHEN coalesce((SELECT n FROM account_rows WHERE user_id = NEW.user_id AND tbl = 'proposals'), 0) >= 5000
+BEGIN
+  SELECT RAISE(ABORT, 'too_many_proposals');
+END;
+CREATE TRIGGER proposals_counted AFTER INSERT ON proposals
+BEGIN
+  INSERT INTO account_rows (user_id, tbl, n) VALUES (NEW.user_id, 'proposals', 1)
+    ON CONFLICT (user_id, tbl) DO UPDATE SET n = n + 1;
+END;
+CREATE TRIGGER proposals_uncounted AFTER DELETE ON proposals
+BEGIN
+  UPDATE account_rows SET n = n - 1 WHERE user_id = OLD.user_id AND tbl = 'proposals';
+END;
+CREATE TRIGGER gyms_total_cap BEFORE INSERT ON gyms
+  WHEN NEW.owner_id IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM gyms WHERE id = NEW.id)
+    AND coalesce((SELECT n FROM account_rows WHERE user_id = NEW.owner_id AND tbl = 'gyms'), 0) >= 500
+BEGIN
+  SELECT RAISE(ABORT, 'too_many_gyms_total');
+END;
+CREATE TRIGGER gyms_counted AFTER INSERT ON gyms
+  WHEN NEW.owner_id IS NOT NULL
+BEGIN
+  INSERT INTO account_rows (user_id, tbl, n) VALUES (NEW.owner_id, 'gyms', 1)
+    ON CONFLICT (user_id, tbl) DO UPDATE SET n = n + 1;
+END;
+CREATE TRIGGER gyms_uncounted AFTER DELETE ON gyms
+  WHEN OLD.owner_id IS NOT NULL
+BEGIN
+  UPDATE account_rows SET n = n - 1 WHERE user_id = OLD.owner_id AND tbl = 'gyms';
+END;
+CREATE TRIGGER gym_equipment_total_cap BEFORE INSERT ON gym_equipment
+  WHEN NEW.owner_id IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM gym_equipment WHERE id = NEW.id)
+    AND coalesce((SELECT n FROM account_rows WHERE user_id = NEW.owner_id AND tbl = 'gym_equipment'), 0) >= 5000
+BEGIN
+  SELECT RAISE(ABORT, 'too_many_listings_total');
+END;
+CREATE TRIGGER gym_equipment_counted AFTER INSERT ON gym_equipment
+  WHEN NEW.owner_id IS NOT NULL
+BEGIN
+  INSERT INTO account_rows (user_id, tbl, n) VALUES (NEW.owner_id, 'gym_equipment', 1)
+    ON CONFLICT (user_id, tbl) DO UPDATE SET n = n + 1;
+END;
+CREATE TRIGGER gym_equipment_uncounted AFTER DELETE ON gym_equipment
+  WHEN OLD.owner_id IS NOT NULL
+BEGIN
+  UPDATE account_rows SET n = n - 1 WHERE user_id = OLD.owner_id AND tbl = 'gym_equipment';
+END;
 
--- At most 100 proposals waiting for the owner (pending) per account. Claude's insert is the only writer
--- (src/mcp/d1-db.ts, insertProposal), one row at a time, and a resolved proposal never turns pending again
--- (src/claude/proposals.ts refuses it), so a live count is enough: at most 100 rows, read through this index, which
--- the app's pull of pending proposals uses too.
+-- Exercises and sets logged, deleted workouts included. A workout save deletes the workout's entries and sets and
+-- writes the ones it carries, so it moves these two counts itself, once a save, by what it changes
+-- (src/sync/workouts.ts, MOVE_ENTRIES and MOVE_SETS): row triggers here would write the count once per row deleted and
+-- once per row written, on every save. These refuse a save that would take a count past its cap; a save that keeps or
+-- lowers it always passes. The first count row an account gets is at most one workout's size, far under either cap.
+CREATE TRIGGER account_rows_entries_cap BEFORE UPDATE OF n ON account_rows
+  WHEN NEW.tbl = 'workout_entries' AND NEW.n > OLD.n AND NEW.n > 50000
+BEGIN
+  SELECT RAISE(ABORT, 'too_many_logged_exercises');
+END;
+CREATE TRIGGER account_rows_sets_cap BEFORE UPDATE OF n ON account_rows
+  WHEN NEW.tbl = 'workout_sets' AND NEW.n > OLD.n AND NEW.n > 250000
+BEGIN
+  SELECT RAISE(ABORT, 'too_many_logged_sets');
+END;
+
+-- At most 100 proposals waiting for the owner (pending) per account, besides proposals_cap's 5,000 in all. Claude's
+-- insert is the only writer (src/mcp/d1-db.ts, insertProposal), one row at a time, and a resolved proposal never turns
+-- pending again (src/claude/proposals.ts refuses it), so a live count is enough: at most 100 rows, read through this
+-- index, which the app's pull of pending proposals uses too.
 CREATE INDEX proposals_user_pending ON proposals (user_id, created_at, id) WHERE status = 'pending';
 CREATE TRIGGER proposals_pending_cap BEFORE INSERT ON proposals
   WHEN NEW.status = 'pending'
     AND (SELECT count(*) FROM proposals WHERE user_id = NEW.user_id AND status = 'pending') >= 100
 BEGIN
-  SELECT RAISE(ABORT, 'too_many_proposals');
+  SELECT RAISE(ABORT, 'too_many_pending_proposals');
 END;
 ```
 
@@ -844,18 +1218,28 @@ import { DomainLimits } from '../shared/domain-limits.ts'
 /** 10000 → "10,000", as the app writes numbers. */
 export const grouped = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 
-const full = (max: number, things: string) =>
-  `You've reached the limit of ${grouped(max)} ${things} on one account, deleted ones included. ` +
-  'This one stays on this iPhone.'
+const full = (max: number, things: string, deleted = 'deleted ones', kept = 'This one') =>
+  `You've reached the limit of ${grouped(max)} ${things} on one account, ${deleted} included. ` +
+  `${kept} stays on this iPhone.`
 
-/** What migrations/0010_account_caps.sql RAISEs, with the app's words (src/http/errors.ts answers 422 with them). */
+/**
+ * What migrations/0010_account_caps.sql RAISEs, with the app's words (src/http/errors.ts answers 422 with them). The
+ * two proposal codes are raised only under Claude's insert, which words them for Claude (CLAUDE_CAPS).
+ */
 export const ACCOUNT_CAPS: Readonly<Record<string, string>> = {
   too_many_workouts: full(DomainLimits.workoutsMax, 'workouts'),
   too_many_body_weights: full(DomainLimits.bodyweightsMax, 'weigh-ins'),
   too_many_routines: full(DomainLimits.routinesMax, 'routines'),
   too_many_custom_exercises: full(DomainLimits.customExercisesMax, 'custom exercises'),
-  // Raised only under Claude's insert, which words it for Claude (src/mcp/d1-db.ts).
-  too_many_proposals: `${grouped(DomainLimits.pendingProposalsMax)} proposals are waiting for review.`,
+  too_many_exercise_prefs: `You've reached the limit of ${grouped(DomainLimits.exercisePrefsMax)} exercise ` +
+    'preferences on one account. This one stays on this iPhone.',
+  too_many_gyms_total: full(DomainLimits.privateGymsTotalMax, 'gyms'),
+  too_many_listings_total: full(DomainLimits.privateListingsTotalMax, 'equipment listings'),
+  too_many_logged_exercises:
+    full(DomainLimits.accountEntriesMax, 'exercises logged', 'deleted workouts', 'This workout'),
+  too_many_logged_sets: full(DomainLimits.accountSetsMax, 'sets logged', 'deleted workouts', 'This workout'),
+  too_many_pending_proposals: `${grouped(DomainLimits.pendingProposalsMax)} proposals are waiting for review.`,
+  too_many_proposals: `The account holds ${grouped(DomainLimits.proposalsMax)} proposals.`,
 }
 ```
 
@@ -913,11 +1297,11 @@ cd server && npx vitest run test/account-caps.test.ts test/domain-limits-drift.t
   test/limits.test.ts
 ```
 
-Expected: `Test Files  4 passed (4)`. The counts: 17 in `account-caps.test.ts`, 6 in the drift test, 5 more in the
+Expected: `Test Files  4 passed (4)`. The counts: 23 in `account-caps.test.ts`, 6 in the drift test, 9 more in the
 schema test, 1 more in the limits test.
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  44 passed (44)`, `Tests  626 passed (626)`; `tsc` prints nothing. Every earlier test still
+Expected: `Test Files  44 passed (44)`, `Tests  636 passed (636)`; `tsc` prints nothing. Every earlier test still
 passes, so no sync, gym, Claude or account test came near a cap.
 
 - [ ] **Step 8: Commit**
@@ -926,29 +1310,30 @@ passes, so no sync, gym, Claude or account test came near a cap.
 git add server/migrations/0010_account_caps.sql server/src/sync/caps.ts server/src/http/errors.ts \
   server/test/cap-fixtures.ts server/test/account-caps.test.ts server/test/domain-limits-drift.test.ts \
   server/test/schema.test.ts server/test/limits.test.ts scripts/test-sync-integration.sh
-git commit -m "feat(server): per-account caps on workouts, weigh-ins, routines and custom exercises"
+git commit -m "feat(server): per-account caps on what one account stores, deleted rows included"
 ```
 
 - [ ] **Step 9: Review**
 
-Ask **code-reviewer** for decisions 2–5, 8, 11 and 12: only new rows are refused; a refused push stores nothing;
-`n` equals `count(*)` in every test (`countOf`); the words. Then **security-reviewer**: no route reads or writes
-`account_rows` (`git grep -n account_rows -- server/src` finds nothing), another account's rows never count, and a
-refusal names no other account's data. Then **typescript-reviewer**.
+Ask **code-reviewer** for decisions 2–4, 6, 7, 11, 15 and 16: only new rows are refused; a refused push stores
+nothing; `n` equals `count(*)` in every test (`countOf`); the words. Then **security-reviewer**: no route reads or
+writes `account_rows` (`git grep -n account_rows -- server/src` finds nothing yet), another account's rows never
+count, and a refusal names no other account's data. Then **typescript-reviewer**.
 
 ---
 
-### Task 3: The size of one workout
+### Task 3: One workout's size, and the exercises and sets an account logs
 
 **Files:**
-- Modify: `server/src/sync/workouts.ts`, `server/src/sync/caps.ts`
-- Test: `server/test/sync-workouts.test.ts`
+- Modify: `server/src/sync/workouts.ts`, `server/src/sync/caps.ts`, `server/test/account-caps.test.ts`,
+  `server/test/schema.test.ts`
+- Test: `server/test/sync-workouts.test.ts`, `server/test/account-caps.test.ts`
 
 - [ ] **Step 1: Check that the save is the only writer of entries and sets**
 
-Run: `git grep -n -E 'INSERT INTO workout_(entries|sets)|UPDATE workout_(entries|sets)' -- server/src`
-Expected: two lines, both in `server/src/sync/workouts.ts` (`INSERT_ENTRIES`, `INSERT_SETS`). Any other line: stop and
-report it; that writer needs the same caps.
+Run: `git grep -n -E '(INSERT INTO|UPDATE|DELETE FROM) workout_(entries|sets)' -- server/src`
+Expected: three lines, all in `server/src/sync/workouts.ts` (`DELETE_ENTRIES`, `INSERT_ENTRIES`, `INSERT_SETS`). Any
+other line: stop and report it. That writer would leave the logged counts wrong (decision 5).
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1015,10 +1400,146 @@ describe('the size of one workout', () => {
 
 `save`, `fetchOne`, `appUUID`, `T2` and `workoutSample` are the file's own helpers and imports.
 
+In `server/test/account-caps.test.ts`, replace the import from `./cap-fixtures.ts` with
+
+```ts
+import { type CappedTable, countOf, kept, type LoggedTable, seedCount, seedRows } from './cap-fixtures.ts'
+```
+
+and the import from `./samples.ts` with
+
+```ts
+import { appUUID, KEY, type Row, SAMPLES, sampleNeeds, T1, T2, type WorkoutJSON, workoutSample } from './samples.ts'
+```
+
+add `const T4 = '2026-11-07T13:00:00.000000Z'` after `const T3 = …`, and add before `describe('the counts', …)`:
+
+```ts
+describe('exercises and sets logged, deleted workouts included', () => {
+  /** A workout of `entries` exercises with `sets` sets each. */
+  const sized = (entries: number, sets: number): WorkoutJSON => workoutSample({
+    entries: Array.from({ length: entries }, (_, i) => ({
+      id: appUUID(), exercise_id: `ex_${i}`, position: i, note: null, superset_group: null,
+      sets: Array.from({ length: sets }, (_, j) => ({ id: appUUID(), position: j, w_kg: 60, r: 8 })),
+    })),
+  })
+  const counts = async (userId: string) =>
+    [await countOf('workout_entries', userId), await countOf('workout_sets', userId)]
+
+  it('stay exact: a re-save moves nothing, a smaller one lowers them, a stale one and a deletion keep them',
+    async () => {
+      const { token, userId } = await signUp()
+      const w = sized(3, 4)
+      const first = await (await save(token, w)).json<Saved>()
+      expect(await counts(userId)).toEqual([3, 12])
+      const again = await (await save(token, {
+        ...w, client_updated_at: T2, base_updated_at: first.updated_at,
+      })).json<Saved>()
+      expect(again.status).toBe('ok')
+      expect(await counts(userId)).toEqual([3, 12])
+      const stale = await (await save(token, {
+        ...sized(5, 5), id: w.id, client_updated_at: T3, base_updated_at: first.updated_at,
+      })).json<Saved>()
+      expect(stale.status).toBe('stale')
+      expect(await counts(userId)).toEqual([3, 12])
+      const smaller = { ...w, entries: w.entries.slice(0, 2), client_updated_at: T3, base_updated_at: again.updated_at }
+      const third = await (await save(token, smaller)).json<Saved>()
+      expect(await counts(userId)).toEqual([2, 8])
+      await save(token, { ...smaller, deleted_at: T4, client_updated_at: T4, base_updated_at: third.updated_at })
+      expect(await counts(userId)).toEqual([2, 8])
+    })
+
+  interface Logged {
+    readonly table: LoggedTable
+    readonly max: number
+    readonly code: string
+    /** A new workout that adds exactly 1 to the count. */
+    readonly one: () => WorkoutJSON
+  }
+  const LOGGED: Logged[] = [
+    {
+      table: 'workout_entries', max: DomainLimits.accountEntriesMax, code: 'too_many_logged_exercises',
+      one: () => sized(1, 0),
+    },
+    { table: 'workout_sets', max: DomainLimits.accountSetsMax, code: 'too_many_logged_sets', one: () => sized(1, 1) },
+  ]
+
+  it.each(LOGGED)('$table: N-1 and N are saved, N+1 is refused whole and writes nothing', async (c) => {
+    const { token, userId } = await signUp()
+    await seedCount(c.table, userId, c.max - 2)
+    expect((await save(token, c.one())).status).toBe(200)
+    expect(await kept(c.table, userId)).toBe(c.max - 1)
+    expect((await save(token, c.one())).status).toBe(200)
+    expect(await kept(c.table, userId)).toBe(c.max)
+    const refused = c.one()
+    await refusedWith(await save(token, refused), c.code)
+    expect(await kept(c.table, userId)).toBe(c.max)
+    expect((await request('GET', `/v1/sync/workouts/${refused.id}`, { token })).status).toBe(404)
+  })
+
+  it('at the cap: a re-save passes, a bigger one is refused and changes nothing, a smaller one makes room',
+    async () => {
+      const { token, userId } = await signUp()
+      await seedCount('workout_sets', userId, DomainLimits.accountSetsMax - 2)
+      const w = sized(1, 2)
+      const first = await (await save(token, w)).json<Saved>()
+      expect(await kept('workout_sets', userId)).toBe(DomainLimits.accountSetsMax)
+      const same = await (await save(token, {
+        ...w, name: 'Pull', client_updated_at: T2, base_updated_at: first.updated_at,
+      })).json<Saved>()
+      expect(same.status).toBe('ok')
+      const [entry] = w.entries
+      const extra = { id: appUUID(), position: 2, w_kg: 60, r: 8 }
+      const bigger = {
+        ...w, entries: [{ ...entry, sets: [...entry.sets, extra] }], client_updated_at: T3,
+        base_updated_at: same.updated_at,
+      }
+      await refusedWith(await save(token, bigger), 'too_many_logged_sets')
+      const stored = await (await request('GET', `/v1/sync/workouts/${w.id}`, { token })).json<WorkoutJSON>()
+      expect(stored.name).toBe('Pull')
+      expect(stored.entries[0].sets).toHaveLength(2)
+      const smaller = {
+        ...w, entries: [{ ...entry, sets: entry.sets.slice(0, 1) }], client_updated_at: T3,
+        base_updated_at: same.updated_at,
+      }
+      expect((await (await save(token, smaller)).json<Saved>()).status).toBe('ok')
+      expect(await kept('workout_sets', userId)).toBe(DomainLimits.accountSetsMax - 1)
+    })
+
+  it("don't count another account's", async () => {
+    const other = await insertUser()
+    await seedCount('workout_entries', other, DomainLimits.accountEntriesMax)
+    await seedCount('workout_sets', other, DomainLimits.accountSetsMax)
+    const { token, userId } = await signUp()
+    expect((await save(token, sized(1, 1))).status).toBe(200)
+    expect(await counts(userId)).toEqual([1, 1])
+  })
+})
+```
+
+In `server/test/schema.test.ts`, add after the case on `proposals_pending_cap`:
+
+```ts
+  it("moves a workout's logged counts by reading its entries and sets through their indexes", async () => {
+    for (const query of [
+      'SELECT count(*) FROM workout_entries WHERE workout_id = ?1',
+      'SELECT count(*) FROM workout_sets WHERE entry_id IN (SELECT id FROM workout_entries WHERE workout_id = ?1)',
+    ]) {
+      const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${query}`).bind(crypto.randomUUID())
+        .all<{ detail: string }>()
+      const details = plan.results.map((r) => r.detail).join('\n')
+      expect(details, query).toMatch(/INDEX workout_entries_workout\b/)
+      expect(details, query).not.toMatch(/^SCAN/m)
+    }
+  })
+```
+
 - [ ] **Step 3: Run them to see them fail**
 
-Run: `cd server && npx vitest run test/sync-workouts.test.ts`
-Expected: FAIL: `WORKOUT_CAPS` isn't exported from `../src/sync/caps.ts`.
+Run: `cd server && npx vitest run test/sync-workouts.test.ts test/account-caps.test.ts test/schema.test.ts`
+Expected: FAIL: `WORKOUT_CAPS` isn't exported from `../src/sync/caps.ts`. Once it is (Step 4), the logged-count tests
+still fail: no save moves the counts yet, so `countOf('workout_entries', …)` finds 3 stored rows and a kept count of
+0.
 
 - [ ] **Step 4: The words, in `server/src/sync/caps.ts`**
 
@@ -1034,7 +1555,7 @@ export const WORKOUT_CAPS = {
 } as const
 ```
 
-- [ ] **Step 5: The check, in `server/src/sync/workouts.ts`**
+- [ ] **Step 5: The check and the count moves, in `server/src/sync/workouts.ts`**
 
 Add to the imports:
 
@@ -1069,27 +1590,80 @@ function parseWorkout(body: unknown): Parsed {
 }
 ```
 
-`parseWorkout` runs first in `pushWorkout`, before the workout is read, so a refused save writes nothing.
+`parseWorkout` runs first in `pushWorkout`, before the workout is read, so a save that is too big writes nothing.
+
+After `INSERT_SETS`, add:
+
+```ts
+
+/**
+ * Moves the account's count of logged entries or sets (account_rows, migrations/0010_account_caps.sql) by what this
+ * save changes: the rows it writes (?4) minus the rows it replaces. Once a save, before the delete, and nothing when
+ * the count stays. account_rows_entries_cap and account_rows_sets_cap refuse a move past a cap, and with it the batch.
+ * The count is exact while this save is the only writer of entries and sets (plan 31, Task 3, Step 1).
+ */
+const moveCount = (tbl: 'workout_entries' | 'workout_sets', stored: string) =>
+  `INSERT INTO account_rows (user_id, tbl, n)
+SELECT ?3, '${tbl}', d FROM (SELECT ?4 - (${stored}) AS d) WHERE d <> 0 AND ${STILL_THIS_SAVE}
+ON CONFLICT (user_id, tbl) DO UPDATE SET n = n + excluded.n`
+const MOVE_ENTRIES = moveCount('workout_entries', 'SELECT count(*) FROM workout_entries WHERE workout_id = ?1')
+const MOVE_SETS = moveCount(
+  'workout_sets',
+  'SELECT count(*) FROM workout_sets WHERE entry_id IN (SELECT id FROM workout_entries WHERE workout_id = ?1)',
+)
+```
+
+and in `pushWorkout`, replace
+
+```ts
+  const results = await db.batch([
+    db.prepare(UPSERT).bind(...values, userId, writeId, force ? 1 : 0, base),
+    db.prepare(DELETE_ENTRIES).bind(id, writeId),
+    db.prepare(INSERT_ENTRIES).bind(id, writeId, userId, JSON.stringify(entryRows)),
+    db.prepare(INSERT_SETS).bind(id, writeId, userId, JSON.stringify(setRows)),
+    db.prepare('SELECT updated_at, write_id FROM workouts WHERE id = ?1').bind(id),
+  ])
+  const after = results[4].results[0] as { updated_at: string; write_id: string }
+```
+
+with
+
+```ts
+  const results = await db.batch([
+    db.prepare(UPSERT).bind(...values, userId, writeId, force ? 1 : 0, base),
+    db.prepare(MOVE_ENTRIES).bind(id, writeId, userId, entryRows.length),
+    db.prepare(MOVE_SETS).bind(id, writeId, userId, setRows.length),
+    db.prepare(DELETE_ENTRIES).bind(id, writeId),
+    db.prepare(INSERT_ENTRIES).bind(id, writeId, userId, JSON.stringify(entryRows)),
+    db.prepare(INSERT_SETS).bind(id, writeId, userId, JSON.stringify(setRows)),
+    db.prepare('SELECT updated_at, write_id FROM workouts WHERE id = ?1').bind(id),
+  ])
+  const after = results[6].results[0] as { updated_at: string; write_id: string }
+```
+
+The moves come before `DELETE_ENTRIES`, so the rows they subtract are still there, and after the `UPSERT`, so
+`STILL_THIS_SAVE` already knows whether the row is this save's.
 
 - [ ] **Step 6: Run the tests to see them pass**
 
-Run: `cd server && npx vitest run test/sync-workouts.test.ts`
-Expected: PASS, with 4 more tests than before.
+Run: `cd server && npx vitest run test/sync-workouts.test.ts test/account-caps.test.ts test/schema.test.ts`
+Expected: PASS: 4 more tests in `sync-workouts.test.ts`, 28 in `account-caps.test.ts`, 1 more in the schema test.
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  44 passed (44)`, `Tests  630 passed (630)`; `tsc` prints nothing.
+Expected: `Test Files  44 passed (44)`, `Tests  646 passed (646)`; `tsc` prints nothing.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add server/src/sync/workouts.ts server/src/sync/caps.ts server/test/sync-workouts.test.ts
-git commit -m "feat(server): at most 50 exercises in a workout and 50 sets in an exercise"
+git add server/src/sync/workouts.ts server/src/sync/caps.ts server/test/sync-workouts.test.ts \
+  server/test/account-caps.test.ts server/test/schema.test.ts
+git commit -m "feat(server): one workout's size, and the exercises and sets an account logs"
 ```
 
 - [ ] **Step 8: Review**
 
-Ask **code-reviewer** for decision 6: a save at both caps is stored whole; a refused save changes nothing; the check
-counts the body and nothing else. Then **typescript-reviewer**.
+Ask **code-reviewer** for decisions 5, 8 and 14: a re-save moves no count; a smaller one lowers them; a stale save and
+a deletion keep them; a save at both caps is stored whole; a refused save changes nothing. Then **typescript-reviewer**.
 
 ---
 
@@ -1105,7 +1679,7 @@ counts the body and nothing else. Then **typescript-reviewer**.
 
 ```ts
 // Claude's writes at an account's storage caps (plan 31), through the MCP tools as Claude calls them: at most 100
-// proposals waiting for review, and the account's 20,000 weigh-ins.
+// proposals waiting for review and 5,000 in all, and the account's 20,000 weigh-ins.
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
@@ -1148,7 +1722,7 @@ async function propose(token: string): Promise<{ isError: boolean; body: unknown
 
 describe("Claude's proposals, at most 100 waiting for review", () => {
   it('words the refusal for Claude', () => {
-    expect(CLAUDE_CAPS.too_many_proposals).toBe(
+    expect(CLAUDE_CAPS.too_many_pending_proposals).toBe(
       'The owner already has 100 proposals waiting for review, the most one account holds. Nothing was saved: ask ' +
         'the owner to apply or dismiss some in the app, then propose again.',
     )
@@ -1162,7 +1736,8 @@ describe("Claude's proposals, at most 100 waiting for review", () => {
     expect((await propose(token)).isError).toBe(false)
     expect((await propose(token)).isError).toBe(false)
     expect(await pending(c.userId)).toBe(100)
-    expect(await propose(token)).toEqual({ isError: true, body: { error: CLAUDE_CAPS.too_many_proposals } })
+    expect(await propose(token))
+      .toEqual({ isError: true, body: { error: CLAUDE_CAPS.too_many_pending_proposals } })
     expect(await pending(c.userId)).toBe(100)
     const audit = await env.DB.prepare(
       "SELECT ok FROM mcp_audit WHERE user_id = ?1 AND tool = 'propose_plan_changes' ORDER BY id DESC LIMIT 1",
@@ -1191,6 +1766,19 @@ describe("Claude's proposals, at most 100 waiting for review", () => {
   })
 })
 
+describe("Claude's proposals, at most 5,000 in all", () => {
+  it('takes the 4,999th and 5,000th, and refuses the 5,001st though few are waiting', async () => {
+    const c = await connectClaude()
+    await seedProposals(c.userId, DomainLimits.proposalsMax - 2, 'dismissed')
+    const token = c.tokens.access_token
+    expect((await propose(token)).isError).toBe(false)
+    expect((await propose(token)).isError).toBe(false)
+    expect(await propose(token)).toEqual({ isError: true, body: { error: CLAUDE_CAPS.too_many_proposals } })
+    expect(await pending(c.userId)).toBe(2)
+    expect(await countOf('proposals', c.userId)).toBe(DomainLimits.proposalsMax)
+  })
+})
+
 describe("Claude's weigh-ins", () => {
   it("log_bodyweight refuses a weigh-in past the account's cap, with words for Claude", async () => {
     const c = await connectClaude()
@@ -1203,7 +1791,7 @@ describe("Claude's weigh-ins", () => {
 })
 ```
 
-The propose test and the weigh-in test each make at most four tool calls, far under the 60 a minute.
+The tests make at most four tool calls each, far under the 60 a minute.
 
 - [ ] **Step 2: Run them to see them fail**
 
@@ -1219,9 +1807,12 @@ Add at the end:
 ```ts
 /** Claude's words when a cap refuses its write (src/mcp/d1-db.ts): a ToolError, which Claude reads. */
 export const CLAUDE_CAPS = {
-  too_many_proposals:
+  too_many_pending_proposals:
     `The owner already has ${grouped(DomainLimits.pendingProposalsMax)} proposals waiting for review, the most one ` +
     'account holds. Nothing was saved: ask the owner to apply or dismiss some in the app, then propose again.',
+  too_many_proposals:
+    `The owner's account already holds ${grouped(DomainLimits.proposalsMax)} proposals, resolved ones included, the ` +
+    'most it can. Nothing was saved.',
   too_many_body_weights:
     `The owner's account already holds ${grouped(DomainLimits.bodyweightsMax)} weigh-ins, deleted ones included, ` +
     'the most it can. Nothing was saved.',
@@ -1240,12 +1831,14 @@ import { CLAUDE_CAPS } from '../sync/caps.ts'
 Add above `export class D1Db`:
 
 ```ts
-/** `write`, with its cap's refusal (migrations/0010_account_caps.sql) as words for Claude. */
-async function capped<T>(write: Promise<T>, code: keyof typeof CLAUDE_CAPS): Promise<T> {
+/** `write`, with the refusal of one of its caps (migrations/0010_account_caps.sql) as words for Claude. */
+async function capped<T>(write: Promise<T>, ...codes: (keyof typeof CLAUDE_CAPS)[]): Promise<T> {
   try {
     return await write
   } catch (error) {
-    if (raisedCode(error) === code) throw new ToolError(CLAUDE_CAPS[code])
+    const raised = raisedCode(error)
+    const code = codes.find((c) => c === raised)
+    if (code !== undefined) throw new ToolError(CLAUDE_CAPS[code])
     throw error
   }
 }
@@ -1277,7 +1870,7 @@ with
 ```ts
     ).bind(crypto.randomUUID(), this.userId, p.summary, JSON.stringify(p.changes)).first<
       { id: string; created_at: string }
-    >(), 'too_many_proposals')
+    >(), 'too_many_pending_proposals', 'too_many_proposals')
     return row!
 ```
 
@@ -1306,10 +1899,10 @@ with
 - [ ] **Step 5: Run the tests to see them pass**
 
 Run: `cd server && npx vitest run test/claude-caps.test.ts test/mcp test/claude-proposals.test.ts test/claude-connection.test.ts`
-Expected: PASS; `claude-caps.test.ts` has 5 tests.
+Expected: PASS; `claude-caps.test.ts` has 6 tests.
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  45 passed (45)`, `Tests  635 passed (635)`; `tsc` prints nothing.
+Expected: `Test Files  45 passed (45)`, `Tests  652 passed (652)`; `tsc` prints nothing.
 
 - [ ] **Step 6: Commit**
 
@@ -1320,7 +1913,7 @@ git commit -m "feat(server): Claude hears why a proposal or a weigh-in was refus
 
 - [ ] **Step 7: Review**
 
-Ask **code-reviewer** for decisions 5 and 10, and spec section 6 ("Claude's tool errors keep `ToolError`"). Then
+Ask **code-reviewer** for decisions 6 and 13, and spec section 6 ("Claude's tool errors keep `ToolError`"). Then
 **security-reviewer**: Claude's words name no other account's data, and the refused call is audited. Then
 **typescript-reviewer**.
 
@@ -1328,7 +1921,7 @@ Ask **code-reviewer** for decisions 5 and 10, and spec section 6 ("Claude's tool
 
 ### Task 5: The phone stops at 50 exercises and 50 sets
 
-Decision 7: nothing made by hand is past the per-workout caps, so the server never refuses it.
+Decision 9: nothing made by hand is past the per-workout caps, so the server never refuses it.
 
 **Files:**
 - Modify: `ios/Packages/GymCore/Sources/GymCore/Model/Workout+Editing.swift`,
@@ -1490,16 +2083,361 @@ git commit -m "feat(app): a workout stops at 50 exercises and 50 sets an exercis
 
 - [ ] **Step 6: Review**
 
-Ask **code-reviewer** for decision 7: every path that adds a set or an exercise to an active workout goes through the
-three functions (`git grep -n -E 'appendingSet|insertingWarmup|appendingEntries' -- ios`), and the importers are left
-as decision 7 says. Then the same agent for quality (Swift).
+Ask **code-reviewer** for decision 9: every path that adds a set or an exercise to an active workout goes through the
+three functions (`git grep -n -E 'appendingSet|insertingWarmup|appendingEntries' -- ios`). Then the same agent for
+quality (Swift).
 
 ---
 
-### Task 6: A refused row on the phone, and one line per reason in Account
+### Task 6: The importers split a workout past the caps
 
-GymSync already turns every 422 into `SyncRecordRejected` with the server's words, and parks the row (decision 8). This
-task pins that path for the caps, then groups identical refusals in Account (decision 9).
+Decision 10. GymCore does the split, so every importer gets it; the app titles the pieces and keeps them together.
+
+**Files:**
+- Create: `ios/Packages/GymCore/Sources/GymCore/Import/ImportSplit.swift`,
+  `ios/Packages/GymCore/Tests/GymCoreTests/ImportSplitTests.swift`
+- Modify: `ios/Packages/GymCore/Sources/GymCore/Import/ImportTypes.swift`,
+  `ios/Packages/GymCore/Sources/GymCore/Import/ImportSupport.swift`, `ios/GymRollins/Features/Import/ImportService.swift`
+- Test: `ios/Packages/GymCore/Tests/GymCoreTests/ImportSplitTests.swift`, `ios/GymRollinsTests/ImportServiceTests.swift`
+
+- [ ] **Step 1: Write the failing GymCore tests**
+
+`ios/Packages/GymCore/Tests/GymCoreTests/ImportSplitTests.swift` (each importer's export is made in the test, from its
+own header and row shape, so no fixture file is needed):
+
+```swift
+import Foundation
+import Testing
+@testable import GymCore
+
+/// A workout from an export comes back as pieces the server stores (server/src/sync/workouts.ts): at most 50
+/// exercises a piece and 50 sets an exercise, every set kept, in order.
+@Suite struct ImportSplitTests {
+    private let start = Date(timeIntervalSince1970: 1_767_636_000) // 2026-01-05 18:00 UTC
+    private let utc = ImportOptions(weightUnit: .kg, timeZone: TimeZone(identifier: "UTC")!)
+
+    private func entry(_ name: String, sets: Int) -> ImportedEntry {
+        ImportedEntry(exerciseName: name, sets: (0..<sets).map { ImportedSet(weightKg: 60, reps: $0 + 1) })
+    }
+
+    private func workout(_ entries: [ImportedEntry]) -> ImportedWorkout {
+        ImportedWorkout(id: UUID(), startedAt: start, entries: entries, name: "Big day", endedAt: start + 3_600)
+    }
+
+    @Test func aWorkoutThatFitsIsLeftAsItIs() {
+        let fits = workout([entry("Bench", sets: 50)] + (1..<50).map { entry("Ex \($0)", sets: 1) })
+        #expect(ImportSplit.pieces(fits) == [fits])
+        let empty = workout([])
+        #expect(ImportSplit.pieces(empty) == [empty])
+    }
+
+    @Test func anExerciseWithMoreThan50SetsGoesOnAsAnotherEntry() {
+        let source = workout([entry("Bench", sets: 120), entry("Row", sets: 3)])
+        let pieces = ImportSplit.pieces(source)
+        #expect(pieces.count == 1)
+        #expect(pieces[0].id == source.id && pieces[0].part == 1 && pieces[0].splitFrom == nil)
+        #expect(pieces[0].entries.map(\.exerciseName) == ["Bench", "Bench", "Bench", "Row"])
+        #expect(pieces[0].entries.map(\.sets.count) == [50, 50, 20, 3])
+        #expect(pieces[0].entries.flatMap(\.sets) == source.entries.flatMap(\.sets))
+    }
+
+    @Test func moreThan50ExercisesGoOnInTheNextWorkoutsOneSecondApart() {
+        let source = workout((0..<120).map { entry("Ex \($0)", sets: 2) })
+        let pieces = ImportSplit.pieces(source)
+        #expect(pieces.map(\.entries.count) == [50, 50, 20])
+        #expect(pieces.map(\.part) == [1, 2, 3])
+        #expect(pieces.map(\.id)[0] == source.id)
+        #expect(pieces.dropFirst().allSatisfy { $0.splitFrom == source.id && $0.id != source.id })
+        #expect(pieces.map(\.startedAt) == [start, start + 1, start + 2])
+        #expect(pieces.allSatisfy { $0.name == "Big day" && $0.endedAt == source.endedAt })
+        #expect(pieces.flatMap(\.entries) == source.entries)
+        #expect(ImportSplit.pieces(source).map(\.id) == pieces.map(\.id)) // the same ids on every import
+    }
+
+    @Test func aLongExerciseMayContinueInTheNextWorkout() {
+        let source = workout((0..<49).map { entry("Ex \($0)", sets: 1) } + [entry("Squat", sets: 70)])
+        let pieces = ImportSplit.pieces(source)
+        #expect(pieces.map(\.entries.count) == [50, 1])
+        #expect(pieces[0].entries.last?.exerciseName == "Squat" && pieces[0].entries.last?.sets.count == 50)
+        #expect(pieces[1].entries.map(\.exerciseName) == ["Squat"] && pieces[1].entries[0].sets.count == 20)
+    }
+
+    @Test func piecesAfterTheFirstAreNumberedWithinTheNameLimit() {
+        #expect(ImportSplit.name("Push", part: 1) == "Push")
+        #expect(ImportSplit.name("Push", part: 2) == "Push (2)")
+        let long = String(repeating: "x", count: DomainLimits.workoutNameMax)
+        #expect(ImportSplit.name(long, part: 1) == long)
+        #expect(ImportSplit.name(long, part: 12).count == DomainLimits.workoutNameMax)
+        #expect(ImportSplit.name(long, part: 12).hasSuffix(" (12)"))
+    }
+
+    /// One export per importer: a workout of 51 exercises, the first with 120 sets.
+    private static let exports: [(ImportSource, String)] = [
+        (.fitNotes, "Date,Exercise,Category,Weight (kg),Weight (lbs),Reps,Distance,Distance Unit,Time,Notes,Kind\n"
+            + rows { "2026-01-05,\($0),Chest,60.0,,\($1 + 1),,,,,wr" }),
+        (.strong, "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout Notes,RPE\n"
+            + rows { "2026-01-05 18:00:00,Big day,1h 5m,\($0),\($1 + 1),60,\($1 + 1),0,0,,," }),
+        (.hevy, "title,start_time,end_time,description,exercise_title,superset_id,exercise_notes,set_index,"
+            + "set_type,weight_kg,reps,distance_km,duration_seconds,rpe\n"
+            + rows { #""Big day","5 Jan 2026, 18:00","5 Jan 2026, 19:10","","\#($0)",,"",\#($1),"normal",60,\#($1 + 1),,,"# }),
+        (.fitbod, "Date,Exercise,Reps,Weight(kg),Duration(s),Distance(m),Incline,Resistance,isWarmup,Note,multiplier\n"
+            + rows { "2026-01-05 18:00:00 +0000,\($0), \($1 + 1),60.0,0.0,0.0,0.0,0.0,false,, 1.0" }),
+    ]
+
+    /// "Ex 0" with 120 sets, then "Ex 1" … "Ex 50" with one set each: (exercise, set index) per row.
+    private static func rows(_ row: (String, Int) -> String) -> String {
+        ((0..<120).map { row("Ex 0", $0) } + (1...50).map { row("Ex \($0)", 0) }).joined(separator: "\n")
+    }
+
+    @Test(arguments: exports.map(\.0))
+    func everyImporterSplitsAnOversizedWorkout(source: ImportSource) throws {
+        let text = try #require(Self.exports.first { $0.0 == source }?.1)
+        let result = try WorkoutImporters.parse(text, source: source, options: utc)
+        #expect(result.rowErrors.isEmpty)
+        #expect(result.workouts.map(\.part) == [1, 2])
+        #expect(result.workouts.map(\.entries.count) == [50, 3])
+        #expect(result.workouts.allSatisfy { $0.entries.allSatisfy { $0.sets.count <= DomainLimits.entrySetsMax } })
+        let names = result.workouts.flatMap(\.entries).map(\.exerciseName)
+        #expect(names == ["Ex 0", "Ex 0", "Ex 0"] + (1...50).map { "Ex \($0)" })
+        #expect(result.workouts.flatMap(\.entries).flatMap(\.sets).count == 170)
+        #expect(result.workouts[1].splitFrom == result.workouts[0].id)
+        #expect(result.workouts[1].startedAt == result.workouts[0].startedAt + 1)
+        #expect(try WorkoutImporters.parse(text, source: source, options: utc).workouts.map(\.id)
+            == result.workouts.map(\.id))
+    }
+}
+```
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `(cd ios/Packages/GymCore && swift test --filter ImportSplitTests)`
+Expected: the build fails: `cannot find 'ImportSplit' in scope`.
+
+- [ ] **Step 3: The pieces' fields, in `ImportTypes.swift`**
+
+In `ImportedWorkout`, replace
+
+```swift
+    /// Workout-level note (Strong "Workout Notes", Hevy `description`).
+    public let note: String?
+
+    public init(id: UUID, startedAt: Date, entries: [ImportedEntry], name: String? = nil, endedAt: Date? = nil,
+                note: String? = nil) {
+        self.id = id
+        self.startedAt = startedAt
+        self.entries = entries
+        self.name = name
+        self.endedAt = endedAt
+        self.note = note
+    }
+```
+
+with
+
+```swift
+    /// Workout-level note (Strong "Workout Notes", Hevy `description`).
+    public let note: String?
+    /// 1, or the piece's number when a workout past the server's caps was split (`ImportSplit`).
+    public let part: Int
+    /// The source workout's id (piece 1's), on pieces 2 and later.
+    public let splitFrom: UUID?
+
+    public init(id: UUID, startedAt: Date, entries: [ImportedEntry], name: String? = nil, endedAt: Date? = nil,
+                note: String? = nil, part: Int = 1, splitFrom: UUID? = nil) {
+        self.id = id
+        self.startedAt = startedAt
+        self.entries = entries
+        self.name = name
+        self.endedAt = endedAt
+        self.note = note
+        self.part = part
+        self.splitFrom = splitFrom
+    }
+```
+
+The defaults keep every existing caller as it is.
+
+- [ ] **Step 4: Write `ios/Packages/GymCore/Sources/GymCore/Import/ImportSplit.swift`**
+
+```swift
+import Foundation
+
+/// A workout from an export, cut into pieces the server stores (server/src/sync/workouts.ts): at most
+/// `DomainLimits.workoutEntriesMax` exercises a piece, and at most `DomainLimits.entrySetsMax` sets an exercise.
+/// - An exercise with more sets goes on as another entry of the same exercise, in the next piece when this one is full.
+/// - Piece 1 keeps the source's id, start, end, title and note. Piece k starts k - 1 seconds after it, so the pieces
+///   sort in order next to each other, has an id of its own made from the source's (the same on every import), and
+///   names the source in `splitFrom`. The app titles it "<title> (k)" (`name(_:part:)`).
+public enum ImportSplit {
+    public static func pieces(_ workout: ImportedWorkout) -> [ImportedWorkout] {
+        let entries = workout.entries.flatMap(runs)
+        if entries.count <= DomainLimits.workoutEntriesMax && entries.count == workout.entries.count { return [workout] }
+        let groups = stride(from: 0, to: entries.count, by: DomainLimits.workoutEntriesMax).map {
+            Array(entries[$0..<min($0 + DomainLimits.workoutEntriesMax, entries.count)])
+        }
+        return groups.enumerated().map { index, entries in
+            ImportedWorkout(id: index == 0 ? workout.id : ImportID.make([workout.id.uuidString, "part", "\(index + 1)"]),
+                            startedAt: workout.startedAt.addingTimeInterval(TimeInterval(index)), entries: entries,
+                            name: workout.name, endedAt: workout.endedAt, note: workout.note, part: index + 1,
+                            splitFrom: index == 0 ? nil : workout.id)
+        }
+    }
+
+    /// The title the user sees on piece `part`: the export's title (or the app's default), then " (2)", " (3)", …,
+    /// within `DomainLimits.workoutNameMax`.
+    public static func name(_ base: String, part: Int) -> String {
+        guard part > 1 else { return String(base.prefix(DomainLimits.workoutNameMax)) }
+        let suffix = " (\(part))"
+        return String(base.prefix(DomainLimits.workoutNameMax - suffix.count)) + suffix
+    }
+
+    /// An entry's sets in runs of at most `DomainLimits.entrySetsMax`, each run an entry of its own.
+    private static func runs(_ entry: ImportedEntry) -> [ImportedEntry] {
+        guard entry.sets.count > DomainLimits.entrySetsMax else { return [entry] }
+        return stride(from: 0, to: entry.sets.count, by: DomainLimits.entrySetsMax).map {
+            ImportedEntry(exerciseName: entry.exerciseName,
+                          sets: Array(entry.sets[$0..<min($0 + DomainLimits.entrySetsMax, entry.sets.count)]),
+                          supersetGroup: entry.supersetGroup)
+        }
+    }
+}
+```
+
+- [ ] **Step 5: Every importer splits, in `ImportSupport.swift`**
+
+In `ImportAssembler.result`, replace
+
+```swift
+        return WorkoutImportResult(workouts: group(rows, id: id), rowErrors: errors,
+```
+
+with
+
+```swift
+        return WorkoutImportResult(workouts: group(rows, id: id).flatMap(ImportSplit.pieces), rowErrors: errors,
+```
+
+Run: `(cd ios/Packages/GymCore && swift test --filter 'Importer|ImportSplit')`
+Expected: `Test run with 67 tests in 6 suites passed`: the four importers' suites and `WorkoutImportersTests` as
+before (no fixture of theirs is past a cap), and the 6 new ones.
+
+Run: `(cd ios/Packages/GymCore && swift test)`
+Expected: `Test run with 541 tests in 65 suites passed`.
+
+- [ ] **Step 6: The app's titles and duplicates**
+
+In `ios/GymRollinsTests/ImportServiceTests.swift`, add inside `ImportServiceTests`, after `dedupeHelperUsesSortedStarts`:
+
+```swift
+    /// A split workout's pieces stay or go with their first piece (plan 31). A re-import keeps them all, though each
+    /// piece starts a second after a workout already in the log; another app's copy of the session drops them all.
+    @Test func aSplitWorkoutsPiecesStayOrGoTogether() throws {
+        let base = Date(timeIntervalSince1970: 1_000_000)
+        let first = ImportedWorkout(id: UUID(), startedAt: base, entries: [])
+        let second = ImportedWorkout(id: UUID(), startedAt: base.addingTimeInterval(1), entries: [], part: 2,
+                                     splitFrom: first.id)
+        let again = try ImportService.withoutDuplicates(
+            [first, second], existing: [Workout(id: first.id, startedAt: base, name: "x")])
+        #expect(again.0.map(\.id) == [first.id, second.id] && again.1 == 0)
+        let otherApp = try ImportService.withoutDuplicates(
+            [first, second], existing: [Workout(startedAt: base.addingTimeInterval(30), name: "x")])
+        #expect(otherApp.0.isEmpty && otherApp.1 == 2)
+    }
+
+    @Test func piecesAfterTheFirstAreNumbered() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let untitled = ImportedWorkout(id: UUID(), startedAt: start, entries: [], part: 2, splitFrom: UUID())
+        #expect(ImportService.workout(from: untitled, exerciseIds: [:], source: .fitNotes).name == "FitNotes workout (2)")
+        let titled = ImportedWorkout(id: UUID(), startedAt: start, entries: [], name: "Push", part: 3, splitFrom: UUID())
+        #expect(ImportService.workout(from: titled, exerciseIds: [:], source: .hevy).name == "Push (3)")
+    }
+```
+
+Run (from `ios/`, the one-test run, `-only-testing:GymRollinsTests/ImportServiceTests`).
+Expected: it builds (Step 3 added `part` and `splitFrom`), and the two new tests fail: the second piece is dropped
+as a duplicate of the workout already in the log, and its title is "FitNotes workout".
+
+In `ios/GymRollins/Features/Import/ImportService.swift`, replace
+
+```swift
+    /// direction, since their start says nothing about when the session happened.
+    static func withoutDuplicates(_ imported: [ImportedWorkout], source: ImportSource = .fitbod,
+                                  existing: [Workout]) throws -> ([ImportedWorkout], Int) {
+        guard !isDateOnly(source) else { return (imported, 0) }
+        let existingIds = Set(existing.map(\.id))
+        let dateOnlyNote = workoutNote(for: .fitNotes)
+        let starts = existing.filter { !($0.source == .import && ($0.note ?? "").hasPrefix(dateOnlyNote)) }
+            .map(\.startedAt.timeIntervalSinceReferenceDate).sorted()
+        let kept = imported.filter { workout in
+            existingIds.contains(workout.id) || !hasStart(near: workout.startedAt, in: starts)
+        }
+        return (kept, imported.count - kept.count)
+    }
+```
+
+with
+
+```swift
+    /// direction, since their start says nothing about when the session happened.
+    /// The pieces of a split workout (`ImportSplit`) stay or go with their first piece. They start a second apart, so on
+    /// their own a re-import would keep the first (its id is known) and drop the rest as its duplicates.
+    static func withoutDuplicates(_ imported: [ImportedWorkout], source: ImportSource = .fitbod,
+                                  existing: [Workout]) throws -> ([ImportedWorkout], Int) {
+        guard !isDateOnly(source) else { return (imported, 0) }
+        let existingIds = Set(existing.map(\.id))
+        let dateOnlyNote = workoutNote(for: .fitNotes)
+        let starts = existing.filter { !($0.source == .import && ($0.note ?? "").hasPrefix(dateOnlyNote)) }
+            .map(\.startedAt.timeIntervalSinceReferenceDate).sorted()
+        let firsts = imported.filter { workout in
+            workout.splitFrom == nil
+                && (existingIds.contains(workout.id) || !hasStart(near: workout.startedAt, in: starts))
+        }
+        let keptIds = Set(firsts.map(\.id))
+        let kept = imported.filter { keptIds.contains($0.splitFrom ?? $0.id) }
+        return (kept, imported.count - kept.count)
+    }
+```
+
+and in `workout(from:exerciseIds:source:multiplier:)`, replace
+
+```swift
+        let name = imported.name.map { String($0.prefix(DomainLimits.workoutNameMax)) } ?? workoutName(for: source)
+```
+
+with
+
+```swift
+        let name = ImportSplit.name(imported.name ?? workoutName(for: source), part: imported.part)
+```
+
+For a piece 1 or a workout that wasn't split, the title is what it was.
+
+Run the one-test run again, `-only-testing:GymRollinsTests/ImportServiceTests`.
+Expected: every `ImportServiceTests` test passed, the two new ones among them, 0 failed.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add ios/Packages/GymCore/Sources/GymCore/Import/ImportSplit.swift \
+  ios/Packages/GymCore/Sources/GymCore/Import/ImportTypes.swift \
+  ios/Packages/GymCore/Sources/GymCore/Import/ImportSupport.swift \
+  ios/Packages/GymCore/Tests/GymCoreTests/ImportSplitTests.swift \
+  ios/GymRollins/Features/Import/ImportService.swift ios/GymRollinsTests/ImportServiceTests.swift
+git commit -m "feat(import): a workout past 50 exercises or 50 sets comes in as several, in order"
+```
+
+- [ ] **Step 8: Review**
+
+Ask **code-reviewer** for decision 10: every set is kept and in order; the pieces' ids are the same on every import;
+a re-import overwrites piece 1 and keeps the rest; another app's copy of the session drops them all; titles stay
+within 80 characters. Then the same agent for quality (Swift).
+
+---
+
+### Task 7: A refused row on the phone, and one line per reason in Account
+
+GymSync already turns every 422 into `SyncRecordRejected` with the server's words, and parks the row (decision 11).
+This task pins that path for the caps, then groups identical refusals in Account (decision 12).
 
 **Files:**
 - Create: `ios/Packages/GymSync/Tests/GymSyncTests/ApiSyncTransportCapTests.swift`,
@@ -1523,8 +2461,11 @@ import Testing
 /// server's words, which the engine records beside the row it keeps.
 @Suite struct ApiSyncTransportCapTests {
     private let t0 = SyncDate.parse("2026-11-08T08:00:00.123456Z")!
+    /// Every code a sync push can meet at a cap; Claude's two proposal codes never reach the app.
     private let codes = ["too_many_workouts", "too_many_body_weights", "too_many_routines",
-                         "too_many_custom_exercises", "too_many_workout_exercises", "too_many_exercise_sets"]
+                         "too_many_custom_exercises", "too_many_exercise_prefs", "too_many_gyms_total",
+                         "too_many_listings_total", "too_many_logged_exercises", "too_many_logged_sets",
+                         "too_many_workout_exercises", "too_many_exercise_sets"]
     private let words = "You've reached the limit of 20,000 weigh-ins on one account, deleted ones included. "
         + "This one stays on this iPhone."
 
@@ -1632,9 +2573,10 @@ import Testing
 ```
 
 Run: `(cd ios/Packages/GymSync && swift test --filter 'ApiSyncTransportCapTests|SyncEngineCapTests')`
-Expected: `Test run with 3 tests in 2 suites passed`. These pass at once: GymSync already maps every 422
-(`ApiSyncTransport.swift:156-166`) and parks a refused edit (`SyncStore+Ownership.swift:66-68`). They pin that for the
-caps. If one fails, stop: decision 8 doesn't hold, and GymSync needs a fix before the server's caps can ship.
+Expected: `Test run with 3 tests in 2 suites passed` (after Task 6, run `swift package clean` here first if the build
+can't find `ImportSplit`). These pass at once: GymSync already maps every 422 (`ApiSyncTransport.swift:156-166`) and
+parks a refused edit (`SyncStore+Ownership.swift:66-68`). They pin that for the caps. If one fails, stop: decision 11
+doesn't hold, and GymSync needs a fix before the server's caps can ship.
 
 - [ ] **Step 2: Write the failing app test**
 
@@ -1759,12 +2701,12 @@ git commit -m "feat(app): a row refused at a cap stays on the phone, and Account
 
 - [ ] **Step 6: Review**
 
-Ask **code-reviewer** for decisions 8 and 9: the refused row stays dirty and isn't sent again until edited; the edit
+Ask **code-reviewer** for decisions 11 and 12: the refused row stays dirty and isn't sent again until edited; the edit
 beside it syncs; the words reach Account unchanged. Then the same agent for quality (Swift).
 
 ---
 
-### Task 7: The docs
+### Task 8: The docs
 
 **Files:**
 - Modify: `docs/cloudflare-checklist.md`, `docs/release-readiness.md`, `server/README.md`
@@ -1779,23 +2721,24 @@ down to, and not including, `- [ ] **Unused OAuth clients**`, with:
 
 **Built** (plan 31, `server/migrations/0010_account_caps.sql`; the numbers are `DomainLimits`', in
 `ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift`):
-- Per account: 10,000 workouts, 20,000 weigh-ins, 200 routines and 1,000 custom exercises.
+- Per account, deleted rows included: 10,000 workouts, 50,000 exercises and 250,000 sets logged in them, 20,000
+  weigh-ins, 200 routines, 1,000 custom exercises, 2,000 exercise preferences, 500 private gyms and 5,000 private
+  listings.
   - **Deleted rows count.** A deletion stays as a tombstone (`deleted_at`), so other devices learn of it, and nothing
-    purges tombstones. So deleting frees nothing: an account that reaches a cap stays there.
-- 100 Claude proposals waiting for review at a time. A resolved one frees a slot.
-- One workout holds at most 50 exercises, and an exercise at most 50 sets in it. The app stops there too; an import
-  can still make a bigger workout, which stays on the phone.
-- Private gyms (100) and private listings (1,000) keep their caps (`0005_gyms_photos.sql`), which count live rows only.
+    purges tombstones. So deleting frees nothing: an account that reaches a cap stays there. Only sets removed from a
+    workout free room.
+- Private gyms (100) and private listings (1,000) also keep their live caps (`0005_gyms_photos.sql`).
+- Claude: 100 proposals waiting for review at a time, and 5,000 in all.
+- One workout holds at most 50 exercises, and an exercise at most 50 sets in it. The app stops there, and the importers
+  split a bigger workout into several ("Push", "Push (2)").
 - A refused row stays on the phone. Account lists it under "N items couldn't sync", with the server's words, and it
   isn't sent again until it is edited.
+- One account at the caps holds about 70 MB of sets; a free D1 database holds 500 MB in all.
 
-**Open** (plan 31, "Questions for the owner"), each a code change in a plan of its own:
-- [ ] Sets per account. The caps above allow 25,000,000 (10,000 × 50 × 50), about 7 GB; a free D1 database holds
-      500 MB.
-- [ ] Gym and listing tombstones, which the gym caps don't count.
-- [ ] Exercise preferences: one row per exercise id, and the id is any short text.
-- [ ] Resolved proposals, and Claude's audit rows (90 days kept, up to 60 a minute).
-- [ ] Imported workouts past 50 exercises or 50 sets: split them at import, or leave them on the phone.
+**Open** (plan 31, "Questions for the owner"):
+- [ ] Claude's audit rows: 90 days kept, up to 60 a minute.
+- [ ] A big workout re-saved again and again: about 10,000 rows written a save at both per-workout caps, against the
+      free plan's 100,000 a day. Section 1's rate limits are the only guard.
 ```
 
 - [ ] **Step 2: `docs/release-readiness.md`**
@@ -1825,9 +2768,9 @@ After the line
 add
 
 ```markdown
-- `0010_account_caps.sql` caps what one account stores, deleted rows included: workouts, weigh-ins, routines and
-  custom exercises (triggers, with the counts in `account_rows`), and the proposals waiting for review. The numbers
-  are `DomainLimits`', and `test/domain-limits-drift.test.ts` checks them. The words are in `src/sync/caps.ts`.
+- `0010_account_caps.sql` caps what one account stores, deleted rows included: triggers, with the counts in
+  `account_rows`; the workout save moves the counts of logged exercises and sets itself (`src/sync/workouts.ts`). The
+  numbers are `DomainLimits`', and `test/domain-limits-drift.test.ts` checks them. The words are in `src/sync/caps.ts`.
 ```
 
 - [ ] **Step 4: Check and commit**
@@ -1847,7 +2790,7 @@ touches Cloudflare without the owner's approval.
 
 ---
 
-### Task 8: Verify everything, and the Outcome
+### Task 9: Verify everything, and the Outcome
 
 **Files:**
 - Modify: this plan (`## Outcome`)
@@ -1866,9 +2809,9 @@ git grep -n account_rows -- server/src
 git grep -c 'CREATE TRIGGER' -- server/migrations/0010_account_caps.sql
 ```
 
-Expected: `Test Files  45 passed (45)`, `Tests  635 passed (635)`; `tsc` prints nothing; no `account_rows` in
-`server/src` (no route reads or writes it); `server/migrations/0010_account_caps.sql:13` (three triggers for each of
-the four tables, and the proposals' one).
+Expected: `Test Files  45 passed (45)`, `Tests  652 passed (652)`; `tsc` prints nothing; `account_rows` only in
+`server/src/sync/workouts.ts` (the count moves; no route reads it); `server/migrations/0010_account_caps.sql:27` (three
+triggers for each of the eight counted tables, two on the logged counts, and the pending proposals' one).
 
 - [ ] **Step 2: The Swift packages**
 
@@ -1876,36 +2819,23 @@ Run:
 
 ```bash
 (cd ios/Packages/GymCore && swift test)
-(cd ios/Packages/GymData && swift test)
-(cd ios/Packages/GymSync && swift test --filter GymSyncTests)
+(cd ios/Packages/GymData && swift package clean && swift test)
+(cd ios/Packages/GymSync && swift package clean && swift test --filter GymSyncTests)
 scripts/test-sync-integration.sh
 ```
 
-Expected: GymCore `Test run with 535 tests in 64 suites passed`; GymData as plan 30 left it (371 tests in 50 suites);
+Expected: GymCore `Test run with 541 tests in 65 suites passed`; GymData as plan 30 left it (371 tests in 50 suites);
 GymSync `Test run with 217 tests in 28 suites passed`; the integration suite as plan 30 left it (`Test run with 45
 tests in 11 suites passed`), then `Account deletion verified: … deleted users, 0 rows left`.
 
-- [ ] **Step 3: The owner's data under the caps** (only with the copy plans 27–30 used, kept outside the repo)
+- [ ] **Step 3: The server move, on a copy of the owner's data**
 
-If the owner's phone backup is at hand, read a copy of its store (never the backup in place: opening it rewrites its
-log). Numbers only go into the Outcome:
+With the backup Task 1, Step 2 measured: `scripts/server-move-check.sh "$BACKUP" <a work folder outside the repo>`.
+It only reads the backup and puts its own copies in the work folder.
+Expected: `Server move verified.`, with every count equal on both sides (148 workouts, 836 entries, 2,685 sets, or the
+newer backup's). Nothing of the owner's data is refused by a cap.
 
-```bash
-READ="$(mktemp -d)"
-cp "$BACKUP/Library/Application Support/default.store"* "$READ/"
-sqlite3 "$READ/default.store" "select (select max(n) from (select count(*) n from ZWORKOUTENTRYRECORD group by ZWORKOUT)), (select max(n) from (select count(*) n from ZSETRECORD group by ZENTRY)), (select count(*) from ZWORKOUTRECORD), (select count(*) from ZBODYWEIGHTRECORD), (select count(*) from ZROUTINERECORD), (select count(*) from ZCUSTOMEXERCISERECORD)"
-rm -rf "$READ"
-```
-
-Expected: the largest exercises in one workout and sets in one exercise are at most 50 each; the counts are far under
-their caps (plan 30 found 148 workouts, 23 weigh-ins, 6 routines and 42 custom exercises). If a largest value is over
-50, stop and ask the owner: that workout would be refused at the cutover.
-
-Then the server-move check, as plan 30 ran it: `scripts/server-move-check.sh "$BACKUP" <a work folder outside the repo>`.
-Expected: `Server move verified.`, with every count equal on both sides (148 workouts, 836 entries, 2,685 sets).
-
-Without the backup, write "not measured" in the Outcome; the cutover's comparison (checklist, section 10) then covers
-it.
+Without the backup, write "not run" in the Outcome; the cutover's comparison (checklist, section 10) then covers it.
 
 - [ ] **Step 4: Everything**
 
@@ -1915,8 +2845,8 @@ Expected: it ends with exit 0. Plan 30 found two accessibility audits that fail 
 
 - [ ] **Step 5: The Outcome**
 
-Fill in `## Outcome` below: the base sha, each task's commits, the counts above, Step 3's numbers or "not measured",
-anything that differed from this plan, and anything left for the owner. Commit:
+Fill in `## Outcome` below: the base sha, Task 1, Step 2's line, each task's commits, the counts above, anything that
+differed from this plan, and anything left for the owner. Commit:
 
 ```bash
 git add docs/plans/2026-11-08-plan-31-account-caps.md
@@ -1931,63 +2861,61 @@ git commit -m "docs: plan 31 outcome"
 
 | Spec, checklist or ask | Where |
 |---|---|
-| Checklist §5: per-user row caps, "a trigger or a conditional insert, with a test at the exact number" | Tasks 2–4; decisions 2–6 |
+| Checklist §5: per-user row caps, "a trigger or a conditional insert, with a test at the exact number" | Tasks 2–4; decisions 2–8 |
 | Checklist §5: tombstone caps | decision 4: tombstones count toward the caps (the owner's choice); no purge |
+| The owner's totals: 250,000 sets, 50,000 entries, 2,000 exercise preferences, 5,000 proposals, 500 gyms and 5,000 listings | decisions 5–7; Tasks 2–4 at the exact numbers |
+| The owner: a re-save doesn't grow the counts; a save past a cap is refused whole and writes nothing | decision 5; Task 3's logged-count tests |
+| The owner: split oversized imports, every importer, sensible times and titles | decision 10; Task 6 |
+| The owner: workouts already on a phone past the caps | decision 10: they stay on the phone, listed in Account |
+| The owner: measure the backup before code | Task 1, Step 2; the numbers in "Facts checked" |
+| The owner: rows written, and a normal session's cost | decision 14 |
 | Spec §1 criterion 2: the daily limits and caps keep working | the gym caps and daily limits are untouched; Task 2, Step 7 runs every earlier test |
-| Spec §1 criterion 3: isolation | another account's rows never count (Tasks 2, 4); no route reads `account_rows` (Task 8, Step 1) |
-| Spec §1 criterion 8: the free plan | no KV, no Durable Objects; one more row written per new row (decision 4) |
+| Spec §1 criterion 3: isolation | another account's rows never count (Tasks 2–4); no route reads `account_rows` (Task 9, Step 1) |
+| Spec §1 criterion 8: the free plan | no KV, no Durable Objects; decision 14's costs |
 | Spec §4 Sync: last-write-wins, acks | unchanged; an edit at the cap is stored and acked (Task 2) |
-| Spec §4: requests within D1's limits | decision 11; a workout at both caps stays under 1 MB (Task 3) |
-| Spec §6: one error body; 422 for a refused row, with the code | decision 8; Tasks 2 and 3 check the body |
-| Spec §6: Claude's tool errors keep `ToolError` | decision 10; Task 4 |
+| Spec §4: requests within D1's limits | decision 15; a workout at both caps stays under 1 MB (Task 3) |
+| Spec §6: one error body; 422 for a refused row, with the code | decision 11; Tasks 2 and 3 check the body |
+| Spec §6: Claude's tool errors keep `ToolError` | decision 13; Task 4 |
 | Spec §8: every cap at its exact number | Tasks 2–4 (N-1, N, N+1); Task 2's requests that arrive together |
-| Spec §7: the owner's data stays out of the repo | Task 8, Step 3 reads a copy outside it, numbers only |
-| The owner: updates never refused | decision 3; Task 2 (edit, deletion, revival at the cap), Task 3 (a refused edit changes nothing) |
-| The owner: the phone keeps the data, no retry loop, a plain message | decisions 8 and 9; Task 6 |
+| Spec §7: the owner's data stays out of the repo | Task 1, Step 2 and Task 9, Step 3 read copies outside it, numbers only |
+| The owner: the phone keeps the data, no retry loop, a plain message | decisions 11 and 12; Task 7 |
 | The owner: one place for the numbers, with the drift test | decision 1; Tasks 1 and 2 |
 
 **What this plan found that the spec says differently** (for its next revision):
-1. **§6 lists the error codes.** Plan 31 adds seven: `too_many_workouts`, `too_many_body_weights`,
-   `too_many_routines`, `too_many_custom_exercises`, `too_many_proposals` (Claude only), `too_many_workout_exercises`
-   and `too_many_exercise_sets`.
+1. **§6 lists the error codes.** Plan 31 adds thirteen: `too_many_workouts`, `too_many_body_weights`,
+   `too_many_routines`, `too_many_custom_exercises`, `too_many_exercise_prefs`, `too_many_gyms_total`,
+   `too_many_listings_total`, `too_many_logged_exercises`, `too_many_logged_sets`, `too_many_workout_exercises`,
+   `too_many_exercise_sets`, and for Claude only `too_many_pending_proposals` and `too_many_proposals`.
 2. **§2, "Locks and limits", says each limit is "insert only if the count is under the limit".** A multi-row push
    can't be: it would skip rows silently and the phone would push them again forever (decision 2). The caps are
    triggers, as plan 28's gym caps already were.
-3. **§1, "Out of scope", says no changes to the SwiftData models.** None here: `SyncFailure` keeps its fields, and the
-   app's changes are GymCore's editing, two buttons and Account's list.
+3. **§1, "Out of scope", says no changes to the SwiftData models.** None here: `SyncFailure` keeps its fields, and
+   `ImportedWorkout` (two new fields) is GymCore's import model, not stored.
 
-**Placeholders:** none in the steps. The Outcome is empty by design. Task 8, Step 3 holds the owner's numbers only when
-the backup is at hand. Every code block is a file's full new text or an exact replacement.
+**Placeholders:** none in the steps. The Outcome is empty by design. Task 1, Step 2 names the backup folder as the owner
+keeps it. Every code block is a file's full new text or an exact replacement.
 
-**Names used across tasks:** `account_rows`, `seedRows`, `countOf`, `CappedTable` (Task 2); `ACCOUNT_CAPS` (Task 2),
-`WORKOUT_CAPS` (Task 3), `CLAUDE_CAPS` and `capped` (Task 4), `grouped` (Task 2); `canAddSet`, `canAddEntries`
-(Task 5); `SyncFailureLine`, `failureLines`, `failuresFooter`, `capBodyweight`, `bodyweightCapWords` (Task 6). Each is
+**Names used across tasks:** `account_rows`, `seedRows`, `countOf`, `seedCount`, `kept`, `CappedTable`, `LoggedTable`,
+`CountedTable` (Task 2); `ACCOUNT_CAPS` (Task 2), `WORKOUT_CAPS`, `MOVE_ENTRIES`, `MOVE_SETS` (Task 3), `CLAUDE_CAPS`
+and `capped` (Task 4), `grouped` (Task 2); `canAddSet`, `canAddEntries` (Task 5); `ImportSplit`, `part`, `splitFrom`
+(Task 6); `SyncFailureLine`, `failureLines`, `failuresFooter`, `capBodyweight`, `bodyweightCapWords` (Task 7). Each is
 defined in the task that first needs it.
 
 ## Questions for the owner
 
-1. **Sets per account.** The owner's numbers allow 10,000 workouts × 50 exercises × 50 sets = 25,000,000 sets in one
-   account. At about 276 bytes a set (measured, indexes included), that is about 7 GB. A D1 database holds 500 MB on
-   the free plan and 10 GB on Workers Paid, for every account together. So the caps don't keep one account from
-   filling D1.
-   - A cap on sets per account would. 250,000 would be about 69 MB; the owner's 2,685 sets are 0.7 MB. It fits this
-     plan's machinery: one `account_rows` count, kept by the workout save (which replaces its sets) in its own batch.
-   - Related: a save at both caps writes about 2,500 sets and 50 entries plus their index rows, and every later save
-     of it deletes and rewrites them. By D1's rule that each index adds a written row, that is roughly 15,000 rows
-     written a save (not measured). The free plan allows 100,000 a day for the whole Worker.
-2. **Imports past 50 and 50.** The CSV importers can make a bigger workout (FitNotes puts a whole day into one). It
-   stays on the phone and sync refuses it with the cap's words (decision 7). Split such workouts at import, skip the
-   extra rows with a note in the import summary, or leave it?
-3. **Gym and listing tombstones.** The gym caps count live rows only (`0005_gyms_photos.sql:22-45`), so adding and
-   deleting gyms or listings grows their tombstones without end. Count deleted ones there too, as plan 31's caps do?
-   An account that deleted many gyms would then be refused.
-4. **Exercise preferences.** One row per exercise id, and the id is any 1–80 characters (`0002_app_schema.sql:99-107`),
-   so a client can make rows without end. Cap them, at the library and custom exercises (1,324 + 1,000), say?
-5. **Resolved proposals and Claude's audit.** Only waiting proposals are capped (the owner's number). With auto-apply
-   on, the app resolves each one, so Claude can keep adding, up to 60 calls a minute. The audit keeps 90 days of calls
-   (`d1-db.ts:553`), so up to about 7.8 million rows for one busy connection. Cap the totals, or purge older rows?
-6. **The words.** "You've reached the limit of 20,000 weigh-ins on one account, deleted ones included. This one stays
+1. **Claude's audit.** It keeps 90 days of calls (`d1-db.ts:553`), up to 60 a minute, so up to about 7.8 million rows
+   for one busy connection. Cap it per account, shorten the 90 days, or leave it to the rate limit?
+2. **Re-saving a big workout.** A workout at both per-workout caps costs about 10,000 rows written on every re-save
+   (decision 14), so about 9 a day use the free plan's 100,000 for everyone. Lower the per-workout caps, rely on the
+   per-IP rate limits (checklist, section 1), or move to Workers Paid before others sign up?
+3. **The size of the whole database.** One account at the caps holds about 69 MB of sets alone (250,000 × about 276
+   bytes). The free plan's database holds 500 MB for every account together, so about seven such accounts fill it.
+   Fine for one owner; before sign-ups open, Workers Paid (10 GB) or lower totals?
+4. **Shared gyms and listings.** The new totals count private rows only (decision 7). Shared ones an account adds are
+   bounded by the daily limits (10 gyms and 30 listings a day) but not in total. Leave them to the daily limits?
+5. **The words.** "You've reached the limit of 20,000 weigh-ins on one account, deleted ones included. This one stays
    on this iPhone." Keep, or reword before the cutover? They live in `server/src/sync/caps.ts`, and only the server
    changes.
+6. **A later plan: indexes for the pulls** (decision 17), before many accounts exist.
 
 ## Outcome
