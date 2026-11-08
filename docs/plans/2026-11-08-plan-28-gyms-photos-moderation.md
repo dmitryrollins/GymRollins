@@ -10,7 +10,9 @@
 - gym photos in R2, private and shared,
 - the public photo routes, including GymRollins' own exercise photos and their `manifest.json`.
 
-Every daily limit and cap keeps its number and its error code, and account deletion keeps working with photos.
+Every daily limit and cap keeps its number and its error code, and account deletion keeps working with photos. Then
+the app uses all of it: the catalogue, moderation and photos through `ApiGymCatalogTransport`, private gyms in sync,
+exercise photos from the Worker, and the gym suites on a throwaway Worker.
 
 **Architecture:**
 - **Sync.** Gyms and listings join the plan-26 entity machinery. `Entity` gains an owner column (`owner_id`), a pull
@@ -37,13 +39,14 @@ photos and moderation"), 6, 7 and 8.
 - the pgTAP files `gyms`, `gym_rules`, `gym_review_fixes`, `gym_moderation`, `gym_photo_guard`, `exercise_photos_bucket`
   and the gym parts of `security` (every behaviour they check has a server test below).
 
-**Branch:** `feat-cloudflare`, on top of plan 26 (and plan 27 if it is committed first; nothing here touches iOS).
+**Branch:** `feat-cloudflare`, on top of plans 26 and 27. The server part needs only plan 26; the iOS part needs plan 27.
 - No push.
 - Local only: never run `wrangler login`, `wrangler deploy`, or any `wrangler` command without `--local`.
 - Commit messages have no `Co-Authored-By`, `Generated with` or `Claude-Session` trailers; the owner forbids them.
 
-**Not in this plan's server part:**
-- The iOS side. It comes as the last section, to be written once plan 27 is committed.
+**Two parts:** the server (Tasks 1–10), then the iOS side (Tasks 11–18), which builds on plan 27.
+
+**Not in this plan:**
 - Claude's reads of gyms (`mcp_read_gyms`), which is plan 29.
 - The remote R2 buckets, the deploy and removing Supabase, which are plan 30 and the owner's steps.
 
@@ -4961,7 +4964,7 @@ from the plan as written, what passes to the iOS part and to plans 29 and 30.
 3. **The drift test** "moves" in §8, but the Supabase functions still run until plan 30. So the Deno test stays for the
    Supabase copy, and the server gets its own Vitest test against the same Swift file.
 4. **Anonymous catalogue reads.** §3 puts every `/v1` route behind the session, which drops the anon reads Supabase
-   allowed (decision 7). This is an open question for the owner, below.
+   allowed (decision 7). Decided so: see "Questions the owner's side decided".
 
 **Placeholders:** none. Every step has its code, command and expected output. The test counts were checked while
 writing: Tasks 1–10 were applied to a scratch copy of `server/` (never committed), giving `Test Files  25 passed
@@ -4976,62 +4979,3210 @@ writing: Tasks 1–10 were applied to a scratch copy of `server/` (never committ
 
 Each is defined once, in the task that first needs it.
 
-## Open questions for the owner
+## Questions the owner's side decided
 
-1. **Should a signed-out phone read the shared catalogue?** Supabase let it, with the anon key. The spec puts `/v1`
-   behind the session, so this plan answers 401 there. If yes, the three read routes move outside the session, and
-   `is_mine` / `confirmed_by_me` answer false.
-2. **May an admin delete any shared photo?** The Postgres policy allowed it. The spec, and this plan, allow it only for
-   a removed listing's photo, which is all the app ever did.
+Both were decided on 2026-11-08 by the controller, following the approved spec (iOS decisions 16 and 17):
+1. **A signed-out phone doesn't read the shared catalogue.** Supabase let it, with the anon key. Now every `/v1`
+   route answers 401 without the session, and the app shows its signed-out state.
+2. **An admin deletes a shared photo only while a removed listing names it.** The Postgres policy let an admin delete
+   any shared photo; the app never did more than this.
 
-## iOS tasks (to be added)
+## iOS tasks
 
-*To be written after plan 27 is committed, on top of its `ApiClient`, `AuthService` and `ApiSyncTransport`.*
+Built on plan 27 as committed (`f3395a2` and the code after it): `ApiError`, `ApiClient`, `ApiConfig`,
+`ApiSyncTransport`, `servesGyms`, the server move, `AuthService(api:)`, the integration support and
+`scripts/test-server.sh`.
 
-The iOS part needs:
-- `ApiGymCatalogTransport` behind the existing `GymCatalogTransport` protocol, for the catalogue reads, sharing,
-  confirming, reports, blocks, the admin calls and the shared photos;
-- a photo transport for `gym-photos-private` (upload, download with the URL cache off, delete), and
-  `deleteAllPhotos` / `detachAllPhotos` over `/v1/photos/mine` and `/v1/photos/detach`;
-- gyms and listings in `ApiSyncTransport` (`/v1/sync/gyms`, `/v1/sync/gym-listings`);
-- `GymCatalogErrors.map` and the sync refusals reading `ApiError` codes before statuses;
-- `PHOTO_HOSTING = storage` pointed at `<API_URL>/photos/exercises/…`, and `publicPhotoURL` at `/photos/shared/<name>`;
-- the gym integration suites on `wrangler dev`;
-- the server-move check re-run with workouts that link gyms and listings.
+**What the iOS part delivers:**
+- `ApiGymCatalogTransport` behind `GymCatalogTransport`, in place of `UnavailableGymCatalogTransport`;
+- gyms, listings and private photos in `ApiSyncTransport` (`servesGyms` becomes true);
+- `GymCatalogErrors.map` reading `ApiError`;
+- the server move forgetting the old catalogue;
+- `PHOTO_HOSTING = storage` reading the Worker;
+- the five parked gym suites back, on the Worker;
+- the server-move check with gym links.
 
-**Notes for those tasks, from the DTOs and rows studied here** (`ios/Packages/GymSync/Sources/GymSync`):
-- **`GymDTO`:**
-  - It encodes `id, visibility ("private"), name, address, latitude, longitude, client_updated_at, deleted_at`, and
-    decodes those plus `updated_at`.
-  - The server answers exactly that set, with `visibility` too.
-- **`GymListingDTO`:**
-  - It encodes `id, gym_id, item_id` (the generic item, `GymRepository.genericItemId(forKind:)`), `visibility,
-    photo_path, loads, quantity, notes, private_brand, private_model, client_updated_at, deleted_at`.
-  - It decodes those plus `updated_at` and `equipment_items.kind_id`, which the pull nests (decision 8).
-  - `photo_missing` (422) maps to `PrivatePhotoMissing`. `too_many_gyms` / `too_many_listings` (422) and 403
-    `not_allowed` map to `SyncRecordRejected` with today's messages (`SupabaseTransport+Gyms.swift`,
-    `limitMessages`, `gymRefusal`).
-- **`GymCatalogRows`** decodes a JSON array. The API wraps lists in `{"rows": [...]}`, so the transport takes `rows`
-  out first:
-  - `GymRow`: `id, name, address, latitude, longitude, maps_place_id`, from `{gym}`, which may be null;
-  - `ItemRow`: `id, kind_id, brand, model, gym_count, photo_path, photo_listing_id`;
-  - `ListingRow`: `id, kind_id, brand, model, photo_path, loads, quantity, confirm_count, gym_id, item_id, notes,
-    status, is_mine, confirmed_by_me`;
-  - `ModerationRow`: `target_type, target_id, title, photo_path, report_count, reasons, notes, status, address,
-    listing_notes`;
-  - `ModerateAnswer`: `photo_path`;
-  - `ShareAnswer`: `status, listing_id, listings`;
-  - `OwnedPhoto`: `bucket_id, name`.
-- **Answers that were bare JSON** are objects now: `findOrCreateGym` → `{id}`, `confirm` → `{confirm_count}`,
-  `unblockAll` → `{cleared}`, `isAdmin` → `{admin}`. `isAdmin` still answers false with no session, without calling.
-- **Paging.** `publicListings` pages with `?offset=&limit=500`, two pages at most, as `readListings` does.
-- **Query encoding.** Percent-encode `+` in `?place=` (`%2B`): Hono reads a bare `+` in a query as a space, and Maps
-  place ids can hold `+`, `/` and `=`.
-- **`GymCatalogErrors.map`** keeps its outcomes, matching codes:
-  - `daily_limit`, `gym_not_shareable`, `photo_missing`, `gym_full`, `photo_in_use`, `unknown_target`, `place_taken`;
-  - every `photo_*` refusal → `.photoRefused`;
-  - `row_rejected` on a report → `.noteRefused`;
-  - 403 → `.notAllowed`, 401 → `.signedOut`;
-  - 5xx and 429 → `.offline`;
-  - anything else → `.rejected(message)`.
-  - An upload's 409 `duplicate` counts as uploaded (`isDuplicateUpload`).
+### Decisions for the iOS part
+
+16. **Catalogue reads need a session**, decided by the controller on 2026-11-08, following the approved spec (open
+    question 1). A signed-out phone hears `.signedOut` for every catalogue call, reads included, and the app shows its
+    signed-out state. Supabase let the anon key read; the ported suites check the new answer instead.
+17. **An admin deletes a shared photo only while a removed listing names it**, decided by the controller on
+    2026-11-08 (open question 2). That is Task 8's rule; the app never did more.
+18. **Bodies and answers** (Task 8 of the server part, decision 8):
+    - Lists come as `{"rows": [...]}` and one gym as `{"gym": …}`. `GymCatalogRows.array(in:key:)` turns either into
+      the JSON array the row decoders already read, so `GymCatalogRows` is unchanged.
+    - `{id}`, `{confirm_count}`, `{cleared}` and `{admin}` are decoded by small private types.
+    - The listing pull's `equipment_items.kind_id` is what `GymListingDTO` already decodes.
+19. **`+` in `?place=`.** `ApiClient` already sends `+` as `%2B` (plan 27, Task 1). Probe on a live Worker:
+    `?place=a%2Bb` reads `a+b`, and `?place=a+b` reads `a b` (400 `invalid place`). A test pins it.
+20. **Errors, code first, then status** (spec section 6):
+    - `daily_limit`, `gym_not_shareable`, `photo_missing`, `gym_full`, `photo_in_use`, `unknown_target` and
+      `place_taken` reach their cases.
+    - `row_rejected` reaches `.noteRefused`, as SQLSTATE 23514 did.
+    - Every other `photo_*` code reaches `.photoRefused`.
+    - Then: 401 → `.signedOut`; 403 → `.notAllowed` (`.signedOut` without a session); 5xx and 429 → `.offline`;
+      anything else → `.rejected(message)`, as 22023 did.
+    - A 409 `duplicate` on an upload counts as uploaded.
+21. **Uploads send the bytes as `image/jpeg`.**
+    - `ApiClient.data` gains a `contentType` parameter, JSON by default.
+    - Photo names are checked with `GymPhotoName.isValid` before any request, and lowercased: a name like `../x`
+      would take the session's token to another path.
+    - Private photos come back through `ApiClient`'s session, which has no URL cache (spec section 7).
+22. **Owned photos.** `OwnedPhoto` and the list-remove-list loop move from `SupabaseGymCatalogTransport+Account.swift`
+    to `OwnedPhotos.swift`, so the API transport uses them and plan 30 can delete the Supabase file alone. Each photo
+    is one `DELETE` on the API.
+23. **The server move and the shared catalogue** (plan 27 left it to plan 28). The catalogue's cache names the old
+    server's rows. The move now:
+    - turns the user's own shared listings, and those still waiting to be shared, into "This phone only", keeping their
+      photos. They are the user's equipment, and sharing them on the new server is the user's call;
+    - clears every maps gym's refresh stamp, so its next open asks the new server. The old gym id stays for that one
+      refresh, because that is how `GymCatalogClient` learns the gym is gone. It then drops other people's cached
+      listings and hands back their picture files, as when a moderator removes a gym;
+    - clears the items' borrowed catalogue pictures, and empties the share outbox, whose rows name the old server's
+      ids and the old account.
+    Re-sharing automatically was rejected: it would publish on a new server without the user doing anything.
+24. **Exercise photos from the Worker.**
+    - `PhotoHostingConfig` reads `API_URL` (`ApiConfig`) instead of `SUPABASE_URL`.
+    - `SupabaseStoragePhotoProvider` becomes `HostedPhotoProvider`, at `<API_URL>/photos/exercises/`.
+    - `scripts/upload-photos.mjs` takes `WORKER_STATE`, so the photo E2E fills the throwaway test Worker's R2 and never
+      the dev data.
+25. **The parked suites come back** with the same names and checks, on the Worker:
+    - Sign-in is plan 27's email accounts.
+    - Photos are a real JPEG start (the server checks the bytes; Storage didn't).
+    - "Anonymous" reads become another account's reads, plus a check that signed out is refused.
+    - Admins are made by a trigger that `scripts/test-sync-integration.sh` adds to the throwaway D1 only, as the
+      Supabase script did for `sync-admin-*@test.local`. Probe: a trigger added with `wrangler d1 execute --local`
+      to a running Worker's D1 made the next such sign-up an admin.
+    - The E2E's search of D1 uses `instr()`, because D1 refuses LIKE patterns over 50 bytes and a marker is longer.
+26. **Checked while writing:** Tasks 11–14 and 16 were applied to a scratch copy of `ios/Packages` at plan 27's head
+    (`509cbf1`), never committed. Results:
+    - GymSync: `Test run with 207 tests in 27 suites passed`.
+    - GymData: 365 tests in 50 suites. The one failure was `LibraryTests`, which needs the app's `exercises.json` beside
+      the copy, as plan 27 found.
+    - All 39 integration tests passed against a throwaway `wrangler dev --local` of this plan's server, the five
+      ported suites and the new move test among them. Of those 39, 15 are plan 27's and 24 are this plan's.
+    - Not run ahead: Task 15 (the app target) and the scripts of Tasks 16–17 end to end. Their SQL was run on a
+      local D1.
+
+### File map (iOS)
+
+| File | Change |
+|---|---|
+| `ios/Packages/GymSync/Sources/GymSync/ApiClient.swift` | `contentType` on `data` |
+| `…/GymCatalogErrors.swift` | Read `ApiError` |
+| `…/OwnedPhotos.swift`, `…/SupabaseGymCatalogTransport+Account.swift` | The owned-photo helpers, shared |
+| `…/GymCatalogRows+Api.swift` | `{"rows"}` and `{"gym"}` as the decoders' arrays |
+| `…/ApiGymCatalogTransport.swift`, `…/ApiGymCatalogTransport+Photos.swift` | Create |
+| `…/ApiSyncTransport.swift`, `…/ApiSyncTransport+Gyms.swift` | `servesGyms`; gyms, listings, private photos |
+| `ios/Packages/GymSync/Tests/GymSyncTests/GymCatalogErrorsApiTests.swift`, `ApiGymCatalogTransportTests.swift`, `ApiSyncTransportGymTests.swift` | Create |
+| `…/GymSyncTests/GymPhotoRemovalTests.swift`, `ApiSyncTransportTests.swift` | Follow the moves |
+| `ios/Packages/GymData/Sources/GymData/Sync/SyncStore+ServerMove.swift` | `forgetOldCatalogue` |
+| `ios/Packages/GymData/Tests/GymDataTests/SyncStoreServerMoveCatalogueTests.swift` | Create |
+| `ios/GymRollins/App/AppEnvironment+GymCatalog.swift` | The catalogue on the API |
+| `ios/GymRollins/Features/Media/*` (`PhotoHosting`, `HostedPhotoProvider`, …) | Exercise photos from the Worker |
+| `ios/GymRollinsTests/StoragePhotoHostingTests.swift`, `StoragePhotoIntegrationTests.swift`, … | Follow the rename |
+| `…/GymSyncIntegrationTests/GymIntegrationSupport.swift`, `IntegrationSupport.swift`, the five gym suites | On the Worker |
+| `scripts/test-sync-integration.sh`, `test-gym-e2e.sh`, `test-photo-hosting.sh`, `upload-photos.mjs`, `test-all.sh`, `server-move-check.sh` | The Worker |
+| `docs/media/README.md` | Hosting on the Worker |
+
+### How to run things (iOS)
+
+As plan 27's "How to run things". Plan 27 ended at `Test run with 190 tests in 24 suites passed` for GymSyncTests and
+363 tests in 49 suites for GymData; each task below gives the new counts. If plan 27's own counts differ, add these
+tasks' tests to them: 4, 9, 4 and 2.
+
+---
+
+### Task 11: The API's errors in the catalogue, photo bodies, and owned photos
+
+**Files:**
+- Modify: `ios/Packages/GymSync/Sources/GymSync/ApiClient.swift`, `GymCatalogErrors.swift`,
+  `SupabaseGymCatalogTransport+Account.swift`
+- Create: `ios/Packages/GymSync/Sources/GymSync/OwnedPhotos.swift`
+- Modify: `ios/Packages/GymSync/Tests/GymSyncTests/GymPhotoRemovalTests.swift`
+- Test: `ios/Packages/GymSync/Tests/GymSyncTests/GymCatalogErrorsApiTests.swift`
+
+- [ ] **Step 1: Write the failing tests**
+
+`ios/Packages/GymSync/Tests/GymSyncTests/GymCatalogErrorsApiTests.swift`:
+
+```swift
+import Foundation
+import GymData
+import Testing
+@testable import GymSync
+
+/// `GymCatalogErrors.map` reading the API's errors (spec section 6): the code first, then the status, to the cases the
+/// Postgres errors reached, so the app shows the same messages.
+@Suite struct GymCatalogErrorsApiTests {
+    private func api(_ status: Int, _ code: String, _ message: String = "The server's words.") -> ApiError {
+        ApiError(status: status, code: code, message: message)
+    }
+
+    @Test func eachRefusalCodeReachesItsCase() {
+        let cases: [(ApiError, GymCatalogError)] = [
+            (api(422, "daily_limit"), .dailyLimit), (api(422, "gym_not_shareable"), .gymNotShareable),
+            (api(422, "photo_missing"), .photoMissing), (api(422, "gym_full"), .gymFull),
+            (api(422, "photo_in_use"), .photoInUse), (api(422, "unknown_target"), .unknownTarget),
+            (api(422, "place_taken"), .placeTaken), (api(422, "row_rejected"), .noteRefused),
+        ]
+        for (error, expected) in cases {
+            #expect(GymCatalogErrors.map(error, hasSession: true) == expected, "\(error.code)")
+        }
+    }
+
+    @Test func everyPhotoRuleIsOneRefusal() {
+        let codes = ["photo_daily_limit", "photo_name_in_use", "photo_bad_name", "photo_not_jpeg", "photo_owner_missing"]
+        for code in codes {
+            #expect(GymCatalogErrors.map(api(422, code), hasSession: true) == .photoRefused, "\(code)")
+        }
+    }
+
+    @Test func theStatusDecidesTheRest() {
+        #expect(GymCatalogErrors.map(api(401, "signed_out"), hasSession: true) == .signedOut)
+        #expect(GymCatalogErrors.map(api(403, "not_allowed"), hasSession: true) == .notAllowed)
+        #expect(GymCatalogErrors.map(api(403, "not_allowed"), hasSession: false) == .signedOut)
+        for status in [429, 500, 503] {
+            #expect(GymCatalogErrors.map(api(status, "busy"), hasSession: true) == .offline, "\(status)")
+        }
+        #expect(GymCatalogErrors.map(api(400, "bad_request", "invalid loads"), hasSession: true)
+            == .rejected("invalid loads"))
+        #expect(GymCatalogErrors.map(api(422, "unknown_listing", "unknown listing"), hasSession: true)
+            == .rejected("unknown listing"))
+        #expect(GymCatalogErrors.map(api(413, "too_large", "A photo is at most 1 MB."), hasSession: true)
+            == .rejected("A photo is at most 1 MB."))
+    }
+
+    @Test func aNetworkFailureIsStillOffline() {
+        #expect(GymCatalogErrors.map(URLError(.notConnectedToInternet), hasSession: true) == .offline)
+    }
+}
+```
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `cd ios/Packages/GymSync && swift test --filter GymCatalogErrorsApiTests`
+Expected: FAIL. An `ApiError` reaches `.rejected(…)` for every code.
+
+- [ ] **Step 3: Let `ApiClient` send a body that isn't JSON**
+
+In `ApiClient.swift`, replace
+
+```swift
+    /// One exchange; the body and response of a 2xx answer.
+    func data(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil,
+              bearer: Bearer = .stored) async throws -> (body: Data, response: HTTPURLResponse) {
+```
+
+with
+
+```swift
+    /// One exchange; the body and response of a 2xx answer. `contentType` names `body`: JSON, or `image/jpeg` for a
+    /// photo upload.
+    func data(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil,
+              contentType: String = "application/json",
+              bearer: Bearer = .stored) async throws -> (body: Data, response: HTTPURLResponse) {
+```
+
+and, in its body, `request.setValue("application/json", forHTTPHeaderField: "Content-Type")` with
+`request.setValue(contentType, forHTTPHeaderField: "Content-Type")`.
+
+- [ ] **Step 4: Share the owned-photo helpers**
+
+`ios/Packages/GymSync/Sources/GymSync/OwnedPhotos.swift`:
+
+```swift
+import Foundation
+import GymData
+
+/// An object the caller owns in one of the gym buckets, as `GET /v1/photos/mine` (and `my_gym_photos()` before it)
+/// lists it.
+struct OwnedPhoto: Decodable, Equatable, Hashable {
+    let bucketId: String
+    let name: String
+
+    enum CodingKeys: String, CodingKey { case bucketId = "bucket_id", name }
+}
+
+/// Removing every photo an account owns, before the account is deleted: list, remove, list again until nothing is
+/// left. Shared by the API's catalogue transport and, until plan 30 deletes it, the Supabase one.
+enum OwnedPhotos {
+    /// A remove call takes a few names at a time, so each request stays small.
+    static let removeBatch = 100
+    /// A list is capped (PostgREST's `max_rows`, the API's 1,000 rows), so a user with more is listed again after each
+    /// pass.
+    static let maxPhotoPasses = 20
+
+    /// Lists, removes, and lists again until nothing is left. The same objects twice in a row mean the server is not
+    /// removing them, and `maxPasses` bounds a user whose photos keep appearing; either ends in a refusal instead of
+    /// a loop.
+    static func removeEverything(maxPasses: Int = maxPhotoPasses, batchSize: Int = removeBatch,
+                                 list: () async throws -> [OwnedPhoto],
+                                 remove: (_ bucket: String, _ names: [String]) async throws -> Void) async throws {
+        var previous: Set<OwnedPhoto> = []
+        for _ in 0..<maxPasses {
+            let photos = try await list()
+            if photos.isEmpty { return }
+            guard Set(photos) != previous else { throw GymCatalogError.rejected("photos remain") }
+            previous = Set(photos)
+            try await removeAll(photos, batchSize: batchSize, remove: remove)
+        }
+        throw GymCatalogError.rejected("photos remain")
+    }
+
+    static func list(from data: Data) throws -> [OwnedPhoto] {
+        do {
+            return try JSONDecoder().decode([OwnedPhoto].self, from: data)
+        } catch {
+            throw GymCatalogError.rejected("unreadable photo list")
+        }
+    }
+
+    static func removeAll(_ photos: [OwnedPhoto], batchSize: Int = removeBatch,
+                          remove: (_ bucket: String, _ names: [String]) async throws -> Void) async throws {
+        var buckets: [String] = []
+        for photo in photos where !buckets.contains(photo.bucketId) { buckets.append(photo.bucketId) }
+        for bucket in buckets {
+            let names = photos.filter { $0.bucketId == bucket }.map(\.name)
+            for start in stride(from: 0, to: names.count, by: batchSize) {
+                try await remove(bucket, Array(names[start..<min(start + batchSize, names.count)]))
+            }
+        }
+    }
+}
+```
+
+Replace `ios/Packages/GymSync/Sources/GymSync/SupabaseGymCatalogTransport+Account.swift` with:
+
+```swift
+import Foundation
+import GymData
+import Supabase
+
+extension SupabaseGymCatalogTransport {
+    /// Removes every photo the caller owns, listed on a listing or not (`my_gym_photos()` goes by owner). Stops at the
+    /// first real failure. An object that is already gone isn't one: Storage just leaves it out of its answer.
+    public func deleteAllPhotos() async throws {
+        guard client.auth.currentSession != nil else { throw GymCatalogError.signedOut }
+        try await OwnedPhotos.removeEverything(list: {
+            let data = try await call { try await client.rpc("my_gym_photos").execute().data }
+            return try OwnedPhotos.list(from: data)
+        }, remove: { bucket, names in
+            _ = try await call { try await client.storage.from(bucket).remove(paths: names) }
+        })
+    }
+
+    /// Clears the photo names from the caller's own listings, so they don't name objects `deleteAllPhotos` is about to
+    /// remove. Nothing else changes.
+    public func detachAllPhotos() async throws {
+        guard client.auth.currentSession != nil else { throw GymCatalogError.signedOut }
+        _ = try await call { try await client.rpc("detach_my_gym_photos").execute().data }
+    }
+}
+```
+
+Point the existing tests at the new home:
+
+```bash
+cd ios/Packages/GymSync/Tests/GymSyncTests
+sed -i '' -e 's/SupabaseGymCatalogTransport\.removeAll/OwnedPhotos.removeAll/g' \
+  -e 's/SupabaseGymCatalogTransport\.removeEverything/OwnedPhotos.removeEverything/g' \
+  -e 's/SupabaseGymCatalogTransport\.ownedPhotos(from:/OwnedPhotos.list(from:/g' GymPhotoRemovalTests.swift
+```
+
+- [ ] **Step 5: Read `ApiError` in `GymCatalogErrors`**
+
+Replace `ios/Packages/GymSync/Sources/GymSync/GymCatalogErrors.swift` with:
+
+```swift
+import Foundation
+import GymData
+import Supabase
+
+/// Turns what the API (and, until plan 30, PostgREST, Storage and Supabase Auth) throws into the few cases
+/// `ShareOutbox` reacts to: offline and signed-out stop the queue, the rest settle one row. The server's own words are the function's `raise exception` messages.
+enum GymCatalogErrors {
+    private static let authCodes: Set<String> = ["PGRST301", "PGRST302", "PGRST303"]
+    /// PostgREST's own "the database isn't reachable or is busy" answers, and Postgres classes 08 (connection) and
+    /// 53 (resources, e.g. too many connections).
+    /// What the bucket trigger raises (`guard_gym_photo`): the daily photo limit, a name a listing already uses, and
+    /// names, types and owners that aren't allowed. A Storage version may show the message or only "row-level security".
+    private static let photoRefusals: Set<String> = [
+        "photo_daily_limit", "photo_name_in_use", "photo_bad_name", "photo_not_jpeg", "photo_immutable",
+        "photo_owner_missing",
+    ]
+    private static let busyCodes: Set<String> = ["PGRST000", "PGRST001", "PGRST002", "PGRST003"]
+
+    /// `hasSession` matters for 42501: with no session the caller is signed out; with one, the server refused this
+    /// row (not allowed here), and the queue goes on with the next.
+    static func map(_ error: Error, hasSession: Bool = false) -> GymCatalogError {
+        switch error {
+        case let known as GymCatalogError: known
+        case let failure as ApiError: map(api: failure, hasSession: hasSession)
+        case let failure as PostgrestError: map(message: failure.message, code: failure.code, hasSession: hasSession)
+        case let failure as StorageError: mapStorage(failure)
+        case is AuthError: .signedOut
+        case let failure as HTTPError: map(status: failure.response.statusCode, text: failure.localizedDescription)
+        case _ where AuthFailure.isNetwork(error): .offline
+        default: .rejected(error.localizedDescription)
+        }
+    }
+
+    /// Storage answers HTTP 400 for both a repeated name and a policy refusal; only the body tells them apart.
+    static func isDuplicateUpload(_ error: StorageError) -> Bool {
+        error.statusCode == "409" || error.error == "Duplicate"
+    }
+
+    /// A busy or overloaded server is a reason to try again later, not a verdict on the row.
+    static func isTemporary(status: Int) -> Bool { status == 429 || (500...599).contains(status) }
+
+    private static func map(status: Int, text: String) -> GymCatalogError {
+        if status == 401 { return .signedOut }
+        return isTemporary(status: status) ? .offline : .rejected(text)
+    }
+
+    private static func map(message: String, code: String?, hasSession: Bool) -> GymCatalogError {
+        switch message {
+        case "daily_limit": return .dailyLimit
+        case "gym_not_shareable": return .gymNotShareable
+        case "photo_missing": return .photoMissing
+        case "gym_full": return .gymFull
+        case "photo_in_use": return .photoInUse
+        case "unknown target": return .unknownTarget
+        case "place_taken": return .placeTaken
+        case _ where photoRefusals.contains(message): return .photoRefused
+        default: break
+        }
+        if let code {
+            if authCodes.contains(code) { return .signedOut }
+            // `reports.note` failed its check: control or invisible characters.
+            if code == "23514" { return .noteRefused }
+            // The item a share named was deleted a moment before (its only other user closed their account). The next
+            // try finds or creates the item again, so this is a retry, not a verdict on the row.
+            if code == "23503" { return .offline }
+            if code == "42501" { return hasSession ? .notAllowed : .signedOut }
+            if busyCodes.contains(code) || code.hasPrefix("08") || code.hasPrefix("53") { return .offline }
+        }
+        return .rejected(message)
+    }
+
+    /// The API's refusals (server/src/gyms/refusals.ts, spec section 6): the code first, then the status. The codes are
+    /// the strings the Postgres functions raised, so each reaches the same case, and the app the same message.
+    private static func map(api failure: ApiError, hasSession: Bool) -> GymCatalogError {
+        switch failure.code {
+        case "daily_limit": return .dailyLimit
+        case "gym_not_shareable": return .gymNotShareable
+        case "photo_missing": return .photoMissing
+        case "gym_full": return .gymFull
+        case "photo_in_use": return .photoInUse
+        case "unknown_target": return .unknownTarget
+        case "place_taken": return .placeTaken
+        // A CHECK or clean_text refused the text (23514): on a report, its note.
+        case "row_rejected": return .noteRefused
+        case _ where failure.code.hasPrefix("photo_"): return .photoRefused
+        default: break
+        }
+        switch failure.status {
+        case 401: return .signedOut
+        case 403: return hasSession ? .notAllowed : .signedOut
+        case _ where failure.isTemporary: return .offline
+        default: return .rejected(failure.message)
+        }
+    }
+
+    /// The trigger on the buckets refuses an upload with a row-level-security error: the daily photo limit, or a
+    /// name a listing already uses. Storage shows only that, as HTTP 400 `AccessDenied`, so every such refusal is one
+    /// answer for the row. A repeated name (409 `Duplicate`) is told apart before this runs.
+    private static func mapStorage(_ error: StorageError) -> GymCatalogError {
+        if error.statusCode == "401" { return .signedOut }
+        if let status = error.statusCode.flatMap(Int.init), isTemporary(status: status) { return .offline }
+        if error.error == "AccessDenied" || photoRefusals.contains(error.message)
+            || error.message.localizedCaseInsensitiveContains("row-level security") {
+            return .photoRefused
+        }
+        return .rejected(error.message)
+    }
+}
+```
+
+What changed:
+- the type's doc comment;
+- `case let failure as ApiError: map(api: failure, hasSession: hasSession)` as the second case;
+- the new `map(api:hasSession:)`.
+The Supabase mapping stays until plan 30.
+
+- [ ] **Step 6: Run the tests**
+
+Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
+Expected: `Test run with 194 tests in 25 suites passed`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add ios/Packages/GymSync
+git commit -m "feat(sync): the catalogue's errors read ApiError; photo bodies; owned photos shared"
+```
+
+- [ ] **Step 8: Review**
+
+A fresh reviewer reads `git diff HEAD~1`:
+1. **Spec compliance:** spec section 6, and decisions 20 and 22. Every code in `server/src/gyms/refusals.ts` reaches
+   the case its Postgres message reached in the old `map(message:code:)`.
+2. **Quality:** the `code-reviewer` agent, then the `swift` skill's review checklist.
+
+---
+
+### Task 12: `ApiGymCatalogTransport`
+
+**Files:**
+- Create: `ios/Packages/GymSync/Sources/GymSync/GymCatalogRows+Api.swift`, `ApiGymCatalogTransport.swift`,
+  `ApiGymCatalogTransport+Photos.swift`
+- Test: `ios/Packages/GymSync/Tests/GymSyncTests/ApiGymCatalogTransportTests.swift`
+
+- [ ] **Step 1: Write the failing tests**
+
+`ios/Packages/GymSync/Tests/GymSyncTests/ApiGymCatalogTransportTests.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+import Testing
+@testable import GymSync
+
+/// `ApiGymCatalogTransport` against a stub of the catalogue, moderation and photo routes: the paths, queries and bodies
+/// of server/src/gyms, src/moderation and src/photos, and their answers.
+@Suite struct ApiGymCatalogTransportTests {
+    private let gymId = UUID(uuidString: "6F1C2A3B-0000-4000-8000-000000000001")!
+    private let listingId = UUID(uuidString: "6F1C2A3B-0000-4000-8000-000000000002")!
+    private let photo = "6f1c2a3b-0000-4000-8000-0000000000aa.jpg"
+    /// The same name as the phone may hold it: an uppercase UUID (the server keeps names lowercase).
+    private var upperPhoto: String { photo.dropLast(4).uppercased() + ".jpg" }
+
+    private func signedIn(_ server: StubServer) -> ApiGymCatalogTransport {
+        let session = StoredSession(token: "token-1", userId: UUID(), email: nil)
+        return ApiGymCatalogTransport(api: server.client(sessions: InMemorySessionStore(session)))
+    }
+
+    private func body(_ request: SeenRequest?) -> [String: Any] { ((try? request?.json()) as? [String: Any]) ?? [:] }
+
+    private var listingJSON: String {
+        #"{"id": "\#(listingId)", "gym_id": "\#(gymId)", "item_id": "\#(UUID())", "kind_id": "cable-station", "#
+            + #""brand": null, "model": null, "photo_path": "\#(photo)", "loads": {"type": "none"}, "quantity": 1, "#
+            + #""notes": null, "status": "active", "confirm_count": 2, "is_mine": true, "confirmed_by_me": false}"#
+    }
+
+    @Test func aPublicGymIsAskedForByItsPlaceWithPlusSentAsPercent2B() async throws {
+        let place = "ChIJ+ab/c="
+        let server = StubServer { request in
+            request.query["place"] == place
+                ? .json(200, #"{"gym": {"id": "\#(gymId)", "name": "Iron Works", "address": null, "latitude": 52.5, "#
+                    + #""longitude": 13.4, "maps_place_id": "\#(place)", "status": "active", "is_mine": false}}"#)
+                : .json(200, #"{"gym": null}"#)
+        }
+        let found = try await signedIn(server).publicGym(mapsPlaceId: place)
+        #expect(found == RemoteGym(id: gymId, name: "Iron Works", address: nil, latitude: 52.5, longitude: 13.4,
+                                   mapsPlaceId: place))
+        let request = try #require(server.requests.first)
+        #expect(request.path == "/v1/gyms/public")
+        #expect(request.url.absoluteString.contains("%2B") && !request.url.absoluteString.contains("+"))
+        #expect(try await signedIn(server).publicGym(mapsPlaceId: "elsewhere") == nil)
+    }
+
+    @Test func listingsAreReadInPagesOfFiveHundredUntilAShortOne() async throws {
+        let server = StubServer { _ in .json(200, #"{"rows": [\#(listingJSON)]}"#) }
+        let read = try await signedIn(server).publicListings(gymId: gymId)
+        #expect(read.listings.map(\.id) == [listingId])
+        #expect(read.listings.first?.isMine == true && read.listings.first?.confirmCount == 2)
+        #expect(read.isComplete)
+        let request = try #require(server.requests.first)
+        #expect(request.path == "/v1/gyms/\(gymId.uuidString.lowercased())/listings")
+        #expect(request.query == ["offset": "0", "limit": "500"])
+
+        var offsets: [Int] = []
+        let full = try JSONSerialization.data(withJSONObject: [[:], [:]])
+        let capped = try await ApiGymCatalogTransport.readListings(pageSize: 2, maxPages: 2) { start in
+            offsets.append(start)
+            return full
+        }
+        #expect(offsets == [0, 2])
+        #expect(capped.capped && capped.skipped == 4)
+    }
+
+    @Test func itemsAndTheQueueAreReadFromRows() async throws {
+        let server = StubServer { request in
+            switch request.path {
+            case "/v1/items":
+                return .json(200, #"{"rows": [{"id": "\#(UUID())", "kind_id": "\#(request.query["kind"] ?? "")", "#
+                    + #""brand": "Acme", "model": null, "photo_path": null, "photo_listing_id": null, "#
+                    + #""gym_count": 3}]}"#)
+            default:
+                return .json(200, #"{"rows": [{"target_type": "listing", "target_id": "\#(listingId)", "#
+                    + #""title": "Acme", "photo_path": null, "report_count": 3, "reasons": {"spam": 3}, "notes": [], "#
+                    + #""status": "flagged", "#
+                    + #""address": "Iron Works", "listing_notes": null}]}"#)
+            }
+        }
+        let items = try await signedIn(server).publicItems(kindId: "cable-station")
+        #expect(items.map(\.kindId) == ["cable-station"] && items.first?.gymCount == 3)
+        let queue = try await signedIn(server).moderationQueue()
+        #expect(queue.map(\.targetId) == [listingId] && queue.first?.reportCount == 3)
+        #expect(server.requests.map(\.path) == ["/v1/items", "/v1/admin/queue"])
+    }
+
+    @Test func writesSendTheirArgumentsAsSnakeCaseBodiesAndReadObjectAnswers() async throws {
+        let server = StubServer { request in
+            switch request.path {
+            case "/v1/gyms/find-or-create": return .json(200, #"{"id": "\#(gymId)"}"#)
+            case "/v1/listings/share": return .json(200, #"{"status": "created", "listing_id": "\#(listingId)"}"#)
+            case "/v1/blocks" where request.method == "DELETE": return .json(200, #"{"cleared": 2}"#)
+            case "/v1/blocks", "/v1/admin/photo-deleted": return StubAnswer(status: 204, headers: [:], body: Data())
+            case "/v1/reports": return .json(200, #"{"status": "already"}"#)
+            case "/v1/admin/moderate": return .json(200, #"{"status": "removed", "photo_path": "\#(photo)"}"#)
+            default: return .json(200, #"{"confirm_count": 4}"#)
+            }
+        }
+        let transport = signedIn(server)
+        let created = try await transport.findOrCreateGym(mapsPlaceId: "p-1", name: "Iron Works", address: nil,
+                                                          latitude: 52.5, longitude: nil)
+        #expect(created == gymId)
+        let share = ShareRequest(listingId: listingId, gymId: gymId, kindId: "cable-station", brand: "Acme", model: nil,
+                                 loads: .stack(maxKg: 90, stepKg: 5), quantity: 2, notes: "by the door",
+                                 photoPath: upperPhoto, forceNew: true)
+        #expect(try await transport.share(share) == .created(listingId))
+        #expect(try await transport.confirm(listingId: listingId) == 4)
+        try await transport.report(targetType: .listing, targetId: listingId, reason: .personInPhoto, note: "a face")
+        try await transport.blockAuthor(targetType: .gym, targetId: gymId)
+        #expect(try await transport.unblockAll() == 2)
+        #expect(try await transport.moderate(targetType: .listing, targetId: listingId, action: .remove) == photo)
+        try await transport.moderationPhotoDeleted(path: photo)
+
+        let seen = server.requests
+        #expect(seen.map { "\($0.method) \($0.path)" } == [
+            "POST /v1/gyms/find-or-create", "POST /v1/listings/share",
+            "POST /v1/listings/\(listingId.uuidString.lowercased())/confirm", "POST /v1/reports", "POST /v1/blocks",
+            "DELETE /v1/blocks", "POST /v1/admin/moderate", "POST /v1/admin/photo-deleted",
+        ])
+        #expect(body(seen[0])["maps_place_id"] as? String == "p-1" && body(seen[0])["latitude"] as? Double == 52.5)
+        let shared = body(seen[1])
+        #expect(shared["listing_id"] as? String == listingId.uuidString.lowercased())
+        #expect(shared["gym_id"] as? String == gymId.uuidString.lowercased())
+        #expect(shared["photo_path"] as? String == photo && shared["force_new"] as? Bool == true)
+        #expect((shared["loads"] as? [String: Any])?["maxKg"] as? Double == 90)
+        #expect(body(seen[3])["target_type"] as? String == "listing")
+        #expect(body(seen[3])["reason"] as? String == "person-in-photo")
+        #expect(body(seen[4])["target_id"] as? String == gymId.uuidString.lowercased())
+        #expect(body(seen[6])["action"] as? String == "remove")
+        #expect(body(seen[7])["path"] as? String == photo)
+    }
+
+    @Test func isAdminAsksOnlyWithASession() async throws {
+        let server = StubServer { _ in .json(200, #"{"admin": true}"#) }
+        #expect(try await ApiGymCatalogTransport(api: server.client()).isAdmin() == false)
+        #expect(server.requests.isEmpty)
+        #expect(try await signedIn(server).isAdmin())
+        #expect(server.requests.map(\.path) == ["/v1/admin/me"])
+    }
+
+    @Test func aSharedPhotoGoesUpAsJpegAndARepeatIsDone() async throws {
+        let server = StubServer { request in
+            request.headers["Content-Type"] == "image/jpeg"
+                ? .json(409, #"{"error": {"code": "duplicate", "message": "Already uploaded."}}"#)
+                : .json(400, #"{"error": {"code": "bad_request", "message": "wrong type"}}"#)
+        }
+        let transport = signedIn(server)
+        #expect(try await transport.uploadSharedPhoto(Data([0xFF, 0xD8, 0xFF]), name: upperPhoto) == photo)
+        let request = try #require(server.requests.first)
+        #expect(request.method == "PUT" && request.path == "/v1/photos/shared/\(photo)")
+        #expect(request.body == Data([0xFF, 0xD8, 0xFF]))
+        await #expect(throws: GymCatalogError.rejected("not a photo name")) {
+            _ = try await transport.uploadSharedPhoto(Data(), name: "../secret.jpg")
+        }
+        await #expect(throws: GymCatalogError.signedOut) {
+            _ = try await ApiGymCatalogTransport(api: server.client()).uploadSharedPhoto(Data(), name: photo)
+        }
+        #expect(server.requests.count == 1)
+    }
+
+    @Test func deletingAllPhotosListsRemovesAndListsAgain() async throws {
+        let names = ["gym-photos": "6f1c2a3b-0000-4000-8000-0000000000b1.jpg",
+                     "gym-photos-private": "6f1c2a3b-0000-4000-8000-0000000000b2.jpg"]
+        let remaining = Remaining(names)
+        let server = StubServer { request in
+            if request.method == "GET" {
+                let rows = remaining.value.map { #"{"bucket_id": "\#($0.key)", "name": "\#($0.value)"}"# }
+                return .json(200, #"{"rows": [\#(rows.joined(separator: ","))]}"#)
+            }
+            remaining.remove(request.path)
+            return StubAnswer(status: 204, headers: [:], body: Data())
+        }
+        try await signedIn(server).deleteAllPhotos()
+        let deletes = server.requests.filter { $0.method == "DELETE" }.map(\.path).sorted()
+        #expect(deletes == ["/v1/photos/private/\(names["gym-photos-private"]!)",
+                            "/v1/photos/shared/\(names["gym-photos"]!)"])
+        #expect(server.requests.filter { $0.method == "GET" }.count == 2)
+        try await signedIn(server).detachAllPhotos()
+        #expect(server.requests.last.map { "\($0.method) \($0.path)" } == "POST /v1/photos/detach")
+    }
+
+    @Test func refusalsReachTheQueuesCases() async throws {
+        let answers: [(StubAnswer, GymCatalogError)] = [
+            (.json(401, #"{"error": {"code": "signed_out", "message": "Sign in required."}}"#), .signedOut),
+            (.json(422, #"{"error": {"code": "daily_limit", "message": "You've shared a lot today."}}"#), .dailyLimit),
+            (.json(503, #"{"error": {"code": "try_again", "message": "Try again."}}"#), .offline),
+        ]
+        for (answer, expected) in answers {
+            let server = StubServer { _ in answer }
+            await #expect(throws: expected) { _ = try await signedIn(server).confirm(listingId: listingId) }
+        }
+    }
+
+    @Test func aPublicPhotoIsTheWorkersPublicRoute() throws {
+        let server = StubServer { _ in .json(200, "{}") }
+        let url = try #require(signedIn(server).publicPhotoURL(path: upperPhoto))
+        #expect(url.absoluteString == "\(server.baseURL.absoluteString)/photos/shared/\(photo)")
+        #expect(signedIn(server).publicPhotoURL(path: "../x.jpg") == nil)
+    }
+}
+
+/// The photos a stub server still holds, by bucket.
+private final class Remaining: @unchecked Sendable {
+    private let lock = NSLock()
+    private var names: [String: String]
+    init(_ names: [String: String]) { self.names = names }
+    var value: [String: String] { lock.withLock { names } }
+    func remove(_ path: String) { lock.withLock { names = names.filter { !path.hasSuffix($0.value) } } }
+}
+```
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `cd ios/Packages/GymSync && swift test --filter ApiGymCatalogTransportTests`
+Expected: FAIL to build: `cannot find 'ApiGymCatalogTransport' in scope`.
+
+- [ ] **Step 3: Read the API's answers as the row decoders' arrays**
+
+`ios/Packages/GymSync/Sources/GymSync/GymCatalogRows+Api.swift`:
+
+```swift
+import Foundation
+import GymData
+
+extension GymCatalogRows {
+    /// The rows of an API answer as the row decoders read them, a JSON array: the list under `key`
+    /// (`{"rows": [...]}`), or a one-row list for an object answer (`{"gym": {...}}`), empty when it is null.
+    static func array(in data: Data, key: String) throws -> Data {
+        guard let answer = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let value = answer[key]
+        else { throw GymCatalogError.rejected("unreadable response") }
+        let rows: [Any] = (value as? [Any]) ?? (value is NSNull ? [] : [value])
+        return try JSONSerialization.data(withJSONObject: rows)
+    }
+}
+```
+
+- [ ] **Step 4: Write the transport**
+
+`ios/Packages/GymSync/Sources/GymSync/ApiGymCatalogTransport.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+
+/// `GymCatalogTransport` over the API: the shared catalogue (`/v1/gyms`, `/v1/items`, `/v1/listings`), moderation
+/// (`/v1/reports`, `/v1/blocks`, `/v1/admin`) and shared photos (`/v1/photos`, read at `/photos/shared`); see
+/// server/src/gyms, src/moderation and src/photos. Every call but the public photo URL needs the app session: a
+/// signed-out phone hears `.signedOut`, reads included (spec section 3; Supabase let the anon key read the views).
+public struct ApiGymCatalogTransport: GymCatalogTransport {
+    /// A gym holds at most `DomainLimits.gymActiveListingsMax` (300) active listings, so one page covers it; two pages
+    /// is the most this reads, and a gym past that is reported as partial instead of looped on.
+    static let pageSize = 500
+    static let maxPages = 2
+
+    let api: ApiClient
+
+    public init(api: ApiClient) { self.api = api }
+
+    var hasSession: Bool { api.sessions.load() != nil }
+
+    // MARK: Reads
+
+    public func publicGym(mapsPlaceId: String) async throws -> RemoteGym? {
+        // ApiClient sends "+" as %2B: a bare "+" in a query is a space to the server, and place ids can hold one.
+        let body = try await call {
+            try await api.data("GET", "/v1/gyms/public", query: [URLQueryItem(name: "place", value: mapsPlaceId)]).body
+        }
+        return try GymCatalogRows.gyms(from: GymCatalogRows.array(in: body, key: "gym")).rows.first
+    }
+
+    public func publicListings(gymId: UUID) async throws -> PublicListings {
+        try await Self.readListings { start in
+            let query = [URLQueryItem(name: "offset", value: String(start)),
+                         URLQueryItem(name: "limit", value: String(Self.pageSize))]
+            let path = "/v1/gyms/\(Self.text(gymId))/listings"
+            let body = try await call { try await api.data("GET", path, query: query).body }
+            return try GymCatalogRows.array(in: body, key: "rows")
+        }
+    }
+
+    /// Reads pages until one is short or `maxPages` is used up; the second case comes back marked as capped.
+    static func readListings(pageSize: Int = Self.pageSize, maxPages: Int = Self.maxPages,
+                             page: (Int) async throws -> Data) async throws -> PublicListings {
+        var found: [RemoteListing] = []
+        var skipped = 0
+        var start = 0
+        for _ in 0..<maxPages {
+            let data = try await page(start)
+            let decoded = try GymCatalogRows.listings(from: data)
+            found += decoded.rows
+            skipped += decoded.skipped
+            let count = GymCatalogRows.rawCount(of: data)
+            if count < pageSize { return PublicListings(listings: found, skipped: skipped) }
+            start += count
+        }
+        return PublicListings(listings: found, skipped: skipped, capped: true)
+    }
+
+    public func publicItems(kindId: String) async throws -> [RemoteItem] {
+        let body = try await call {
+            try await api.data("GET", "/v1/items", query: [URLQueryItem(name: "kind", value: kindId)]).body
+        }
+        return try GymCatalogRows.items(from: GymCatalogRows.array(in: body, key: "rows")).rows
+    }
+
+    /// `<API_URL>/photos/shared/<name>`: public and cached, so loading it needs no session.
+    public func publicPhotoURL(path: String) -> URL? {
+        guard GymPhotoName.isValid(path) else { return nil }
+        return api.baseURL.appending(path: "photos/shared/\(path.lowercased())")
+    }
+
+    // MARK: Writes
+
+    public func findOrCreateGym(mapsPlaceId: String, name: String, address: String?, latitude: Double?,
+                                longitude: Double?) async throws -> UUID {
+        let place = Place(mapsPlaceId: mapsPlaceId, name: name, address: address, latitude: latitude,
+                          longitude: longitude)
+        let answer: IdAnswer = try await call { try await api.post("/v1/gyms/find-or-create", place) }
+        return answer.id
+    }
+
+    public func share(_ request: ShareRequest) async throws -> ShareResult {
+        let body = try await call {
+            try await api.data("POST", "/v1/listings/share", body: SyncJSON.encoder.encode(ShareBody(request))).body
+        }
+        return try GymCatalogRows.shareResult(from: body, gymId: request.gymId)
+    }
+
+    public func confirm(listingId: UUID) async throws -> Int {
+        let path = "/v1/listings/\(Self.text(listingId))/confirm"
+        let answer: ConfirmAnswer = try await call { try await api.post(path, Empty()) }
+        return answer.confirmCount
+    }
+
+    /// The server answers `{"status": "reported" | "own" | "already"}`; none of them is an error to the queue.
+    public func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
+        let body = ReportBody(targetType: targetType.rawValue, targetId: Self.text(targetId), reason: reason.rawValue,
+                              note: note)
+        _ = try await call { try await api.data("POST", "/v1/reports", body: SyncJSON.encoder.encode(body)) }
+    }
+
+    public func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws {
+        let body = Target(targetType: targetType.rawValue, targetId: Self.text(targetId))
+        _ = try await call { try await api.data("POST", "/v1/blocks", body: SyncJSON.encoder.encode(body)) }
+    }
+
+    public func unblockAll() async throws -> Int {
+        let body = try await call { try await api.data("DELETE", "/v1/blocks").body }
+        return try Self.decode(Cleared.self, from: body, what: "unblock count").cleared
+    }
+
+    // MARK: Moderation
+
+    public func isAdmin() async throws -> Bool {
+        guard hasSession else { return false }
+        let body = try await call { try await api.data("GET", "/v1/admin/me").body }
+        return try Self.decode(AdminAnswer.self, from: body, what: "admin answer").admin
+    }
+
+    public func moderationQueue() async throws -> [ModerationEntry] {
+        let body = try await call { try await api.data("GET", "/v1/admin/queue").body }
+        return try GymCatalogRows.moderation(from: GymCatalogRows.array(in: body, key: "rows")).rows
+    }
+
+    public func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
+        let body = ModerateBody(targetType: targetType.rawValue, targetId: Self.text(targetId), action: action.rawValue)
+        let answer = try await call {
+            try await api.data("POST", "/v1/admin/moderate", body: SyncJSON.encoder.encode(body)).body
+        }
+        return try GymCatalogRows.moderatedPhoto(from: answer)
+    }
+
+    public func moderationPhotoDeleted(path: String) async throws {
+        let body = PathBody(path: path.lowercased())
+        _ = try await call {
+            try await api.data("POST", "/v1/admin/photo-deleted", body: SyncJSON.encoder.encode(body))
+        }
+    }
+
+    // MARK: Helpers
+
+    enum UploadOutcome: Error { case alreadyThere }
+
+    /// Every call's errors as `GymCatalogError`. A 409 `duplicate` is a photo an earlier try uploaded whose answer was
+    /// lost; the upload treats it as done.
+    func call<R>(_ body: () async throws -> R) async throws -> R {
+        do {
+            return try await body()
+        } catch let cancelled as CancellationError {
+            throw cancelled
+        } catch let failure as ApiError where failure.status == 409 && failure.code == "duplicate" {
+            throw UploadOutcome.alreadyThere
+        } catch {
+            throw GymCatalogErrors.map(error, hasSession: hasSession)
+        }
+    }
+
+    static func text(_ id: UUID) -> String { id.uuidString.lowercased() }
+
+    static func decode<T: Decodable>(_ type: T.Type, from data: Data, what: String) throws -> T {
+        guard let value = try? JSONDecoder().decode(type, from: data) else {
+            throw GymCatalogError.rejected("unreadable \(what)")
+        }
+        return value
+    }
+}
+
+// MARK: - Bodies and answers (server/src/gyms/share.ts, src/moderation/*.ts)
+
+private struct Empty: Encodable {}
+
+private struct Place: Encodable {
+    let mapsPlaceId: String, name: String, address: String?, latitude: Double?, longitude: Double?
+
+    enum CodingKeys: String, CodingKey { case name, address, latitude, longitude, mapsPlaceId = "maps_place_id" }
+}
+
+private struct ShareBody: Encodable {
+    let listingId: String, gymId: String, kindId: String, brand: String?, model: String?, loads: ListingLoads
+    let quantity: Int, notes: String?, photoPath: String?, forceNew: Bool
+
+    init(_ request: ShareRequest) {
+        listingId = ApiGymCatalogTransport.text(request.listingId)
+        gymId = ApiGymCatalogTransport.text(request.gymId)
+        kindId = request.kindId
+        brand = request.brand
+        model = request.model
+        loads = request.loads
+        quantity = request.quantity
+        notes = request.notes
+        photoPath = request.photoPath?.lowercased()
+        forceNew = request.forceNew
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case brand, model, loads, quantity, notes
+        case listingId = "listing_id", gymId = "gym_id", kindId = "kind_id", photoPath = "photo_path",
+             forceNew = "force_new"
+    }
+}
+
+private struct Target: Encodable {
+    let targetType: String, targetId: String
+
+    enum CodingKeys: String, CodingKey { case targetType = "target_type", targetId = "target_id" }
+}
+
+private struct ReportBody: Encodable {
+    let targetType: String, targetId: String, reason: String, note: String?
+
+    enum CodingKeys: String, CodingKey { case reason, note, targetType = "target_type", targetId = "target_id" }
+}
+
+private struct ModerateBody: Encodable {
+    let targetType: String, targetId: String, action: String
+
+    enum CodingKeys: String, CodingKey { case action, targetType = "target_type", targetId = "target_id" }
+}
+
+private struct PathBody: Encodable { let path: String }
+
+private struct IdAnswer: Decodable { let id: UUID }
+
+private struct ConfirmAnswer: Decodable {
+    let confirmCount: Int
+
+    enum CodingKeys: String, CodingKey { case confirmCount = "confirm_count" }
+}
+
+private struct Cleared: Decodable { let cleared: Int }
+
+private struct AdminAnswer: Decodable { let admin: Bool }
+```
+
+`ios/Packages/GymSync/Sources/GymSync/ApiGymCatalogTransport+Photos.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+
+/// Shared photos (`/v1/photos/shared`), and the account's photos in both buckets before it is deleted
+/// (`/v1/photos/mine`, `/v1/photos/detach`).
+extension ApiGymCatalogTransport {
+    /// Uploads to `gym-photos/<name>` as JPEG; a name already uploaded (409) counts as uploaded.
+    public func uploadSharedPhoto(_ data: Data, name: String) async throws -> String {
+        guard hasSession else { throw GymCatalogError.signedOut }
+        let stored = try Self.photoName(name)
+        do {
+            _ = try await call {
+                try await api.data("PUT", "/v1/photos/shared/\(stored)", body: data, contentType: "image/jpeg")
+            }
+        } catch UploadOutcome.alreadyThere {
+            // The same photo, uploaded by an earlier try whose answer was lost.
+        }
+        return stored
+    }
+
+    public func deleteSharedPhoto(path: String) async throws {
+        let stored = try Self.photoName(path)
+        _ = try await call { try await api.data("DELETE", "/v1/photos/shared/\(stored)") }
+    }
+
+    /// Removes every photo the caller owns, listed on a listing or not (`/v1/photos/mine` goes by owner). Stops at the
+    /// first real failure. A photo already gone isn't one: the server answers 204 for it.
+    public func deleteAllPhotos() async throws {
+        guard hasSession else { throw GymCatalogError.signedOut }
+        try await OwnedPhotos.removeEverything(list: {
+            let body = try await call { try await api.data("GET", "/v1/photos/mine").body }
+            return try OwnedPhotos.list(from: GymCatalogRows.array(in: body, key: "rows"))
+        }, remove: { bucket, names in
+            let folder = bucket == "gym-photos" ? "shared" : "private"
+            for name in names {
+                _ = try await call { try await api.data("DELETE", "/v1/photos/\(folder)/\(try Self.photoName(name))") }
+            }
+        })
+    }
+
+    /// Clears the photo names from the caller's own listings, so they don't name objects `deleteAllPhotos` is about to
+    /// remove. Nothing else changes.
+    public func detachAllPhotos() async throws {
+        guard hasSession else { throw GymCatalogError.signedOut }
+        _ = try await call { try await api.data("POST", "/v1/photos/detach") }
+    }
+
+    /// A photo name as the API stores it: a lowercase UUID and `.jpg`. Anything else is refused here, because a name
+    /// like `../x` would send the session's token to another path.
+    static func photoName(_ name: String) throws -> String {
+        guard GymPhotoName.isValid(name) else { throw GymCatalogError.rejected("not a photo name") }
+        return name.lowercased()
+    }
+}
+```
+
+- [ ] **Step 5: Run the tests**
+
+Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
+Expected: `Test run with 203 tests in 26 suites passed`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add ios/Packages/GymSync
+git commit -m "feat(sync): ApiGymCatalogTransport on the catalogue, moderation and photo routes"
+```
+
+- [ ] **Step 7: Review**
+
+A fresh reviewer reads `git diff HEAD~1`:
+1. **Spec compliance:** check every path, body, query and answer against the server's routes table and its tests
+   (`server/test/catalogue.test.ts`, `share.test.ts`, `moderation.test.ts`, `admin.test.ts`, `photos.test.ts`). The
+   server is the source of truth.
+2. **Quality:** the `code-reviewer` agent.
+3. **Security:** the `security-reviewer` agent:
+   - the token goes only to the API's origin;
+   - no photo name reaches a URL unchecked;
+   - `isAdmin` makes no call without a session.
+
+---
+
+### Task 13: Gyms, listings and private photos in `ApiSyncTransport`
+
+**Files:**
+- Modify: `ios/Packages/GymSync/Sources/GymSync/ApiSyncTransport.swift`,
+  `ios/Packages/GymSync/Tests/GymSyncTests/ApiSyncTransportTests.swift`
+- Create: `ios/Packages/GymSync/Sources/GymSync/ApiSyncTransport+Gyms.swift`
+- Test: `ios/Packages/GymSync/Tests/GymSyncTests/ApiSyncTransportGymTests.swift`
+
+- [ ] **Step 1: Write the failing tests**
+
+`ios/Packages/GymSync/Tests/GymSyncTests/ApiSyncTransportGymTests.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+import Testing
+@testable import GymSync
+
+/// Private gyms, listings and their photos through `ApiSyncTransport` against a stub of `/v1/sync/gyms`,
+/// `/v1/sync/gym-listings` and `/v1/photos/private` (server/src/sync/entities.ts, src/photos/routes.ts).
+@Suite struct ApiSyncTransportGymTests {
+    private let t0 = SyncDate.parse("2026-11-08T08:00:00.123456Z")!
+    private let photo = "6f1c2a3b-0000-4000-8000-0000000000cc.jpg"
+    /// The same name as the phone may hold it: an uppercase UUID (the server keeps names lowercase).
+    private var upperPhoto: String { photo.dropLast(4).uppercased() + ".jpg" }
+
+    private func rows(_ request: SeenRequest?) -> [[String: Any]] {
+        ((try? request?.json()) as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+    }
+
+    @Test func gymsAndListingsGoUpAndComeBackOnTheirOwnPaths() async throws {
+        let gym = SyncedGym(id: UUID(), name: "Garage", address: nil, latitude: nil, longitude: nil)
+        let listingId = UUID()
+        let server = StubServer { request in
+            switch (request.method, request.path) {
+            case ("POST", _): return .json(200, #"{"acks": []}"#)
+            case (_, "/v1/sync/gym-listings"):
+                return .json(200, #"{"rows": [{"id": "\#(listingId)", "gym_id": "\#(gym.id)", "#
+                    + #""item_id": "\#(UUID())", "#
+                    + #""visibility": "private", "photo_path": null, "loads": {"type": "fixed", "kg": [20, 24]}, "#
+                    + #""quantity": 1, "notes": null, "private_brand": "Secret", "private_model": null, "#
+                    + #""client_updated_at": "2026-11-08T08:00:00.123456Z", "deleted_at": null, "#
+                    + #""updated_at": "2026-11-08T09:00:00.100000Z", "equipment_items": {"kind_id": "dumbbells"}}]}"#)
+            default: return .json(200, #"{"rows": []}"#)
+            }
+        }
+        let transport = ApiSyncTransport(api: server.client())
+        #expect(transport.servesGyms)
+        _ = try await transport.push(gyms: [GymDTO(SyncRow(value: gym, clientUpdatedAt: t0))])
+        let pulled = try await transport.pullGymListings(since: nil)
+        _ = try await transport.pullGyms(since: nil)
+
+        #expect(server.requests.map { "\($0.method) \($0.path)" } == [
+            "POST /v1/sync/gyms", "GET /v1/sync/gym-listings", "GET /v1/sync/gyms",
+        ])
+        #expect(rows(server.requests.first).first?["visibility"] as? String == "private")
+        let listing = try #require(pulled.first?.toDomain())
+        #expect(listing.value.kindId == "dumbbells" && listing.value.brand == "Secret")
+        #expect(listing.value.loads == .fixed(kg: [20, 24]))
+    }
+
+    @Test func aListingWhosePhotoTheServerLacksAsksForTheUploadAgain() async throws {
+        let server = StubServer { _ in
+            .json(422, #"{"error": {"code": "photo_missing", "message": "That photo isn't uploaded."}}"#)
+        }
+        let listing = SyncedListing(id: UUID(), gymId: UUID(), kindId: "dumbbells", brand: nil, model: nil,
+                                    loads: .fixed(kg: [20]), quantity: 1, notes: nil, photoFile: nil,
+                                    remotePhotoPath: photo)
+        await #expect(throws: PrivatePhotoMissing.self) {
+            _ = try await ApiSyncTransport(api: server.client())
+                .push(gymListings: [GymListingDTO(SyncRow(value: listing, clientUpdatedAt: t0))])
+        }
+    }
+
+    @Test func theCapsRefuseTheRowWithTheAppsWords() async throws {
+        let words = "You've reached the limit of gyms on one account."
+        let server = StubServer { _ in .json(422, #"{"error": {"code": "too_many_gyms", "message": "\#(words)"}}"#) }
+        let gym = SyncedGym(id: UUID(), name: "One more", address: nil, latitude: nil, longitude: nil)
+        await #expect(throws: SyncRecordRejected(code: "too_many_gyms", message: words)) {
+            let row = GymDTO(SyncRow(value: gym, clientUpdatedAt: t0))
+            _ = try await ApiSyncTransport(api: server.client()).push(gyms: [row])
+        }
+    }
+
+    @Test func aPrivatePhotoGoesUpAsJpegComesBackAndGoes() async throws {
+        let jpeg = Data([0xFF, 0xD8, 0xFF, 0xE0])
+        let server = StubServer { request in
+            switch request.method {
+            case "PUT": return .json(409, #"{"error": {"code": "duplicate", "message": "Already uploaded."}}"#)
+            case "GET": return StubAnswer(status: 200, headers: ["Content-Type": "image/jpeg"], body: jpeg)
+            default: return StubAnswer(status: 204, headers: [:], body: Data())
+            }
+        }
+        let transport = ApiSyncTransport(api: server.client())
+        #expect(try await transport.uploadPrivatePhoto(jpeg, name: upperPhoto) == photo)
+        #expect(try await transport.downloadPrivatePhoto(path: photo) == jpeg)
+        try await transport.deletePrivatePhoto(path: photo)
+        let path = "/v1/photos/private/\(photo)"
+        #expect(server.requests.map { "\($0.method) \($0.path)" } == ["PUT \(path)", "GET \(path)", "DELETE \(path)"])
+        #expect(server.requests.first?.headers["Content-Type"] == "image/jpeg")
+        await #expect(throws: URLError.self) { _ = try await transport.downloadPrivatePhoto(path: "../secret.jpg") }
+        #expect(server.requests.count == 3)
+    }
+}
+```
+
+In `ApiSyncTransportTests.swift`, the API now serves gyms: rename `itServesNeitherGymsNorProposalsYet()` to
+`itServesGymsButNotProposalsYet()`, and change its first expectation to
+`#expect(transport.servesGyms && !transport.servesProposals)`.
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `cd ios/Packages/GymSync && swift test --filter 'ApiSyncTransportGymTests|ApiSyncTransportTests'`
+Expected: FAIL. `servesGyms` is false, and the gym calls use the protocol's do-nothing defaults.
+
+- [ ] **Step 3: Serve gyms**
+
+In `ApiSyncTransport.swift`:
+- replace the doc comment's last paragraph (`/// Gyms, listings, their photos and Claude's proposals aren't on the API until plans 28
+  and 29, …` through `… until plan 29.`) with:
+
+```swift
+/// Private gyms, their listings and their photos are on the API since plan 28 (`ApiSyncTransport+Gyms.swift`). Claude's
+/// proposals aren't until plan 29, so `servesProposals` is false and the engine leaves them out; Claude's last use and
+/// grants keep the protocol's defaults (never used, nothing to revoke).
+```
+
+- `public var servesGyms: Bool { false }` → `public var servesGyms: Bool { true }`;
+- `private func push<Row: Encodable>` → `func push<Row: Encodable>`, and `private func pull<Row: Decodable>` →
+  `func pull<Row: Decodable>`, so the extension below can use them.
+
+`ios/Packages/GymSync/Sources/GymSync/ApiSyncTransport+Gyms.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+
+/// Private gyms and listings (`/v1/sync/gyms`, `/v1/sync/gym-listings`; server/src/sync/entities.ts) and their photos
+/// in `gym-photos-private` (`/v1/photos/private/<name>`). The server keeps them to the session's account, stamps the
+/// owner and author itself, and nests a pulled listing's kind as `equipment_items.kind_id`, which `GymListingDTO`
+/// reads.
+extension ApiSyncTransport {
+    public func push(gyms: [GymDTO]) async throws -> [RowAck] {
+        try await push(gyms, to: "gyms")
+    }
+
+    /// A listing whose photo the server doesn't hold as this account's (422 `photo_missing`) throws
+    /// `PrivatePhotoMissing`, so the phone uploads it again. The caps (`too_many_gyms`, `too_many_listings`) and refused values come back as
+    /// `SyncRecordRejected` with the server's words, which are the app's.
+    public func push(gymListings: [GymListingDTO]) async throws -> [RowAck] {
+        do {
+            return try await push(gymListings, to: "gym-listings")
+        } catch let refused as SyncRecordRejected where refused.code == "photo_missing" {
+            throw PrivatePhotoMissing()
+        }
+    }
+
+    public func pullGyms(since: Date?) async throws -> [GymDTO] {
+        try await pull("gyms", tiebreak: "id", since: since)
+    }
+
+    public func pullGymListings(since: Date?) async throws -> [GymListingDTO] {
+        try await pull("gym-listings", tiebreak: "id", since: since)
+    }
+
+    /// Uploads as JPEG; a name the caller already uploaded (409) counts as uploaded.
+    public func uploadPrivatePhoto(_ data: Data, name: String) async throws -> String {
+        let stored = try Self.privatePhotoPath(name)
+        do {
+            _ = try await api.data("PUT", stored, body: data, contentType: "image/jpeg")
+        } catch let failure as ApiError where failure.status == 409 {
+            // The same photo, uploaded by an earlier try whose answer was lost.
+        }
+        return name.lowercased()
+    }
+
+    /// Served to its owner only, never cached: `ApiClient`'s session has no URL cache, and the server says no-store.
+    public func downloadPrivatePhoto(path: String) async throws -> Data {
+        try await api.data("GET", Self.privatePhotoPath(path)).body
+    }
+
+    public func deletePrivatePhoto(path: String) async throws {
+        _ = try await api.data("DELETE", Self.privatePhotoPath(path))
+    }
+
+    /// `/v1/photos/private/<uuid>.jpg`. Any other name is refused before a request is made: a name like `../x` would
+    /// take the session's token to another path.
+    static func privatePhotoPath(_ name: String) throws -> String {
+        guard GymPhotoName.isValid(name) else { throw URLError(.badURL) }
+        return "/v1/photos/private/\(name.lowercased())"
+    }
+}
+```
+
+- [ ] **Step 4: Run the tests**
+
+Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
+Expected: `Test run with 207 tests in 27 suites passed`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ios/Packages/GymSync
+git commit -m "feat(sync): private gyms, listings and their photos on /v1"
+```
+
+- [ ] **Step 6: Review**
+
+A fresh reviewer reads `git diff HEAD~1`:
+1. **Spec compliance:** decision 18, and plan 27's decision 6 for the refused rows. `photo_missing` is
+   `PrivatePhotoMissing`, the caps are `SyncRecordRejected` with the app's words.
+2. **Quality:** the `code-reviewer` agent.
+3. **Security:** the `security-reviewer` agent. Private photos go to and come from `/v1/photos/private` only, with the
+   session and no cache.
+
+---
+
+### Task 14: The server move forgets the old catalogue
+
+**Files:**
+- Modify: `ios/Packages/GymData/Sources/GymData/Sync/SyncStore+ServerMove.swift`
+- Test: `ios/Packages/GymData/Tests/GymDataTests/SyncStoreServerMoveCatalogueTests.swift`
+
+- [ ] **Step 1: Write the failing tests**
+
+`ios/Packages/GymData/Tests/GymDataTests/SyncStoreServerMoveCatalogueTests.swift`:
+
+```swift
+import Foundation
+import GymCore
+import SwiftData
+import Testing
+@testable import GymData
+
+/// The server move and the shared catalogue's cache (plan 28): the old server's gym ids, cached listings, borrowed
+/// pictures and outbox go; the user's own listings stay on the phone, as "This phone only".
+@MainActor
+@Suite struct SyncStoreServerMoveCatalogueTests {
+    let f: SyncFixture
+    let transport = FakeGymCatalogTransport()
+    init() throws { f = try SyncFixture() }
+
+    private let new = "http://127.0.0.1:8787"
+    private var repo: GymRepository { GymRepository(context: f.context, now: { [clock = f.clock] in clock.now }) }
+
+    private func listing(_ id: UUID) throws -> GymListingRecord? {
+        try f.context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first
+    }
+
+    private func gymRecord(_ id: UUID) throws -> GymRecord {
+        try #require(try f.context.fetch(FetchDescriptor<GymRecord>(predicate: #Predicate { $0.id == id })).first)
+    }
+
+    private func item(_ id: UUID) throws -> EquipmentItemRecord {
+        let items = try f.context.fetch(FetchDescriptor<EquipmentItemRecord>(predicate: #Predicate { $0.id == id }))
+        return try #require(items.first)
+    }
+
+    private struct OldCatalogue {
+        let gym: UUID, own: UUID, waiting: UUID, theirs: UUID, item: UUID
+    }
+
+    /// What a phone that used the old server's catalogue holds: a maps gym with the old id, the user's own shared
+    /// listing, one still waiting to be shared, someone else's cached listing, an item's borrowed picture, and an
+    /// outbox row.
+    private func oldCatalogue() throws -> OldCatalogue {
+        let gym = try repo.addMapsGym(placeId: "P1", name: "Iron Works", address: nil, latitude: 1, longitude: 2)
+        let gymRow = try gymRecord(gym.id)
+        gymRow.remoteId = UUID()
+        gymRow.catalogRefreshedAt = f.clock.now
+        let own = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack", photoFile: "mine.jpg"))
+        let waiting = try repo.addListing(NewListing(gymId: gym.id, kindId: "kettlebell"))
+        let theirs = try repo.addListing(NewListing(gymId: gym.id, kindId: "cable-stack", photoFile: "theirs.jpg"))
+        let states: [(UUID, UploadState, Bool)] = [(own.id, .uploaded, true), (waiting.id, .queued, true),
+                                                   (theirs.id, .uploaded, false)]
+        for (id, state, isOwn) in states {
+            let row = try #require(try listing(id))
+            row.visibilityRaw = GymVisibility.shared.rawValue
+            row.uploadStateRaw = state.rawValue
+            row.isOwn = isOwn
+            row.remoteId = state == .uploaded ? id : nil
+            row.remotePhotoPath = "\(UUID().uuidString.lowercased()).jpg"
+            row.confirmCount = 3
+        }
+        let itemId = try #require(try listing(theirs.id)).itemId
+        let itemRow = try item(itemId)
+        itemRow.catalogPhotoPath = "\(UUID().uuidString.lowercased()).jpg"
+        itemRow.catalogPhotoListingId = theirs.id
+        f.context.insert(ShareOutboxRecord(kind: .share, targetId: waiting.id, ownerId: UUID(), now: f.clock.now))
+        try f.context.save()
+        f.store.ownerUserId = UUID()
+        f.store.syncedServer = "http://127.0.0.1:55421"
+        return OldCatalogue(gym: gym.id, own: own.id, waiting: waiting.id, theirs: theirs.id, item: itemId)
+    }
+
+    @Test func theUsersOwnSharedListingsStayOnThePhoneAndTheOldCatalogueIsForgotten() throws {
+        defer { f.tearDown() }
+        let old = try oldCatalogue()
+
+        #expect(try f.store.moveToServer(new))
+
+        for id in [old.own, old.waiting] {
+            let row = try #require(try listing(id))
+            #expect(row.visibilityRaw == GymVisibility.device.rawValue)
+            #expect(row.uploadStateRaw == UploadState.local.rawValue)
+            #expect(row.remoteId == nil && row.remotePhotoPath == nil && row.confirmCount == 0)
+        }
+        #expect(try listing(old.own)?.photoFile == "mine.jpg", "the picture stays on the phone")
+        #expect(try listing(old.theirs)?.visibilityRaw == GymVisibility.shared.rawValue,
+                "someone else's listing waits for the next refresh, which drops it with its picture")
+        let gym = try gymRecord(old.gym)
+        #expect(gym.remoteId != nil && gym.catalogRefreshedAt == nil)
+        let borrowed = try item(old.item)
+        #expect(borrowed.catalogPhotoPath == nil && borrowed.catalogPhotoListingId == nil)
+        #expect(try f.context.fetch(FetchDescriptor<ShareOutboxRecord>()).isEmpty)
+    }
+
+    @Test func theNextOpenAsksTheNewServerAndDropsTheOldServersListingsAndPictures() async throws {
+        defer { f.tearDown() }
+        let old = try oldCatalogue()
+        try f.store.moveToServer(new)
+        let client = GymCatalogClient(repository: repo, transport: transport, knownKinds: ["cable-stack", "kettlebell"],
+                                      now: { [clock = f.clock] in clock.now })
+
+        let refresh = try await client.refresh(gymId: old.gym, force: false)
+
+        #expect(try listing(old.theirs) == nil)
+        #expect(refresh.filesToDelete == ["theirs.jpg"])
+        #expect(try listing(old.own) != nil)
+        #expect(try listing(old.waiting) != nil)
+        #expect(try gymRecord(old.gym).remoteId == nil, "the new server has no gym at this place yet")
+    }
+}
+```
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `cd ios/Packages/GymData && swift test --filter SyncStoreServerMoveCatalogueTests`
+Expected: FAIL. The own listings stay shared, and the stamp and the outbox stay.
+
+- [ ] **Step 3: Forget the old catalogue in the move**
+
+Replace `ios/Packages/GymData/Sources/GymData/Sync/SyncStore+ServerMove.swift` with:
+
+```swift
+import Foundation
+import SwiftData
+
+// The server move (docs/specs/2026-11-07-cloudflare-backend-design.md, section 4): when this build talks to another API
+// than the one the data last synced with, the local copy goes to the next account that signs in, and every record that
+// synced goes up again. Nothing is deleted except Claude's pending proposals, which only the old server could resolve.
+extension SyncStore {
+    private static let serverKey = "gymrollins.sync.server"
+
+    /// The API this phone's data last synced with (`ApiConfig.origin`); nil until a launch records one.
+    public var syncedServer: String? {
+        get { defaults.string(forKey: Self.serverKey) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Self.serverKey) }
+            else { defaults.removeObject(forKey: Self.serverKey) }
+        }
+    }
+
+    /// Run at launch, before the session is restored, with the API this build talks to. When another server (or none)
+    /// is recorded and the data carries an owner, a pull cursor or a server version, the move runs:
+    /// - the owner, the cursors and the recorded refusals are forgotten;
+    /// - every record that syncs with the account loses its server version and goes dirty, keeping its edit time;
+    /// - synced listings forget the old server's photo names, so pictures on this phone upload again;
+    /// - pending proposals go, and resolutions not yet sent count as sent;
+    /// - the shared catalogue forgets the old server (`forgetOldCatalogue`).
+    /// Then `server` is recorded. The store is saved before anything in `defaults` changes, so a move that fails runs
+    /// again at the next launch. Returns whether the move ran.
+    @discardableResult
+    public func moveToServer(_ server: String) throws -> Bool {
+        guard syncedServer != server else { return false }
+        let moves = try hasServerState()
+        if moves {
+            try markEverythingUnsynced()
+            for entity in SyncEntity.allCases { clearCursor(for: entity) }
+            forgetOwnershipAndFailures()
+        }
+        syncedServer = server
+        return moves
+    }
+
+    /// An owner, a pull cursor, or a record holding a server version.
+    private func hasServerState() throws -> Bool {
+        if ownerUserId != nil || SyncEntity.allCases.contains(where: { cursor(for: $0) != nil }) { return true }
+        return try accountRecords().contains { $0.serverUpdatedAt != nil }
+    }
+
+    private func markEverythingUnsynced() throws {
+        for record in try accountRecords() {
+            record.serverUpdatedAt = nil
+            record.dirty = true
+        }
+        let synced = GymVisibility.synced.rawValue
+        for listing in try context.fetch(FetchDescriptor<GymListingRecord>(
+            predicate: #Predicate { $0.visibilityRaw == synced })) {
+            listing.remotePhotoPath = nil
+        }
+        try forgetOldCatalogue()
+        let pending = ProposalStatus.pending.rawValue
+        for proposal in try context.fetch(FetchDescriptor<ProposalRecord>()) {
+            if proposal.statusRaw == pending {
+                context.delete(proposal)
+            } else {
+                proposal.dirty = false
+                proposal.serverUpdatedAt = nil
+            }
+        }
+        try context.save()
+    }
+
+    /// The shared catalogue's cache names the old server's rows: its gym ids, listings and pictures, and the outbox's
+    /// shares, confirmations, reports and blocks (for the old account). None of them is on the new server.
+    /// - The user's own shared listings, and those still waiting to be shared, become "This phone only", with their
+    ///   photos: they are the user's equipment, and sharing them again is the user's call.
+    /// - Other people's cached listings stay until the gym's next refresh, which the cleared stamp makes its next open.
+    ///   The new server doesn't know the old gym id, so that refresh drops them and their pictures, as it does when a
+    ///   moderator removed a gym; the maps gym keeps the old id until then, because that is how the refresh finds out.
+    /// - Items lose the catalogue picture they borrowed, and the outbox is emptied.
+    private func forgetOldCatalogue() throws {
+        let shared = GymVisibility.shared.rawValue
+        let uploaded = UploadState.uploaded.rawValue
+        let cached = try context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.visibilityRaw == shared }))
+        for listing in cached where listing.isOwn || listing.uploadStateRaw != uploaded {
+            listing.visibilityRaw = GymVisibility.device.rawValue
+            listing.uploadStateRaw = UploadState.local.rawValue
+            listing.uploadError = nil
+            listing.duplicatesData = nil
+            listing.remoteId = nil
+            listing.remotePhotoPath = nil
+            listing.statusRaw = ListingStatus.active.rawValue
+            listing.confirmCount = 0
+            listing.confirmedByMe = false
+        }
+        for gym in try context.fetch(FetchDescriptor<GymRecord>()) where gym.mapsPlaceId != nil {
+            gym.catalogRefreshedAt = nil
+        }
+        for item in try context.fetch(FetchDescriptor<EquipmentItemRecord>()) where item.catalogPhotoPath != nil {
+            item.catalogPhotoPath = nil
+            item.catalogPhotoListingId = nil
+        }
+        for row in try context.fetch(FetchDescriptor<ShareOutboxRecord>()) { context.delete(row) }
+    }
+
+    /// Every record that syncs with the account: the aggregate roots, and the gyms and listings synced to it ("This
+    /// phone only" rows and the shared catalogue's are left alone).
+    private func accountRecords() throws -> [any SyncTracked] {
+        let synced = GymVisibility.synced.rawValue
+        var records: [any SyncTracked] = []
+        records += try every(ProfileRecord.self)
+        records += try every(CustomExerciseRecord.self)
+        records += try every(ExercisePreferenceRecord.self)
+        records += try every(RoutineRecord.self)
+        records += try every(WeekdayRecord.self)
+        records += try every(MuscleTargetRecord.self)
+        records += try every(BodyweightRecord.self)
+        records += try every(WorkoutRecord.self)
+        records += try context.fetch(FetchDescriptor<GymRecord>(predicate: #Predicate { $0.visibilityRaw == synced }))
+            .map { $0 as any SyncTracked }
+        records += try context.fetch(FetchDescriptor<GymListingRecord>(
+            predicate: #Predicate { $0.visibilityRaw == synced })).map { $0 as any SyncTracked }
+        return records
+    }
+
+    private func every<T: PersistentModel & SyncTracked>(_ type: T.Type) throws -> [any SyncTracked] {
+        try context.fetch(FetchDescriptor<T>()).map { $0 as any SyncTracked }
+    }
+}
+```
+
+What changed from plan 27's file:
+- the doc line about the catalogue;
+- `try forgetOldCatalogue()` in `markEverythingUnsynced`, before its single `save`, so a failed move still runs again;
+- the new `forgetOldCatalogue()`.
+
+- [ ] **Step 4: Run the tests**
+
+Run: `cd ios/Packages/GymData && swift test`
+Expected: `Test run with 365 tests in 50 suites passed`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ios/Packages/GymData
+git commit -m "feat(data): the server move forgets the old server's catalogue and keeps the user's own listings"
+```
+
+- [ ] **Step 6: Review**
+
+A fresh reviewer reads `git diff HEAD~1`:
+1. **Spec compliance:** spec section 4 "Server move" ("It deletes nothing" of the user's: own listings and photos
+   stay), and decision 23.
+2. **Quality:** the `code-reviewer` agent.
+
+---
+
+### Task 15: The app on the catalogue API, and exercise photos from the Worker
+
+**Files:**
+- Modify: `ios/GymRollins/App/AppEnvironment+GymCatalog.swift`
+- Rename: `ios/GymRollins/Features/Media/SupabaseStoragePhotoProvider.swift` → `HostedPhotoProvider.swift`
+- Modify: `ios/GymRollins/Features/Media/PhotoHosting.swift`, `ExerciseMediaService.swift`, `PhotoURLPolicy.swift`,
+  `EquipmentKindPhotos.swift`, `StoragePhotoManifest.swift`
+- Modify: `ios/GymRollinsTests/StoragePhotoHostingTests.swift`, `StoragePhotoIntegrationTests.swift`,
+  `EquipmentKindPhotoTests.swift`, `PhotoFallbackAndRefreshTests.swift`
+- Modify: `scripts/upload-photos.mjs`, `scripts/test-photo-hosting.sh`, `scripts/test-all.sh`, `docs/media/README.md`
+
+- [ ] **Step 1: The shared catalogue goes through the API**
+
+In `ios/GymRollins/App/AppEnvironment+GymCatalog.swift`:
+- Replace the doc comment of `UnavailableGymCatalogTransport` with:
+
+```swift
+/// Stands in when the build has no API: reads find nothing and writes need an account. It holds none of the account's
+/// photos, so account deletion's photo steps have nothing to detach or remove.
+```
+
+- In `makeGymSharing`, replace
+
+```swift
+        // The shared catalogue isn't on the API until plan 28, and the Supabase one can't use the API's session.
+        let transport: any GymCatalogTransport = UnavailableGymCatalogTransport()
+```
+
+with
+
+```swift
+        // The catalogue, moderation and shared photos on the API, with the session sync uses (spec section 3).
+        let transport: any GymCatalogTransport = sync.auth.map { ApiGymCatalogTransport(api: $0.api) }
+            ?? UnavailableGymCatalogTransport()
+```
+
+Account deletion's two photo steps (`detachAllPhotos`, then `deleteAllPhotos`, wired in `wireGymSharing`) now reach
+`/v1/photos`. Catalogue photos load from `publicPhotoURL`, now `<API_URL>/photos/shared/<name>`, with no session.
+
+- [ ] **Step 2: Exercise photos from `<API_URL>/photos/exercises/`**
+
+Rename the provider and the URL setting, and point the path at the Worker (from `ios/`):
+
+```bash
+git mv GymRollins/Features/Media/SupabaseStoragePhotoProvider.swift GymRollins/Features/Media/HostedPhotoProvider.swift
+FILES=$(grep -rl -e SupabaseStoragePhotoProvider -e supabaseURL GymRollins GymRollinsTests --include='*.swift')
+sed -i '' -e 's/SupabaseStoragePhotoProvider/HostedPhotoProvider/g' -e 's/supabaseURL/apiURL/g' \
+  -e 's#storage/v1/object/public/exercise-photos/#photos/exercises/#g' $FILES
+```
+
+In `HostedPhotoProvider.swift`, replace the doc comment above the class with:
+
+```swift
+/// GymRollins' own photos hosted in the public `exercise-photos` bucket behind the API (uploaded by
+/// `scripts/upload-photos.mjs`). Which exercises have photos comes from the bucket's manifest; the photo URLs are
+/// `<API_URL>/photos/exercises/own-<id>-<frame>.jpg?v=<rev>`. Without a manifest (first launch offline, fetch failed)
+/// it answers nil, so the chain falls through to bundled / free-exercise-db photos.
+```
+
+and in it:
+- replace `/// \`<SUPABASE_URL>/storage/v1/object/public/exercise-photos/\`` with `/// \`<API_URL>/photos/exercises/\``;
+- replace the body of `publicBaseURL(apiURL:)` with
+  `apiURL.appending(path: "photos/exercises/", directoryHint: .isDirectory)`.
+
+Replace `ios/GymRollins/Features/Media/PhotoHosting.swift` with:
+
+```swift
+import Foundation
+import GymSync
+
+/// Where GymRollins' own photos come from, set per build with `PHOTO_HOSTING` (xcconfig -> Info.plist):
+/// - `bundle` (default): only the photos bundled in Resources/OwnPhotos.
+/// - `storage`: the public `exercise-photos` bucket behind the API (`<API_URL>/photos/exercises/`, manifest-driven),
+///   with the bundled photos as fallback. See docs/media/README.md ("Hosting").
+enum PhotoHosting: String, Sendable, Equatable {
+    case bundle
+    case storage
+
+    static let infoKey = "PHOTO_HOSTING"
+
+    /// Missing, empty or unknown values mean `bundle` (the pre-hosting behaviour).
+    init(rawSetting: String?) {
+        let value = rawSetting?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        self = PhotoHosting(rawValue: value) ?? .bundle
+    }
+}
+
+/// The photo hosting settings for this launch.
+struct PhotoHostingConfig: Sendable, Equatable {
+    let hosting: PhotoHosting
+    /// The API's origin (`ApiConfig`); nil when the build has no valid `API_URL`.
+    let apiURL: URL?
+
+    /// From Info.plist; in DEBUG, the `PHOTO_HOSTING` and `API_URL` environment variables win (as for sync), so tests
+    /// and debug runs can point at a local Worker.
+    static func resolve(info: [String: Any], environment: [String: String]) -> PhotoHostingConfig {
+        var hostingSetting = info[PhotoHosting.infoKey] as? String
+        var apiURL = (try? ApiConfig(info: info))?.baseURL
+        #if DEBUG
+        if let override = environment[PhotoHosting.infoKey] { hostingSetting = override }
+        if let fromEnvironment = try? ApiConfig(environment: environment) { apiURL = fromEnvironment.baseURL }
+        #endif
+        return PhotoHostingConfig(hosting: PhotoHosting(rawSetting: hostingSetting), apiURL: apiURL)
+    }
+}
+```
+
+In `ios/GymRollinsTests/StoragePhotoHostingTests.swift`, replace the two configuration tests with:
+
+```swift
+    @Test func resolvesFromInfoPlist() {
+        let info: [String: Any] = ["PHOTO_HOSTING": "storage", "API_URL": "https://gymrollins.example.workers.dev"]
+        let config = PhotoHostingConfig.resolve(info: info, environment: [:])
+        #expect(config == PhotoHostingConfig(hosting: .storage, apiURL: URL(string: "https://gymrollins.example.workers.dev")))
+        #expect(PhotoHostingConfig.resolve(info: [:], environment: [:]) == PhotoHostingConfig(hosting: .bundle, apiURL: nil))
+    }
+
+    @Test func debugEnvironmentOverridesInfoPlist() {
+        let info: [String: Any] = ["PHOTO_HOSTING": "bundle", "API_URL": "https://gymrollins.example.workers.dev"]
+        let env = ["PHOTO_HOSTING": "storage", "API_URL": "http://127.0.0.1:8788"]
+        let config = PhotoHostingConfig.resolve(info: info, environment: env)
+        #expect(config == PhotoHostingConfig(hosting: .storage, apiURL: URL(string: "http://127.0.0.1:8788")))
+    }
+```
+
+and delete `private let anon = "anon-key"` if nothing else in the file uses it.
+
+In `ios/GymRollinsTests/StoragePhotoIntegrationTests.swift`:
+- replace `End-to-end against the LOCAL Supabase stack` with `End-to-end against a throwaway LOCAL Worker`;
+- replace `with \`PHOTO_E2E=1\`, \`SUPABASE_URL\` and \`PHOTO_E2E_ID\`` with
+  `with \`PHOTO_E2E=1\`, \`API_URL\` and \`PHOTO_E2E_ID\``;
+- replace `environment["SUPABASE_URL"]` with `environment["API_URL"]`.
+
+- [ ] **Step 3: Fill the throwaway Worker's bucket in the photo E2E**
+
+In `scripts/upload-photos.mjs`, replace `workerState: resolve(ROOT, 'server/.wrangler/state'),` with:
+
+```js
+  // WORKER_STATE names another local state folder: the photo E2E's throwaway Worker (scripts/test-photo-hosting.sh).
+  workerState: process.env.WORKER_STATE ? resolve(process.env.WORKER_STATE) : resolve(ROOT, 'server/.wrangler/state'),
+```
+
+Replace `scripts/test-photo-hosting.sh` with:
+
+```bash
+#!/usr/bin/env bash
+# Exercise photo hosting end to end against a throwaway LOCAL Worker (scripts/test-server.sh: port 8788 and a state
+# folder of its own, removed afterwards; never the development data or a deployed Worker):
+# 1. uploads two generated test photos into that Worker's R2 with scripts/upload-photos.mjs --target worker,
+# 2. checks a second upload is a no-op,
+# 3. runs GymRollinsTests/StoragePhotoIntegrationTests (manifest -> provider -> ExercisePhotoStore over local http).
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEST="${DEST:-platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2}"
+TEST_ID="9990"
+# shellcheck source=scripts/test-server.sh
+source "$ROOT/scripts/test-server.sh"
+
+WORK="$(mktemp -d -t photo-hosting-e2e)"
+cleanup() {
+  local status=$?
+  rm -rf "$WORK"
+  stop_test_server
+  exit "$status"
+}
+trap cleanup EXIT
+start_test_server
+
+mkdir -p "$WORK/photos"
+python3 - "$WORK/photos" "$TEST_ID" <<'PY'
+import sys
+from PIL import Image
+out, test_id = sys.argv[1], sys.argv[2]
+Image.new("RGB", (30, 20), (230, 120, 40)).save(f"{out}/own-{test_id}-0.jpg", quality=80)
+Image.new("RGB", (20, 30), (40, 120, 230)).save(f"{out}/own-{test_id}-1.jpg", quality=80)
+PY
+
+upload() {
+  WORKER_URL="$TEST_API_URL" WORKER_STATE="$TEST_API_STATE" \
+    node "$ROOT/scripts/upload-photos.mjs" --target worker --dir "$WORK/photos"
+}
+upload
+second="$(upload)"
+echo "$second"
+grep -q "done: 0 uploaded, 2 skipped, 0 failed; manifest unchanged" <<<"$second" \
+  || { echo "second upload was not a no-op" >&2; exit 1; }
+
+cd "$ROOT/ios"
+xcodegen generate --quiet
+LOG="$WORK/xcodebuild.log"
+TEST_RUNNER_PHOTO_E2E=1 TEST_RUNNER_API_URL="$TEST_API_URL" TEST_RUNNER_PHOTO_E2E_ID="$TEST_ID" \
+  xcodebuild test -project GymRollins.xcodeproj -scheme GymRollins -destination "$DEST" \
+  -only-testing:GymRollinsTests/StoragePhotoIntegrationTests \
+  -resultBundlePath "$ROOT/ios/build/TestResults-photos-$(date +%s).xcresult" "$@" >"$LOG" 2>&1 \
+  || { tail -40 "$LOG" >&2; exit 1; }
+# The suite skips itself without PHOTO_E2E=1, which xcodebuild reports as success: require that it really ran.
+grep -E "Test uploadedPhotosLoadThroughTheManifestAndProvider\(\) passed" "$LOG" \
+  || { tail -40 "$LOG" >&2; echo "the photo E2E test did not run" >&2; exit 1; }
+```
+
+In `scripts/test-all.sh`, replace the comment line
+`# Storage photo hosting end-to-end against the local Supabase stack (needs Docker): opt in with PHOTO_E2E=1.` with
+`# Exercise photo hosting end to end against a throwaway local Worker (no Docker): opt in with PHOTO_E2E=1.`
+
+In `docs/media/README.md`, replace the section "Switch the app to Storage" (from its heading to the line
+`the build settings. UI tests (\`-uiTesting\`) never touch Storage.`) with:
+
+```markdown
+### Switch the app to the hosted photos
+
+Set `PHOTO_HOSTING = storage` in `ios/Config/Local.xcconfig` (gitignored; default `bundle` in `Base.xcconfig`), then
+rebuild. The photos come from `<API_URL>/photos/exercises/` of whatever `API_URL` the build uses:
+
+- **Local Worker (DEBUG only):** the default `API_URL = http://127.0.0.1:8787` works in the simulator once
+  `node scripts/upload-photos.mjs --target worker` has filled it. Plain http is allowed only in DEBUG builds and only
+  for 127.0.0.1 / localhost, or the configured `API_URL` host when it is a loopback/LAN address — see
+  `PhotoURLPolicy`. Release builds load photos over https only; with an http `API_URL` a Release build keeps the
+  bundled photos.
+- **Deployed Worker:** set its https `API_URL` in `Local.xcconfig` once the owner has deployed it (plan 30's
+  checklist).
+
+In DEBUG, the environment variables `PHOTO_HOSTING` and `API_URL` (Xcode scheme) override the build settings. UI tests
+(`-uiTesting`) never load hosted photos.
+```
+
+- [ ] **Step 4: Build and run the app tests that cover this**
+
+From `ios/`, one at a time, as in plan 27's "How to run things":
+
+```bash
+xcodegen generate --quiet
+for suite in StoragePhotoHostingTests EquipmentKindPhotoTests PhotoFallbackAndRefreshTests GymWipeEnvironmentTests \
+             SyncAccountSafetyTests; do
+  xcodebuild test -project GymRollins.xcodeproj -scheme GymRollins \
+    -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' -only-testing:GymRollinsTests/$suite \
+    -resultBundlePath build/TestResults-one-$(date +%s).xcresult -quiet
+done
+```
+
+Expected: each run ends `** TEST SUCCEEDED **`. Then run `PHOTO_E2E=1`'s script once:
+`DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' scripts/test-photo-hosting.sh`. It ends with
+`Test uploadedPhotosLoadThroughTheManifestAndProvider() passed`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ios scripts/upload-photos.mjs scripts/test-photo-hosting.sh scripts/test-all.sh docs/media/README.md
+git commit -m "feat(app): the shared catalogue and exercise photos on the API"
+```
+
+- [ ] **Step 6: Review**
+
+A fresh reviewer reads `git diff HEAD~1`:
+1. **Spec compliance:** spec section 3 (public photos at `/photos/*`), section 7 (the URL cache off for private
+   photos; the public ones carry no user id), and decisions 16 and 24.
+2. **Quality:** the `code-reviewer` agent and the `swiftui-expert-skill` checklist for the touched app files.
+
+---
+
+### Task 16: The gym suites, and the gym E2E, on the Worker
+
+The five suites parked by plan 27 come back with the same names and checks (decision 25). This task also adds the
+test plan 27 asked for: a moved phone's workouts reach the new server with their gym links.
+
+**Files:**
+- Create: `ios/Packages/GymSync/Tests/GymSyncIntegrationTests/GymIntegrationSupport.swift`
+- Move back from `SupabaseParked/` and rewrite: `GymAccountPhotosIntegrationTests.swift`, `GymCatalogE2ETests.swift`,
+  `GymCatalogIntegrationTests.swift`, `GymModerationIntegrationTests.swift`, `GymPrivateIntegrationTests.swift`
+- Modify: `ios/Packages/GymSync/Tests/GymSyncIntegrationTests/IntegrationSupport.swift`,
+  `ios/Packages/GymSync/Package.swift` (comment only)
+- Modify: `scripts/test-sync-integration.sh`, `scripts/test-gym-e2e.sh`, `scripts/test-all.sh`
+
+- [ ] **Step 1: Move the five suites back**
+
+```bash
+cd ios/Packages/GymSync/Tests/GymSyncIntegrationTests
+git mv SupabaseParked/GymAccountPhotosIntegrationTests.swift SupabaseParked/GymCatalogE2ETests.swift \
+  SupabaseParked/GymCatalogIntegrationTests.swift SupabaseParked/GymModerationIntegrationTests.swift \
+  SupabaseParked/GymPrivateIntegrationTests.swift .
+```
+
+In `ios/Packages/GymSync/Package.swift`, the comment above the `GymSyncIntegrationTests` target now reads:
+
+```swift
+        // The Supabase-only suites left (proposals, Claude's grants) sign in with the Supabase client the app no
+        // longer has. They stay as the reference plan 29 ports to the API, unbuilt meanwhile.
+```
+
+- [ ] **Step 2: The shared support, and account deletion with its photo steps**
+
+`ios/Packages/GymSync/Tests/GymSyncIntegrationTests/GymIntegrationSupport.swift`:
+
+```swift
+import Foundation
+import GymData
+import Testing
+@testable import GymSync
+
+/// What the gym suites share on the Worker.
+extension Account {
+    /// The shared catalogue, moderation and shared photos, as this account's phone reaches them.
+    var catalog: ApiGymCatalogTransport { ApiGymCatalogTransport(api: auth.api) }
+}
+
+enum GymIntegration {
+    /// A JPEG as far as the server checks one (its first bytes, and the declared type), at a photo-like size.
+    static let jpeg = Data([0xFF, 0xD8, 0xFF, 0xE0]) + Data(repeating: 0, count: 596)
+
+    /// A phone with no account: the catalogue answers it `.signedOut`, reads included (spec section 3).
+    static func signedOutCatalog() throws -> ApiGymCatalogTransport {
+        ApiGymCatalogTransport(api: try IntegrationEnv.config().makeClient(sessions: InMemorySessionStore()))
+    }
+
+    static func signedOutTransport() throws -> ApiSyncTransport {
+        ApiSyncTransport(api: try IntegrationEnv.config().makeClient(sessions: InMemorySessionStore()))
+    }
+
+    /// Whether `/photos/shared/<name>` serves the photo to anyone, past every cache.
+    static func isServed(_ name: String) async throws -> Bool {
+        let url = try #require(try signedOutCatalog().publicPhotoURL(path: name))
+        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+}
+```
+
+In `IntegrationSupport.swift`, replace
+
+```swift
+    /// The Worker holds no photos before plan 28, so there are no photo steps.
+    func deleteAccount() async throws {
+        let id = userId
+        try await auth.deleteAccount()
+        IntegrationEnv.recordDeletedUser(id)
+    }
+```
+
+with
+
+```swift
+    /// Detaches and removes the account's photos first, as the app does, then deletes the account.
+    func deleteAccount() async throws {
+        let id = userId
+        let catalog = ApiGymCatalogTransport(api: auth.api)
+        try await auth.deleteAccount(photos: AccountPhotoSteps(detach: { try await catalog.detachAllPhotos() },
+                                                               remove: { try await catalog.deleteAllPhotos() }))
+        IntegrationEnv.recordDeletedUser(id)
+    }
+```
+
+- [ ] **Step 3: Rewrite the five suites for the Worker**
+
+Each file is replaced in full.
+
+`GymAccountPhotosIntegrationTests.swift`:
+
+```swift
+import Foundation
+import GymData
+import Testing
+@testable import GymSync
+
+/// Account deletion and the photos the account owns, against the local Worker: the app removes them through
+/// `/v1/photos` first, and the server refuses to delete the account while any remain.
+@MainActor
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
+struct GymAccountPhotosIntegrationTests {
+    private func catalog(_ account: Account) -> ApiGymCatalogTransport { account.catalog }
+
+    private func photoName() -> String { "\(UUID().uuidString.lowercased()).jpg" }
+
+    /// Uploads to a bucket as the phone does: shared photos through the share queue's transport, private ones
+    /// through sync's.
+    private func upload(_ account: Account, bucket: String, name: String) async throws {
+        if bucket == "gym-photos" {
+            _ = try await account.catalog.uploadSharedPhoto(GymIntegration.jpeg, name: name)
+        } else {
+            _ = try await account.transport.uploadPrivatePhoto(GymIntegration.jpeg, name: name)
+        }
+    }
+
+    private func owned(_ account: Account) async throws -> [OwnedPhoto] {
+        let body = try await account.auth.api.data("GET", "/v1/photos/mine").body
+        return try OwnedPhotos.list(from: GymCatalogRows.array(in: body, key: "rows"))
+    }
+
+    @Test func deletingAnAccountRemovesItsPhotosAndKeepsTheSharedListing() async throws {
+        let user = try await Account.signUp()
+        let gymId = try await catalog(user).findOrCreateGym(
+            mapsPlaceId: "it-\(UUID().uuidString.lowercased())", name: "Iron Works", address: nil, latitude: 52.5,
+            longitude: 13.4)
+        let shared = photoName(), orphan = photoName(), privateName = photoName()
+        try await upload(user, bucket: "gym-photos", name: shared)
+        try await upload(user, bucket: "gym-photos", name: orphan)
+        try await upload(user, bucket: "gym-photos-private", name: privateName)
+        let listingId = UUID()
+        _ = try await catalog(user).share(ShareRequest(
+            listingId: listingId, gymId: gymId, kindId: "cable-station", brand: nil, model: nil,
+            loads: .stack(maxKg: 90, stepKg: 5), quantity: 1, notes: "mine", photoPath: shared, forceNew: false))
+        #expect(try await owned(user).count == 3, "the orphan and the private photo are listed too")
+
+        try await user.deleteAccount()
+
+        // Catalogue reads need a session now, so another account reads what stayed.
+        let reader = try await Account.signUp()
+        let listings = try await reader.catalog.publicListings(gymId: gymId).listings
+        let listing = try #require(listings.first { $0.id == listingId })
+        #expect(listing.photoPath == nil)
+        #expect(listing.notes == nil)
+        #expect(try await !GymIntegration.isServed(shared))
+        #expect(try await !GymIntegration.isServed(orphan))
+        try await reader.deleteAccount()
+    }
+
+    @Test func theServerRefusesToDeleteWhileAPhotoRemains() async throws {
+        let user = try await Account.signUp()
+        try await upload(user, bucket: "gym-photos-private", name: photoName())
+        let refused = await #expect(throws: AuthFailure.self) { try await user.auth.deleteAccount() }
+        #expect(refused?.message.contains("still being removed") == true)
+        #expect(user.auth.state.userId == user.userId, "the account stays signed in")
+        #expect(try await owned(user).count == 1)
+
+        try await catalog(user).deleteAllPhotos()
+        try await catalog(user).deleteAllPhotos() // nothing left, and that is fine
+        try await user.deleteAccount()
+    }
+
+    @Test func removingAPhotoAlreadyGoneIsNotAFailure() async throws {
+        let user = try await Account.signUp()
+        let name = photoName()
+        try await upload(user, bucket: "gym-photos", name: name)
+        try await catalog(user).deleteSharedPhoto(path: name)
+        try await catalog(user).deleteAllPhotos()
+        try await user.deleteAccount()
+    }
+}
+```
+
+`GymModerationIntegrationTests.swift`:
+
+```swift
+import Foundation
+import GymData
+import Testing
+@testable import GymSync
+
+/// The admin list against the local Worker. `scripts/test-sync-integration.sh` makes any account named
+/// `sync-admin-*@test.local` an admin when it signs up.
+@MainActor
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
+struct GymModerationIntegrationTests {
+    /// This test's own brand: parallel tests that share one would delete each other's item with their accounts.
+    private let brand = "Hammer \(UUID().uuidString.prefix(8))"
+
+    private func catalog(_ account: Account) -> ApiGymCatalogTransport { account.catalog }
+
+    private func signUpAdmin() async throws -> Account {
+        let account = try Account.fresh(email: "sync-admin-\(UUID().uuidString.lowercased())@test.local")
+        try await account.auth.signUp(email: account.email, password: IntegrationEnv.password)
+        return account
+    }
+
+    private func isServed(_ transport: ApiGymCatalogTransport, _ name: String) async throws -> Bool {
+        try await GymIntegration.isServed(name)
+    }
+
+    @Test func anAdminRemovesAnotherUsersFlaggedListingAndItsPhotoGoesFromStorage() async throws {
+        let author = try await Account.signUp()
+        let admin = try await signUpAdmin()
+        let plain = try await Account.signUp()
+        var reporters: [Account] = []
+        for _ in 0..<3 { reporters.append(try await Account.signUp()) }
+
+        let gymId = try await catalog(author).findOrCreateGym(mapsPlaceId: "it-\(UUID().uuidString.lowercased())",
+                                                              name: "Iron Works", address: nil, latitude: 52.5,
+                                                              longitude: 13.4)
+        let name = "\(UUID().uuidString.lowercased()).jpg"
+        _ = try await catalog(author).uploadSharedPhoto(GymIntegration.jpeg, name: name)
+        let listingId = UUID()
+        let request = ShareRequest(listingId: listingId, gymId: gymId, kindId: "cable-station", brand: brand,
+                                   model: nil, loads: .stack(maxKg: 90, stepKg: 5), quantity: 1, notes: nil,
+                                   photoPath: name, forceNew: false)
+        _ = try await catalog(author).share(request)
+        for reporter in reporters {
+            try await catalog(reporter).report(targetType: .listing, targetId: listingId, reason: .personInPhoto,
+                                               note: nil)
+        }
+
+        #expect(try await catalog(admin).isAdmin())
+        #expect(try await !catalog(plain).isAdmin())
+        await #expect(throws: GymCatalogError.notAllowed) { _ = try await catalog(plain).moderationQueue() }
+        await #expect(throws: GymCatalogError.notAllowed) {
+            _ = try await catalog(plain).moderate(targetType: .listing, targetId: listingId, action: .remove)
+        }
+
+        let queued = try #require(try await catalog(admin).moderationQueue().first { $0.targetId == listingId })
+        #expect(queued.targetType == .listing)
+        #expect(queued.title == brand)
+        #expect(queued.status == .flagged)
+        #expect(queued.reportCount == 3)
+        #expect(queued.reasons == [.init(reason: "person-in-photo", count: 3)])
+        #expect(queued.photoPath == name)
+        #expect(try await isServed(catalog(admin), name))
+
+        let photo = try await catalog(admin).moderate(targetType: .listing, targetId: listingId, action: .remove)
+        #expect(photo == name)
+        try await catalog(admin).deleteSharedPhoto(path: name)
+        #expect(try await !isServed(catalog(admin), name), "an admin's delete reaches a removed listing's photo")
+        // The name stays on a removed listing until the app confirms the object is gone (moderation_photo_deleted), so
+        // a failed delete can be retried: the queue still shows it, as removed and still naming the photo.
+        let waiting = try #require(try await catalog(admin).moderationQueue().first { $0.targetId == listingId })
+        #expect(waiting.status == .removed && waiting.photoPath == name)
+        #expect(try await catalog(admin).moderate(targetType: .listing, targetId: listingId, action: .remove) == name,
+                "removing again hands the same path out")
+        try await catalog(admin).moderationPhotoDeleted(path: name)
+        #expect(try await !catalog(admin).moderationQueue().contains { $0.targetId == listingId },
+                "once the server hears the object is gone, the listing leaves the queue")
+
+        for account in [author, admin, plain] + reporters { try await account.deleteAccount() }
+    }
+}
+```
+
+`GymCatalogIntegrationTests.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+import Testing
+@testable import GymSync
+
+/// `ApiGymCatalogTransport` against the local Worker: the catalogue, moderation and photo routes the app relies on.
+@MainActor
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
+struct GymCatalogIntegrationTests {
+    private func catalog(_ account: Account) -> ApiGymCatalogTransport { account.catalog }
+
+    /// A phone with no account: the catalogue answers it `.signedOut`, reads included.
+    private func anonCatalog() throws -> ApiGymCatalogTransport { try GymIntegration.signedOutCatalog() }
+
+    private func freshPlace() -> String { "it-\(UUID().uuidString.lowercased())" }
+
+    /// A JPEG: the server checks the bytes as well as the declared type.
+    private func photo() -> Data { GymIntegration.jpeg }
+
+    private func photoName() -> String { "\(UUID().uuidString.lowercased()).jpg" }
+
+    /// Every test has a brand of its own. Suites run in parallel and share the server, and an item with a brand only
+    /// the test's account used is deleted with that account: two tests sharing "Hammer" could delete each other's
+    /// item between `share_listing` finding it and inserting the listing.
+    private let ownBrand = "Hammer \(UUID().uuidString.prefix(8))"
+
+    private func request(_ id: UUID = UUID(), gym: UUID, kind: String = "cable-station", brand: String? = nil,
+                         brandless: Bool = false, photo: String? = nil, forceNew: Bool = false) -> ShareRequest {
+        ShareRequest(listingId: id, gymId: gym, kindId: kind, brand: brandless ? nil : (brand ?? ownBrand),
+                     model: nil,
+                     loads: .stack(maxKg: 90, stepKg: 5), quantity: 2, notes: "by the door", photoPath: photo,
+                     forceNew: forceNew)
+    }
+
+    private func gym(_ transport: ApiGymCatalogTransport, place: String) async throws -> UUID {
+        try await transport.findOrCreateGym(mapsPlaceId: place, name: "Iron Works", address: "1 Main St",
+                                            latitude: 52.5, longitude: 13.4)
+    }
+
+    @Test func aSharedListingWithAPhotoReadsBackThroughAnotherAccountButNotSignedOut() async throws {
+        let user = try await Account.signUp()
+        let transport = catalog(user)
+        let place = freshPlace()
+        let gymId = try await gym(transport, place: place)
+        #expect(try await gym(transport, place: place) == gymId)
+
+        let name = photoName()
+        #expect(try await transport.uploadSharedPhoto(photo(), name: name) == name)
+        let listingId = UUID()
+        #expect(try await transport.share(request(listingId, gym: gymId, photo: name)) == .created(listingId))
+        #expect(try await transport.share(request(listingId, gym: gymId, photo: name)) == .created(listingId))
+
+        await #expect(throws: GymCatalogError.signedOut) { _ = try await anonCatalog().publicGym(mapsPlaceId: place) }
+        let reader = try await Account.signUp()
+        let anon = catalog(reader)
+        let found = try #require(try await anon.publicGym(mapsPlaceId: place))
+        #expect(found.id == gymId)
+        #expect(found.name == "Iron Works")
+        let listings = try await anon.publicListings(gymId: gymId).listings
+        let listing = try #require(listings.first)
+        #expect(listing.id == listingId)
+        #expect(listing.kindId == "cable-station")
+        #expect(listing.brand == ownBrand)
+        #expect(listing.loads == .stack(maxKg: 90, stepKg: 5))
+        #expect(listing.quantity == 2)
+        #expect(listing.photoPath == name)
+        #expect(!listing.isMine)
+        #expect(!listing.confirmedByMe)
+
+        let mine = try #require(try await transport.publicListings(gymId: gymId).listings.first)
+        #expect(mine.isMine)
+
+        let items = try await anon.publicItems(kindId: "cable-station")
+        let item = try #require(items.first { $0.id == listing.itemId })
+        #expect(item.photoPath == name)
+        #expect(item.photoListingId == listingId)
+
+        let url = try #require(anon.publicPhotoURL(path: name))
+        #expect(!url.absoluteString.contains(user.userId.uuidString.lowercased()))
+        let (_, response) = try await URLSession.shared.data(from: url)
+        let http = try #require(response as? HTTPURLResponse)
+        #expect(http.statusCode == 200)
+        #expect(http.value(forHTTPHeaderField: "Content-Type") == "image/jpeg")
+        try await user.deleteAccount()
+        try await reader.deleteAccount()
+    }
+
+    @Test func aSecondShareOfTheKindReturnsDuplicatesUnlessForced() async throws {
+        let first = try await Account.signUp()
+        let second = try await Account.signUp()
+        let gymId = try await gym(catalog(first), place: freshPlace())
+        let original = UUID()
+        _ = try await catalog(first).share(request(original, gym: gymId))
+
+        let result = try await catalog(second).share(request(gym: gymId))
+        guard case let .duplicates(found) = result else { Issue.record("expected duplicates, got \(result)"); return }
+        #expect(found.map(\.id) == [original])
+        #expect(found.first?.kindId == "cable-station")
+        #expect(found.first?.loads == .stack(maxKg: 90, stepKg: 5))
+
+        let forced = UUID()
+        #expect(try await catalog(second).share(request(forced, gym: gymId, forceNew: true)) == .created(forced))
+        let listings = try await catalog(second).publicListings(gymId: gymId).listings
+        #expect(Set(listings.map(\.id)) == [original, forced])
+        #expect(try await catalog(second).confirm(listingId: original) == 1)
+        #expect(try await catalog(second).confirm(listingId: original) == 1)
+        try await first.deleteAccount()
+        try await second.deleteAccount()
+    }
+
+    @Test func uploadingTheSamePhotoTwiceSucceeds() async throws {
+        let user = try await Account.signUp()
+        let transport = catalog(user)
+        let name = photoName()
+        #expect(try await transport.uploadSharedPhoto(photo(), name: name) == name)
+        #expect(try await transport.uploadSharedPhoto(photo(), name: name) == name)
+        try await user.deleteAccount()
+    }
+
+    @Test func aNameAListingUsesCannotBeUploadedAgain() async throws {
+        let user = try await Account.signUp()
+        let transport = catalog(user)
+        let gymId = try await gym(transport, place: freshPlace())
+        let name = photoName()
+        _ = try await transport.uploadSharedPhoto(photo(), name: name)
+        let listingId = UUID()
+        _ = try await transport.share(request(listingId, gym: gymId, photo: name))
+
+        try await transport.deleteSharedPhoto(path: name)
+        // The name stays a listing's after its object went (photo_name_in_use): every photo refusal is one answer.
+        await #expect(throws: GymCatalogError.photoRefused) {
+            _ = try await transport.uploadSharedPhoto(photo(), name: name)
+        }
+        try await user.deleteAccount()
+    }
+
+    private func isServed(_ transport: ApiGymCatalogTransport, _ name: String) async throws -> Bool {
+        try await GymIntegration.isServed(name)
+    }
+
+    @Test func onlyTheOwnerCanDeleteAnUploadedPhoto() async throws {
+        let owner = try await Account.signUp()
+        let other = try await Account.signUp()
+        let name = photoName()
+        _ = try await catalog(owner).uploadSharedPhoto(photo(), name: name)
+        #expect(try await isServed(catalog(owner), name))
+
+        try await catalog(other).deleteSharedPhoto(path: name)
+        #expect(try await isServed(catalog(owner), name), "another user's delete removes nothing")
+        try await catalog(owner).deleteSharedPhoto(path: name)
+        #expect(try await !isServed(catalog(owner), name))
+        try await catalog(owner).deleteSharedPhoto(path: name) // already gone: fine
+        try await owner.deleteAccount()
+        try await other.deleteAccount()
+    }
+
+    @Test func anotherUsersUploadedPhotoCannotBeShared() async throws {
+        let owner = try await Account.signUp()
+        let thief = try await Account.signUp()
+        let gymId = try await gym(catalog(owner), place: freshPlace())
+        let name = photoName()
+        _ = try await catalog(owner).uploadSharedPhoto(photo(), name: name)
+
+        await #expect(throws: GymCatalogError.photoMissing) {
+            _ = try await catalog(thief).share(request(gym: gymId, photo: name))
+        }
+        try await owner.deleteAccount()
+        try await thief.deleteAccount()
+    }
+
+    @Test func anAnonymousWriteIsSignedOutAndAnUnknownGymIsNotShareable() async throws {
+        let anon = try anonCatalog()
+        await #expect(throws: GymCatalogError.signedOut) {
+            _ = try await anon.confirm(listingId: UUID())
+        }
+        await #expect(throws: GymCatalogError.signedOut) {
+            _ = try await anon.uploadSharedPhoto(photo(), name: photoName())
+        }
+        let user = try await Account.signUp()
+        await #expect(throws: GymCatalogError.gymNotShareable) {
+            _ = try await catalog(user).share(request(gym: UUID()))
+        }
+        try await user.deleteAccount()
+    }
+
+    @Test func aGymNobodyHasSharedYetIsAbsent() async throws {
+        let user = try await Account.signUp()
+        #expect(try await catalog(user).publicGym(mapsPlaceId: freshPlace()) == nil)
+        try await user.deleteAccount()
+    }
+
+    // MARK: Reports and blocks
+
+    @Test func aReportBlockAndUnblockGoThroughTheServer() async throws {
+        let author = try await Account.signUp()
+        let reader = try await Account.signUp()
+        let gymId = try await gym(catalog(author), place: freshPlace())
+        let kept = UUID(), reported = UUID()
+        _ = try await catalog(author).share(request(kept, gym: gymId, kind: "cable-station", brandless: true))
+        _ = try await catalog(author).share(request(reported, gym: gymId, kind: "leg-press", brandless: true))
+
+        // Nothing to say about the author's own listing: the server answers `own`, which is not an error.
+        try await catalog(author).report(targetType: .listing, targetId: reported, reason: .spam, note: nil)
+        try await catalog(reader).report(targetType: .listing, targetId: reported, reason: .wrongInfo, note: "a note")
+        try await catalog(reader).report(targetType: .listing, targetId: reported, reason: .wrongInfo, note: nil)
+        try await catalog(reader).report(targetType: .gym, targetId: gymId, reason: .notHereAnymore, note: nil)
+
+        await #expect(throws: GymCatalogError.unknownTarget) {
+            try await catalog(reader).report(targetType: .listing, targetId: UUID(), reason: .spam, note: nil)
+        }
+        await #expect(throws: GymCatalogError.noteRefused) {
+            try await catalog(reader).report(targetType: .listing, targetId: kept, reason: .other, note: "bad\u{7}note")
+        }
+        await #expect(throws: GymCatalogError.signedOut) {
+            try await anonCatalog().report(targetType: .listing, targetId: kept, reason: .spam, note: nil)
+        }
+
+        try await catalog(reader).blockAuthor(targetType: .listing, targetId: kept)
+        #expect(try await catalog(reader).publicListings(gymId: gymId).listings.isEmpty)
+        #expect(try await catalog(author).publicListings(gymId: gymId).listings.count == 2)
+        #expect(try await catalog(reader).unblockAll() == 1)
+        #expect(try await catalog(reader).publicListings(gymId: gymId).listings.count == 2)
+        #expect(try await catalog(reader).unblockAll() == 0)
+        try await author.deleteAccount()
+        try await reader.deleteAccount()
+    }
+}
+```
+
+`GymPrivateIntegrationTests.swift`. Besides the new last test, the changes are:
+- `anonTransport()` is a signed-out `ApiSyncTransport`;
+- `user.catalog`;
+- the JPEG.
+
+```swift
+import Foundation
+import GymCore
+import GymData
+import SwiftData
+import Testing
+@testable import GymSync
+
+private final class MemoryPhotoFiles: GymPhotoFiles, @unchecked Sendable {
+    private let lock = NSLock()
+    private var files: [String: Data]
+    init(_ files: [String: Data] = [:]) { self.files = files }
+    var stored: [String: Data] { lock.withLock { files } }
+    func data(file: String) -> Data? { lock.withLock { files[file] } }
+    func save(_ jpeg: Data, file: String) throws { lock.withLock { files[file] = jpeg } }
+    func delete(file: String) throws { lock.withLock { files[file] = nil } }
+}
+
+/// Private gyms, listings and photos against the local stack: a second device of the same user gets them; another
+/// user and a signed-out client get nothing.
+@MainActor
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
+struct GymPrivateIntegrationTests {
+    @MainActor private struct Phone {
+        let container: ModelContainer
+        let store: SyncStore
+        let engine: SyncEngine
+        let photos: MemoryPhotoFiles
+        let repo: GymRepository
+
+        init(_ account: Account, clock: DeviceClock, photos: MemoryPhotoFiles = MemoryPhotoFiles()) throws {
+            container = try GymStore.container(inMemory: true)
+            let defaults = UserDefaults(suiteName: "gym-it-\(UUID())")!
+            store = SyncStore(context: container.mainContext, defaults: defaults, now: { clock.now })
+            engine = SyncEngine(store: store, transport: account.transport, photos: photos, now: { clock.now })
+            self.photos = photos
+            repo = GymRepository(context: container.mainContext, now: { clock.now })
+        }
+    }
+
+    private func anonTransport() throws -> ApiSyncTransport { try GymIntegration.signedOutTransport() }
+
+    @Test func aPrivateGymListingAndPhotoReachAnotherDeviceAndNoOneElse() async throws {
+        let owner = try await Account.signUp()
+        let stranger = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let jpeg = GymIntegration.jpeg
+        let first = try Phone(owner, clock: clock, photos: MemoryPhotoFiles(["mine.jpg": jpeg]))
+
+        let gym = try first.repo.addPrivateGym(name: "Garage", address: "1 Home St")
+        let listing = try first.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station", brand: "Hammer",
+                                                           loads: .stack(maxKg: 90, stepKg: 5), notes: "garage",
+                                                           photoFile: "mine.jpg"))
+        try first.repo.makeSynced(listing: listing.id)
+        await first.engine.sync()
+        #expect(first.engine.status == .idle)
+        #expect(try first.store.dirtyGyms().isEmpty && first.store.dirtyGymListings().isEmpty,
+                "\(first.store.syncFailures().map(\.message)) \(first.engine.status)")
+        let path = try #require(try first.container.mainContext.fetch(FetchDescriptor<GymListingRecord>()).first?.remotePhotoPath)
+
+        let other = try Phone(stranger, clock: clock)
+        await other.engine.sync()
+        #expect(try other.repo.gyms().isEmpty)
+
+        let second = try Phone(try await owner.onAnotherDevice(), clock: clock)
+        await second.engine.sync()
+        #expect(second.engine.status == .idle)
+
+        // The owner has now downloaded the picture; no client may be served it from a cache afterwards.
+        let anon = try anonTransport()
+        // Refused outright or empty: either way a signed-out client reads nothing.
+        #expect((try? await anon.pullGyms(since: nil))?.isEmpty ?? true)
+        #expect((try? await anon.pullGymListings(since: nil))?.isEmpty ?? true)
+        await #expect(throws: (any Error).self) { _ = try await anon.downloadPrivatePhoto(path: path) }
+        await #expect(throws: (any Error).self) { _ = try await stranger.transport.downloadPrivatePhoto(path: path) }
+
+        let copy = try #require(try second.repo.listings(gymId: gym.id).first)
+        #expect(copy.id == listing.id && copy.item.brand == "Hammer" && copy.notes == "garage")
+        #expect(copy.loads == .stack(maxKg: 90, stepKg: 5))
+        let file = try #require(copy.photoFile)
+        #expect(second.photos.stored[file] == jpeg)
+
+        clock.advance(60)
+        _ = try first.repo.removeListing(listing.id)
+        await first.engine.sync()
+        #expect(try first.container.mainContext.fetchCount(FetchDescriptor<GymListingRecord>()) == 0)
+        clock.advance(60)
+        await second.engine.sync()
+        #expect(try second.repo.listings(gymId: gym.id).isEmpty)
+        await #expect(throws: (any Error).self) { _ = try await owner.transport.downloadPrivatePhoto(path: path) }
+
+        try await owner.deleteAccount()
+        try await stranger.deleteAccount()
+    }
+
+    @Test func aWorkoutKeepsItsSyncedGymAndListingAcrossDevicesButNeverALocalOne() async throws {
+        let owner = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let first = try Phone(owner, clock: clock)
+        let workouts = WorkoutRepository(context: first.container.mainContext, now: { clock.now })
+
+        let gym = try first.repo.addPrivateGym(name: "Garage", address: nil)
+        let listing = try first.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station",
+                                                           loads: .stack(maxKg: 90, stepKg: 5)))
+        try first.repo.makeSynced(listing: listing.id)
+        let local = try first.repo.addPrivateGym(name: "Phone only", address: nil)
+        let localListing = try first.repo.addListing(NewListing(gymId: local.id, kindId: "cable-station"))
+        await first.engine.sync()
+
+        func workout(gym: UUID, listing: UUID) -> Workout {
+            Workout(startedAt: clock.now, endedAt: clock.now.addingTimeInterval(600), name: "Pull", entries: [
+                WorkoutEntry(exerciseId: "bench", sets: [WorkoutSet(weightKg: 50, reps: 8, done: true)],
+                             gymListingId: listing)], gymId: gym)
+        }
+        let linked = workout(gym: gym.id, listing: listing.id)
+        let phoneOnly = workout(gym: local.id, listing: localListing.id)
+        try workouts.save(linked)
+        try workouts.save(phoneOnly)
+        await first.engine.sync()
+        #expect(first.engine.status == .idle, "\(first.store.syncFailures().map(\.message))")
+        #expect(try workouts.workout(phoneOnly.id)?.gymId == local.id, "a pull never clears a local link")
+
+        let second = try Phone(try await owner.onAnotherDevice(), clock: clock)
+        await second.engine.sync()
+        let other = WorkoutRepository(context: second.container.mainContext, now: { clock.now })
+        #expect(try other.workout(linked.id)?.gymId == gym.id)
+        #expect(try other.workout(linked.id)?.entries.first?.gymListingId == listing.id)
+        #expect(try other.workout(phoneOnly.id)?.gymId == nil)
+
+        try await owner.deleteAccount()
+    }
+    // MARK: Two accounts on one phone
+
+    @Test func theNextAccountOnThePhoneGetsItsOwnGymIdsAndBothAccountsKeepTheirRows() async throws {
+        let first = try await Account.signUp()
+        let second = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let phone = try Phone(first, clock: clock)
+        phone.store.ownerUserId = first.userId
+        let gym = try phone.repo.addPrivateGym(name: "Garage", address: nil)
+        let listing = try phone.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station"))
+        try phone.repo.makeSynced(listing: listing.id)
+        await phone.engine.sync()
+        #expect(try phone.store.dirtyGyms().isEmpty)
+        // Edited while offline, so the listing survives the sign-out as an unpushed change.
+        clock.advance(60)
+        _ = try phone.repo.updateListing(listing.id, loads: .none, quantity: 2, notes: "edited offline")
+        _ = try phone.store.resetAccountData()
+
+        // The second account signs in on the same phone, syncs the gym and a workout.
+        phone.store.ownerUserId = second.userId
+        let moves = try phone.store.settleDemotedRows(for: second.userId)
+        let newGym = try #require(moves[gym.id])
+        let workouts = WorkoutRepository(context: phone.container.mainContext, now: { clock.now })
+        try workouts.save(finishedWorkout(name: "Push", at: clock.now))
+        try phone.repo.makeSynced(gym: newGym)
+        let engine = SyncEngine(store: phone.store, transport: second.transport, photos: phone.photos,
+                                now: { clock.now })
+        await engine.sync()
+        #expect(engine.status == .idle, "\(phone.store.syncFailures().map(\.message))")
+        #expect(phone.store.syncFailures().isEmpty)
+
+        #expect(try await second.transport.pullGyms(since: nil).map(\.id) == [newGym])
+        #expect(try await second.transport.pullWorkouts(since: nil).count == 1)
+        let untouched = try await first.transport.pullGyms(since: nil)
+        #expect(untouched.map(\.id) == [gym.id] && untouched.first?.name == "Garage")
+        let theirs = try await first.transport.pullGymListings(since: nil)
+        #expect(theirs.map(\.id) == [listing.id] && theirs.first?.notes == nil)
+
+        try await first.deleteAccount()
+        try await second.deleteAccount()
+    }
+
+    @Test func aGymAnotherAccountHoldsIsRefusedForThatRowAndTheRoundGoesOn() async throws {
+        let first = try await Account.signUp()
+        let second = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let phoneA = try Phone(first, clock: clock)
+        let gym = try phoneA.repo.addPrivateGym(name: "Garage", address: nil)
+        try phoneA.repo.makeSynced(gym: gym.id)
+        await phoneA.engine.sync()
+
+        // A phone whose row carries the first account's id (what an old demoted row used to look like).
+        let phoneB = try Phone(second, clock: clock)
+        let clash = GymRecord(id: gym.id, name: "Mine now", address: nil, now: clock.now)
+        clash.visibilityRaw = GymVisibility.synced.rawValue
+        clash.dirty = true
+        phoneB.container.mainContext.insert(clash)
+        try phoneB.container.mainContext.save()
+        let workouts = WorkoutRepository(context: phoneB.container.mainContext, now: { clock.now })
+        try workouts.save(finishedWorkout(name: "Push", at: clock.now))
+        await phoneB.engine.sync()
+
+        #expect(try await second.transport.pullWorkouts(since: nil).count == 1, "the workout is not held back")
+        #expect(phoneB.store.syncFailures().map(\.entity) == [.gyms])
+        let untouched = try await first.transport.pullGyms(since: nil)
+        #expect(untouched.first?.name == "Garage")
+
+        try await first.deleteAccount()
+        try await second.deleteAccount()
+    }
+
+    /// Account deletion that fails after the photos went: no row names a deleted object, the phone uploads its pictures
+    /// again at the next sync, and a retry deletes the account.
+    @Test func aDeletionRefusedAfterThePhotosWentLeavesNoRowNamingThemAndTheNextSyncUploadsAgain() async throws {
+        let user = try await Account.signUp()
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let jpeg = GymIntegration.jpeg
+        let phone = try Phone(user, clock: clock, photos: MemoryPhotoFiles(["mine.jpg": jpeg]))
+        let catalog = user.catalog
+
+        let gym = try phone.repo.addPrivateGym(name: "Garage", address: nil)
+        let listing = try phone.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station",
+                                                           loads: .stack(maxKg: 90, stepKg: 5), photoFile: "mine.jpg"))
+        try phone.repo.makeSynced(listing: listing.id)
+        await phone.engine.sync()
+        let record = try #require(try phone.container.mainContext.fetch(FetchDescriptor<GymListingRecord>()).first)
+        let oldPath = try #require(record.remotePhotoPath)
+
+        let place = "it-\(UUID().uuidString.lowercased())"
+        let sharedGym = try await catalog.findOrCreateGym(mapsPlaceId: place, name: "Iron Works", address: nil,
+                                                          latitude: 52.5, longitude: 13.4)
+        let sharedName = "\(UUID().uuidString.lowercased()).jpg"
+        _ = try await catalog.uploadSharedPhoto(jpeg, name: sharedName)
+        let sharedId = UUID()
+        _ = try await catalog.share(ShareRequest(
+            listingId: sharedId, gymId: sharedGym, kindId: "leg-press", brand: nil, model: nil,
+            loads: .stack(maxKg: 90, stepKg: 5), quantity: 1, notes: nil, photoPath: sharedName, forceNew: false))
+
+        // The server stamps the detach with its real clock, and the phone's edit has to be newer than that, as a real
+        // phone's is a moment later; the fixed clock the other tests use is a day behind.
+        clock.now = Date().addingTimeInterval(60)
+        struct Refused: Error {}
+        nonisolated(unsafe) let store = phone.store
+        let steps = AccountPhotoSteps(
+            detach: { try await catalog.detachAllPhotos(); try await MainActor.run { try store.forgetRemotePhotos() } },
+            remove: { try await catalog.deleteAllPhotos() })
+        // The server step fails after the photos are gone, as a lost connection or a refusal would.
+        await #expect(throws: AuthFailure.self) {
+            try await user.auth.deleteAccount(photos: steps) { throw Refused() }
+        }
+
+        let rows = try await user.transport.pullGymListings(since: nil)
+        #expect(rows.count == 1 && rows.first.map { $0.photoPath } == .some(nil), "the server's row holds no path")
+        let shared = try #require(try await catalog.publicListings(gymId: sharedGym).listings.first { $0.id == sharedId })
+        #expect(shared.photoPath == nil, "the shared listing stays, without its photo")
+        #expect(record.remotePhotoPath == nil && record.photoFile == "mine.jpg" && record.dirty)
+
+        clock.advance(60)
+        await phone.engine.sync()
+        let newPath = try #require(record.remotePhotoPath)
+        #expect(newPath != oldPath, "the picture went up again under a new name")
+        #expect(try await user.transport.pullGymListings(since: nil).first?.photoPath == newPath)
+        #expect(try await user.transport.downloadPrivatePhoto(path: newPath) == jpeg)
+
+        try await user.deleteAccount() // the retry
+    }
+
+    // MARK: After a server move
+
+    /// Plan 27 left this to plan 28: a phone moved from another server sends its gyms and listings in the same round
+    /// as the workouts that link them, gyms first, so the links reach the new server.
+    @Test func aPhoneMovedFromAnotherServerSendsItsGymsBeforeTheWorkoutsThatLinkThem() async throws {
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let earlier = try await Account.signUp()
+        let phone = try Phone(earlier, clock: clock)
+        let workouts = WorkoutRepository(context: phone.container.mainContext, now: { clock.now })
+        let gym = try phone.repo.addPrivateGym(name: "Garage", address: nil)
+        let listing = try phone.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station",
+                                                           loads: .stack(maxKg: 90, stepKg: 5)))
+        try phone.repo.makeSynced(listing: listing.id)
+        let linked = Workout(startedAt: clock.now, endedAt: clock.now.addingTimeInterval(600), name: "Pull", entries: [
+            WorkoutEntry(exerciseId: "bench", sets: [WorkoutSet(weightKg: 50, reps: 8, done: true)],
+                         gymListingId: listing.id)], gymId: gym.id)
+        try workouts.save(linked)
+        await phone.engine.sync()
+        #expect(phone.engine.status == .idle, "\(phone.store.syncFailures().map(\.message))")
+
+        // The "old server" here is this Worker as another account; deleting it frees the ids, as a new server has them.
+        #expect(try phone.store.moveToServer("http://moved.invalid"))
+        try await earlier.deleteAccount()
+        let next = try await Account.signUp()
+        phone.store.ownerUserId = next.userId
+        let engine = SyncEngine(store: phone.store, transport: next.transport, photos: phone.photos, now: { clock.now })
+        await engine.sync()
+
+        #expect(engine.status == .idle, "\(phone.store.syncFailures().map(\.message))")
+        let pulled = try #require(try await next.transport.pullWorkouts(since: nil).first { $0.id == linked.id })
+        #expect(pulled.gymId == gym.id)
+        #expect(pulled.entries.first?.gymEquipmentId == listing.id)
+        try await next.deleteAccount()
+    }
+}
+```
+
+`GymCatalogE2ETests.swift`:
+
+```swift
+import Foundation
+import GymCore
+import GymData
+import SwiftData
+import Testing
+@testable import GymSync
+
+/// Two users (and a signed-out phone, which the catalogue now turns away) against the local Worker, each on a phone of
+/// their own, with the real transports and the rules from GymCore (`scripts/test-gym-e2e.sh` starts the Worker and
+/// checks D1 afterwards).
+@MainActor
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
+struct GymCatalogE2ETests {
+    private nonisolated static let kinds = [
+        EquipmentKind(id: "dumbbells", name: "Dumbbells", category: .freeWeight, load: .fixedSet),
+        EquipmentKind(id: "adjustable-bench", name: "Adjustable bench", category: .bench, load: .none),
+        EquipmentKind(id: "cable-station", name: "Cable station", category: .cable, load: .stack),
+        EquipmentKind(id: "chest-press-machine", name: "Chest press", category: .machine, load: .stack),
+        EquipmentKind(id: "pec-deck", name: "Pec deck", category: .machine, load: .stack),
+    ]
+
+    private nonisolated static let requirements = ExerciseRequirements(groups: [
+        "c-db-press": [["dumbbells"], ["adjustable-bench"]],
+        "c-machine-press": [["chest-press-machine"]],
+        "c-pec-deck": [["pec-deck"]],
+        "c-cable-fly": [["cable-station"]],
+        "c-cable-crossover": [["cable-station"]],
+        "c-pushup": [],
+    ])
+
+    private nonisolated static let exercises = [
+        Exercise(id: "c-db-press", name: "Dumbbell Bench Press", bodyPart: "chest", equipment: "dumbbell",
+                 target: "pectorals", secondary: ["triceps"]),
+        Exercise(id: "c-machine-press", name: "Lever Chest Press", bodyPart: "chest", equipment: "leverage machine",
+                 target: "pectorals", secondary: ["triceps"]),
+        Exercise(id: "c-pec-deck", name: "Lever Seated Fly", bodyPart: "chest", equipment: "leverage machine",
+                 target: "pectorals"),
+        Exercise(id: "c-cable-fly", name: "Cable Middle Fly", bodyPart: "chest", equipment: "cable",
+                 target: "pectorals", secondary: ["shoulders"]),
+        Exercise(id: "c-cable-crossover", name: "Cable Crossover", bodyPart: "chest", equipment: "cable",
+                 target: "pectorals", secondary: ["shoulders"]),
+        Exercise(id: "c-pushup", name: "Push-Up", bodyPart: "chest", equipment: "body weight", target: "pectorals",
+                 secondary: ["triceps"]),
+    ]
+
+    /// One phone: its own store, repository, catalogue client and share queue, talking to the server as `client`.
+    @MainActor private struct Phone {
+        let container: ModelContainer
+        let repo: GymRepository
+        let catalog: ApiGymCatalogTransport
+        let client: GymCatalogClient
+        let outbox: ShareOutbox
+
+        init(_ api: ApiClient) throws {
+            container = try GymStore.container(inMemory: true)
+            repo = GymRepository(context: container.mainContext)
+            catalog = ApiGymCatalogTransport(api: api)
+            client = GymCatalogClient(repository: repo, transport: catalog,
+                                      knownKinds: Set(GymCatalogE2ETests.kinds.map(\.id)), now: Date.init)
+            outbox = ShareOutbox(repository: repo, transport: catalog,
+                                 photoData: { _ in GymIntegration.jpeg }, now: Date.init)
+        }
+
+        func mapsGym(_ place: String) throws -> Gym {
+            try repo.addMapsGym(placeId: place, name: "Iron Works", address: "1 Main St", latitude: 52.5,
+                                longitude: 13.4)
+        }
+
+        @discardableResult
+        func add(_ gym: Gym, _ kind: String, loads: ListingLoads = .stack(maxKg: 90, stepKg: 5), brand: String? = nil,
+                 photo: String? = nil, notes: String? = nil) throws -> GymListing {
+            try repo.addListing(NewListing(gymId: gym.id, kindId: kind, brand: brand, loads: loads, quantity: 1,
+                                           notes: notes, photoFile: photo))
+        }
+
+        func record(_ id: UUID) throws -> GymListingRecord? {
+            try container.mainContext.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first
+        }
+
+        func share(_ listing: GymListing, as user: UUID) async throws {
+            try outbox.enqueueShare(listingId: listing.id, ownerId: user)
+            await outbox.run(userId: user)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func signUp() async throws -> Account {
+        let account = try Account.fresh(email: "gym-\(UUID().uuidString.lowercased())@test.local")
+        try await account.auth.signUp(email: account.email, password: IntegrationEnv.password)
+        return account
+    }
+
+    private func anonClient() throws -> ApiClient {
+        try IntegrationEnv.config().makeClient(sessions: InMemorySessionStore())
+    }
+
+    private func place() -> String { "e2e-\(UUID().uuidString.lowercased())" }
+
+    private func build(_ phone: Phone, _ gym: Gym) throws -> BuiltWorkout {
+        let matcher = InventoryMatcher(requirements: Self.requirements, kinds: Self.kinds,
+                                       inventory: try phone.repo.inventory(gymId: gym.id))
+        return WorkoutBuilder(matcher: matcher, exercises: Self.exercises, history: [])
+            .build(BuildRequest(muscles: [.chest], length: .medium, date: Date(timeIntervalSince1970: 20_400 * 86_400)))
+    }
+
+    /// Records a string for the shell script to look for (or not) in the tables.
+    private func hand(_ role: String, _ marker: String) {
+        guard let path = ProcessInfo.processInfo.environment["GYM_E2E_MARKERS_FILE"],
+              let line = "\(role) \(marker)\n".data(using: .utf8),
+              let handle = FileHandle(forWritingAtPath: path) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: line)
+    }
+
+    private func report(_ listing: UUID, as account: Account) async throws {
+        try await account.catalog.report(targetType: .listing, targetId: listing, reason: .wrongInfo, note: nil)
+    }
+
+    // MARK: - Criterion 2
+
+    @Test func criterion2AnotherUserBuildsAChestWorkoutFromSharedListingsAndASignedOutPhoneIsAskedToSignIn() async throws {
+        let a = try await signUp()
+        let b = try await signUp()
+        let phoneA = try Phone(a.auth.api)
+        let placeId = place()
+        let gymA = try phoneA.mapsGym(placeId)
+        let shared = try [
+            phoneA.add(gymA, "dumbbells", loads: .fixed(kg: [10, 15, 20])),
+            phoneA.add(gymA, "adjustable-bench", loads: .none),
+            phoneA.add(gymA, "cable-station", loads: .stack(maxKg: 80, stepKg: 5)),
+            phoneA.add(gymA, "chest-press-machine", loads: .stack(maxKg: 100, stepKg: 5)),
+            phoneA.add(gymA, "pec-deck", loads: .stack(maxKg: 80, stepKg: 5)),
+        ]
+        for listing in shared { try await phoneA.share(listing, as: a.userId) }
+        let sharedState = try shared.map { try #require(try phoneA.repo.listing($0.id)) }
+        #expect(sharedState.allSatisfy { $0.visibility == .shared && $0.uploadState == .uploaded })
+        let ids = Set(shared.map(\.id))
+
+        // Catalogue reads need a session now (spec section 3): a signed-out phone is asked to sign in.
+        let signedOut = try Phone(try anonClient())
+        let anonGym = try signedOut.mapsGym(placeId)
+        await #expect(throws: GymCatalogError.signedOut) {
+            _ = try await signedOut.client.refresh(gymId: anonGym.id, force: true)
+        }
+
+        for (name, client) in [("user B", b.auth.api)] {
+            let phone = try Phone(client)
+            let gym = try phone.mapsGym(placeId)
+            _ = try await phone.client.refresh(gymId: gym.id, force: true)
+            let inventory = try phone.repo.inventory(gymId: gym.id)
+            #expect(Set(inventory.listings.map(\.id)) == ids, "\(name) sees all five")
+            let built = try build(phone, gym)
+            #expect(built.items.count == 4, "\(name)")
+            #expect(built.thin.isEmpty, "\(name)")
+            for item in built.items {
+                #expect(!item.isBodyweightFill, "\(name): \(item.exercise.exerciseId)")
+                #expect(!item.match.listingIds.isEmpty, "\(name): \(item.exercise.exerciseId)")
+                #expect(Set(item.match.listingIds).isSubset(of: ids), "\(name): \(item.exercise.exerciseId)")
+            }
+        }
+        try await a.deleteAccount()
+        try await b.deleteAccount()
+    }
+
+    // MARK: - Criterion 4
+
+    @Test func criterion4ASecondShareOfTheSameKindIsKeptAsAConfirmation() async throws {
+        let a = try await signUp()
+        let b = try await signUp()
+        let phoneA = try Phone(a.auth.api)
+        let phoneB = try Phone(b.auth.api)
+        let placeId = place()
+        let gymA = try phoneA.mapsGym(placeId)
+        let original = try phoneA.add(gymA, "cable-station")
+        try await phoneA.share(original, as: a.userId)
+
+        let gymB = try phoneB.mapsGym(placeId)
+        _ = try await phoneB.client.refresh(gymId: gymB.id, force: true)
+        let mine = try phoneB.add(gymB, "cable-station", loads: .stack(maxKg: 70, stepKg: 10))
+        try await phoneB.share(mine, as: b.userId)
+
+        let waiting = try #require(try phoneB.repo.listing(mine.id))
+        #expect(waiting.uploadState == .waitingForChoice)
+        #expect(try phoneB.outbox.duplicates(listingId: mine.id).map(\.id) == [original.id])
+
+        _ = try phoneB.outbox.keepExisting(listingId: mine.id, existingId: original.id, ownerId: b.userId)
+        await phoneB.outbox.run(userId: b.userId)
+        #expect(try phoneB.repo.listing(mine.id) == nil)
+        #expect(try phoneB.repo.listing(original.id)?.confirmCount == 1)
+
+        let server = try await phoneB.catalog.publicListings(gymId: try #require(phoneB.repo.gym(gymB.id)?.remoteId)).listings
+        #expect(server.map(\.id) == [original.id])
+        #expect(server.first?.confirmCount == 1)
+        #expect(server.first?.confirmedByMe == true)
+
+        _ = try await phoneA.client.refresh(gymId: gymA.id, force: true)
+        let theirs = try #require(try phoneA.repo.listing(original.id))
+        #expect(theirs.confirmCount == 1)
+        #expect(theirs.isOwn)
+        try await a.deleteAccount()
+        try await b.deleteAccount()
+    }
+
+    // MARK: - A lost answer
+
+    /// Sends the first share to the real server and then drops the answer, as a connection lost on the way back does.
+    private final class LosesTheFirstAnswer: GymCatalogTransport, @unchecked Sendable {
+        let base: ApiGymCatalogTransport
+        private let lock = NSLock()
+        private var lost = false
+        init(_ base: ApiGymCatalogTransport) { self.base = base }
+
+        func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { try await base.publicGym(mapsPlaceId: mapsPlaceId) }
+        func publicListings(gymId: UUID) async throws -> PublicListings { try await base.publicListings(gymId: gymId) }
+        func publicItems(kindId: String) async throws -> [RemoteItem] { try await base.publicItems(kindId: kindId) }
+        func findOrCreateGym(mapsPlaceId: String, name: String, address: String?, latitude: Double?,
+                             longitude: Double?) async throws -> UUID {
+            try await base.findOrCreateGym(mapsPlaceId: mapsPlaceId, name: name, address: address, latitude: latitude,
+                                           longitude: longitude)
+        }
+        func share(_ request: ShareRequest) async throws -> ShareResult {
+            let result = try await base.share(request)
+            let first = lock.withLock { () -> Bool in defer { lost = true }; return !lost }
+            if first { throw GymCatalogError.offline }
+            return result
+        }
+        func confirm(listingId: UUID) async throws -> Int { try await base.confirm(listingId: listingId) }
+        func uploadSharedPhoto(_ data: Data, name: String) async throws -> String {
+            try await base.uploadSharedPhoto(data, name: name)
+        }
+        func deleteSharedPhoto(path: String) async throws { try await base.deleteSharedPhoto(path: path) }
+        func deleteAllPhotos() async throws { try await base.deleteAllPhotos() }
+        func detachAllPhotos() async throws { try await base.detachAllPhotos() }
+        func report(targetType: GymTargetType, targetId: UUID, reason: ReportReason, note: String?) async throws {
+            try await base.report(targetType: targetType, targetId: targetId, reason: reason, note: note)
+        }
+        func blockAuthor(targetType: GymTargetType, targetId: UUID) async throws {
+            try await base.blockAuthor(targetType: targetType, targetId: targetId)
+        }
+        func unblockAll() async throws -> Int { try await base.unblockAll() }
+        func isAdmin() async throws -> Bool { try await base.isAdmin() }
+        func moderationQueue() async throws -> [ModerationEntry] { try await base.moderationQueue() }
+        func moderate(targetType: GymTargetType, targetId: UUID, action: ModerationAction) async throws -> String? {
+            try await base.moderate(targetType: targetType, targetId: targetId, action: action)
+        }
+        func moderationPhotoDeleted(path: String) async throws { try await base.moderationPhotoDeleted(path: path) }
+        func publicPhotoURL(path: String) -> URL? { base.publicPhotoURL(path: path) }
+    }
+
+    @Test func aShareWhoseAnswerWasLostIsRetriedIntoOneListing() async throws {
+        let account = try await signUp()
+        let phone = try Phone(account.auth.api)
+        let flaky = LosesTheFirstAnswer(phone.catalog)
+        let outbox = ShareOutbox(repository: phone.repo, transport: flaky,
+                                 photoData: { _ in GymIntegration.jpeg }, now: Date.init)
+        let gym = try phone.mapsGym(place())
+        let listing = try phone.add(gym, "cable-station", photo: "mine.jpg")
+        try outbox.enqueueShare(listingId: listing.id, ownerId: account.userId)
+
+        await outbox.run(userId: account.userId)
+        #expect(outbox.pendingCount == 1, "the answer was lost, so the share is still queued")
+        let photo = try #require(try phone.record(listing.id)?.remotePhotoPath)
+        let serverGym = try #require(try phone.repo.gym(gym.id)?.remoteId)
+
+        await outbox.run(userId: account.userId)
+        #expect(outbox.pendingCount == 0)
+        #expect(try phone.record(listing.id)?.uploadStateRaw == UploadState.uploaded.rawValue)
+        #expect(try phone.record(listing.id)?.remotePhotoPath == photo, "the photo is not uploaded twice")
+        let onServer = try await phone.catalog.publicListings(gymId: serverGym).listings
+        #expect(onServer.map(\.id) == [listing.id], "one row on the server")
+        try await account.deleteAccount()
+    }
+
+    // MARK: - Borrowed photo
+
+    @Test func aListingWithoutAPhotoBorrowsOneFromTheCatalogueUntilItIsFlagged() async throws {
+        let a = try await signUp()
+        let b = try await signUp()
+        let c = try await signUp()
+        let d = try await signUp()
+        let phoneA = try Phone(a.auth.api)
+        let phoneB = try Phone(b.auth.api)
+        let gymA = try phoneA.mapsGym(place())
+        let withPhoto = try phoneA.add(gymA, "cable-station", brand: "E2E Hammer", photo: "a.jpg")
+        try await phoneA.share(withPhoto, as: a.userId)
+        let photoName = try #require(try phoneA.repo.listing(withPhoto.id).flatMap { _ in
+            try phoneA.container.mainContext.fetch(FetchDescriptor<GymListingRecord>()).first?.remotePhotoPath
+        })
+
+        let gymB = try phoneB.mapsGym(place())
+        let without = try phoneB.add(gymB, "cable-station", brand: "E2E Hammer")
+        try await phoneB.share(without, as: b.userId)
+        let serverB = try await phoneB.catalog.publicListings(gymId: try #require(phoneB.repo.gym(gymB.id)?.remoteId)).listings
+        #expect(serverB.first?.photoPath == nil, "share_listing with no photo stores none")
+
+        _ = try await phoneB.client.refresh(gymId: gymB.id, force: true)
+        let borrowed = try #require(try phoneB.repo.listing(without.id)).item
+        #expect(borrowed.catalogPhotoPath == photoName)
+        #expect(borrowed.catalogPhotoListingId == withPhoto.id)
+        #expect(try phoneB.repo.listing(without.id)?.photoFile == nil)
+
+        let url = try #require(phoneB.catalog.publicPhotoURL(path: photoName))
+        let (_, response) = try await URLSession.shared.data(from: url)
+        let http = try #require(response as? HTTPURLResponse)
+        #expect(http.statusCode == 200)
+        #expect(http.value(forHTTPHeaderField: "Content-Type") == "image/jpeg")
+
+        for reporter in [b, c, d] { try await report(withPhoto.id, as: reporter) }
+        _ = try await phoneB.client.refresh(gymId: gymB.id, force: true)
+        let after = try #require(try phoneB.repo.listing(without.id)).item
+        #expect(after.catalogPhotoPath == nil)
+        #expect(after.catalogPhotoListingId == nil)
+
+        try? await a.catalog.deleteSharedPhoto(path: photoName)
+        for account in [a, b, c, d] { try await account.deleteAccount() }
+    }
+
+    // MARK: - Criterion 6
+
+    @Test func criterion6AThisPhoneOnlyGymAndListingNeverReachAnyTable() async throws {
+        let a = try await signUp()
+        let tag = UUID().uuidString.lowercased()
+        let phone = try Phone(a.auth.api)
+        let deviceGym = "e2e-private-gym-\(tag)", deviceNote = "e2e-private-note-\(tag)"
+        let deviceBrand = "e2e-private-brand-\(tag)", mapsNote = "e2e-maps-note-\(tag)"
+        let syncedGym = "e2e-synced-gym-\(tag)"
+
+        let home = try phone.repo.addPrivateGym(name: deviceGym, address: "e2e-private-address-\(tag)")
+        try phone.add(home, "cable-station", brand: deviceBrand, photo: "a.jpg", notes: deviceNote)
+        let maps = try phone.mapsGym(place())
+        try phone.add(maps, "cable-station", notes: mapsNote)
+        // The control: the same machinery must carry a synced gym, or an empty result below would prove nothing.
+        let synced = try phone.repo.addPrivateGym(name: syncedGym, address: nil)
+        try phone.repo.makeSynced(gym: synced.id)
+
+        let defaults = UserDefaults(suiteName: "gym-e2e-\(tag)")!
+        defer { UserDefaults.standard.removePersistentDomain(forName: "gym-e2e-\(tag)") }
+        let store = SyncStore(context: phone.container.mainContext, defaults: defaults)
+        let engine = SyncEngine(store: store, transport: ApiSyncTransport(api: a.auth.api))
+        await engine.sync()
+        await phone.outbox.run(userId: a.userId)
+        _ = try await phone.client.refresh(gymId: home.id, force: true)
+        _ = try await phone.client.refresh(gymId: maps.id, force: true)
+        await engine.sync()
+
+        for marker in [deviceGym, deviceNote, deviceBrand, mapsNote, "e2e-private-address-\(tag)"] {
+            hand("absent", marker)
+        }
+        hand("present", syncedGym)
+        let own = try #require(try phone.repo.listing(try phone.repo.listings(gymId: home.id).first!.id))
+        #expect(own.visibility == .device)
+        #expect(own.photoFile == "a.jpg")
+        #expect(try phone.repo.listings(gymId: maps.id).first?.visibility == .device)
+        // The account stays: deleting it would remove the control row too. The script reads the tables, then removes
+        // every gym-*@test.local user.
+    }
+}
+```
+
+- [ ] **Step 4: Admins, and the gym tables, in the integration script**
+
+In `scripts/test-sync-integration.sh`, after `start_test_server`, add:
+
+```bash
+
+# GymModerationIntegrationTests: accounts named sync-admin-*@test.local become admins when they sign up, in this
+# throwaway D1 only (never a migration).
+(cd "$ROOT/server" && npx wrangler d1 execute gymrollins --local --persist-to "$TEST_API_STATE" --command \
+  "CREATE TRIGGER test_admins AFTER INSERT ON \"user\" WHEN NEW.email LIKE 'sync-admin-%@test.local' BEGIN INSERT INTO app_admins (user_id, created_at) VALUES (NEW.id, strftime('%Y-%m-%dT%H:%M:%f', 'now') || '000Z'); END") \
+  > /dev/null
+```
+
+and replace the last line of the `left=$(test_d1_count "select …` sum,
+`  + (select count(*) from bodyweight where user_id in ($ids)) as n")`, with:
+
+```bash
+  + (select count(*) from bodyweight where user_id in ($ids))
+  + (select count(*) from gyms where owner_id in ($ids) or created_by in ($ids))
+  + (select count(*) from gym_equipment where owner_id in ($ids) or added_by in ($ids))
+  + (select count(*) from equipment_items where created_by in ($ids))
+  + (select count(*) from photo_objects where owner_id in ($ids))
+  + (select count(*) from equipment_confirmations where user_id in ($ids))
+  + (select count(*) from reports where reporter_id in ($ids))
+  + (select count(*) from user_blocks where blocker_id in ($ids) or blocked_id in ($ids))
+  + (select count(*) from gym_unblocks where user_id in ($ids))
+  + (select count(*) from app_admins where user_id in ($ids)) as n")
+```
+
+Change its header's last sentence to `The Supabase-only suites left (proposals, Claude's grants) are parked until plan
+29.`
+
+- [ ] **Step 5: The gym E2E on its own throwaway Worker**
+
+Replace `scripts/test-gym-e2e.sh` with:
+
+```bash
+#!/usr/bin/env bash
+# Shared gym catalogue end to end: two users with the real transports, against a throwaway LOCAL Worker
+# (scripts/test-server.sh: port 8788, a state folder of its own, removed afterwards; never the development data).
+# Afterwards, D1 is searched for every marker the Swift suite recorded: "This phone only" text must never have reached
+# a gym, a listing or an item, and the control must have.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/test-server.sh
+source "$ROOT/scripts/test-server.sh"
+
+MARKERS_FILE="$(mktemp -t gym-e2e-markers)"
+cleanup() {
+  local status=$?
+  rm -f "$MARKERS_FILE"
+  stop_test_server
+  exit "$status"
+}
+trap cleanup EXIT
+start_test_server
+
+export API_URL="$TEST_API_URL" GYM_E2E_MARKERS_FILE="$MARKERS_FILE"
+(cd "$ROOT/ios/Packages/GymSync" && swift test --filter GymCatalogE2ETests)
+
+# Criterion 6: each marker in every text column that could hold it. instr(), because D1 refuses LIKE patterns over
+# 50 bytes, and a marker is longer. The photo rules over HTTP are server/test/photos.test.ts's now.
+count_rows() {
+  test_d1_count "select
+      (select count(*) from gyms
+        where instr(name || '|' || coalesce(address, '') || '|' || coalesce(maps_place_id, ''), '$1') > 0)
+    + (select count(*) from gym_equipment
+        where instr(coalesce(notes, '') || '|' || coalesce(private_brand, '') || '|' || coalesce(private_model, ''), '$1') > 0)
+    + (select count(*) from equipment_items
+        where instr(coalesce(brand, '') || '|' || coalesce(model, ''), '$1') > 0) as n"
+}
+absent=0; present=0
+while read -r role marker; do
+  [[ "$marker" =~ ^e2e-[a-z-]+-[0-9a-f-]{36}$ ]] || { echo "Unexpected marker: $marker" >&2; exit 1; }
+  found=$(count_rows "$marker")
+  case "$role" in
+    absent) [[ "$found" == "0" ]] || { echo "FAIL: '$marker' is in $found shared row(s)" >&2; exit 1; }; absent=$((absent + 1)) ;;
+    present) [[ "$found" != "0" ]] || { echo "FAIL: control '$marker' never reached the server" >&2; exit 1; }; present=$((present + 1)) ;;
+  esac
+done < "$MARKERS_FILE"
+[[ "$absent" -gt 0 && "$present" -gt 0 ]] || { echo "FAIL: no markers were recorded ($absent absent, $present present)" >&2; exit 1; }
+echo "Stays on the phone verified: $absent markers absent from gyms, gym_equipment, equipment_items; $present control present"
+```
+
+In `scripts/test-all.sh`, replace plan 27's `GYM_E2E` block with:
+
+```bash
+# Gyms shared between two users, on a throwaway local Worker (no Docker): opt in with GYM_E2E=1.
+if [[ "${GYM_E2E:-0}" == "1" ]]; then
+  echo "==> Shared gym catalogue E2E (throwaway local Worker on :8788)"
+  "$ROOT/scripts/test-gym-e2e.sh"
+fi
+```
+
+- [ ] **Step 6: Run them**
+
+```bash
+scripts/test-sync-integration.sh
+GYM_E2E=1 scripts/test-gym-e2e.sh
+```
+
+Expected (leave the dev Worker alone; the scripts need port 8788 free):
+- the first ends `Test run with 39 tests in 9 suites passed` and `Account deletion verified: N deleted users, 0 rows
+  left`;
+- the second ends `Stays on the phone verified: … markers absent …; … control present`.
+
+Plan 27's suites are 15 of the 39. The rest are this task's: 3 in account photos, 1 in moderation, 9 in the catalogue,
+6 in private gyms and 5 in the E2E.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add ios/Packages/GymSync scripts/test-sync-integration.sh scripts/test-gym-e2e.sh scripts/test-all.sh
+git commit -m "test(sync): the gym, photo and moderation suites on the Worker"
+```
+
+- [ ] **Step 8: Review**
+
+A fresh reviewer reads `git diff HEAD~1`:
+1. **Spec compliance:** spec section 8 (the same suites, on `wrangler dev`) and decision 25. Every check the parked
+   suites made is still made, or was replaced by its signed-out counterpart.
+2. **Quality:** the `code-reviewer` agent.
+3. **Security:** the `security-reviewer` agent:
+   - the admin trigger exists only in the throwaway D1;
+   - every script refuses to run without its own Worker;
+   - nothing is written to `server/.wrangler/state`.
+
+---
+
+### Task 17: The server-move check, with gym links in D1
+
+Plan 27's check compares counts and the phone's records. Its decision 12 left D1's gym links to this plan. Gyms now
+sync, so the check also compares private gyms, private listings, and the workouts and entries that link them.
+
+**Files:**
+- Modify: `scripts/server-move-check.sh`
+
+- [ ] **Step 1: Count the gyms and their links**
+
+In `scripts/server-move-check.sh`, add to `CHECKS` after the `muscle targets` line:
+
+```bash
+  "private gyms|select count(*) from ZGYMRECORD where ZVISIBILITYRAW = 'synced'|select count(*) as n from gyms where visibility = 'private'"
+  "private listings|select count(*) from ZGYMLISTINGRECORD where ZVISIBILITYRAW = 'synced'|select count(*) as n from gym_equipment where visibility = 'private'"
+  "workouts at a gym|select count(*) from ZWORKOUTRECORD w join ZGYMRECORD g on g.ZID = w.ZGYMID where w.ZISACTIVE = 0 and g.ZVISIBILITYRAW = 'synced'|select count(*) as n from workouts where gym_id is not null"
+  "entries at a listing|select count(*) from ZWORKOUTENTRYRECORD e join ZGYMLISTINGRECORD l on l.ZID = e.ZGYMLISTINGID join ZWORKOUTRECORD w on e.ZWORKOUT = w.Z_PK where w.ZISACTIVE = 0 and l.ZVISIBILITYRAW = 'synced'|select count(*) as n from workout_entries where gym_equipment_id is not null"
+```
+
+Only links to synced gyms and listings ever leave the phone (plan 27, decision 12); "This phone only" ones stay local.
+So the phone's side counts those, and D1's counts every link it kept.
+
+In the `unsynced=` sum, add before its closing `")"`:
+
+```bash
+  + (select count(*) from ZGYMRECORD where ZVISIBILITYRAW = 'synced' and ZDIRTY = 1)
+  + (select count(*) from ZGYMLISTINGRECORD where ZVISIBILITYRAW = 'synced' and ZDIRTY = 1)
+```
+
+- [ ] **Step 2: Run the check**
+
+Use a fresh copy of the phone's store, as plan 27's Task 10 says (backup steps there), outside the repo. Then:
+
+```bash
+scripts/server-move-check.sh <phone-backup-dir> <work-dir>
+```
+
+Expected:
+- every line equal between the phone and D1;
+- `Records still unsynced on the phone: 0`, `Stores match apart from sync state.`, `Server move verified.`.
+
+The owner's copy has one gym, "This phone only", so the four new lines read 0 and 0. That the links themselves arrive
+is shown by Task 16's `aPhoneMovedFromAnotherServerSendsItsGymsBeforeTheWorkoutsThatLinkThem`. Write the printed
+counts (numbers only) into this plan's Outcome, then remove the work folder.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add scripts/server-move-check.sh
+git commit -m "test(app): the server-move check counts private gyms, listings and their links"
+```
+
+- [ ] **Step 4: Review**
+
+A fresh reviewer reads `git diff HEAD~1`:
+1. **Spec compliance:** spec section 8's server-move check and plan 27's decision 12.
+2. **Security:** the `security-reviewer` agent. As in plan 27, the copies stay outside the repo, and only counts are
+   printed.
+
+---
+
+### Task 18: Finish
+
+- [ ] **Step 1: Run everything this plan touched**
+
+```bash
+cd server && npx vitest run && npx tsc --noEmit && cd ..
+node --test scripts/upload-photos.test.mjs
+(cd ios/Packages/GymSync && swift test --filter GymSyncTests)
+(cd ios/Packages/GymData && swift test)
+scripts/test-sync-integration.sh
+GYM_E2E=1 scripts/test-gym-e2e.sh
+```
+
+Expected:
+- `Tests  284 passed (284)` and `# pass 24`;
+- `Test run with 207 tests in 27 suites passed`, and 365 tests in 50 suites;
+- 39 integration tests;
+- the E2E's markers verified.
+
+- [ ] **Step 2: Docs**
+
+- In `server/README.md`, under the iOS test paragraph that plan 27 added, add: "The gym suites
+  (`GymSyncIntegrationTests`, `scripts/test-gym-e2e.sh`) make `sync-admin-*@test.local` accounts admins with a
+  trigger in their throwaway D1."
+- In `docs/plans/2026-11-08-plan-27-ios-client-server-move.md` nothing changes. This plan's Outcome records what plan
+  27 handed over and how it was closed.
+
+- [ ] **Step 3: Commit and outcome**
+
+```bash
+git add server/README.md
+git commit -m "docs: the gym suites' admins on the test Worker"
+```
+
+Then add `## Outcome` to this plan, as plan 26 did:
+- commits per task;
+- final counts;
+- differences from the plan as written;
+- what passes to plans 29 and 30: proposals and grants still parked; `SupabaseGymCatalogTransport*`,
+  `SupabaseStoragePhotoProvider`'s Supabase-era tests and `SUPABASE_*` to delete; the remote R2 buckets and the
+  exercise-photo upload to the deployed Worker in the Cloudflare checklist.
+
+## Self-review of the iOS part
+
+**Coverage** (the controller's list, and plan 27's "Handed to later plans → Plan 28"):
+
+| Asked for | Where |
+|---|---|
+| `ApiGymCatalogTransport` behind the protocol, in place of `UnavailableGymCatalogTransport` | Tasks 12, 15 |
+| Gym and listing sync in `ApiSyncTransport`, `servesGyms` true | Task 13 |
+| Photo upload, read, delete, list, detach | Tasks 12 (shared, list, detach), 13 (private) |
+| `GymCatalogErrors` from `ApiError`, code first, then status, same messages | Task 11 |
+| `{id}`, `{confirm_count}`, `{cleared}`, `{admin}` | Task 12 |
+| `+` as `%2B` in `?place=` | `ApiClient` (plan 27); pinned by Task 12's test, probed on the Worker |
+| `PHOTO_HOSTING = storage` from `<API_URL>/photos/exercises/…` | Task 15 |
+| The five parked suites, and `GYM_E2E` | Task 16 |
+| The catalogue cache after a move | Task 14 (decision 23) |
+| Workouts that went up before their gym (plan 27's handoff) | Task 16's move test |
+| The server-move check with gym links in D1 | Task 17 |
+| Both open questions | Decided (16, 17) |
+
+**Placeholders:** none. The Swift of Tasks 11–14 and 16 is the code that compiled and passed in the scratch copy
+(decision 26). The app's Swift in Task 15 and the scripts weren't run ahead; their SQL was.
+
+**Names used across tasks:** `ApiGymCatalogTransport`, `GymCatalogRows.array(in:key:)`, `OwnedPhotos`,
+`ApiSyncTransport.privatePhotoPath`, `forgetOldCatalogue`, `GymIntegration.jpeg` / `signedOutCatalog` /
+`signedOutTransport` / `isServed`, `Account.catalog`, `HostedPhotoProvider`, `PhotoHostingConfig.apiURL`,
+`WORKER_STATE`.
