@@ -12,6 +12,9 @@
 //                             supabase/.env.local; refuses anything that isn't a loopback URL.
 //   --target remote:          SUPABASE_URL (https) + SUPABASE_SERVICE_ROLE_KEY from the environment or the gitignored
 //                             app/.env. The key is never logged.
+//   --target worker:          the local Worker (scripts/server-up.sh) at WORKER_URL or http://127.0.0.1:8787. Writes go
+//                             through `wrangler r2 object put --local` into server/.wrangler/state, the folder
+//                             `wrangler dev` reads; reads go through the Worker's /photos/exercises route. Loopback only.
 //
 // Idempotent: an object is skipped when the bucket already holds one with the same size and MD5 (Storage's eTag for
 // single-part uploads). Photos get `cache-control: max-age=31536000`; the manifest `max-age=60`. The manifest is built
@@ -26,6 +29,7 @@
 //   POST /storage/v1/object/<bucket>/<name>       upload (x-upsert: true overwrites; cache-control stored as sent)
 //   POST /storage/v1/object/list/<bucket>         { prefix, limit, offset, sortBy } -> [{ name, metadata: { size, eTag } }]
 //   GET  /storage/v1/object/authenticated/<bucket>/<name>  read with the service key (bypasses the public CDN copy)
+import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -49,7 +53,12 @@ export const PATHS = {
   photoDirs: [resolve(ROOT, 'media/photos'), resolve(ROOT, 'ios/GymRollins/Resources/OwnPhotos')],
   envFile: resolve(ROOT, '.env'),
   localEnvFile: resolve(ROOT, 'supabase/.env.local'),
+  /** The local Worker's project and state folder (wrangler dev's default, named in scripts/server-up.sh). */
+  serverDir: resolve(ROOT, 'server'),
+  workerState: resolve(ROOT, 'server/.wrangler/state'),
 }
+
+const DEFAULT_WORKER_URL = 'http://127.0.0.1:8787'
 
 // ---------- args / config ----------
 
@@ -64,7 +73,9 @@ export function parseArgs(argv) {
     if (flag === '--dry-run') args.dryRun = true
     else if (flag === '--target') {
       args.target = value()
-      if (!['local', 'remote'].includes(args.target)) throw new Error(`--target must be local or remote, got "${args.target}"`)
+      if (!['local', 'remote', 'worker'].includes(args.target)) {
+        throw new Error(`--target must be local, remote or worker, got "${args.target}"`)
+      }
     } else if (flag === '--dir') args.dirs.push(value())
     else throw new Error(`Unknown flag ${flag}`)
   }
@@ -95,6 +106,11 @@ const trimSlash = url => url.replace(/\/+$/, '')
 
 /** Where to upload and with which key. Local: supabase/.env.local only (never a cloud URL). Remote: env, then .env. */
 export function resolveTarget({ target, env = process.env, envFile = PATHS.envFile, localEnvFile = PATHS.localEnvFile }) {
+  if (target === 'worker') {
+    const url = trimSlash(env.WORKER_URL?.trim() || DEFAULT_WORKER_URL)
+    if (!isLocalUrl(url)) throw new Error(`WORKER_URL (${url}) is not the local Worker; remote buckets come with the deploy`)
+    return { url, worker: true }
+  }
   if (target === 'local') {
     if (!existsSync(localEnvFile)) throw new Error(`Missing ${localEnvFile} — run scripts/supabase-up.sh first`)
     const local = readEnvFile(localEnvFile)
@@ -227,6 +243,57 @@ function storageClient({ url, key, fetch }) {
   return { list, upload, storedJSON }
 }
 
+/**
+ * The local Worker. Writes go through `wrangler r2 object put --local` into server/.wrangler/state, which a running
+ * `wrangler dev` sees at once; reads go through the Worker's public route, whose ETag is the object's MD5. Only the
+ * local photos' names are looked up: nothing else writes this local bucket.
+ */
+export function workerClient({ url, fetch, run = runWrangler }) {
+  const publicURL = name => `${url}/photos/exercises/${encodeURIComponent(name)}`
+
+  async function list(local = []) {
+    const objects = new Map()
+    for (const { name } of local) {
+      const response = await fetch(publicURL(name), { method: 'HEAD' })
+      if (response.status === 404) continue
+      if (!response.ok) throw new Error(`Reading ${name} from the local Worker failed: HTTP ${response.status}`)
+      objects.set(name, {
+        size: Number(response.headers.get('content-length')),
+        etag: String(response.headers.get('etag') ?? '').replaceAll('"', ''),
+      })
+    }
+    return objects
+  }
+
+  async function upload(name, body, contentType, cacheControl) {
+    const args = ['r2', 'object', 'put', `${BUCKET}/${name}`, '--local', '--persist-to', PATHS.workerState, '--pipe',
+      '--content-type', contentType, '--cache-control', cacheControl]
+    const { status, stderr } = await run(args, body)
+    if (status !== 0) throw new Error(`wrangler exited with ${status}: ${String(stderr).trim().split('\n').pop()}`)
+  }
+
+  async function storedJSON(name) {
+    const response = await fetch(publicURL(name), { headers: { 'cache-control': 'no-cache' } })
+    if (!response.ok) return null
+    try { return await response.json() } catch { return null }
+  }
+
+  return { list, upload, storedJSON }
+}
+
+/** `npx wrangler <args>` in server/, with `input` on stdin. Never without --local: no Cloudflare account is used. */
+export function runWrangler(args, input) {
+  if (!args.includes('--local')) return Promise.reject(new Error('wrangler runs only with --local here'))
+  return new Promise((done, fail) => {
+    const child = spawn('npx', ['wrangler', ...args], { cwd: PATHS.serverDir, stdio: ['pipe', 'ignore', 'pipe'] })
+    let stderr = ''
+    child.stderr.on('data', chunk => { stderr += chunk })
+    child.on('error', fail)
+    child.on('close', status => done({ status, stderr }))
+    child.stdin.end(input)
+  })
+}
+
 async function withRetry(fn, { attempts = MAX_ATTEMPTS, delayMs = 500 } = {}) {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -252,11 +319,11 @@ async function forEachLimited(items, limit, fn) {
  */
 export async function uploadPhotos({
   url, key, dirs = PATHS.photoDirs, dryRun = false, fetch = globalThis.fetch, log = console.log,
-  now = () => new Date(), retryDelayMs = 500,
+  now = () => new Date(), retryDelayMs = 500, worker = false, run = runWrangler,
 }) {
-  const client = storageClient({ url, key, fetch })
+  const client = worker ? workerClient({ url, fetch, run }) : storageClient({ url, key, fetch })
   const local = scanPhotos(dirs, log)
-  const remote = await client.list()
+  const remote = await client.list(local)
   const { upload, skip } = planUploads(local, remote)
   log(`${local.length} local photos in ${dirs.join(', ')}; ${skip.length} already in ${BUCKET}, ${upload.length} to upload (${url})`)
 
@@ -271,7 +338,7 @@ export async function uploadPhotos({
 
   let uploaded = 0
   let failed = 0
-  await forEachLimited(upload, CONCURRENCY, async photo => {
+  await forEachLimited(upload, worker ? 1 : CONCURRENCY, async photo => {
     try {
       await withRetry(() => client.upload(photo.name, readFileSync(photo.path), 'image/jpeg', PHOTO_CACHE),
         { delayMs: retryDelayMs })
@@ -283,7 +350,7 @@ export async function uploadPhotos({
     }
   })
 
-  const objects = await client.list()
+  const objects = await client.list(local)
   const manifest = buildManifest([...objects].map(([name, o]) => ({ name, etag: o.etag })), now())
   const photos = Object.keys(manifest.photos).length
   if (sameContent(manifest, await client.storedJSON(MANIFEST_NAME))) {
@@ -298,9 +365,9 @@ export async function uploadPhotos({
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const { url, key } = resolveTarget({ target: args.target })
+  const { url, key, worker } = resolveTarget({ target: args.target })
   const dirs = args.dirs.length > 0 ? args.dirs.map(d => resolve(d)) : PATHS.photoDirs
-  const summary = await uploadPhotos({ url, key, dirs, dryRun: args.dryRun })
+  const summary = await uploadPhotos({ url, key, worker, dirs, dryRun: args.dryRun })
   console.log(`done: ${summary.uploaded} ${args.dryRun ? 'to upload' : 'uploaded'}, ${summary.skipped} skipped, ` +
     `${summary.failed} failed; manifest ${summary.manifest} (${summary.photos} exercises)`)
   if (summary.failed > 0) process.exitCode = 1

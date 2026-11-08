@@ -9,6 +9,7 @@ import type { AppEnv } from './env.ts'
 import { catalogueRoutes } from './gyms/routes.ts'
 import { errorBody, onError } from './http/errors.ts'
 import { moderationRoutes } from './moderation/routes.ts'
+import { publicPhotoRoutes } from './photos/public.ts'
 import { photoRoutes } from './photos/routes.ts'
 import { syncRoutes } from './sync/routes.ts'
 
@@ -39,5 +40,6 @@ v1.route('/', catalogueRoutes)
 v1.route('/', moderationRoutes)
 v1.route('/photos', photoRoutes)
 app.route('/v1', v1)
+app.route('/photos', publicPhotoRoutes)
 
 export default app

@@ -128,6 +128,19 @@ the build settings. UI tests (`-uiTesting`) never touch Storage.
    generator's style reference) — the bundle stays a fallback only for what's left in it. Keep every `kind-*.jpg`: they are
    the offline fallback for the equipment stock photos, and a test needs them.
 
+### The local Worker (plan 28)
+
+The Cloudflare Worker serves the same bucket at `<API_URL>/photos/exercises/<name>` (`manifest.json` included), from
+R2. Locally, with `scripts/server-up.sh` running:
+
+    node scripts/upload-photos.mjs --target worker --dry-run
+    node scripts/upload-photos.mjs --target worker
+
+It writes with `wrangler r2 object put --local` into `server/.wrangler/state` (no Cloudflare account) and reads back
+through the Worker, so a second run uploads nothing. `WORKER_URL` overrides `http://127.0.0.1:8787` (loopback only).
+The app switches `PHOTO_HOSTING = storage` to the Worker in the iOS part of plan 28; the deployed bucket is filled
+after the deploy (plan 30's checklist).
+
 ### Tests
 
 - Uploader: `node --test scripts/upload-photos.test.mjs` (mocked Storage API; in `scripts/test-all.sh`).

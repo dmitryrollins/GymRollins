@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
-  BUCKET, buildManifest, isLocalUrl, parseArgs, planUploads, resolveTarget, scanPhotos, uploadPhotos,
+  BUCKET, PATHS, buildManifest, isLocalUrl, parseArgs, planUploads, resolveTarget, runWrangler, scanPhotos, uploadPhotos,
+  workerClient,
 } from './upload-photos.mjs'
 
 const URL_LOCAL = 'http://127.0.0.1:55421'
@@ -315,4 +316,60 @@ test('the CLI runs from a checkout path with spaces (entry-point check is path-s
   const run = spawnSync(process.execPath, [script, '--dry-run'], { encoding: 'utf8' })
   assert.equal(run.status, 1, 'no local stack env in the copy -> the CLI must run and fail loudly, not exit 0 silently')
   assert.match(run.stderr, /supabase-up\.sh/)
+})
+
+/** The local Worker's public route over a map of objects, and a fake wrangler that writes into that map. */
+function fakeWorker({ objects = {} } = {}) {
+  const store = new Map(Object.entries(objects).map(([name, body]) => [name, Buffer.from(body)]))
+  const runs = []
+  const fetch = async (input, init = {}) => {
+    const url = new URL(input)
+    const prefix = '/photos/exercises/'
+    const body = url.pathname.startsWith(prefix) ? store.get(decodeURIComponent(url.pathname.slice(prefix.length))) : null
+    if (!body) return new Response('{"error":{"code":"not_found"}}', { status: 404 })
+    const headers = { etag: `"${md5(body)}"`, 'content-length': String(body.length) }
+    return new Response(init.method === 'HEAD' ? null : body, { status: 200, headers })
+  }
+  const run = async (args, input) => {
+    runs.push(args)
+    store.set(args[3].slice(`${BUCKET}/`.length), Buffer.from(input))
+    return { status: 0, stderr: '' }
+  }
+  return { fetch, run, runs, store }
+}
+
+test('resolveTarget worker: the local Worker only, at WORKER_URL or 127.0.0.1:8787', () => {
+  assert.equal(parseArgs(['--target', 'worker']).target, 'worker')
+  assert.deepEqual(resolveTarget({ target: 'worker', env: {} }), { url: 'http://127.0.0.1:8787', worker: true })
+  assert.deepEqual(resolveTarget({ target: 'worker', env: { WORKER_URL: 'http://localhost:9000/' } }),
+    { url: 'http://localhost:9000', worker: true })
+  assert.throws(() => resolveTarget({ target: 'worker', env: { WORKER_URL: 'https://gymrollins.example.workers.dev' } }),
+    /not the local Worker/)
+})
+
+test('uploadPhotos --target worker: wrangler --local into server/.wrangler/state, then the manifest; again, a no-op',
+  async () => {
+    const dir = photoDir()
+    const worker = fakeWorker()
+    const { log } = quiet()
+    const options = { url: 'http://127.0.0.1:8787', worker: true, dirs: [dir], fetch: worker.fetch, run: worker.run, log }
+    const first = await uploadPhotos(options)
+    assert.equal(first.uploaded, 3)
+    assert.equal(first.manifest, 'uploaded')
+    for (const args of worker.runs) {
+      assert.ok(args.includes('--local'))
+      assert.equal(args[args.indexOf('--persist-to') + 1], PATHS.workerState)
+    }
+    const last = worker.runs.at(-1)
+    assert.equal(last[3], `${BUCKET}/manifest.json`)
+    assert.equal(last[last.indexOf('--content-type') + 1], 'application/json')
+    assert.deepEqual(JSON.parse(worker.store.get('manifest.json')).photos, { '0227': 1, '0453': 2 })
+    const second = await uploadPhotos(options)
+    assert.equal(second.uploaded, 0)
+    assert.equal(second.skipped, 3)
+    assert.equal(second.manifest, 'unchanged')
+  })
+
+test('runWrangler refuses to run wrangler without --local', async () => {
+  await assert.rejects(runWrangler(['r2', 'object', 'put', `${BUCKET}/x.jpg`, '--pipe'], ''), /only with --local/)
 })

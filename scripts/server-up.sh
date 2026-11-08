@@ -13,5 +13,5 @@ if grep -q '^BETTER_AUTH_SECRET=replace-with' .dev.vars; then
   exit 1
 fi
 [[ -d node_modules ]] || npm ci
-npx wrangler d1 migrations apply gymrollins --local < /dev/null
-exec npx wrangler dev --local
+npx wrangler d1 migrations apply gymrollins --local --persist-to .wrangler/state < /dev/null
+exec npx wrangler dev --local --persist-to .wrangler/state
