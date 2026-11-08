@@ -1,8 +1,8 @@
 import Foundation
 
 /// Which photo URLs may be downloaded. Production is https-only. A DEBUG build may additionally load plain http from
-/// the local Supabase stack (127.0.0.1 / localhost, or the configured `SUPABASE_URL` host when it is a loopback/LAN
-/// address), so Storage-hosted photos can be tested against `scripts/supabase-up.sh`. A Release build never gets an
+/// a local Worker (127.0.0.1 / localhost, or the configured `API_URL` host when it is a loopback/LAN
+/// address), so hosted photos can be tested against `scripts/server-up.sh`. A Release build never gets an
 /// http allowance: `forBuild` returns `.httpsOnly` there and `debugLocal` doesn't exist.
 struct PhotoURLPolicy: Sendable, Equatable {
     /// Hosts (lowercased) that may be fetched over plain http. Empty = https only.
@@ -19,20 +19,20 @@ struct PhotoURLPolicy: Sendable, Equatable {
     }
 
     /// The policy for this build: DEBUG allows http to the local dev hosts, Release is https-only.
-    static func forBuild(supabaseURL: URL?) -> PhotoURLPolicy {
+    static func forBuild(apiURL: URL?) -> PhotoURLPolicy {
         #if DEBUG
-        return debugLocal(supabaseURL: supabaseURL)
+        return debugLocal(apiURL: apiURL)
         #else
         return .httpsOnly
         #endif
     }
 
     #if DEBUG
-    /// DEBUG only: http to loopback, plus the Supabase host when it is a local/LAN address (a device testing against
-    /// the Mac's stack). A public host never gets http, even in DEBUG.
-    static func debugLocal(supabaseURL: URL?) -> PhotoURLPolicy {
+    /// DEBUG only: http to loopback, plus the API host when it is a local/LAN address (a device testing against
+    /// the Mac's Worker). A public host never gets http, even in DEBUG.
+    static func debugLocal(apiURL: URL?) -> PhotoURLPolicy {
         var hosts: Set<String> = ["127.0.0.1", "localhost"]
-        if let host = supabaseURL?.host()?.lowercased(), isLocalDevHost(host) { hosts.insert(host) }
+        if let host = apiURL?.host()?.lowercased(), isLocalDevHost(host) { hosts.insert(host) }
         return PhotoURLPolicy(insecureHosts: hosts)
     }
     #endif

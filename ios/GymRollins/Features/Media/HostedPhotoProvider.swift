@@ -2,28 +2,28 @@ import Foundation
 import GymCore
 import Synchronization
 
-/// GymRollins' own photos hosted in the public `exercise-photos` Supabase Storage bucket (uploaded by
+/// GymRollins' own photos hosted in the public `exercise-photos` bucket behind the API (uploaded by
 /// `scripts/upload-photos.mjs`). Which exercises have photos comes from the bucket's manifest; the photo URLs are
-/// `<SUPABASE_URL>/storage/v1/object/public/exercise-photos/own-<id>-<frame>.jpg?v=<rev>`. Without a manifest (first
-/// launch offline, fetch failed) it answers nil, so the chain falls through to bundled / free-exercise-db photos.
-final class SupabaseStoragePhotoProvider: ExerciseMediaProvider, Sendable {
+/// `<API_URL>/photos/exercises/own-<id>-<frame>.jpg?v=<rev>`. Without a manifest (first launch offline, fetch failed)
+/// it answers nil, so the chain falls through to bundled / free-exercise-db photos.
+final class HostedPhotoProvider: ExerciseMediaProvider, Sendable {
     static let bucket = "exercise-photos"
 
-    /// `<SUPABASE_URL>/storage/v1/object/public/exercise-photos/`
+    /// `<API_URL>/photos/exercises/`
     let publicBaseURL: URL
     private let manifest: Mutex<StoragePhotoManifest?>
 
-    init(supabaseURL: URL, manifest: StoragePhotoManifest? = nil) {
-        publicBaseURL = Self.publicBaseURL(supabaseURL: supabaseURL)
+    init(apiURL: URL, manifest: StoragePhotoManifest? = nil) {
+        publicBaseURL = Self.publicBaseURL(apiURL: apiURL)
         self.manifest = Mutex(manifest)
     }
 
-    static func publicBaseURL(supabaseURL: URL) -> URL {
-        supabaseURL.appending(path: "storage/v1/object/public/\(bucket)/", directoryHint: .isDirectory)
+    static func publicBaseURL(apiURL: URL) -> URL {
+        apiURL.appending(path: "photos/exercises/", directoryHint: .isDirectory)
     }
 
-    static func manifestURL(supabaseURL: URL) -> URL {
-        publicBaseURL(supabaseURL: supabaseURL).appending(path: "manifest.json", directoryHint: .notDirectory)
+    static func manifestURL(apiURL: URL) -> URL {
+        publicBaseURL(apiURL: apiURL).appending(path: "manifest.json", directoryHint: .notDirectory)
     }
 
     var currentManifest: StoragePhotoManifest? { manifest.withLock { $0 } }
@@ -64,10 +64,10 @@ final class SupabaseStoragePhotoProvider: ExerciseMediaProvider, Sendable {
     /// The provider with the cached manifest (usable right away), plus a one-off refresh for this launch that swaps
     /// in the fresh manifest when it arrives and then calls `onChange` (the app bumps `MediaRevision`, so photo views
     /// already on screen reload). The returned task is only awaited by tests.
-    static func start(supabaseURL: URL, loader: StoragePhotoManifestLoader,
+    static func start(apiURL: URL, loader: StoragePhotoManifestLoader,
                       onChange: @escaping @MainActor @Sendable () -> Void = {})
-        -> (provider: SupabaseStoragePhotoProvider, refresh: Task<Void, Never>) {
-        let provider = SupabaseStoragePhotoProvider(supabaseURL: supabaseURL, manifest: loader.cached())
+        -> (provider: HostedPhotoProvider, refresh: Task<Void, Never>) {
+        let provider = HostedPhotoProvider(apiURL: apiURL, manifest: loader.cached())
         let refresh = Task.detached(priority: .utility) {
             if let fresh = await loader.refresh(), provider.apply(fresh) { await onChange() }
         }

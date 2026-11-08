@@ -90,6 +90,25 @@ import Testing
         #expect(rig.env.gymRevision == revision, "nothing changed, so nothing reloads")
     }
 
+    /// Decision 16: catalogue reads need a session. A signed-out refresh keeps the cached rows and the screens as they
+    /// are (the sign-in prompt belongs to the actions that need an account), and a later signed-in one works.
+    @Test func signedOutReadsKeepTheCachedRowsAndDoNotBreakTheScreens() async throws {
+        let (rig, stub) = try rig()
+        let gym = try mapsGym(rig)
+        stub.listings = [remote()]
+        await rig.env.gymCatalogRefresh(gymId: gym.id, force: false)
+        let revision = rig.env.gymRevision
+        stub.failure = .signedOut
+        await rig.env.gymCatalogRefresh(gymId: gym.id, force: true)
+        #expect(try rig.env.gyms.listings(gymId: gym.id).count == 1)
+        #expect(rig.env.gymRevision == revision, "nothing changed, so nothing reloads")
+        #expect(!rig.env.gymSharing.refreshing.contains(gym.id))
+        stub.failure = nil
+        stub.listings = [remote(), remote(kind: "flat-bench")]
+        await rig.env.gymCatalogRefresh(gymId: gym.id, force: true)
+        #expect(try rig.env.gyms.listings(gymId: gym.id).count == 2)
+    }
+
     @Test func aFreshCacheIsNotAskedAgainUntilForced() async throws {
         let (rig, stub) = try rig()
         let gym = try mapsGym(rig)

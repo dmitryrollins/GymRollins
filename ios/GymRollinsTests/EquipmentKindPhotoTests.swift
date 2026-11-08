@@ -16,7 +16,7 @@ import Testing
 
     private func photos(kinds: [String: String]? = nil, bundled: Bool = true) -> EquipmentKindPhotos {
         let storage = kinds.map {
-            SupabaseStoragePhotoProvider(supabaseURL: supabase, manifest: StoragePhotoManifest(photos: [:], kinds: $0))
+            HostedPhotoProvider(apiURL: supabase, manifest: StoragePhotoManifest(photos: [:], kinds: $0))
         }
         let url = bundledDumbbells
         return EquipmentKindPhotos(storage: storage) { id in bundled && id == "dumbbells" ? url : nil }
@@ -50,13 +50,13 @@ import Testing
     // MARK: Storage URL
 
     @Test func storageAnswersTheHostedKindPhotoWithItsRev() throws {
-        let storage = SupabaseStoragePhotoProvider(
-            supabaseURL: supabase, manifest: StoragePhotoManifest(photos: [:], kinds: ["dumbbells": "ab12"]))
+        let storage = HostedPhotoProvider(
+            apiURL: supabase, manifest: StoragePhotoManifest(photos: [:], kinds: ["dumbbells": "ab12"]))
         let url = try #require(storage.kindPhotoURL(kindId: "dumbbells"))
-        #expect(url.absoluteString == "https://abc.supabase.co/storage/v1/object/public/exercise-photos/kind-dumbbells.jpg?v=ab12")
+        #expect(url.absoluteString == "https://abc.supabase.co/photos/exercises/kind-dumbbells.jpg?v=ab12")
         #expect(storage.kindPhotoURL(kindId: "kettlebells") == nil, "the manifest doesn't list it")
         #expect(storage.kindPhotoURL(kindId: "../dumbbells") == nil)
-        #expect(SupabaseStoragePhotoProvider(supabaseURL: supabase).kindPhotoURL(kindId: "dumbbells") == nil,
+        #expect(HostedPhotoProvider(apiURL: supabase).kindPhotoURL(kindId: "dumbbells") == nil,
                 "no manifest yet")
     }
 

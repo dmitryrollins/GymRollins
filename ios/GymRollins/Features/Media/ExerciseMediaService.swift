@@ -14,7 +14,7 @@ struct ExerciseMediaService: Sendable {
     /// Stock photos of equipment kinds, for gym listings that have none of their own.
     var kindPhotos = EquipmentKindPhotos.none
 
-    /// Real launches: own media (record URLs, then — with `PHOTO_HOSTING = storage` — photos in the Supabase
+    /// Real launches: own media (record URLs, then — with `PHOTO_HOSTING = storage` — photos behind the API's
     /// `exercise-photos` bucket, then photos bundled in the app) -> free-exercise-db photos -> wger photos (only fill
     /// gaps; credited on the detail photo) -> (nil) illustration.
     /// Remote photos are downloaded on demand and cached; bundled ones load from the app. The storage manifest is
@@ -31,7 +31,7 @@ struct ExerciseMediaService: Sendable {
         }
         #endif
         let config = PhotoHostingConfig.resolve(info: info, environment: options.environment)
-        let policy = PhotoURLPolicy.forBuild(supabaseURL: config.supabaseURL)
+        let policy = PhotoURLPolicy.forBuild(apiURL: config.apiURL)
         let revision = MediaRevision()
         var providers: [any ExerciseMediaProvider] = [ExerciseRecordMediaProvider()]
         let storage = storageProvider(config: config, policy: policy, onChange: { revision.bump() })
@@ -45,27 +45,27 @@ struct ExerciseMediaService: Sendable {
                                                                     bundled: EquipmentKindPhotos.bundled(.main)))
     }
 
-    /// The Storage provider when this build hosts photos in Supabase Storage and the project URL may be fetched
-    /// (https, or the local stack in DEBUG); nil otherwise (logged), so the bundled photos stay the source.
+    /// The hosted provider when this build hosts photos behind the API and its URL may be fetched
+    /// (https, or a local Worker in DEBUG); nil otherwise (logged), so the bundled photos stay the source.
     /// `makeLoader` builds the manifest loader for the manifest URL (tests inject a stubbed session).
     static func storageProvider(
         config: PhotoHostingConfig, policy: PhotoURLPolicy,
         makeLoader: ((URL) -> StoragePhotoManifestLoader)? = nil,
         onChange: @escaping @MainActor @Sendable () -> Void = {}
-    ) -> (provider: SupabaseStoragePhotoProvider, refresh: Task<Void, Never>)? {
+    ) -> (provider: HostedPhotoProvider, refresh: Task<Void, Never>)? {
         guard config.hosting == .storage else { return nil }
-        guard let supabaseURL = config.supabaseURL else {
-            MediaLog.log.error("PHOTO_HOSTING = storage but there is no valid SUPABASE_URL; using bundled photos")
+        guard let apiURL = config.apiURL else {
+            MediaLog.log.error("PHOTO_HOSTING = storage but there is no valid API_URL; using bundled photos")
             return nil
         }
-        let manifestURL = SupabaseStoragePhotoProvider.manifestURL(supabaseURL: supabaseURL)
+        let manifestURL = HostedPhotoProvider.manifestURL(apiURL: apiURL)
         guard policy.allows(manifestURL) else {
-            MediaLog.log.error("PHOTO_HOSTING = storage needs an https SUPABASE_URL in this build; using bundled photos")
+            MediaLog.log.error("PHOTO_HOSTING = storage needs an https API_URL in this build; using bundled photos")
             return nil
         }
         let loader = makeLoader?(manifestURL)
             ?? StoragePhotoManifestLoader.standard(manifestURL: manifestURL, policy: policy)
-        return SupabaseStoragePhotoProvider.start(supabaseURL: supabaseURL, loader: loader, onChange: onChange)
+        return HostedPhotoProvider.start(apiURL: apiURL, loader: loader, onChange: onChange)
     }
 }
 

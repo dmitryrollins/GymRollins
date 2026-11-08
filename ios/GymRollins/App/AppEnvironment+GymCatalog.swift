@@ -32,9 +32,8 @@ final class GymSharing {
     }
 }
 
-/// Stands in while there is no catalogue server: a build without a backend, or the API before plan 28 adds the
-/// catalogue. Reads find nothing and writes need an account. Neither holds any of the account's photos, so account
-/// deletion's photo steps have nothing to detach or remove.
+/// Stands in when the build has no API: reads find nothing and writes need an account. It holds none of the account's
+/// photos, so account deletion's photo steps have nothing to detach or remove.
 struct UnavailableGymCatalogTransport: GymCatalogTransport {
     func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { throw GymCatalogError.offline }
     func publicListings(gymId: UUID) async throws -> PublicListings { throw GymCatalogError.offline }
@@ -74,8 +73,9 @@ extension AppEnvironment {
                               photoData: photoData, now: now)
         }
         #endif
-        // The shared catalogue isn't on the API until plan 28, and the Supabase one can't use the API's session.
-        let transport: any GymCatalogTransport = UnavailableGymCatalogTransport()
+        // The catalogue, moderation and shared photos on the API, with the session sync uses (spec section 3).
+        let transport: any GymCatalogTransport = sync.auth.map { ApiGymCatalogTransport(api: $0.api) }
+            ?? UnavailableGymCatalogTransport()
         return GymSharing(repository: gyms, transport: transport, knownKinds: known,
                           photos: GymPhotoCache.live(store: photoStore), photoData: photoData, now: now)
     }
@@ -172,6 +172,9 @@ extension AppEnvironment {
             let result = try await sharing.client.refresh(gymId: gymId, force: force)
             await downloadPhotos(result.photosToFetch)
             removeGymPhotos(result.filesToDelete)
+        } catch GymCatalogError.signedOut {
+            // Catalogue reads need a session (decision 16). Signed out, the cached rows stay as they are.
+            Self.log.info("The shared catalogue needs a session; the cached rows stay")
         } catch {
             Self.log.error("Refresh of the shared catalogue failed: \(error.localizedDescription, privacy: .public)")
         }

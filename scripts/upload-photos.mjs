@@ -55,7 +55,8 @@ export const PATHS = {
   localEnvFile: resolve(ROOT, 'supabase/.env.local'),
   /** The local Worker's project and state folder (wrangler dev's default, named in scripts/server-up.sh). */
   serverDir: resolve(ROOT, 'server'),
-  workerState: resolve(ROOT, 'server/.wrangler/state'),
+  // WORKER_STATE names another local state folder: the photo E2E's throwaway Worker (scripts/test-photo-hosting.sh).
+  workerState: process.env.WORKER_STATE ? resolve(process.env.WORKER_STATE) : resolve(ROOT, 'server/.wrangler/state'),
 }
 
 const DEFAULT_WORKER_URL = 'http://127.0.0.1:8787'

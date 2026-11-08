@@ -64,7 +64,7 @@ if [[ "${SYNC_E2E:-0}" == "1" ]]; then
   "$ROOT/scripts/ios-test-sync.sh"
 fi
 
-# Storage photo hosting end-to-end against the local Supabase stack (needs Docker): opt in with PHOTO_E2E=1.
+# Exercise photo hosting end to end against a throwaway local Worker (no Docker): opt in with PHOTO_E2E=1.
 if [[ "${PHOTO_E2E:-0}" == "1" ]]; then
   echo "==> Photo hosting E2E (local Supabase Storage: upload script -> manifest -> app provider)"
   "$ROOT/scripts/test-photo-hosting.sh"

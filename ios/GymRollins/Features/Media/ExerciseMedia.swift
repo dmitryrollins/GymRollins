@@ -62,7 +62,7 @@ struct PhotoCredit: Equatable, Hashable, Sendable {
 }
 
 /// Resolves the media for an exercise. The views only talk to this protocol, so a new media source (e.g. own
-/// images/GIFs in Supabase Storage) is a new provider placed first in `ChainedMediaProvider`, with no view changes.
+/// images/GIFs behind the API) is a new provider placed first in `ChainedMediaProvider`, with no view changes.
 protocol ExerciseMediaProvider: Sendable {
     /// nil = nothing to show: the view keeps the body-part illustration.
     func media(for exercise: Exercise) -> ExerciseMedia?
@@ -75,7 +75,7 @@ extension ExerciseMediaProvider {
     func candidates(for exercise: Exercise) -> [ExerciseMedia] { media(for: exercise).map { [$0] } ?? [] }
 }
 
-/// Asks each provider in order and returns the first answer. The app's order is: own media (record URLs -> Supabase
+/// Asks each provider in order and returns the first answer. The app's order is: own media (record URLs -> hosted
 /// Storage when `PHOTO_HOSTING = storage` -> bundled) -> free-exercise-db photos -> wger photos -> (nil) body-part
 /// illustration.
 struct ChainedMediaProvider: ExerciseMediaProvider {

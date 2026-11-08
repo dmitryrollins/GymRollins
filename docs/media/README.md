@@ -73,7 +73,7 @@ public read, JPEG + JSON only, 5 MB cap; no storage policies, so only the servic
 
 `photos` = frame count per exercise id, `rev` = a content hash per exercise. The app fetches the manifest once per
 launch (in the background; the last good copy is cached in Caches/ExercisePhotoManifest and used meanwhile and
-offline) and builds `<SUPABASE_URL>/storage/v1/object/public/exercise-photos/own-<id>-<frame>.jpg?v=<rev>` — the
+offline) and builds `<API_URL>/photos/exercises/own-<id>-<frame>.jpg?v=<rev>` — the
 `?v=` makes a regenerated photo bypass the long-lived photo caches. Photos download on demand into the existing
 150 MB photo cache. If the manifest can't be loaded (first launch offline, error), the app silently falls back.
 
@@ -102,20 +102,21 @@ SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=... node script
 `--dir <folder>` (repeatable) uploads from other folders instead. `--target local` refuses anything but a loopback
 URL; `--target remote` requires https.
 
-### Switch the app to Storage
+### Switch the app to the hosted photos
 
 Set `PHOTO_HOSTING = storage` in `ios/Config/Local.xcconfig` (gitignored; default `bundle` in `Base.xcconfig`), then
-rebuild. The photos come from whatever `SUPABASE_URL` the build uses:
+rebuild. The photos come from `<API_URL>/photos/exercises/` of whatever `API_URL` the build uses:
 
-- **Local stack (DEBUG only):** the default `SUPABASE_URL = http://127.0.0.1:55421` works in the simulator. Plain
-  http is allowed only in DEBUG builds and only for 127.0.0.1 / localhost, or the configured `SUPABASE_URL` host
-  when it is a loopback/LAN address (e.g. a device pointed at the Mac's LAN IP) — see `PhotoURLPolicy`. Release
-  builds load photos over https only; with an http `SUPABASE_URL` a Release build ignores Storage and keeps bundled
-  photos.
-- **Cloud:** set the cloud `SUPABASE_URL` / `SUPABASE_ANON_KEY` in `Local.xcconfig` (see `docs/cloud-checklist.md`).
+- **Local Worker (DEBUG only):** the default `API_URL = http://127.0.0.1:8787` works in the simulator once
+  `node scripts/upload-photos.mjs --target worker` has filled it. Plain http is allowed only in DEBUG builds and only
+  for 127.0.0.1 / localhost, or the configured `API_URL` host when it is a loopback/LAN address — see
+  `PhotoURLPolicy`. Release builds load photos over https only; with an http `API_URL` a Release build keeps the
+  bundled photos.
+- **Deployed Worker:** set its https `API_URL` in `Local.xcconfig` once the owner has deployed it (plan 30's
+  checklist).
 
-In DEBUG, the environment variables `PHOTO_HOSTING` and `SUPABASE_URL` + `SUPABASE_ANON_KEY` (Xcode scheme) override
-the build settings. UI tests (`-uiTesting`) never touch Storage.
+In DEBUG, the environment variables `PHOTO_HOSTING` and `API_URL` (Xcode scheme) override the build settings. UI tests
+(`-uiTesting`) never load hosted photos.
 
 ### When the cloud project exists
 

@@ -14,7 +14,7 @@ struct EquipmentKindPhotos: Sendable {
         self.bundled = bundled
     }
 
-    init(storage: SupabaseStoragePhotoProvider?, bundled: @escaping Lookup) {
+    init(storage: HostedPhotoProvider?, bundled: @escaping Lookup) {
         self.init(hosted: { storage?.kindPhotoURL(kindId: $0) }, bundled: bundled)
     }
 

@@ -86,7 +86,7 @@ struct StoragePhotoManifest: Sendable, Equatable {
     }
 }
 
-/// Fetches the manifest (at most once per launch, driven by `SupabaseStoragePhotoProvider.start`) and keeps the last
+/// Fetches the manifest (at most once per launch, driven by `HostedPhotoProvider.start`) and keeps the last
 /// good copy on disk, so the app shows hosted photos immediately on the next launch and offline
 /// (stale-while-revalidate). Any failure keeps the cached copy; the app then falls back to bundled/free photos.
 struct StoragePhotoManifestLoader: Sendable {

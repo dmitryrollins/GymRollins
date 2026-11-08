@@ -69,7 +69,7 @@ private struct Fixed: ExerciseMediaProvider {
     // MARK: Views reload when a fresh manifest arrives
 
     @Test func applyReportsWhetherTheManifestChanged() {
-        let provider = SupabaseStoragePhotoProvider(supabaseURL: URL(string: "https://abc.supabase.co")!)
+        let provider = HostedPhotoProvider(apiURL: URL(string: "https://abc.supabase.co")!)
         #expect(provider.apply(StoragePhotoManifest(photos: ["0453": 2])))
         #expect(!provider.apply(StoragePhotoManifest(photos: ["0453": 2])))
         #expect(provider.apply(StoragePhotoManifest(photos: ["0453": 2], rev: ["0453": "ab"])))
@@ -80,16 +80,16 @@ private struct Fixed: ExerciseMediaProvider {
         let cache = PhotoTestData.tempDir()
         HostStubURLProtocol.serve(host: host) { _ in .init(status: 200, body: PhotoTestData.manifest(["0453": 2])) }
         let loader = StoragePhotoManifestLoader(
-            manifestURL: SupabaseStoragePhotoProvider.manifestURL(supabaseURL: URL(string: "https://\(host)")!),
+            manifestURL: HostedPhotoProvider.manifestURL(apiURL: URL(string: "https://\(host)")!),
             cacheDirectory: cache, policy: .httpsOnly, session: HostStubURLProtocol.session())
 
         let revision = MediaRevision()
-        let first = SupabaseStoragePhotoProvider.start(supabaseURL: URL(string: "https://\(host)")!, loader: loader,
+        let first = HostedPhotoProvider.start(apiURL: URL(string: "https://\(host)")!, loader: loader,
                                                        onChange: { revision.bump() })
         await first.refresh.value
         #expect(revision.value == 1, "no cache -> fresh manifest -> views reload")
 
-        let second = SupabaseStoragePhotoProvider.start(supabaseURL: URL(string: "https://\(host)")!, loader: loader,
+        let second = HostedPhotoProvider.start(apiURL: URL(string: "https://\(host)")!, loader: loader,
                                                         onChange: { revision.bump() })
         await second.refresh.value
         #expect(revision.value == 1, "same manifest as the cached one -> nothing reloads")
