@@ -42,6 +42,7 @@ struct ImportPlan: Sendable {
     }
 
     struct Stats: Equatable, Sendable {
+        /// The export's workouts, a split one (`ImportSplit`) counted once.
         let workouts: Int
         let sets: Int
         let warmupSets: Int
@@ -79,7 +80,8 @@ struct ImportPlan: Sendable {
         let sets = result.workouts.flatMap(\.entries).reduce(0) { $0 + $1.sets.count }
         let dates = result.workouts.map(\.startedAt)
         let range = dates.min().flatMap { low in dates.max().map { low...$0 } }
-        let stats = Stats(workouts: result.workouts.count, sets: sets, warmupSets: result.warmupSetCount,
+        let stats = Stats(workouts: ImportService.sourceCount(result.workouts), sets: sets,
+                          warmupSets: result.warmupSetCount,
                           dateRange: range, rowErrors: result.rowErrors)
         return ImportPlan(result: result, names: names, resolutions: resolutions, stats: stats)
     }

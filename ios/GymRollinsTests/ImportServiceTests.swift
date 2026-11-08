@@ -183,7 +183,32 @@ import Testing
         #expect(again.0.map(\.id) == [first.id, second.id] && again.1 == 0)
         let otherApp = try ImportService.withoutDuplicates(
             [first, second], existing: [Workout(startedAt: base.addingTimeInterval(30), name: "x")])
-        #expect(otherApp.0.isEmpty && otherApp.1 == 2)
+        #expect(otherApp.0.isEmpty && otherApp.1 == 1, "one workout of the export skipped, not two")
+        let fitNotes = try ImportService.withoutDuplicates(
+            [first, second], source: .fitNotes, existing: [Workout(startedAt: base.addingTimeInterval(30), name: "x")])
+        #expect(fitNotes.0.map(\.id) == [first.id, second.id] && fitNotes.1 == 0, "date-only: never matched by time")
+    }
+
+    /// A split workout is one workout of the export: the preview, the summary and "1 workout" count it once, though
+    /// all its pieces are saved.
+    @Test func aSplitWorkoutCountsOnce() async throws {
+        let base = Date(timeIntervalSince1970: 1_000_000)
+        let first = ImportedWorkout(id: UUID(), startedAt: base, entries: [], endedAt: base.addingTimeInterval(300))
+        let pieces = [first] + (2...3).map { part in
+            ImportedWorkout(id: UUID(), startedAt: base.addingTimeInterval(TimeInterval(100 * part)), entries: [],
+                            endedAt: base.addingTimeInterval(TimeInterval(100 * part + 100)), part: part,
+                            splitFrom: first.id)
+        }
+        let result = WorkoutImportResult(workouts: pieces, rowErrors: [], warmupSetCount: 0, rowCount: 0, source: .hevy)
+        let lib = try ImportFixtures.library()
+        let plan = ImportPlan.make(result: result, library: lib, aliases: [:],
+                                   matcher: ExerciseMatcher(library: lib.exercises))
+        #expect(plan.stats.workouts == 1)
+        let summary = try await service.importAll(plan: plan)
+        #expect(summary.workouts == 1 && summary.duplicatesSkipped == 0)
+        #expect(try allWorkouts().map(\.id) == pieces.map(\.id))
+        #expect(ImportResultView.workoutsText(summary.workouts) == "1 workout")
+        #expect(ImportResultView.workoutsText(3) == "3 workouts")
     }
 
     @Test func piecesAfterTheFirstAreNumbered() {

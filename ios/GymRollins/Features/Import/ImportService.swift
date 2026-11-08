@@ -8,15 +8,16 @@ enum ImportServiceError: Error, Equatable {
 }
 
 struct ImportSummary: Equatable, Sendable {
-    /// Workouts written (new or overwritten by a re-import); excludes `duplicatesSkipped`.
+    /// The export's workouts written (new or overwritten by a re-import); excludes `duplicatesSkipped`. A workout split
+    /// into pieces (`ImportSplit`) counts once.
     let workouts: Int
     let sets: Int
     let warmupSets: Int
     let rowErrors: [ImportRowError]
     /// Custom exercises created by this run (empty on a re-import: existing ones are reused by name).
     let createdExercises: [Exercise]
-    /// Workouts not imported because a different workout already in the log starts within
-    /// `ImportService.duplicateWindow` (e.g. the same session exported from two apps).
+    /// The export's workouts not imported because a different workout already in the log starts within
+    /// `ImportService.duplicateWindow` (e.g. the same session exported from two apps); a split one counts once.
     var duplicatesSkipped = 0
 }
 
@@ -75,7 +76,7 @@ final class ImportService {
         }
         progress(1)
         let importedSets = imported.flatMap(\.entries).flatMap(\.sets)
-        return ImportSummary(workouts: imported.count, sets: importedSets.count,
+        return ImportSummary(workouts: Self.sourceCount(imported), sets: importedSets.count,
                              warmupSets: importedSets.filter(\.warmup).count, rowErrors: plan.stats.rowErrors,
                              createdExercises: created, duplicatesSkipped: duplicates)
     }
@@ -100,7 +101,12 @@ final class ImportService {
         }
         let keptIds = Set(firsts.map(\.id))
         let kept = imported.filter { keptIds.contains($0.splitFrom ?? $0.id) }
-        return (kept, imported.count - kept.count)
+        return (kept, sourceCount(imported) - firsts.count)
+    }
+
+    /// The export's workouts among `workouts`: a split one's pieces after the first don't count.
+    nonisolated static func sourceCount(_ workouts: [ImportedWorkout]) -> Int {
+        workouts.filter { $0.splitFrom == nil }.count
     }
 
     static func isDateOnly(_ source: ImportSource) -> Bool { source == .fitNotes }
