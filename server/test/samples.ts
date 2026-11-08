@@ -70,3 +70,38 @@ export function pulled(entity: string, row: Row, updatedAt: string, userId: stri
   if (ENTITIES[entity].pullsUserId) out.user_id = userId
   return out
 }
+
+/** A workout as the tests build and read it: loosely typed, like the JSON. */
+export type WorkoutJSON = Record<string, any> & { id: string; entries: Array<Record<string, any>> }
+
+/** A workout push as the app encodes it (WorkoutDTO): nested entries and sets, the set's nil optionals left out. */
+export function workoutSample(overrides: Record<string, unknown> = {}): WorkoutJSON {
+  return {
+    id: appUUID(),
+    started_at: '2026-11-07T09:00:00.000000Z',
+    ended_at: '2026-11-07T10:00:00.000000Z',
+    paused_sec: 0,
+    routine_id: null,
+    name: 'Push',
+    source: 'app',
+    note: null,
+    vol_kg: 960,
+    records: [{ exerciseId: 'bench_press', kind: 'e1RM', valueKg: 75 }],
+    entries: [{
+      id: appUUID(),
+      exercise_id: 'bench_press',
+      position: 0,
+      note: null,
+      superset_group: null,
+      sets: [
+        { id: appUUID(), position: 0, w_kg: 60, r: 8, done: true, warmup: false, multiplier: 1 },
+        { id: appUUID(), position: 1, w_kg: 60, r: 8, done: true, warmup: false, multiplier: 1, rir: 2 },
+      ],
+    }],
+    client_updated_at: T1,
+    deleted_at: null,
+    base_updated_at: null,
+    force: false,
+    ...overrides,
+  }
+}
