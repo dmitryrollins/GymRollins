@@ -1,0 +1,19 @@
+import { Hono } from 'hono'
+import type { AppEnv } from '../env.ts'
+import { jsonBody } from '../http/body.ts'
+import { entityNamed } from './entities.ts'
+import { parsePullQuery, pullRows, pushRows } from './table-sync.ts'
+
+/** /v1/sync: what the app's SyncTransport calls (spec section 3, "Routes"). Specific routes go above /:entity. */
+export const syncRoutes = new Hono<AppEnv>()
+
+syncRoutes.post('/:entity', async (c) => {
+  const acks = await pushRows(c.env.DB, c.var.userId, entityNamed(c.req.param('entity')), await jsonBody(c))
+  return c.json({ acks })
+})
+
+syncRoutes.get('/:entity', async (c) => {
+  const entity = entityNamed(c.req.param('entity'))
+  const rows = await pullRows(c.env.DB, c.var.userId, entity, parsePullQuery(c.req.query(), entity.tiebreak.kind))
+  return c.json({ rows })
+})
