@@ -76,7 +76,8 @@ if [[ "${MCP_E2E:-0}" == "1" ]]; then
   "$ROOT/scripts/test-mcp.sh"
 fi
 
-# Gyms shared between two users: its Swift suite is parked until plan 28 moves the catalogue to the Worker.
+# Gyms shared between two users, on a throwaway local Worker (no Docker): opt in with GYM_E2E=1.
 if [[ "${GYM_E2E:-0}" == "1" ]]; then
-  echo "==> Shared gym catalogue E2E: parked until plan 28"
+  echo "==> Shared gym catalogue E2E (throwaway local Worker on :8788)"
+  "$ROOT/scripts/test-gym-e2e.sh"
 fi

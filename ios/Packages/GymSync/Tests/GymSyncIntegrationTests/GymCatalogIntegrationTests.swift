@@ -1,26 +1,22 @@
 import Foundation
 import GymCore
 import GymData
-import Supabase
 import Testing
 @testable import GymSync
 
-/// `SupabaseGymCatalogTransport` against the local stack: the views, functions and Storage rules the app relies on.
+/// `ApiGymCatalogTransport` against the local Worker: the catalogue, moderation and photo routes the app relies on.
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
 struct GymCatalogIntegrationTests {
-    private func catalog(_ account: Account) -> SupabaseGymCatalogTransport {
-        SupabaseGymCatalogTransport(client: account.auth.client)
-    }
+    private func catalog(_ account: Account) -> ApiGymCatalogTransport { account.catalog }
 
-    private func anonCatalog() throws -> SupabaseGymCatalogTransport {
-        SupabaseGymCatalogTransport(client: try IntegrationEnv.config().makeClient(storage: InMemoryAuthStorage()))
-    }
+    /// A phone with no account: the catalogue answers it `.signedOut`, reads included.
+    private func anonCatalog() throws -> ApiGymCatalogTransport { try GymIntegration.signedOutCatalog() }
 
     private func freshPlace() -> String { "it-\(UUID().uuidString.lowercased())" }
 
-    /// A JPEG-typed payload; Storage checks the declared type, not the bytes.
-    private func photo() -> Data { Data(repeating: 0xFF, count: 600) }
+    /// A JPEG: the server checks the bytes as well as the declared type.
+    private func photo() -> Data { GymIntegration.jpeg }
 
     private func photoName() -> String { "\(UUID().uuidString.lowercased()).jpg" }
 
@@ -37,12 +33,12 @@ struct GymCatalogIntegrationTests {
                      forceNew: forceNew)
     }
 
-    private func gym(_ transport: SupabaseGymCatalogTransport, place: String) async throws -> UUID {
+    private func gym(_ transport: ApiGymCatalogTransport, place: String) async throws -> UUID {
         try await transport.findOrCreateGym(mapsPlaceId: place, name: "Iron Works", address: "1 Main St",
                                             latitude: 52.5, longitude: 13.4)
     }
 
-    @Test func aSharedListingWithAPhotoReadsBackThroughAnAnonClient() async throws {
+    @Test func aSharedListingWithAPhotoReadsBackThroughAnotherAccountButNotSignedOut() async throws {
         let user = try await Account.signUp()
         let transport = catalog(user)
         let place = freshPlace()
@@ -55,7 +51,9 @@ struct GymCatalogIntegrationTests {
         #expect(try await transport.share(request(listingId, gym: gymId, photo: name)) == .created(listingId))
         #expect(try await transport.share(request(listingId, gym: gymId, photo: name)) == .created(listingId))
 
-        let anon = try anonCatalog()
+        await #expect(throws: GymCatalogError.signedOut) { _ = try await anonCatalog().publicGym(mapsPlaceId: place) }
+        let reader = try await Account.signUp()
+        let anon = catalog(reader)
         let found = try #require(try await anon.publicGym(mapsPlaceId: place))
         #expect(found.id == gymId)
         #expect(found.name == "Iron Works")
@@ -85,6 +83,7 @@ struct GymCatalogIntegrationTests {
         #expect(http.statusCode == 200)
         #expect(http.value(forHTTPHeaderField: "Content-Type") == "image/jpeg")
         try await user.deleteAccount()
+        try await reader.deleteAccount()
     }
 
     @Test func aSecondShareOfTheKindReturnsDuplicatesUnlessForced() async throws {
@@ -128,30 +127,29 @@ struct GymCatalogIntegrationTests {
         let listingId = UUID()
         _ = try await transport.share(request(listingId, gym: gymId, photo: name))
 
-        _ = try await user.auth.client.storage.from("gym-photos").remove(paths: [name])
-        // Storage shows the trigger's refusal as a plain row-level-security error; it reaches the queue as one answer.
+        try await transport.deleteSharedPhoto(path: name)
+        // The name stays a listing's after its object went (photo_name_in_use): every photo refusal is one answer.
         await #expect(throws: GymCatalogError.photoRefused) {
             _ = try await transport.uploadSharedPhoto(photo(), name: name)
         }
         try await user.deleteAccount()
     }
 
-    private func isServed(_ transport: SupabaseGymCatalogTransport, _ name: String) async throws -> Bool {
-        let url = try #require(transport.publicPhotoURL(path: name))
-        // The system's own cache would keep answering 200 for the hour the object was told to be cached.
-        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
-        let (_, response) = try await URLSession.shared.data(for: request)
-        return (response as? HTTPURLResponse)?.statusCode == 200
+    private func isServed(_ transport: ApiGymCatalogTransport, _ name: String) async throws -> Bool {
+        try await GymIntegration.isServed(name)
     }
 
     @Test func onlyTheOwnerCanDeleteAnUploadedPhoto() async throws {
         let owner = try await Account.signUp()
         let other = try await Account.signUp()
+        let gymId = try await gym(catalog(owner), place: freshPlace())
         let name = photoName()
         _ = try await catalog(owner).uploadSharedPhoto(photo(), name: name)
+        #expect(try await !isServed(catalog(owner), name), "an upload no listing uses is not served")
+        _ = try await catalog(owner).share(request(gym: gymId, photo: name))
         #expect(try await isServed(catalog(owner), name))
 
-        try await catalog(other).deleteSharedPhoto(path: name)
+        await #expect(throws: GymCatalogError.notAllowed) { try await catalog(other).deleteSharedPhoto(path: name) }
         #expect(try await isServed(catalog(owner), name), "another user's delete removes nothing")
         try await catalog(owner).deleteSharedPhoto(path: name)
         #expect(try await !isServed(catalog(owner), name))
@@ -190,7 +188,9 @@ struct GymCatalogIntegrationTests {
     }
 
     @Test func aGymNobodyHasSharedYetIsAbsent() async throws {
-        #expect(try await anonCatalog().publicGym(mapsPlaceId: freshPlace()) == nil)
+        let user = try await Account.signUp()
+        #expect(try await catalog(user).publicGym(mapsPlaceId: freshPlace()) == nil)
+        try await user.deleteAccount()
     }
 
     // MARK: Reports and blocks

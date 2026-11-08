@@ -47,10 +47,12 @@ struct Account {
         return other
     }
 
-    /// The Worker holds no photos before plan 28, so there are no photo steps.
+    /// Detaches and removes the account's photos first, as the app does, then deletes the account.
     func deleteAccount() async throws {
         let id = userId
-        try await auth.deleteAccount()
+        let catalog = ApiGymCatalogTransport(api: auth.api)
+        try await auth.deleteAccount(photos: AccountPhotoSteps(detach: { try await catalog.detachAllPhotos() },
+                                                               remove: { try await catalog.deleteAllPhotos() }))
         IntegrationEnv.recordDeletedUser(id)
     }
 

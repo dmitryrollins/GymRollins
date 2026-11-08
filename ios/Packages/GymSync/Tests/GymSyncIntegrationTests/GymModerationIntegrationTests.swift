@@ -1,20 +1,17 @@
 import Foundation
 import GymData
-import Supabase
 import Testing
 @testable import GymSync
 
-/// The admin list against the local stack. `scripts/test-sync-integration.sh` makes any account named
+/// The admin list against the local Worker. `scripts/test-sync-integration.sh` makes any account named
 /// `sync-admin-*@test.local` an admin when it signs up.
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
 struct GymModerationIntegrationTests {
     /// This test's own brand: parallel tests that share one would delete each other's item with their accounts.
     private let brand = "Hammer \(UUID().uuidString.prefix(8))"
 
-    private func catalog(_ account: Account) -> SupabaseGymCatalogTransport {
-        SupabaseGymCatalogTransport(client: account.auth.client)
-    }
+    private func catalog(_ account: Account) -> ApiGymCatalogTransport { account.catalog }
 
     private func signUpAdmin() async throws -> Account {
         let account = try Account.fresh(email: "sync-admin-\(UUID().uuidString.lowercased())@test.local")
@@ -22,11 +19,8 @@ struct GymModerationIntegrationTests {
         return account
     }
 
-    private func isServed(_ transport: SupabaseGymCatalogTransport, _ name: String) async throws -> Bool {
-        let url = try #require(transport.publicPhotoURL(path: name))
-        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
-        let (_, response) = try await URLSession.shared.data(for: request)
-        return (response as? HTTPURLResponse)?.statusCode == 200
+    private func isServed(_ transport: ApiGymCatalogTransport, _ name: String) async throws -> Bool {
+        try await GymIntegration.isServed(name)
     }
 
     @Test func anAdminRemovesAnotherUsersFlaggedListingAndItsPhotoGoesFromStorage() async throws {
@@ -40,7 +34,7 @@ struct GymModerationIntegrationTests {
                                                               name: "Iron Works", address: nil, latitude: 52.5,
                                                               longitude: 13.4)
         let name = "\(UUID().uuidString.lowercased()).jpg"
-        _ = try await catalog(author).uploadSharedPhoto(Data(repeating: 0xFF, count: 600), name: name)
+        _ = try await catalog(author).uploadSharedPhoto(GymIntegration.jpeg, name: name)
         let listingId = UUID()
         let request = ShareRequest(listingId: listingId, gymId: gymId, kindId: "cable-station", brand: brand,
                                    model: nil, loads: .stack(maxKg: 90, stepKg: 5), quantity: 1, notes: nil,
@@ -70,7 +64,7 @@ struct GymModerationIntegrationTests {
         let photo = try await catalog(admin).moderate(targetType: .listing, targetId: listingId, action: .remove)
         #expect(photo == name)
         try await catalog(admin).deleteSharedPhoto(path: name)
-        #expect(try await !isServed(catalog(admin), name), "an admin's delete reaches another user's photo")
+        #expect(try await !isServed(catalog(admin), name), "an admin's delete reaches a removed listing's photo")
         // The name stays on a removed listing until the app confirms the object is gone (moderation_photo_deleted), so
         // a failed delete can be retried: the queue still shows it, as removed and still naming the photo.
         let waiting = try #require(try await catalog(admin).moderationQueue().first { $0.targetId == listingId })

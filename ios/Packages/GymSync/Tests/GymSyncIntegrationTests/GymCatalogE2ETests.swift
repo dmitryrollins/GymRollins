@@ -1,15 +1,15 @@
 import Foundation
 import GymCore
 import GymData
-import Supabase
 import SwiftData
 import Testing
 @testable import GymSync
 
-/// Two users and an anonymous client against the local stack, each on a phone of their own, with the real transports
-/// and the rules from GymCore (`scripts/test-gym-e2e.sh` sets the environment and checks the tables afterwards).
+/// Two users (and a signed-out phone, which the catalogue now turns away) against the local Worker, each on a phone of
+/// their own, with the real transports and the rules from GymCore (`scripts/test-gym-e2e.sh` starts the Worker and
+/// checks D1 afterwards).
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
 struct GymCatalogE2ETests {
     private nonisolated static let kinds = [
         EquipmentKind(id: "dumbbells", name: "Dumbbells", category: .freeWeight, load: .fixedSet),
@@ -47,18 +47,18 @@ struct GymCatalogE2ETests {
     @MainActor private struct Phone {
         let container: ModelContainer
         let repo: GymRepository
-        let catalog: SupabaseGymCatalogTransport
+        let catalog: ApiGymCatalogTransport
         let client: GymCatalogClient
         let outbox: ShareOutbox
 
-        init(_ supabase: SupabaseClient) throws {
+        init(_ api: ApiClient) throws {
             container = try GymStore.container(inMemory: true)
             repo = GymRepository(context: container.mainContext)
-            catalog = SupabaseGymCatalogTransport(client: supabase)
+            catalog = ApiGymCatalogTransport(api: api)
             client = GymCatalogClient(repository: repo, transport: catalog,
                                       knownKinds: Set(GymCatalogE2ETests.kinds.map(\.id)), now: Date.init)
             outbox = ShareOutbox(repository: repo, transport: catalog,
-                                 photoData: { _ in Data(repeating: 0xFF, count: 600) }, now: Date.init)
+                                 photoData: { _ in GymIntegration.jpeg }, now: Date.init)
         }
 
         func mapsGym(_ place: String) throws -> Gym {
@@ -91,8 +91,8 @@ struct GymCatalogE2ETests {
         return account
     }
 
-    private func anonClient() throws -> SupabaseClient {
-        try IntegrationEnv.config().makeClient(storage: InMemoryAuthStorage())
+    private func anonClient() throws -> ApiClient {
+        try IntegrationEnv.config().makeClient(sessions: InMemorySessionStore())
     }
 
     private func place() -> String { "e2e-\(UUID().uuidString.lowercased())" }
@@ -115,18 +115,15 @@ struct GymCatalogE2ETests {
     }
 
     private func report(_ listing: UUID, as account: Account) async throws {
-        let params: [String: AnyJSON] = ["p_target_type": .string("listing"),
-                                         "p_target_id": .string(listing.uuidString.lowercased()),
-                                         "p_reason": .string("wrong-info")]
-        try await account.auth.client.rpc("report_content", params: params).execute()
+        try await account.catalog.report(targetType: .listing, targetId: listing, reason: .wrongInfo, note: nil)
     }
 
     // MARK: - Criterion 2
 
-    @Test func criterion2AnotherUserAndAnAnonymousClientBuildAChestWorkoutFromSharedListings() async throws {
+    @Test func criterion2AnotherUserBuildsAChestWorkoutFromSharedListingsAndASignedOutPhoneIsAskedToSignIn() async throws {
         let a = try await signUp()
         let b = try await signUp()
-        let phoneA = try Phone(a.auth.client)
+        let phoneA = try Phone(a.auth.api)
         let placeId = place()
         let gymA = try phoneA.mapsGym(placeId)
         let shared = try [
@@ -141,7 +138,14 @@ struct GymCatalogE2ETests {
         #expect(sharedState.allSatisfy { $0.visibility == .shared && $0.uploadState == .uploaded })
         let ids = Set(shared.map(\.id))
 
-        for (name, client) in [("user B", b.auth.client), ("anonymous", try anonClient())] {
+        // Catalogue reads need a session now (spec section 3): a signed-out phone is asked to sign in.
+        let signedOut = try Phone(try anonClient())
+        let anonGym = try signedOut.mapsGym(placeId)
+        await #expect(throws: GymCatalogError.signedOut) {
+            _ = try await signedOut.client.refresh(gymId: anonGym.id, force: true)
+        }
+
+        for (name, client) in [("user B", b.auth.api)] {
             let phone = try Phone(client)
             let gym = try phone.mapsGym(placeId)
             _ = try await phone.client.refresh(gymId: gym.id, force: true)
@@ -165,8 +169,8 @@ struct GymCatalogE2ETests {
     @Test func criterion4ASecondShareOfTheSameKindIsKeptAsAConfirmation() async throws {
         let a = try await signUp()
         let b = try await signUp()
-        let phoneA = try Phone(a.auth.client)
-        let phoneB = try Phone(b.auth.client)
+        let phoneA = try Phone(a.auth.api)
+        let phoneB = try Phone(b.auth.api)
         let placeId = place()
         let gymA = try phoneA.mapsGym(placeId)
         let original = try phoneA.add(gymA, "cable-station")
@@ -203,10 +207,10 @@ struct GymCatalogE2ETests {
 
     /// Sends the first share to the real server and then drops the answer, as a connection lost on the way back does.
     private final class LosesTheFirstAnswer: GymCatalogTransport, @unchecked Sendable {
-        let base: SupabaseGymCatalogTransport
+        let base: ApiGymCatalogTransport
         private let lock = NSLock()
         private var lost = false
-        init(_ base: SupabaseGymCatalogTransport) { self.base = base }
+        init(_ base: ApiGymCatalogTransport) { self.base = base }
 
         func publicGym(mapsPlaceId: String) async throws -> RemoteGym? { try await base.publicGym(mapsPlaceId: mapsPlaceId) }
         func publicListings(gymId: UUID) async throws -> PublicListings { try await base.publicListings(gymId: gymId) }
@@ -247,10 +251,10 @@ struct GymCatalogE2ETests {
 
     @Test func aShareWhoseAnswerWasLostIsRetriedIntoOneListing() async throws {
         let account = try await signUp()
-        let phone = try Phone(account.auth.client)
+        let phone = try Phone(account.auth.api)
         let flaky = LosesTheFirstAnswer(phone.catalog)
         let outbox = ShareOutbox(repository: phone.repo, transport: flaky,
-                                 photoData: { _ in Data(repeating: 0xFF, count: 600) }, now: Date.init)
+                                 photoData: { _ in GymIntegration.jpeg }, now: Date.init)
         let gym = try phone.mapsGym(place())
         let listing = try phone.add(gym, "cable-station", photo: "mine.jpg")
         try outbox.enqueueShare(listingId: listing.id, ownerId: account.userId)
@@ -276,8 +280,8 @@ struct GymCatalogE2ETests {
         let b = try await signUp()
         let c = try await signUp()
         let d = try await signUp()
-        let phoneA = try Phone(a.auth.client)
-        let phoneB = try Phone(b.auth.client)
+        let phoneA = try Phone(a.auth.api)
+        let phoneB = try Phone(b.auth.api)
         let gymA = try phoneA.mapsGym(place())
         let withPhoto = try phoneA.add(gymA, "cable-station", brand: "E2E Hammer", photo: "a.jpg")
         try await phoneA.share(withPhoto, as: a.userId)
@@ -309,7 +313,7 @@ struct GymCatalogE2ETests {
         #expect(after.catalogPhotoPath == nil)
         #expect(after.catalogPhotoListingId == nil)
 
-        _ = try? await a.auth.client.storage.from("gym-photos").remove(paths: [photoName])
+        try? await a.catalog.deleteSharedPhoto(path: photoName)
         for account in [a, b, c, d] { try await account.deleteAccount() }
     }
 
@@ -318,7 +322,7 @@ struct GymCatalogE2ETests {
     @Test func criterion6AThisPhoneOnlyGymAndListingNeverReachAnyTable() async throws {
         let a = try await signUp()
         let tag = UUID().uuidString.lowercased()
-        let phone = try Phone(a.auth.client)
+        let phone = try Phone(a.auth.api)
         let deviceGym = "e2e-private-gym-\(tag)", deviceNote = "e2e-private-note-\(tag)"
         let deviceBrand = "e2e-private-brand-\(tag)", mapsNote = "e2e-maps-note-\(tag)"
         let syncedGym = "e2e-synced-gym-\(tag)"
@@ -334,7 +338,7 @@ struct GymCatalogE2ETests {
         let defaults = UserDefaults(suiteName: "gym-e2e-\(tag)")!
         defer { UserDefaults.standard.removePersistentDomain(forName: "gym-e2e-\(tag)") }
         let store = SyncStore(context: phone.container.mainContext, defaults: defaults)
-        let engine = SyncEngine(store: store, transport: SupabaseTransport(client: a.auth.client))
+        let engine = SyncEngine(store: store, transport: ApiSyncTransport(api: a.auth.api))
         await engine.sync()
         await phone.outbox.run(userId: a.userId)
         _ = try await phone.client.refresh(gymId: home.id, force: true)

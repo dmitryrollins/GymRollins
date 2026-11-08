@@ -1,7 +1,6 @@
 import Foundation
 import GymCore
 import GymData
-import Supabase
 import SwiftData
 import Testing
 @testable import GymSync
@@ -19,7 +18,7 @@ private final class MemoryPhotoFiles: GymPhotoFiles, @unchecked Sendable {
 /// Private gyms, listings and photos against the local stack: a second device of the same user gets them; another
 /// user and a signed-out client get nothing.
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
+@Suite(.enabled(if: apiConfigured, "Set API_URL (scripts/test-sync-integration.sh) to run against a local Worker"))
 struct GymPrivateIntegrationTests {
     @MainActor private struct Phone {
         let container: ModelContainer
@@ -38,15 +37,13 @@ struct GymPrivateIntegrationTests {
         }
     }
 
-    private func anonTransport() throws -> SupabaseTransport {
-        SupabaseTransport(client: try IntegrationEnv.config().makeClient(storage: InMemoryAuthStorage()))
-    }
+    private func anonTransport() throws -> ApiSyncTransport { try GymIntegration.signedOutTransport() }
 
     @Test func aPrivateGymListingAndPhotoReachAnotherDeviceAndNoOneElse() async throws {
         let owner = try await Account.signUp()
         let stranger = try await Account.signUp()
         let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
-        let jpeg = Data(repeating: 0xFF, count: 600)
+        let jpeg = GymIntegration.jpeg
         let first = try Phone(owner, clock: clock, photos: MemoryPhotoFiles(["mine.jpg": jpeg]))
 
         let gym = try first.repo.addPrivateGym(name: "Garage", address: "1 Home St")
@@ -207,9 +204,9 @@ struct GymPrivateIntegrationTests {
     @Test func aDeletionRefusedAfterThePhotosWentLeavesNoRowNamingThemAndTheNextSyncUploadsAgain() async throws {
         let user = try await Account.signUp()
         let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
-        let jpeg = Data(repeating: 0xFF, count: 600)
+        let jpeg = GymIntegration.jpeg
         let phone = try Phone(user, clock: clock, photos: MemoryPhotoFiles(["mine.jpg": jpeg]))
-        let catalog = SupabaseGymCatalogTransport(client: user.auth.client)
+        let catalog = user.catalog
 
         let gym = try phone.repo.addPrivateGym(name: "Garage", address: nil)
         let listing = try phone.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station",
@@ -256,5 +253,40 @@ struct GymPrivateIntegrationTests {
         #expect(try await user.transport.downloadPrivatePhoto(path: newPath) == jpeg)
 
         try await user.deleteAccount() // the retry
+    }
+
+    // MARK: After a server move
+
+    /// Plan 27 left this to plan 28: a phone moved from another server sends its gyms and listings in the same round
+    /// as the workouts that link them, gyms first, so the links reach the new server.
+    @Test func aPhoneMovedFromAnotherServerSendsItsGymsBeforeTheWorkoutsThatLinkThem() async throws {
+        let clock = DeviceClock("2026-10-30T12:00:00.000000Z")
+        let earlier = try await Account.signUp()
+        let phone = try Phone(earlier, clock: clock)
+        let workouts = WorkoutRepository(context: phone.container.mainContext, now: { clock.now })
+        let gym = try phone.repo.addPrivateGym(name: "Garage", address: nil)
+        let listing = try phone.repo.addListing(NewListing(gymId: gym.id, kindId: "cable-station",
+                                                           loads: .stack(maxKg: 90, stepKg: 5)))
+        try phone.repo.makeSynced(listing: listing.id)
+        let linked = Workout(startedAt: clock.now, endedAt: clock.now.addingTimeInterval(600), name: "Pull", entries: [
+            WorkoutEntry(exerciseId: "bench", sets: [WorkoutSet(weightKg: 50, reps: 8, done: true)],
+                         gymListingId: listing.id)], gymId: gym.id)
+        try workouts.save(linked)
+        await phone.engine.sync()
+        #expect(phone.engine.status == .idle, "\(phone.store.syncFailures().map(\.message))")
+
+        // The "old server" here is this Worker as another account; deleting it frees the ids, as a new server has them.
+        #expect(try phone.store.moveToServer("http://moved.invalid"))
+        try await earlier.deleteAccount()
+        let next = try await Account.signUp()
+        phone.store.ownerUserId = next.userId
+        let engine = SyncEngine(store: phone.store, transport: next.transport, photos: phone.photos, now: { clock.now })
+        await engine.sync()
+
+        #expect(engine.status == .idle, "\(phone.store.syncFailures().map(\.message))")
+        let pulled = try #require(try await next.transport.pullWorkouts(since: nil).first { $0.id == linked.id })
+        #expect(pulled.gymId == gym.id)
+        #expect(pulled.entries.first?.gymEquipmentId == listing.id)
+        try await next.deleteAccount()
     }
 }
