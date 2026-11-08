@@ -278,4 +278,15 @@ extension WorkoutSessionTests {
         model.removeSet(entry.sets[2])
         #expect(session.entry(entry.id)?.sets.count == 2)
     }
+
+    /// Add Set stops at 50 sets an exercise, the server's cap (DomainLimits.entrySetsMax).
+    @Test func addSetStopsAtTheCap() {
+        let session = make(Spy(), now: { Date(timeIntervalSince1970: 1_100) })
+        let entry = session.workout.entries[0]
+        let model = ExerciseScreenModel.workout(session, entryId: entry.id)
+        #expect(model.canAddSet)
+        for _ in 0..<60 { model.addSet() }
+        #expect(session.entry(entry.id)?.sets.count == DomainLimits.entrySetsMax)
+        #expect(!model.canAddSet)
+    }
 }

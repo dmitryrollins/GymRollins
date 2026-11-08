@@ -103,4 +103,27 @@ import Testing
         let single = set.with(multiplier: 1)
         #expect(single.multiplier == 1 && single.completedAt == set.completedAt && single.reps == 8)
     }
+
+    /// The server stores at most 50 exercises a workout and 50 sets an exercise (server/src/sync/workouts.ts), so
+    /// editing stops there too.
+    @Test func setsAndExercisesStopAtTheServersCaps() {
+        let full = WorkoutEntry(exerciseId: "0025",
+                                sets: (0..<DomainLimits.entrySetsMax).map { _ in WorkoutSet(weightKg: 60, reps: 8) })
+        let short = WorkoutEntry(exerciseId: "0070", sets: [WorkoutSet(weightKg: 24.9, reps: 10)])
+        let w = Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push", entries: [full, short])
+        #expect(!w.canAddSet(entryId: full.id))
+        #expect(w.appendingSet(entryId: full.id).entries[0].sets.count == 50)
+        #expect(w.insertingWarmup(entryId: full.id, set: warm).entries[0].sets.count == 50)
+        #expect(w.canAddSet(entryId: short.id))
+        #expect(w.appendingSet(entryId: short.id).entries[1].sets.count == 2)
+        #expect(!w.canAddSet(entryId: UUID()))
+
+        let more = (0..<60).map { WorkoutEntry(exerciseId: "e\($0)", sets: []) }
+        let crowded = w.appendingEntries(more)
+        #expect(crowded.entries.count == DomainLimits.workoutEntriesMax)
+        #expect(crowded.entries.last?.exerciseId == "e47")
+        #expect(!crowded.canAddEntries)
+        #expect(crowded.appendingEntries([WorkoutEntry(exerciseId: "x", sets: [])]).entries.count == 50)
+        #expect(w.canAddEntries)
+    }
 }

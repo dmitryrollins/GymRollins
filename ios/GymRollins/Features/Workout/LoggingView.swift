@@ -254,6 +254,7 @@ struct LoggingView: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(!model.canAddSet)
         .padding(.top, 4)
         .accessibilityIdentifier("logging.addSet")
     }

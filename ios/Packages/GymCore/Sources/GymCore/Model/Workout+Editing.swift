@@ -81,8 +81,18 @@ extension Workout {
         mappingEntry(entryId) { entry in entry.with(sets: entry.sets.map { $0.id == setId ? transform($0) : $0 }) }
     }
 
+    /// Whether the entry can take one more set: an exercise holds at most `DomainLimits.entrySetsMax` sets in a
+    /// workout, as the server stores it.
+    public func canAddSet(entryId: UUID) -> Bool {
+        entries.first { $0.id == entryId }.map { $0.sets.count < DomainLimits.entrySetsMax } ?? false
+    }
+
+    /// Whether the workout can take one more exercise (`DomainLimits.workoutEntriesMax`).
+    public var canAddEntries: Bool { entries.count < DomainLimits.workoutEntriesMax }
+
     public func appendingSet(entryId: UUID) -> Workout {
-        mappingEntry(entryId) { entry in
+        guard canAddSet(entryId: entryId) else { return self }
+        return mappingEntry(entryId) { entry in
             let template = entry.sets.last(where: { !$0.warmup }) ?? entry.sets.last
             let new = template?.duplicatedUndone() ?? WorkoutSet(weightKg: 0, reps: 8)
             return entry.with(sets: entry.sets + [new])
@@ -90,7 +100,8 @@ extension Workout {
     }
 
     public func insertingWarmup(entryId: UUID, set: WorkoutSet) -> Workout {
-        mappingEntry(entryId) { entry in
+        guard canAddSet(entryId: entryId) else { return self }
+        return mappingEntry(entryId) { entry in
             let index = entry.sets.firstIndex(where: { !$0.warmup }) ?? entry.sets.count
             return entry.with(sets: Array(entry.sets[..<index]) + [set] + Array(entry.sets[index...]))
         }
@@ -108,8 +119,9 @@ extension Workout {
         mappingEntry(entryId) { $0.with(exerciseId: exerciseId) }
     }
 
+    /// The new entries, as many as fit under `DomainLimits.workoutEntriesMax`.
     public func appendingEntries(_ new: [WorkoutEntry]) -> Workout {
-        with(entries: entries + new)
+        with(entries: entries + new.prefix(max(0, DomainLimits.workoutEntriesMax - entries.count)))
     }
 
     public func settingNote(entryId: UUID, note: String?) -> Workout {

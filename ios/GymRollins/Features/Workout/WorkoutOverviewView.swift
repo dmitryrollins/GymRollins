@@ -172,6 +172,7 @@ struct WorkoutOverviewView: View {
         HStack {
             Spacer()
             GlassPillButton(title: "+ Add exercise", identifier: "workout.addExercise") { showAddExercise = true }
+                .disabled(!session.workout.canAddEntries)
             Spacer()
         }
         .padding(.top, 4)

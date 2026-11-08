@@ -88,6 +88,14 @@ enum ExerciseScreenModel {
         }
     }
 
+    /// Add Set stops at the server's cap on sets an exercise holds in a workout; Today's plan editor has its own.
+    var canAddSet: Bool {
+        switch self {
+        case .workout(let session, let entryId): session.workout.canAddSet(entryId: entryId)
+        case .plan: true
+        }
+    }
+
     /// A logged set stays; the last remaining (working) set can't go.
     func canRemoveSet(_ set: WorkoutSet) -> Bool {
         switch self {
