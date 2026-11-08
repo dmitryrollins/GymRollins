@@ -194,6 +194,17 @@ final class SyncCoordinator {
         try await engine?.revokeOAuthGrants() ?? 0
     }
 
+    /// The Claude sign-in waiting with `code` (Approve a connection). Signed out there's no session to ask with.
+    func connectRequest(code: String) async throws -> ConnectRequest {
+        guard let engine else { throw SyncUnavailableError() }
+        return try await engine.connectRequest(code: code)
+    }
+
+    func decideConnect(code: String, decision: ConnectDecision) async throws {
+        guard let engine else { throw SyncUnavailableError() }
+        try await engine.decideConnect(code: code, decision: decision)
+    }
+
     // MARK: Account
 
     #if DEBUG

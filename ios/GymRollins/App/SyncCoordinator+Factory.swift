@@ -58,10 +58,9 @@ extension SyncCoordinator {
         }
     }
 
-    /// The MCP connector URL Claude needs (`<SUPABASE_URL>/functions/v1/mcp`), nil without a Supabase config. Claude's
-    /// server stays on Supabase until plan 29 makes it `<API_URL>/mcp`.
+    /// The MCP connector URL Claude needs, `<API_URL>/mcp` (spec section 5); nil without an API.
     static func connectorURL(options: LaunchOptions) -> String? {
-        supabaseConfig(options).map { $0.url.appending(path: "functions/v1/mcp").absoluteString }
+        apiConfig(options).map { $0.baseURL.appending(path: "mcp").absoluteString }
     }
 
     private static func apiConfig(_ options: LaunchOptions) -> ApiConfig? {
@@ -73,13 +72,6 @@ extension SyncCoordinator {
             log.error("Sync disabled, bad API_URL: \(String(describing: error), privacy: .public)")
             return nil
         }
-    }
-
-    private static func supabaseConfig(_ options: LaunchOptions) -> SupabaseConfig? {
-        #if DEBUG
-        if let fromEnvironment = try? SupabaseConfig(environment: options.environment) { return fromEnvironment }
-        #endif
-        return try? SupabaseConfig.fromBundle()
     }
 
     private static func sessionStore(_ options: LaunchOptions) -> any SessionStore {

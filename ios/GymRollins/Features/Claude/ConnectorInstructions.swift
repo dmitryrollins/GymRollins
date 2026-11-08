@@ -20,7 +20,7 @@ struct ConnectorInstructions: View {
         }
         step(1, "Copy the connector URL")
         step(2, "In Claude: Settings \u{2192} Connectors \u{2192} Add custom connector, then paste it")
-        step(3, "Approve access when asked")
+        step(3, "When Claude shows a code, open Settings \u{203A} Claude \u{203A} Approve a connection and type it")
     }
 
     private func step(_ number: Int, _ text: String) -> some View {

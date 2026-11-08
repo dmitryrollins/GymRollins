@@ -57,11 +57,10 @@ extension AppEnvironment {
         if autoApply { autoApplyProposals() }
     }
 
-    /// "Disconnect Claude": every permission goes off first and the profile is pushed at once (RLS enforces the
-    /// flags for any token Claude still holds), then the connector's OAuth grant is revoked. Revoking deletes its
-    /// sessions and refresh tokens, so it can't refresh and the MCP endpoint refuses its access token at once; only
-    /// direct PostgREST use of that stateless JWT stays possible until it expires, which the flags-off guard covers.
-    /// Returns the grants revoked; succeeds only when the server stored the flags AND the grant was revoked
+    /// "Disconnect Claude": every permission goes off first and the profile is pushed at once (the server checks the
+    /// toggles on each call Claude makes), then `POST /v1/claude/revoke` removes every grant and token of the account,
+    /// so Claude's next call is refused and its refresh token is dead.
+    /// Returns the connections revoked; succeeds only when the server stored the flags AND the revoke worked
     /// (`ClaudeDisconnectError` says which step failed; the revoke is not attempted if the flags weren't stored).
     @discardableResult
     func disconnectClaude() async throws -> Int {

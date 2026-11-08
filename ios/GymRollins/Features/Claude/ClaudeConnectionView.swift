@@ -25,6 +25,7 @@ struct ClaudeConnectionView: View {
     @State private var pending: [Proposal] = []
     @State private var recent: [Proposal] = []
     @State private var copied = false
+    @State private var approving = false
     @State private var confirmDisconnect = false
     @State private var disconnected = false
     @State private var error: String?
@@ -52,6 +53,7 @@ struct ClaudeConnectionView: View {
             Button("Disconnect Claude", role: .destructive) { Task { await disconnect() } }
                 .accessibilityIdentifier("claude.disconnect.confirm")
         }
+        .sheet(isPresented: $approving, onDismiss: { Task { await loadLastUse() } }) { approveSheet }
     }
 
     // MARK: Sections
@@ -76,7 +78,23 @@ struct ClaudeConnectionView: View {
     }
 
     private var connectSection: some View {
-        Section("Connect") { ConnectorInstructions(connectorURL: env.connectorURL, copied: $copied) }
+        Section("Connect") {
+            ConnectorInstructions(connectorURL: env.connectorURL, copied: $copied)
+            Button("Approve a connection") { approving = true }
+                .accessibilityIdentifier("claude.approveConnection")
+        }
+    }
+
+    /// A fresh model each time the sheet opens, asking through the account's sync coordinator.
+    private var approveSheet: some View {
+        NavigationStack {
+            ApproveConnectionView(model: ApproveConnectionModel(
+                lookUp: { [sync = env.sync] code in try await sync.connectRequest(code: code) },
+                decide: { [sync = env.sync] code, decision in
+                    try await sync.decideConnect(code: code, decision: decision)
+                }
+            ))
+        }
     }
 
     private var undoable: [Proposal] { recent.filter { $0.canUndo(at: env.now()) } }
