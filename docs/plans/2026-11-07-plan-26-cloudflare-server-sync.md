@@ -789,6 +789,20 @@ git add server
 git commit -m "feat(server): sign-in with Better Auth (Apple id token, bearer sessions)"
 ```
 
+- [ ] **Step 7: The review fix (added after review): only the auth routes the app uses, and a nonce on Apple sign-in**
+
+The review found two gaps, both confirmed in Better Auth's source:
+- `verify-id-token.mjs` checks an id token's nonce only when the client sends one, so a stolen Apple token could be replayed without it.
+- `sign-in/social` without an `idToken` starts the web redirect flow, which the app never uses.
+
+`server/src/auth/routes.ts` (`authHandler`) closes both:
+- It answers 404 for every Better Auth route except five: `POST sign-in/social`, `sign-up/email`, `sign-in/email`, `sign-out` and `GET get-session`.
+- It answers 400 for a `sign-in/social` without both `idToken.token` and a non-empty `idToken.nonce`.
+
+`index.ts` mounts `authHandler` on `/api/auth/*`. Three tests cover it in `auth.test.ts`: the nonce left out, no id token, and routes the app doesn't use. With them: `Tests  14 passed (14)`.
+
+Commit: `fix(server): only the auth routes the app uses, and Apple sign-in needs its nonce`.
+
 ### Task 3: The D1 schema and seeds
 
 **Files:**
@@ -1387,7 +1401,7 @@ Run: `node --test scripts/gen-equipment-seed.test.mjs && node scripts/gen-exerci
 Expected: `# pass 5`, `# fail 0`, `Exercise seeds match the bundled JSON`, `Equipment seeds match the bundled JSON`.
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  4 passed (4)`, `Tests  16 passed (16)`.
+Expected: `Test Files  4 passed (4)`, `Tests  19 passed (19)`.
 
 - [ ] **Step 7: Commit**
 
@@ -1689,7 +1703,7 @@ export function wireRow(columns: readonly Column[], row: Record<string, unknown>
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  6 passed (6)`, `Tests  44 passed (44)`.
+Expected: `Test Files  6 passed (6)`, `Tests  47 passed (47)`.
 
 - [ ] **Step 6: Commit**
 
@@ -2257,7 +2271,7 @@ Replace `server/src/index.ts` with:
 // and the app's routes under /v1 behind its session.
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { createAuth } from './auth/auth.ts'
+import { authHandler } from './auth/routes.ts'
 import { requireUser } from './auth/session.ts'
 import type { AppEnv } from './env.ts'
 import { errorBody, onError } from './http/errors.ts'
@@ -2269,7 +2283,7 @@ const MAX_BODY_BYTES = 4 * 1024 * 1024
 const app = new Hono<AppEnv>()
 app.onError(onError)
 app.notFound((c) => c.json(errorBody('not_found', 'No such route.'), 404))
-app.on(['GET', 'POST'], '/api/auth/*', (c) => createAuth(c.env).handler(c.req.raw))
+app.on(['GET', 'POST'], '/api/auth/*', authHandler)
 
 const v1 = new Hono<AppEnv>()
 v1.use('*', bodyLimit({
@@ -2287,7 +2301,7 @@ export default app
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
 Expected:
-- `Test Files  7 passed (7)` and `Tests  93 passed (93)`.
+- `Test Files  7 passed (7)` and `Tests  96 passed (96)`.
 - `sync-rows.test.ts` adds 49 tests: 35 for the seven tables and 14 more.
 
 - [ ] **Step 7: Commit**
@@ -2409,7 +2423,7 @@ and add these two fields to the `bodyweight` entry:
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  8 passed (8)`, `Tests  97 passed (97)`.
+Expected: `Test Files  8 passed (8)`, `Tests  100 passed (100)`.
 
 - [ ] **Step 5: Commit**
 
@@ -2754,7 +2768,7 @@ export async function entryListings(
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  9 passed (9)`, `Tests  107 passed (107)`.
+Expected: `Test Files  9 passed (9)`, `Tests  110 passed (110)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3281,7 +3295,7 @@ syncRoutes.get('/workouts/:id', async (c) => c.json(await fetchWorkout(c.env.DB,
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  10 passed (10)`, `Tests  121 passed (121)`.
+Expected: `Test Files  10 passed (10)`, `Tests  124 passed (124)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3514,7 +3528,7 @@ v1.route('/account', accountRoutes)
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  11 passed (11)`, `Tests  124 passed (124)`.
+Expected: `Test Files  11 passed (11)`, `Tests  127 passed (127)`.
 
 - [ ] **Step 5: Commit**
 
@@ -3640,7 +3654,7 @@ node scripts/gen-exercise-seed.mjs --check && node scripts/gen-equipment-seed.mj
 ```
 
 Expected:
-- `Test Files  11 passed (11)`, `Tests  124 passed (124)`.
+- `Test Files  11 passed (11)`, `Tests  127 passed (127)`.
 - The seed tests: `# pass 5`, and both checks match.
 - The Deno suite is unchanged: `159 passed … 1 ignored`. This plan doesn't touch it.
 
