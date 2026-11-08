@@ -2926,3 +2926,138 @@ defined in the task that first needs it.
 6. **A later plan: indexes for the pulls** (decision 17), before many accounts exist.
 
 ## Outcome
+
+Built on 2026-11-08, on `feat-cloudflare`, from base `61312a2` (the plan's last commit). Local only, not pushed. No
+Cloudflare account, resource or deploy; nothing on the phone or claude.ai.
+
+**The owner's sizes** (Task 1, Step 2's query, run again in Task 9 on the server-move check's own copy of the backup):
+`15|8|148|836|2685|23|6|42|0|4|1|1`, the line in "Facts checked". At most 15 exercises in a workout and 8 sets in an
+exercise, so nothing of the owner's is split, and every count is far under its cap.
+
+**Commits**
+
+| Task | Commits |
+|---|---|
+| 1 The numbers in `DomainLimits` | `f16f2a0` |
+| 2 The account caps in D1 | `90c4205` |
+| 3 One workout's size, and the logged counts | `c42e63a` |
+| 4 Claude's writes at a cap | `4256db9` |
+| 2–4, added after review | `a8ca035` (the counts on deletion and in the migration's backfill, an account at every cap deleted whole, resolved proposals still counting); `7ba431a` (the logged counts after a lost race, a force save, a lost answer's retry, a bigger re-save and a revival) |
+| 5 The phone stops at 50 and 50 | `df81b35`; after review `1606016` (Add exercise picks no more than the workout has room for; Add warm-up set stops at 50 sets) |
+| 6 The importers split | `306ea3a`; after review `bd240cb` (the pieces follow each other through the session) and `dc2c285` (a split workout counts once in the preview, the summary and the duplicates skipped) |
+| 7 A refused row, one line per reason | `954ef9d`; after review `4d9893a` (each line reads as one sentence; no promise of a retry at an account cap) |
+| 8 The docs | `5152741` |
+| 9 Verify, and small fixes | `98c6fbf`, `42f3269`, `566b2a3` (below); this Outcome |
+
+**Task 9's small fixes**
+1. `42f3269`: `RealExportImportTests` (opt-in, `GYM_REAL_EXPORT`) compares the stored rows with the pieces
+   (`plan.result.workouts.count`), and checks that the summary counts the export's workouts (`plan.stats.workouts`)
+   and skips no duplicates. Its `142` still means the export's workouts: `stats.workouts` counts a split workout once
+   since `dc2c285`, and none of the owner's is past the caps. It compiles (`build-for-testing`); it can't run without
+   the owner's export.
+2. `98c6fbf`: `ImportSplitTimesTests`, a table of 14 start and end combinations (an hour, a start off the whole second,
+   seven pieces, one piece with far fewer sets, a first piece with none, no sets at all, exactly and just under a
+   second a piece, a span shorter than the pieces, an end at or before the start, no end time). With a span of at
+   least a second a piece: the durations sum to the span, no overlap or gap, starts strictly increase, every piece
+   lasts a second or more, the last ends at the source's end. Without one: the pieces start a second apart and keep
+   the source's end. With the minimum-second pass removed from `ImportSplit.times`, the table fails.
+3. `566b2a3`: the current docs give the API's address as `https://api.gymrollins.com` (the owner's custom domain,
+   checklist section 1, option A): `docs/release-readiness.md`, `docs/media/README.md`'s cloud upload commands,
+   `docs/design/STYLE.md` and the two design canvases showing the connector URL. The checklist's own `workers.dev`
+   lines explain option B and stay.
+4. **The two intermittent audits: not fixed.** About 22 minutes, each try `-test-iterations 5` on just the two tests:
+   - Try 1: scroll to the end of the list, wait until two checks half a second apart see the same frame (and, for
+     Unblock, until the dialog is gone), then audit. `testClaudeConnectionAudit` 4 of 5, `testUnblockEveryoneAudit`
+     4 of 5.
+   - Try 2: the same, with contrast audited first and Dynamic Type in a call of its own. 3 of 5 and 3 of 5.
+   - Unblock's failures at the end all flag the "Apple Health" row (its label and the "Off" badge at y = 123.5, 3.5
+     points past the 120-point top band the test excludes): the list's end puts that row at the navigation bar's edge. The Claude failures
+     came at offsets short of the end (a swipe that didn't move the list ended the loop); there, at rest, "Approve a
+     connection", "Show all", "Copy prompt", the Project note and "What Claude can do" (y 268 to 665) were flagged,
+     though the screenshot shows them at full contrast.
+   - Reverted; nothing committed.
+
+**Final counts** (`DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2'` with `SYNC_E2E`, `MCP_E2E`,
+`PHOTO_E2E` and `GYM_E2E`)
+- Guard: `Old backend gone: no folder, no name outside docs/plans, docs/specs and docs/research, no script running Docker.`
+- Server: `Test Files  46 passed (46)`, `Tests  669 passed (669)` on the re-run; `tsc --noEmit` clean. In the full run
+  `Tests  1 failed | 668 passed (669)` (failure 3 below). `git grep -n account_rows -- server/src` finds only
+  `server/src/sync/workouts.ts` (the count moves, at `:83`, and two comment lines); `0010_account_caps.sql` has 27
+  `CREATE TRIGGER`.
+- GymCore `Test run with 548 tests in 66 suites passed`; GymData 372 tests in 50 suites; GymSync `Test run with 217
+  tests in 28 suites passed`; GymHealth 85 in 17; GymWatchLink 63 in 8. The Watch app builds for `watchsimulator` and
+  `watchos`.
+- Integration: `Test run with 45 tests in 11 suites passed`; `Account deletion verified: 66 deleted users, 0 rows left`.
+- App unit and UI suite: 1,164 tests, 1,144 passed, 18 skipped, 2 failed (failures 2 and 4 below).
+  - Skipped, all opt-in: `SyncUITests` 5 and `ProposalSyncUITests` 3 (need a Worker), `ReadmeScreenshotsUITests` 8,
+    `StoragePhotoIntegrationTests` 1, `RealExportImportTests` 1.
+- Sync UI: 8 tests, 7 passed, 1 skipped (the server-move test), 0 failed.
+- Node: share page `# pass 17`; photo matcher 13; wger 21; alias tables 13; photo prompts and generator 32; strength
+  14; uploader 22; seeds 3, and both `--check` runs match; store comparison 4. Every one `# fail 0`.
+- `MCP_E2E`: 12 `ok` lines, from `discovery: 401 on /mcp points at the resource metadata` to `Disconnect Claude removed
+  1 connection(s); the next call got 401`.
+- `PHOTO_E2E`: `done: 2 uploaded`, then `done: 0 uploaded, 2 skipped, 0 failed; manifest unchanged (1 exercises)`, then
+  `Test uploadedPhotosLoadThroughTheManifestAndProvider() passed`.
+- `GYM_E2E`: `Test run with 5 tests in 1 suite passed`; `Stays on the phone verified: 5 markers absent from gyms,
+  gym_equipment, equipment_items; 1 control present`.
+- **No run of `scripts/test-all.sh` ended `exit 0`.** The first stopped at GymHealth (`exit 1`, failure 1); the second
+  at the app suite (`exit 65`). The blocks after the app suite then ran from a copy of `test-all.sh`'s own lines that
+  goes on past a failure: all passed apart from the server's one test (failure 3), which passed on its re-run. No
+  tracked file changed (no screenshot re-rendered).
+
+**The failures** (none caused by plan 31)
+1. **GymHealth's build, first run:** `cannot find 'ImportSplit' in scope` in GymCore's `ImportSupport.swift`. It is the
+   stale incremental build "How to run things" describes, in a package Task 9, Step 2 doesn't clean. After
+   `swift package clean` there, GymHealth passed (85 in 17), and the second run passed it too.
+2. **`AccessibilityAuditUITests/testUnblockEveryoneAudit`:** contrast on two of Settings' section headers (y = 135 and
+   245); alone it failed again (one header, y = 228). Plan 30 found it intermittent on the code before the migration
+   too. Plan 31 changes no Settings code and not this test (`git log 61312a2..HEAD -- ios/GymRollins/Features/Settings`
+   is empty). See Task 9's fix 4.
+3. **Server, `claude-proposals.test.ts`, "lists the account's pending proposals, oldest first":** the two proposals
+   came back in the other order. The pull orders by `created_at, id`, and `created_at` is SQLite's `now`, to the
+   millisecond, so two proposals written in the same millisecond fall back to their random ids. The query and the
+   test are `864c344`'s, before plan 31; the new index `proposals_user_pending (user_id, created_at, id)` doesn't
+   change the order asked for. It passed in the server's re-run and in 6 runs of the file alone.
+4. **`EmptyStatesUITests/testLibraryNoResultsOffersCreateCustomExercise`:** the search field got
+   `Zzznotarealexerc` of `Zzznotarealexercise` (keystrokes dropped). It passed when re-run alone. Plan 31 touches no
+   Library code.
+
+**The server-move check** (numbers only; phone and D1 equal on every line): workouts 148, entries 836, sets 2,685,
+routines 6, body weights 23, custom exercises 42, week days 4, profile 1, exercise preferences 0, muscle targets 0,
+private gyms 0, private listings 0, workouts at a gym 0, entries at a listing 0; unsynced 0; `Stores match apart from
+sync state.`, then `Server move verified.` Nothing of the owner's data was refused by a cap.
+- It took three attempts, each on a fresh work folder outside the repo. The first hung: the new simulator never drew
+  a screen (`simctl io` gave `Timeout waiting for screen surfaces`) and no request reached the Worker in 20 minutes;
+  stopping `xcodebuild` let the script clean up. The second failed before any data moved: the email field never took
+  keyboard focus (the 5-second `hasKeyboardFocus` wait). The third passed, in about 8 minutes with the build.
+- The three work folders still hold copies of the backup, for the owner to delete.
+
+**Where the build differs from this plan:**
+1. **Counts.** The server is at 46 files and 669 tests, not 45 and 652: `account-rows.test.ts` and the other review
+   tests (`a8ca035`, `7ba431a`). GymCore 548 in 66, not 541 in 65 (`1606016` +1, `bd240cb` +5, `98c6fbf` a suite of
+   1). GymData 372, not 371 (`4d9893a`).
+2. **`SyncFailure` keeps the server's code** (`4d9893a`): an optional `code`, so failures stored before decode with
+   none, and `SyncEngine.recordRejection` passes it. Decision 12 said the stored `SyncFailure` wouldn't change, and
+   decision 11 that no GymSync code would. It lets Account drop "Editing one tries again." when every refused row hit
+   an account cap, where an edit is refused again; otherwise the footer reads as decision 12 says.
+3. **The phone's caps reach further** than Task 5's buttons (`1606016`): Add exercise lets the picker choose no more
+   than the room left, and Add warm-up set stops at 50 sets.
+4. **The split's times and counts** changed after review (`bd240cb`, `dc2c285`); decision 10 records the times.
+5. **`scripts/test-all.sh` never ended `exit 0` in one run,** as in plan 30 (above).
+6. **The server-move check** needed three attempts (above).
+
+**Left open for the owner** ("Questions for the owner" 1–6 are all still open):
+- **Deleting an account at every cap writes about 349,000 rows** (an estimate made in review), against the free plan's
+  100,000 a day. Move to Workers Paid before inviting anyone else. The checklist doesn't list this yet.
+- Claude's audit rows have no per-account cap (90 days kept, up to 60 a minute; question 1).
+- Shared gyms and listings are bounded only by the daily limits (question 4).
+- Indexes for the pulls (decision 17), a later plan before many accounts exist (question 6).
+- The refusals' words, in `server/src/sync/caps.ts` (question 5).
+- Re-saving a workout at both per-workout caps, and the database's size (questions 2 and 3).
+- A split workout without an end time (Fitbod, FitNotes): the app gives each piece its own estimated end
+  (`ImportService.endedAt`: 45 minutes or more unless every set is timed), so the pieces overlap and its time counts
+  once a piece. With an end
+  time they share it (decision 10). No workout of the owner's is split.
+- The two intermittent audits (Task 9's fix 4, and failure 2).
+- `ReadmeScreenshotsUITests.swift:164` still launches with a `workers.dev` `API_URL`. It draws the tracked README
+  screenshots, so changing it means rendering them again.
