@@ -13,10 +13,10 @@
   "dependencies": {
     "@better-auth/mcp": "1.7.18",
     "@better-auth/oauth-provider": "1.7.18",
-    "@modelcontextprotocol/server": "2.1.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "better-auth": "1.7.18",
     "hono": "4.13.17",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.6.0",

@@ -34,7 +34,7 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
 **Tech stack:**
 - Plan 26's server: Hono 4.13.17, Better Auth 1.7.18, D1, Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0, and TypeScript 5.9.3.
 - New: `@better-auth/oauth-provider` 1.7.18 and `@better-auth/mcp` 1.7.18, both released 2026-11-05 with Better Auth 1.7.18.
-- New: `@modelcontextprotocol/server` 2.1.0, the version the Deno server runs, and `zod` 4.6.5, the same.
+- New: `@modelcontextprotocol/server` 2.4.0 and `zod` 4.6.7 (the Deno server runs 2.1.0 and 4.6.5).
 
 **Spec:** `docs/specs/2026-11-07-cloudflare-backend-design.md`. This plan covers:
 - section 3 (the routes for Claude),
@@ -68,8 +68,8 @@ Its edits to `src/index.ts` and `src/env.ts` are small insertions next to lines 
      - it defaults the refresh replay window to 30 seconds.
      It can't be combined with a second `oauthProvider()`.
    - Its tables are `oauthClient`, `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent` and `oauthClientAssertion`. `scripts/gen-oauth-schema.mjs` writes them as SQL from Better Auth's own `getMigrations` (Task 4).
-   - **For MCP on Workers,** `@modelcontextprotocol/server` 2.1.0 (2026-09-23) is the version the Deno server runs. Its `createMcpHandler` is fetch-based and has a `workerd` export, so it runs in the Worker and in the tests. Each request builds its own `McpServer`, so it needs no session, KV or Durable Objects. The `agents` package isn't needed.
-   - 2.4.0 is newer. Upgrading stays out of this plan, so the tools behave exactly as on Supabase.
+   - **For MCP on Workers,** `@modelcontextprotocol/server` 2.4.0 (2026-10-23) is used. Its `createMcpHandler` is fetch-based and has a `workerd` export, so it runs in the Worker and in the tests. Each request builds its own `McpServer`, so it needs no session, KV or Durable Objects. The `agents` package isn't needed.
+   - The Deno server runs 2.1.0; this plan uses 2.4.0. Upgraded after review: npm audit flagged GHSA-jm63-cq47-j5jp, GHSA-46jr-4wx8-v453, GHSA-rvq5-wwqv-78pq and GHSA-mrhx-c7xc-m3w5.
 2. **The sign-in hands over without Better Auth's login hook. This is the path the spec allows, and it is chosen on purpose.**
    - `loginPage` and `consentPage` are both `/connect`. Better Auth's authorize step redirects there with the request signed: `sig`, `exp`, `ba_iat`, and the `ba_param` list.
    - The plugin's own way back is a hook. A sign-in endpoint must set the session cookie with the signed query in a JSON body, and the response is then `{redirect, url}`. That needs script on the page, and the consent step would be a second hop.
@@ -618,11 +618,11 @@ git commit -m "feat(server): plan validation, insights and strength code on Vite
 
 - [ ] **Step 1: Install the MCP SDK and zod at the Deno server's versions**
 
-Run: `cd server && npm install --save-exact @modelcontextprotocol/server@2.1.0 zod@4.6.5`
+Run: `cd server && npm install --save-exact @modelcontextprotocol/server@2.4.0 zod@4.6.7`
 
 Expected:
 - `added … packages`, no `ERR!`.
-- `package.json`'s `dependencies` gains `"@modelcontextprotocol/server": "2.1.0"` and `"zod": "4.6.5"`.
+- `package.json`'s `dependencies` gains `"@modelcontextprotocol/server": "2.4.0"` and `"zod": "4.6.7"`.
 
 - [ ] **Step 2: Copy the MCP code**
 
@@ -6648,7 +6648,7 @@ Expected: all pass. The hermetic suite (`scripts/ios-test.sh`) skips `ProposalSy
 | §10 the login hook and revocable tokens | Decisions 2 and 3 (proved in the scratch copy, Decision 13) |
 
 **What this plan found that the spec says differently** (for the spec's next revision):
-- **Section 3 says "createMcpHandler + McpServer".** They come from `@modelcontextprotocol/server` 2.1.0, as on Supabase, and not from the `agents` package.
+- **Section 3 says "createMcpHandler + McpServer".** They come from `@modelcontextprotocol/server` 2.4.0, and not from the `agents` package.
 - **Section 4 says "Better Auth's login step sends the browser to `/connect`".** It does. The way back isn't the plugin's login hook, though: `/connect` signs the browser in and re-enters the authorize step (Decision 2).
 - **Section 4 says "registers itself, dynamically or with a client metadata document".** Only dynamic registration is on (Decision 4).
 - **Section 8 says "the 127 MCP tests".** What comes across:
