@@ -4,6 +4,8 @@
 // weight, the audit row and the rate-limit slot. The old Deno server's data layer and the Postgres
 // policies were the reference.
 import { claudeReadsPrivateListing, claudeReadsPublicListing } from '../gyms/visibility.ts'
+import { raisedCode } from '../http/errors.ts'
+import { CLAUDE_CAPS } from '../sync/caps.ts'
 import { inJson } from '../sync/sql.ts'
 import { normalizeTimestamp, NOW_SQL } from '../sync/time.ts'
 import type {
@@ -79,6 +81,18 @@ function setRow(r: Raw): SetRow {
     rir: r.rir as number | null,
     rpe: r.rpe as number | null,
     multiplier: r.multiplier as number,
+  }
+}
+
+/** `write`, with the refusal of one of its caps (migrations/0010_account_caps.sql) as words for Claude. */
+async function capped<T>(write: Promise<T>, ...codes: (keyof typeof CLAUDE_CAPS)[]): Promise<T> {
+  try {
+    return await write
+  } catch (error) {
+    const raised = raisedCode(error)
+    const code = codes.find((c) => c === raised)
+    if (code !== undefined) throw new ToolError(CLAUDE_CAPS[code])
+    throw error
   }
 }
 
@@ -498,14 +512,14 @@ export class D1Db implements Db {
     p: { summary: string; changes: unknown[] },
   ): Promise<{ id: string; created_at: string }> {
     if (!(await this.allowed()).propose) throw new ToolError(NOT_ALLOWED)
-    const row = await this.db.prepare(
+    const row = await capped(this.db.prepare(
       'INSERT INTO proposals (id, user_id, created_at, summary, changes, status, applied_change_ids, ' +
         `client_updated_at, updated_at) VALUES (?1, ?2, ${NOW_SQL}, ?3, ?4, 'pending', '[]', ${NOW_SQL}, ` +
         `${NOW_SQL}) ` +
         'RETURNING id, created_at',
     ).bind(crypto.randomUUID(), this.userId, p.summary, JSON.stringify(p.changes)).first<
       { id: string; created_at: string }
-    >()
+    >(), 'too_many_pending_proposals', 'too_many_proposals')
     return row!
   }
 
@@ -529,10 +543,11 @@ export class D1Db implements Db {
     r: { id: string; measured_at: string; w_kg: number; bf_pct?: number },
   ): Promise<void> {
     if (!(await this.allowed()).body) throw new ToolError(NOT_ALLOWED)
-    await this.db.prepare(
+    await capped(this.db.prepare(
       'INSERT INTO bodyweight (id, user_id, measured_at, w_kg, bf_pct, client_updated_at, updated_at) ' +
         `VALUES (?1, ?2, ?3, ?4, ?5, ${NOW_SQL}, ${NOW_SQL})`,
-    ).bind(r.id.toLowerCase(), this.userId, stamp(r.measured_at), r.w_kg, r.bf_pct ?? null).run()
+    ).bind(r.id.toLowerCase(), this.userId, stamp(r.measured_at), r.w_kg, r.bf_pct ?? null).run(),
+    'too_many_body_weights')
   }
 
   async audit(tool: string, ok: boolean, argsDigest: string): Promise<void> {

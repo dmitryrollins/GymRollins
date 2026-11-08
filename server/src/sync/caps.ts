@@ -38,3 +38,16 @@ export const WORKOUT_CAPS = {
   too_many_exercise_sets:
     `An exercise in a workout can have up to ${DomainLimits.entrySetsMax} sets. This workout stays on this iPhone.`,
 } as const
+
+/** Claude's words when a cap refuses its write (src/mcp/d1-db.ts): a ToolError, which Claude reads. */
+export const CLAUDE_CAPS = {
+  too_many_pending_proposals:
+    `The owner already has ${grouped(DomainLimits.pendingProposalsMax)} proposals waiting for review, the most one ` +
+    'account holds. Nothing was saved: ask the owner to apply or dismiss some in the app, then propose again.',
+  too_many_proposals:
+    `The owner's account already holds ${grouped(DomainLimits.proposalsMax)} proposals, resolved ones included, the ` +
+    'most it can. Nothing was saved.',
+  too_many_body_weights:
+    `The owner's account already holds ${grouped(DomainLimits.bodyweightsMax)} weigh-ins, deleted ones included, ` +
+    'the most it can. Nothing was saved.',
+} as const
