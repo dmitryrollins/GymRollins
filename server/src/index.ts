@@ -8,6 +8,7 @@ import { requireUser } from './auth/session.ts'
 import type { AppEnv } from './env.ts'
 import { catalogueRoutes } from './gyms/routes.ts'
 import { errorBody, onError } from './http/errors.ts'
+import { moderationRoutes } from './moderation/routes.ts'
 import { syncRoutes } from './sync/routes.ts'
 
 /** A workout or 200 rows is far below this, and one bound JSON value must stay under D1's ~2 MB. */
@@ -34,6 +35,7 @@ v1.use('*', requireUser)
 v1.route('/sync', syncRoutes)
 v1.route('/account', accountRoutes)
 v1.route('/', catalogueRoutes)
+v1.route('/', moderationRoutes)
 app.route('/v1', v1)
 
 export default app

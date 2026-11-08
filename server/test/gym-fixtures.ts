@@ -164,3 +164,37 @@ export async function listingsSharedToday(gym: string, addedBy: string, count: n
 export async function agedRows(table: string, column: string, userId: string) {
   await env.DB.prepare(`UPDATE ${table} SET created_at = ?2 WHERE ${column} = ?1`).bind(userId, DAYS_AGO).run()
 }
+
+/** An account with no session, as an author to block: cheaper than signing up. */
+export async function insertUser(): Promise<string> {
+  const id = crypto.randomUUID()
+  await env.DB.prepare(
+    'INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt") VALUES (?1, ?2, ?3, 0, ?4, ?4)',
+  ).bind(id, 'Fixture', `f-${id}@test.local`, T).run()
+  return id
+}
+
+/** `count` reports the account filed just now, on targets nobody else reported. */
+export async function reportsToday(userId: string, count: number) {
+  const ids = Array.from({ length: count }, () => crypto.randomUUID())
+  await env.DB.prepare(
+    `INSERT INTO reports (id, target_type, target_id, reporter_id, reason, created_at)
+     SELECT value, 'listing', value, ?2, 'spam', ${NOW_SQL} FROM json_each(?1)`,
+  ).bind(JSON.stringify(ids), userId).run()
+}
+
+/** `count` accounts the user blocked just now. */
+export async function blocksToday(userId: string, count: number): Promise<string[]> {
+  const blocked = await Promise.all(Array.from({ length: count }, () => insertUser()))
+  await env.DB.prepare(
+    `INSERT INTO user_blocks (blocker_id, blocked_id, created_at) SELECT ?2, value, ${NOW_SQL} FROM json_each(?1)`,
+  ).bind(JSON.stringify(blocked), userId).run()
+  return blocked
+}
+
+/** `count` unblock-alls the account made just now. */
+export async function unblocksToday(userId: string, count: number) {
+  for (let i = 0; i < count; i++) {
+    await env.DB.prepare(`INSERT INTO gym_unblocks (user_id, created_at) VALUES (?1, ${NOW_SQL})`).bind(userId).run()
+  }
+}
