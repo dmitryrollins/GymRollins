@@ -1574,7 +1574,8 @@ public struct ApiSyncTransport: SyncTransport {
 
     public func push(profile: ProfileDTO) async throws -> RowAck? {
         // The server's ack id is the account's id; the engine knows the profile by its fixed id.
-        try await push([profile], to: "profile").first.map { RowAck(id: SyncStore.profileSyncID, updatedAt: $0.updatedAt) }
+        try await push([profile], to: "profile").first
+            .map { RowAck(id: SyncStore.profileSyncID, updatedAt: $0.updatedAt) }
     }
 
     public func push(customExercises: [CustomExerciseDTO]) async throws -> [RowAck] {
@@ -1732,7 +1733,10 @@ private struct AckList: Decodable {
 - [ ] **Step 5: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 177 tests in 24 suites passed`.
+Expected: `Test run with 180 tests in 24 suites passed` (177 plus the three tests added after review).
+
+Added after review: two tests decode a workout in the API's own shape (pull and fetch), a third covers the
+`servesProposals` guard in `SyncEngineServerScopeTests`, and over-long lines were wrapped.
 
 - [ ] **Step 6: Commit**
 
@@ -2076,7 +2080,12 @@ extension SyncStore {
                 proposal.serverUpdatedAt = nil
             }
         }
-        try context.save()
+        do {
+            try context.save()
+        } catch {
+            context.rollback() // leave no half-moved records in the context for a later save to commit
+            throw error
+        }
     }
 
     /// Every record that syncs with the account: the aggregate roots, and the gyms and listings synced to it ("This
@@ -2108,7 +2117,11 @@ extension SyncStore {
 - [ ] **Step 4: Run the tests**
 
 Run: `cd ios/Packages/GymData && swift test`
-Expected: `Test run with 363 tests in 49 suites passed`.
+Expected: `Test run with 364 tests in 49 suites passed` (363 plus the crash-recovery test added after review).
+
+Added after review: a test of the "This phone only" Garage `GymRecord` itself, a test that a move cut short after the
+save runs again to the same end, and `context.rollback()` when the save throws (not tested: a save failure can't be
+forced cleanly).
 
 - [ ] **Step 5: Commit**
 
@@ -3222,7 +3235,7 @@ Expected: no output.
 - [ ] **Step 9: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 190 tests in 24 suites passed` (188 plus the two review tests above; a parameterized test
+Expected: `Test run with 193 tests in 24 suites passed` (188 plus the two review tests above and the three added in the Task 4 and 5 review follow-ups; a parameterized test
 counts once). The integration target builds too, and its suites skip without
 `API_URL`; Task 8 runs them.
 
@@ -3668,7 +3681,7 @@ xcrun xcresulttool get test-results summary --path "$(ls -td build/TestResults-p
 Expected: `"result" : "Passed"`, `failedTests` 0, and `passedTests` equal to `totalTestCount`. The new suites add 4 tests.
 
 Then run the package suites again: `(cd Packages/GymSync && swift test --filter GymSyncTests)`.
-Expected: `Test run with 190 tests in 24 suites passed` (188 plus the two review tests above; a parameterized test
+Expected: `Test run with 193 tests in 24 suites passed` (188 plus the two review tests above and the three added in the Task 4 and 5 review follow-ups; a parameterized test
 counts once). The Keychain store is tested in the app, where the simulator's
 Keychain works.
 
@@ -4475,8 +4488,8 @@ DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' scripts/ios-test-sy
 
 Expected:
 - GymCore unchanged.
-- GymData: `Test run with 363 tests in 49 suites passed`.
-- GymSync: `Test run with 188 tests in 24 suites passed`.
+- GymData: `Test run with 364 tests in 49 suites passed`.
+- GymSync: `Test run with 193 tests in 24 suites passed`.
 - Integration: `Test run with 15 tests in 4 suites passed`, then `Account deletion verified: 17 deleted users, 0 rows
   left`.
 - Store comparison: `# pass 2`.

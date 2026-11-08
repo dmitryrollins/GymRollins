@@ -15,7 +15,8 @@ public enum SyncStatus: Equatable, Sendable {
 /// targets, bodyweight, then workouts
 /// one RPC each) and proposal resolutions, then pulls each entity since its cursor and applies it through `SyncStore`. Only one sync (or
 /// conflict resolution) runs at a time; network failures, a busy server and rate limits leave local data untouched and
-/// report `.offline`. A row the server refuses for its values is recorded as a `SyncFailure` and skipped, so it can't block the rest of the round.
+/// report `.offline`. A row the server refuses for its values is recorded as a `SyncFailure` and skipped, so it can't
+/// block the rest of the round.
 /// After the pull, pending proposals are auto-applied when the owner allows it (`autoApply`) and pushed at once.
 /// `shutdown()` (sign-out, account switch/deletion) stops the engine: after it, no response can reach the store.
 @MainActor @Observable

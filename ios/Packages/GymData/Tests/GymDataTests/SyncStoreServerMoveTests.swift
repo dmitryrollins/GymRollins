@@ -28,7 +28,8 @@ import Testing
                              serverUpdatedAt: at)
         }
         for row in try s.dirtyCustomExercises() {
-            try s.markSynced(.customExercises, id: row.value.id, clientUpdatedAt: row.clientUpdatedAt, serverUpdatedAt: at)
+            try s.markSynced(.customExercises, id: row.value.id, clientUpdatedAt: row.clientUpdatedAt,
+                             serverUpdatedAt: at)
         }
         for row in try s.dirtyExercisePreferences() {
             try s.markSynced(.exercisePreferences, id: row.value.exerciseId, clientUpdatedAt: row.clientUpdatedAt,
@@ -47,7 +48,8 @@ import Testing
                              serverUpdatedAt: at)
         }
         for row in try s.dirtyGyms() {
-            try s.markSynced(.gyms, id: row.value.id.uuidString, clientUpdatedAt: row.clientUpdatedAt, serverUpdatedAt: at)
+            try s.markSynced(.gyms, id: row.value.id.uuidString, clientUpdatedAt: row.clientUpdatedAt,
+                             serverUpdatedAt: at)
         }
         for row in try s.dirtyGymListings() {
             try s.markSynced(.gymListings, id: row.value.id.uuidString, clientUpdatedAt: row.clientUpdatedAt,
@@ -101,8 +103,13 @@ import Testing
         return workout
     }
 
+    private func gymRecord(_ id: UUID) throws -> GymRecord {
+        try #require(try f.context.fetch(FetchDescriptor<GymRecord>(predicate: #Predicate { $0.id == id })).first)
+    }
+
     private func listingRecord(_ id: UUID) throws -> GymListingRecord {
-        try #require(try f.context.fetch(FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first)
+        try #require(try f.context.fetch(
+            FetchDescriptor<GymListingRecord>(predicate: #Predicate { $0.id == id })).first)
     }
 
     @Test func aFirstLaunchWithNothingFromAServerOnlyRemembersIt() throws {
@@ -138,7 +145,8 @@ import Testing
         #expect(SyncEntity.allCases.allSatisfy { f.store.cursor(for: $0) == nil })
         #expect(f.store.syncFailures().isEmpty)
         #expect(f.store.syncedServer == new)
-        #expect(try dirtyCount() == 8, "profile, custom exercise, preference, routine, weekday, target, weigh-in, workout")
+        #expect(try dirtyCount() == 8,
+                "profile, custom exercise, preference, routine, weekday, target, weigh-in, workout")
         let row = try #require(try f.store.dirtyWorkouts().first)
         #expect(row.value.workout.id == workout.id)
         #expect(row.serverUpdatedAt == nil, "it goes up with no base version, as a new workout")
@@ -166,6 +174,8 @@ import Testing
         f.store.ownerUserId = UUID()
         let before = try listingRecord(kept.id)
         let keptState = (before.dirty, before.updatedAt, before.visibilityRaw)
+        let garage = try gymRecord(phoneOnly.id)
+        let garageState = (garage.dirty, garage.serverUpdatedAt, garage.updatedAt)
 
         #expect(try f.store.moveToServer(new))
 
@@ -177,6 +187,34 @@ import Testing
         #expect(moved.value.photoFile == "p.jpg")
         let after = try listingRecord(kept.id)
         #expect(after.dirty == keptState.0 && after.updatedAt == keptState.1 && after.visibilityRaw == keptState.2)
+        let garageAfter = try gymRecord(phoneOnly.id)
+        #expect(garageAfter.dirty == garageState.0, "the Garage keeps its dirty flag")
+        #expect(garageAfter.serverUpdatedAt == garageState.1, "and its server version")
+        #expect(garageAfter.updatedAt == garageState.2, "and its edit time")
+    }
+
+    @Test func aMoveCutShortAfterTheSaveRunsAgainToTheSameEnd() throws {
+        defer { f.tearDown() }
+        let owner = UUID()
+        let workout = try syncedAccount(owner: owner)
+        let edited = try #require(try f.context.fetch(FetchDescriptor<WorkoutRecord>()).first?.updatedAt)
+        #expect(try f.store.moveToServer(new))
+
+        // The app died after the store was saved, before the owner and cursors were forgotten: the old server's
+        // leftovers are back and the new server was never recorded.
+        f.store.ownerUserId = owner
+        f.store.setCursor(f.clock.now, for: .routines)
+        f.store.syncedServer = old
+
+        #expect(try f.store.moveToServer(new))
+
+        #expect(f.store.ownerUserId == nil)
+        #expect(SyncEntity.allCases.allSatisfy { f.store.cursor(for: $0) == nil })
+        #expect(f.store.syncedServer == new)
+        #expect(try dirtyCount() == 8)
+        let row = try #require(try f.store.dirtyWorkouts().first)
+        #expect(row.value.workout.id == workout.id && row.serverUpdatedAt == nil && row.clientUpdatedAt == edited)
+        #expect(try !f.store.moveToServer(new), "and then it is done")
     }
 
     @Test func pendingProposalsGoAndResolutionsCountAsSent() throws {

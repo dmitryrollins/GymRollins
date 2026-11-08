@@ -82,9 +82,11 @@ import Testing
                 guard let after else { return at > since }
                 return at > since || (at == since && id > after)
             }.prefix(limit).map { id, at in
-                #"{"id": "\#(id)", "measured_at": "2026-09-27T08:00:00.000000Z", "w_kg": 80, "bf_pct": null, "t": null, "#
+                #"{"id": "\#(id)", "measured_at": "2026-09-27T08:00:00.000000Z", "w_kg": 80, "bf_pct": null, "#
+                    + #""t": null, "#
                     + #""source": null, "health_sample_id": null, "health_fat_sample_id": null, "#
-                    + #""client_updated_at": "2026-09-27T08:00:00.000000Z", "deleted_at": null, "updated_at": "\#(at)"}"#
+                    + #""client_updated_at": "2026-09-27T08:00:00.000000Z", "deleted_at": null, "#
+                    + #""updated_at": "\#(at)"}"#
             }
             return .json(200, #"{"rows": [\#(page.joined(separator: ","))]}"#)
         }
@@ -112,7 +114,9 @@ import Testing
     }
 
     @Test func aWorkoutGoesUpAloneWithItsBaseVersionAndEntries() async throws {
-        let server = StubServer { _ in .json(200, #"{"status": "stale", "updated_at": "2026-11-08T10:00:00.100000Z"}"#) }
+        let server = StubServer { _ in
+            .json(200, #"{"status": "stale", "updated_at": "2026-11-08T10:00:00.100000Z"}"#)
+        }
         let workout = Workout(startedAt: t0, endedAt: t0 + 600, name: "Push", entries: [
             WorkoutEntry(exerciseId: "bench", sets: [WorkoutSet(weightKg: 60, reps: 8, done: true)]),
         ])
@@ -140,10 +144,53 @@ import Testing
         #expect(server.requests.first?.path == "/v1/sync/workouts/\(id.uuidString.lowercased())")
     }
 
+    /// One workout as server/src/sync/workouts.ts `withEntries` sends it: entries[] with sets[] in position order, no
+    /// `workout_id` / `entry_id` back-references, the server version as `updated_at`.
+    private let serverWorkout = """
+    {"id": "11111111-1111-4111-8111-111111111111", "started_at": "2026-11-07T09:00:00.000000Z",
+     "ended_at": "2026-11-07T10:00:00.000000Z", "paused_sec": 0, "routine_id": null, "name": "Push", "source": "app",
+     "note": null, "vol_kg": 960, "records": [{"exerciseId": "bench_press", "kind": "e1RM", "valueKg": 75}],
+     "client_updated_at": "2026-11-07T10:00:00.000000Z", "deleted_at": null,
+     "updated_at": "2026-11-08T10:00:00.250000Z",
+     "entries": [{"id": "22222222-2222-4222-8222-222222222222", "exercise_id": "bench_press", "position": 0,
+       "note": null, "superset_group": null, "sets": [
+         {"id": "33333333-3333-4333-8333-333333333331", "position": 0, "w_kg": 60, "r": 8, "done": true,
+          "warmup": false, "multiplier": 1},
+         {"id": "33333333-3333-4333-8333-333333333332", "position": 1, "w_kg": 62.5, "r": 6, "done": true,
+          "warmup": false, "multiplier": 1, "rir": 2}]}]}
+    """
+
+    private func expectServerWorkout(_ dto: WorkoutDTO?) throws {
+        let workout = try #require(dto)
+        #expect(workout.id == UUID(uuidString: "11111111-1111-4111-8111-111111111111"))
+        #expect(workout.updatedAt == SyncDate.parse("2026-11-08T10:00:00.25Z"))
+        let entry = try #require(workout.entries.first)
+        #expect(workout.entries.count == 1 && entry.exerciseId == "bench_press")
+        #expect(entry.sets.map(\.wKg) == [60, 62.5])
+        #expect(entry.sets.map(\.r) == [8, 6])
+        #expect(entry.sets.last?.rir == 2)
+        let domain = workout.toDomain().value.workout
+        #expect(domain.entries.first?.sets.count == 2 && domain.entries.first?.sets.first?.done == true)
+    }
+
+    @Test func pulledWorkoutsDecodeInTheApisShape() async throws {
+        let server = StubServer { _ in .json(200, #"{"rows": [\#(self.serverWorkout)]}"#) }
+        let pulled = try await ApiSyncTransport(api: server.client()).pullWorkouts(since: nil)
+        #expect(pulled.count == 1)
+        try expectServerWorkout(pulled.first)
+    }
+
+    @Test func aFetchedWorkoutDecodesInTheApisShape() async throws {
+        let server = StubServer { _ in .json(200, self.serverWorkout) }
+        try expectServerWorkout(try await ApiSyncTransport(api: server.client()).fetchWorkout(id: UUID()))
+    }
+
     @Test func refusedRowsBecomeRowRejectionsAndTheRestEndsTheRound() async throws {
         let row = BodyweightDTO(SyncRow(value: BodyweightEntry(date: t0, weightKg: 500), clientUpdatedAt: t0))
         func push(_ status: Int, _ code: String, _ message: String) async throws {
-            let server = StubServer { _ in .json(status, #"{"error": {"code": "\#(code)", "message": "\#(message)"}}"#) }
+            let server = StubServer { _ in
+                .json(status, #"{"error": {"code": "\#(code)", "message": "\#(message)"}}"#)
+            }
             _ = try await ApiSyncTransport(api: server.client()).push(bodyweight: [row])
         }
         await #expect(throws: SyncRecordRejected(code: "row_rejected",

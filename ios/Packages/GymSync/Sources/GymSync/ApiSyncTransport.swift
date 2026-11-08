@@ -3,8 +3,8 @@ import GymData
 
 /// `SyncTransport` over the API's `/v1/sync` (server/src/sync/routes.ts; spec section 3, "Routes"). The server scopes
 /// every call to the session's account.
-/// - Rows go up as `POST /v1/sync/<entity>` `{"rows": [...]}`, 200 a request, and the answer acks the rows stored. A row
-///   the server's last-write-wins skipped gets no ack, as with `lww_guard`.
+/// - Rows go up as `POST /v1/sync/<entity>` `{"rows": [...]}`, 200 a request, and the answer acks the rows
+///   stored. A row the server's last-write-wins skipped gets no ack, as with `lww_guard`.
 /// - Pulls are keyset pages, `GET /v1/sync/<entity>?since&after&limit` answered `{"rows": [...]}`: `since` alone means
 ///   newer than it; with `after`, the rows after `(since, after)` in `(updated_at, tiebreak)` order.
 /// - A workout goes up alone, with its entries, sets and base version, and is answered `{"status", "updated_at"}`.
@@ -41,7 +41,8 @@ public struct ApiSyncTransport: SyncTransport {
 
     public func push(profile: ProfileDTO) async throws -> RowAck? {
         // The server's ack id is the account's id; the engine knows the profile by its fixed id.
-        try await push([profile], to: "profile").first.map { RowAck(id: SyncStore.profileSyncID, updatedAt: $0.updatedAt) }
+        try await push([profile], to: "profile").first
+            .map { RowAck(id: SyncStore.profileSyncID, updatedAt: $0.updatedAt) }
     }
 
     public func push(customExercises: [CustomExerciseDTO]) async throws -> [RowAck] {
@@ -161,7 +162,8 @@ public struct ApiSyncTransport: SyncTransport {
 
     /// A row refused for its values (422, `row_rejected`: a CHECK, a foreign key or a wrong type), for an id another
     /// account holds (403 `not_allowed`), or for being too big (413 `too_large`) is about that row alone: the engine
-    /// records it and syncs the rest, as with SQLSTATE 22/23. Anything else (signed out, server trouble) ends the round.
+    /// records it and syncs the rest, as with SQLSTATE 22/23. Anything else (signed out, server trouble) ends the
+    /// round.
     static func mappingRejections<R>(_ call: () async throws -> R) async throws -> R {
         do {
             return try await call()

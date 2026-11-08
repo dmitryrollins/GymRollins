@@ -68,7 +68,8 @@ public struct AuthFailure: LocalizedError, Equatable, Sendable {
             return Messages.weakPassword
         case "signed_out", "session_expired":
             return Messages.sessionExpired
-        case "email_password_disabled", "email_password_sign_up_disabled", "provider_not_found", "id_token_not_supported":
+        case "email_password_disabled", "email_password_sign_up_disabled", "provider_not_found",
+             "id_token_not_supported":
             return Messages.methodUnavailable
         default:
             return failure.status == 429 ? Messages.rateLimited : nil

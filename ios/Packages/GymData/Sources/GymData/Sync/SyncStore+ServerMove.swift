@@ -62,7 +62,12 @@ extension SyncStore {
                 proposal.serverUpdatedAt = nil
             }
         }
-        try context.save()
+        do {
+            try context.save()
+        } catch {
+            context.rollback() // leave no half-moved records in the context for a later save to commit
+            throw error
+        }
     }
 
     /// Every record that syncs with the account: the aggregate roots, and the gyms and listings synced to it ("This

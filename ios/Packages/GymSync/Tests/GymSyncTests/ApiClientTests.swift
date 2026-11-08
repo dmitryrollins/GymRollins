@@ -169,7 +169,8 @@ import Testing
         var dumped = ""
         dump(session, to: &dumped)
         dump(bearer, to: &dumped)
-        let shown = [printed, dumped, "\(session)", "\(bearer)", String(reflecting: session), String(reflecting: bearer)]
+        let shown = [printed, dumped, "\(session)", "\(bearer)",
+                     String(reflecting: session), String(reflecting: bearer)]
         for text in shown {
             #expect(!text.contains(session.token), "\(text)")
             #expect(text.contains("<redacted>"), "\(text)")

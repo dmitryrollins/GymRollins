@@ -14,7 +14,8 @@ final class StepLog: @unchecked Sendable {
 
 private let userId = UUID(uuidString: "b73f3bdc-18c8-400a-b492-4db321b4baee")!
 /// Better Auth 1.7.18's answers as plan 27's probe recorded them, trimmed.
-private let signInBody = #"{"redirect": false, "token": "raw-token", "user": {"id": "b73f3bdc-18c8-400a-b492-4db321b4baee", "#
+private let signInBody = #"{"redirect": false, "token": "raw-token", "#
+    + #""user": {"id": "b73f3bdc-18c8-400a-b492-4db321b4baee", "#
     + #""email": "a@test.local", "name": "", "emailVerified": true}}"#
 private let sessionBody = #"{"session": {"token": "raw-token", "userId": "b73f3bdc-18c8-400a-b492-4db321b4baee"}, "#
     + #""user": {"id": "b73f3bdc-18c8-400a-b492-4db321b4baee", "email": "a@test.local", "name": ""}}"#
@@ -39,7 +40,8 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
     }
 
     @Test func wrongCredentials() {
-        #expect(AuthFailure(api(401, "invalid_email_or_password"), during: .signIn).message == "Wrong email or password.")
+        #expect(AuthFailure(api(401, "invalid_email_or_password"), during: .signIn).message
+            == "Wrong email or password.")
     }
 
     @Test func existingAccount() {
@@ -75,7 +77,8 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
     @Test func anythingElseIsGeneric() {
         struct Boom: Error {}
         #expect(AuthFailure(Boom(), during: .signIn).message == "Couldn't sign in. Please try again.")
-        #expect(AuthFailure(api(401, "invalid_token"), during: .signIn).message == "Couldn't sign in. Please try again.",
+        #expect(AuthFailure(api(401, "invalid_token"), during: .signIn).message
+                == "Couldn't sign in. Please try again.",
                 "Apple's token refused: audience, nonce, signature or expiry")
         #expect(AuthFailure(api(500, "server_error"), during: .signUp).message
             == "Couldn't create your account. Please try again.")
@@ -301,7 +304,8 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         let sessions = InMemorySessionStore(stored)
         let auth = service(server, sessions: sessions)
         await auth.restore()
-        try await auth.deleteAccount(photos: AccountPhotoSteps(detach: { log.add("detach") }, remove: { log.add("remove") }))
+        try await auth.deleteAccount(photos: AccountPhotoSteps(
+            detach: { log.add("detach") }, remove: { log.add("remove") }))
         #expect(log.items == ["GET /api/auth/get-session", "GET /api/auth/get-session", "detach", "remove",
                               "DELETE /v1/account"])
         #expect(auth.state == .signedOut)

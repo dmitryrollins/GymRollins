@@ -100,9 +100,10 @@ private actor PagedTable {
         #expect(try PageKey.decode(weekdays, tiebreak: "weekday").first?.tiebreak == "3")
     }
 
-
     @Test func keyRowsAlsoComeFromTheAPIsRowsObject() throws {
-        let page = Data(#"{"rows": [{"user_id": "b73f3bdc-18c8-400a-b492-4db321b4baee", "updated_at": "2026-11-08T10:00:00.123000Z"}]}"#.utf8)
+        let page = Data(
+            (#"{"rows": [{"user_id": "b73f3bdc-18c8-400a-b492-4db321b4baee", "#
+                + #""updated_at": "2026-11-08T10:00:00.123000Z"}]}"#).utf8)
         #expect(try PageKey.decode(page, tiebreak: "user_id").first?.tiebreak == "b73f3bdc-18c8-400a-b492-4db321b4baee")
         #expect(try PageKey.decode(Data(#"{"rows": []}"#.utf8), tiebreak: "id").isEmpty)
     }

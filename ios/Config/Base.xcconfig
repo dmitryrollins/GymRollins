@@ -1,8 +1,8 @@
 // Committed base settings. Put DEVELOPMENT_TEAM etc. in Local.xcconfig (gitignored).
 
-// The GymRollins API (read by GymSync's ApiConfig from Info.plist): the Cloudflare Worker in server/. The default is the
-// LOCAL Worker (scripts/server-up.sh). A deployed Worker's address goes in Local.xcconfig, once the owner approves the
-// deploy (spec section 9).
+// The GymRollins API (read by GymSync's ApiConfig from Info.plist): the Cloudflare Worker in
+// server/. The default is the LOCAL Worker (scripts/server-up.sh). A deployed Worker's address goes in Local.xcconfig,
+// once the owner approves the deploy (spec section 9).
 API_URL = http:/$()/127.0.0.1:8787
 
 // Supabase (read by GymSync's SupabaseConfig from Info.plist) for exercise photo hosting and Claude's connector URL
