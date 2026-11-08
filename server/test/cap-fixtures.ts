@@ -14,7 +14,7 @@ export type CappedTable =
   | 'gym_equipment'
 /** The two counts a workout save moves itself (src/sync/workouts.ts). */
 export type LoggedTable = 'workout_entries' | 'workout_sets'
-/** Every table account_rows counts. Proposals are seeded by test/claude-caps.test.ts. */
+/** Every table account_rows counts. Proposals have a seed of their own (seedProposals). */
 export type CountedTable = CappedTable | LoggedTable | 'proposals'
 
 const T = '2026-11-07T10:00:00.000000Z'
@@ -78,6 +78,17 @@ export async function seedRows(table: CappedTable, userId: string, count: number
     `INSERT INTO gyms (${FILL.gyms.columns}) VALUES (?2, 'private', ?1, ?1, 'Seeded', ?3, ?3, ?3, ?3)`,
   ).bind(userId, gym, T).run()
   await insert.bind(userId, keys, T, gym).run()
+}
+
+/** `count` proposals for the account with `status`, written straight to D1; answers their ids. */
+export async function seedProposals(userId: string, count: number, status = 'pending'): Promise<string[]> {
+  const ids = Array.from({ length: count }, () => crypto.randomUUID())
+  await env.DB.prepare(
+    'INSERT INTO proposals (id, user_id, created_at, summary, changes, status, applied_change_ids, ' +
+      'client_updated_at, updated_at) ' +
+      `SELECT value, ?1, ?3, 'Seeded', '[{"id":"c1","type":"weight"}]', ?4, '[]', ?3, ?3 FROM json_each(?2)`,
+  ).bind(userId, JSON.stringify(ids), T, status).run()
+  return ids
 }
 
 const OWNER: Readonly<Record<string, string>> = { gyms: 'owner_id', gym_equipment: 'owner_id' }

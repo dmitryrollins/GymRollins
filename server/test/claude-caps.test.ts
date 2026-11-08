@@ -4,13 +4,12 @@ import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
 import { CLAUDE_CAPS } from '../src/sync/caps.ts'
-import { countOf, seedRows } from './cap-fixtures.ts'
+import { countOf, seedProposals, seedRows } from './cap-fixtures.ts'
 import { connectClaude, mcp } from './claude.ts'
 import { insertUser } from './gym-fixtures.ts'
 import { request } from './helpers.ts'
 import { readRpc, toolJson } from './mcp/rpc.ts'
 
-const T = '2026-11-07T10:00:00.000000Z'
 const PROPOSAL = {
   summary: 'Add a Push day',
   changes: [{ id: 'c1', type: 'add-routine', routineId: 'new-push', name: 'Push' }],
@@ -18,17 +17,6 @@ const PROPOSAL = {
 
 const callTool = (token: string, name: string, args: Record<string, unknown>) =>
   mcp(token, 'tools/call', { name, arguments: args }, 2)
-
-/** `count` proposals for the account with `status`, written straight to D1; answers their ids. */
-async function seedProposals(userId: string, count: number, status = 'pending'): Promise<string[]> {
-  const ids = Array.from({ length: count }, () => crypto.randomUUID())
-  await env.DB.prepare(
-    'INSERT INTO proposals (id, user_id, created_at, summary, changes, status, applied_change_ids, ' +
-      'client_updated_at, updated_at) ' +
-      `SELECT value, ?1, ?3, 'Seeded', '[{"id":"c1","type":"weight"}]', ?4, '[]', ?3, ?3 FROM json_each(?2)`,
-  ).bind(userId, JSON.stringify(ids), T, status).run()
-  return ids
-}
 
 const pending = async (userId: string) => (await env.DB.prepare(
   "SELECT count(*) AS n FROM proposals WHERE user_id = ?1 AND status = 'pending'",
@@ -95,6 +83,24 @@ describe("Claude's proposals, at most 5,000 in all", () => {
     expect((await propose(token)).isError).toBe(false)
     expect(await propose(token)).toEqual({ isError: true, body: { error: CLAUDE_CAPS.too_many_proposals } })
     expect(await pending(c.userId)).toBe(2)
+    expect(await countOf('proposals', c.userId)).toBe(DomainLimits.proposalsMax)
+  })
+
+  it('frees no room when the owner resolves one: a resolved proposal still counts', async () => {
+    const c = await connectClaude()
+    await seedProposals(c.userId, DomainLimits.proposalsMax - 1, 'dismissed')
+    const token = c.tokens.access_token
+    expect((await propose(token)).isError).toBe(false)
+    const waiting = await env.DB.prepare("SELECT id FROM proposals WHERE user_id = ?1 AND status = 'pending'")
+      .bind(c.userId).first<{ id: string }>()
+    const later = new Date(Date.now() + 60_000).toISOString().replace(/Z$/, '000Z')
+    const resolved = await request('PATCH', `/v1/claude/proposals/${waiting!.id}`, {
+      token: c.appToken,
+      body: { status: 'dismissed', applied_change_ids: [], resolved_at: later, client_updated_at: later },
+    })
+    expect(resolved.status).toBe(200)
+    expect(await pending(c.userId)).toBe(0)
+    expect(await propose(token)).toEqual({ isError: true, body: { error: CLAUDE_CAPS.too_many_proposals } })
     expect(await countOf('proposals', c.userId)).toBe(DomainLimits.proposalsMax)
   })
 })
