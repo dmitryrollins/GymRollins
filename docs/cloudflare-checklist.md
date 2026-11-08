@@ -15,6 +15,17 @@ as section 2 does.
 `<origin>` below is the Worker's https address: `https://api.gymrollins.com`, the custom domain the owner chose
 (section 1, option A).
 
+**The config is the deployed Worker.** The top level of `server/wrangler.jsonc` holds the production values: the
+custom domain `api.gymrollins.com`, no `workers.dev` address and no preview URLs, `PUBLIC_BASE_URL` set to `<origin>`,
+and `BETTER_AUTH_SECRET` required. So a plain `npx wrangler deploy` can't ship a local address, and no deploy step
+passes `--var`. There are no wrangler environments, so no `--env` either.
+- The local starts pass their own values: `scripts/server-up.sh`, `scripts/test-server.sh` and `npm run dev` add
+  `--var PUBLIC_BASE_URL:http://127.0.0.1:<port>` and `--infer-origin-from-routes=false` (without it, wrangler dev
+  shows the Worker the custom domain as its own address).
+- `server/test/wrangler-config.test.ts` checks both sides.
+- A bare `npx wrangler dev` advertises `<origin>` in its OAuth metadata and refuses email sign-up. It still uses
+  only local data. Start the local Worker with the scripts.
+
 ## 0. Before anything is created (local)
 
 - [ ] `scripts/test-all.sh` passes on the branch being deployed, with `SYNC_E2E=1 MCP_E2E=1 PHOTO_E2E=1 GYM_E2E=1`.
@@ -37,7 +48,7 @@ Why first:
 
 The Worker's own caps are not per IP: the registration cap is global, `/connect`'s 20 sign-ins are per client (anyone can
 register more clients), and `/mcp`'s 60 calls a minute are per account (a refused token still costs a D1 lookup). So
-every one of these paths gets a per-IP rule from Cloudflare, before anything else is done:
+these paths want a per-IP rule from Cloudflare, before anything else is done:
 - `/api/auth/*`: sign-in, authorize and token,
 - `/api/auth/oauth2/register`: dynamic client registration, with the tightest limit,
 - `/connect`: Claude's sign-in page,
@@ -48,8 +59,9 @@ every one of these paths gets a per-IP rule from Cloudflare, before anything els
 per-IP rules below. Cloudflare's rate-limiting rules belong to a zone, which is a domain on the account. The free
 `*.workers.dev` address isn't one, so no rule can be put on it. The two options were:
 - **A. A custom domain.**
-  - Add the domain to the account, route the Worker to `api.gymrollins.com` (`routes` in `server/wrangler.jsonc`),
-    and set `"workers_dev": false`.
+  - The zone `gymrollins.com` is active on the VIPPIE LLC account (Free plan). `server/wrangler.jsonc` routes the
+    Worker to `api.gymrollins.com` (`"custom_domain": true`) and sets `"workers_dev": false` and
+    `"preview_urls": false`: a preview address would skip the zone's rules too.
   - Add rate-limiting rules (Security › WAF › Rate limiting rules), counted per IP:
     - one for registration, with a low limit: `(http.request.uri.path eq "/api/auth/oauth2/register")`
     - one for the rest, with this expression:
@@ -63,41 +75,71 @@ per-IP rules below. Cloudflare's rate-limiting rules belong to a zone, which is 
     per Cloudflare location) are enough for the registration path.
   - Not taken: the owner chose A.
 
+The rule to create now, in the dashboard (the Free plan's limit is one rule, with a 10-second window; the page shows
+it):
+- [ ] Security › WAF › Rate limiting rules on `gymrollins.com`, one rule:
+  - expression: `(http.host eq "api.gymrollins.com" and (starts_with(http.request.uri.path, "/api/auth/") or starts_with(http.request.uri.path, "/connect")))`
+  - counted per IP, 20 requests per 10 seconds, action Block.
+- [ ] It covers registration (`/api/auth/oauth2/register`), sign-in, authorize and token, and `/connect`, which
+      share its limit. `/v1/*` and `/mcp` keep only the Worker's own caps (above). Widening the rule to them is the
+      owner's call.
+
 ## 2. Create the resources (owner's approval)
+
+- [ ] R2 is enabled on the VIPPIE LLC account (dashboard › R2 Object Storage). It may ask for a payment method first,
+      even within its free tier, and `r2 bucket create` fails until it is enabled. Use past the free tier is billed,
+      which is what section 6's alerts are for.
 
 ```bash
 cd server
 export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC (the top of this list)
-npx wrangler login                                  # the owner's Cloudflare account, in the browser
-npx wrangler d1 create gymrollins                   # prints the database_id
-npx wrangler r2 bucket create gym-photos
-npx wrangler r2 bucket create gym-photos-private
-npx wrangler r2 bucket create exercise-photos
+npx wrangler whoami                                             # lists VIPPIE LLC; if not, npx wrangler login
+npx wrangler d1 create gymrollins --no-update-config            # prints the database_id
+npx wrangler r2 bucket create gym-photos --no-update-config
+npx wrangler r2 bucket create gym-photos-private --no-update-config
+npx wrangler r2 bucket create exercise-photos --no-update-config
 ```
 
-- [ ] Put the printed `database_id` in `server/wrangler.jsonc` in place of `00000000-0000-0000-0000-000000000000`, and
-      commit it (`chore(server): the deployed D1 database id`). It isn't a secret.
-- [ ] Afterwards `scripts/server-up.sh` may start with an empty local D1, if local state is keyed by the id. Run it
-      once more to migrate it. The tests use an in-memory D1 and don't care.
-- [ ] The three buckets stay private: no public bucket access, and no `r2.dev` address. The Worker serves the photos.
-- [ ] R2 may ask for a payment method on the account before the first bucket, even within its free tier. Use past the
-      free tier is billed, which is what section 6's alerts are for.
+`--no-update-config` stops wrangler from writing the new resource into `server/wrangler.jsonc` itself: it would add a
+second binding, or, given `--binding`, rewrite the whole file in its own format.
 
-## 3. Secrets and settings (owner's approval)
+Then put the printed `database_id` in place of the placeholder, and commit it. It isn't a secret.
 
 ```bash
-openssl rand -base64 48 | npx wrangler secret put BETTER_AUTH_SECRET    # 48 random bytes; never printed or saved
+DB_ID=<the database_id d1 create printed>
+sed -i '' "s/00000000-0000-0000-0000-000000000000/$DB_ID/" wrangler.jsonc
+git diff --stat wrangler.jsonc                 # 1 file changed, 1 insertion(+), 1 deletion(-)
+npx vitest run test/wrangler-config.test.ts    # all pass: database_id is a UUID, everything else unchanged
+git add wrangler.jsonc && git commit -m "chore(server): the deployed D1 database id"
 ```
 
-- [ ] If wrangler offers to create the Worker for the secret, accept: the deploy in step 4 fills it.
+- [ ] Afterwards `scripts/server-up.sh` starts with an empty local D1: local state is keyed by `database_id`. It
+      migrates the new one on start; the old local data stays in its file, unused. The tests use an in-memory D1,
+      and `scripts/test-server.sh` a throwaway one.
+- [ ] The three buckets stay private: no public bucket access, and no `r2.dev` address. The Worker serves the photos.
+
+## 3. Secrets and settings (checks; nothing runs here)
+
+- [ ] `BETTER_AUTH_SECRET` goes up with the Worker's first version, in step 4's first deploy, so the Worker never
+      runs without it. `"secrets": { "required": ["BETTER_AUTH_SECRET"] }` in `server/wrangler.jsonc` makes wrangler
+      refuse any deploy that would leave it out. `wrangler secret put` before the Worker exists would first make a
+      placeholder Worker to hold it, so step 4 doesn't use it.
+- [ ] To replace the secret later (the Worker exists then), for instance if it may have leaked. Expect to sign in again,
+      in the app and in Claude:
+
+      ```bash
+      cd server && export CLOUDFLARE_ACCOUNT_ID=<account-id>
+      openssl rand -base64 48 | npx wrangler secret put BETTER_AUTH_SECRET    # 48 random bytes; never printed or saved
+      ```
 - [ ] `git check-ignore -q server/.dev.vars && echo ignored` prints `ignored`: the local secrets file never reaches git.
-- [ ] If the secret may have leaked, put a new one with the same command. Expect to sign in again, in the app and in
-      Claude.
-- [ ] `ALLOW_PASSWORD_AUTH` stays `"0"` in `server/wrangler.jsonc`, and no variable in the dashboard overrides it.
-      Email and password sign-in is for local tests only.
+- [ ] `ALLOW_PASSWORD_AUTH` stays `"0"` in `server/wrangler.jsonc`, and no variable in the dashboard overrides it
+      (a deploy without `--keep-vars` removes dashboard variables). Email and password sign-in is for local tests only.
 - [ ] `APPLE_BUNDLE_ID` stays `com.rollins.gymrollins`: Apple's id tokens carry it as their audience.
-- [ ] `PUBLIC_BASE_URL` must be `<origin>`: the OAuth issuer and the MCP resource are built from it.
-      `server/wrangler.jsonc` keeps the local `http://127.0.0.1:8787`, so every deploy passes it (step 4).
+- [ ] `PUBLIC_BASE_URL` is `<origin>` in `server/wrangler.jsonc`: the OAuth issuer and the MCP resource are built from
+      it. No deploy passes `--var`.
+- [ ] `api.gymrollins.com` has no DNS record of its own yet (DNS › Records): the first deploy creates it and its
+      certificate. With the secret piped in, that deploy can't ask questions, so it would replace such a record
+      without asking.
 
 ## 4. Migrate and deploy (owner's approval)
 
@@ -106,15 +148,35 @@ openssl rand -base64 48 | npx wrangler secret put BETTER_AUTH_SECRET    # 48 ran
 
 On every deploy after the first, note a Time Travel bookmark first (section 7), so a migration can be undone.
 
+The first deploy, from the commit that holds the `database_id` (step 2):
+
 ```bash
-npx wrangler d1 migrations apply gymrollins --remote
-npx wrangler deploy --var PUBLIC_BASE_URL:<origin>
+cd server
+export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC (the top of this list)
+git status --short wrangler.jsonc                               # prints nothing: the committed config
+npx wrangler deploy --dry-run --outdir "$(mktemp -d)"           # local build only; the bindings list shows
+                                                                #   PUBLIC_BASE_URL ("https://api.gymrollins.com")
+npx wrangler d1 migrations apply gymrollins --remote            # lists 0001 to 0010; confirm
+openssl rand -base64 48 | sed 's/^/BETTER_AUTH_SECRET=/' | npx wrangler deploy --secrets-file /dev/stdin
+```
+
+The last line makes the secret (48 random bytes) and hands it to the Worker's first version through a pipe: it is
+never printed or saved. wrangler 4.158.0 reads `--secrets-file` as a dotenv file, and refuses an empty one. It lists
+`api.gymrollins.com (custom domain)` as the target.
+
+Every deploy after the first keeps the secret it has:
+
+```bash
+cd server
+export CLOUDFLARE_ACCOUNT_ID=<account-id>
+npx wrangler d1 migrations apply gymrollins --remote            # only when the deploy brings a migration
+npx wrangler deploy
 ```
 
 Then check from any machine. These need no account:
 
 ```bash
-BASE=<origin>
+BASE=https://api.gymrollins.com
 curl -s -o /dev/null -w '%{http_code}\n' "$BASE/v1/sync/profile"            # 401
 curl -si -X POST "$BASE/mcp" | grep -i '^www-authenticate'                 # resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp"
 curl -s "$BASE/.well-known/oauth-protected-resource/mcp"                  # "resource":"<origin>/mcp"
@@ -126,10 +188,14 @@ curl -s -X POST "$BASE/api/auth/sign-up/email" -H 'content-type: application/jso
 The opener's place on the approve sheet comes from `request.cf`, which Cloudflare sets on every request. No zone
 setting or header is needed, and a `cf-ipcity` header a client sends is ignored (the code never reads client headers). Section 11 checks the place.
 
-If the metadata names `http://127.0.0.1:8787`, the deploy missed `--var PUBLIC_BASE_URL`. Deploy again with it.
+The metadata names `<origin>` because `server/wrangler.jsonc` does. If it names anything else, the deployed config
+isn't the committed one: roll back (below) and run `npx vitest run test/wrangler-config.test.ts`.
 
-**If a deploy goes wrong** (owner's approval):
+Then the exercise photos (section 8).
+
+**If a deploy goes wrong** (owner's approval), from `server/` with `CLOUDFLARE_ACCOUNT_ID` exported:
 - `npx wrangler deployments list` shows the versions, and `npx wrangler rollback <version-id>` puts an earlier one back.
+- The first deploy has no earlier version. Until the app and Claude point at it, nothing depends on it.
 - A rollback leaves D1 as it is. If the bad deploy came with a migration the old Worker can't read, restore the
   bookmark noted before it (section 7). That also undoes every write made since.
 - Hold back the app build that needed the new Worker (the order above) until the Worker it needs is back.
@@ -186,12 +252,14 @@ If the metadata names `http://127.0.0.1:8787`, the deploy missed `--var PUBLIC_B
 
 ## 8. Exercise photos in the deployed bucket (owner's approval)
 
-So far only the local bucket has them. From the repo root:
+So far only the local bucket has them. Right after section 4's checks:
 
 ```bash
-GYM_CLOUD_APPROVED=1 WORKER_URL=<origin> node scripts/upload-photos.mjs --target cloud --dry-run
-GYM_CLOUD_APPROVED=1 WORKER_URL=<origin> node scripts/upload-photos.mjs --target cloud
-curl -s "<origin>/photos/exercises/manifest.json" | head -c 300
+cd server
+export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC (the top of this list)
+GYM_CLOUD_APPROVED=1 WORKER_URL=https://api.gymrollins.com node ../scripts/upload-photos.mjs --target cloud --dry-run
+GYM_CLOUD_APPROVED=1 WORKER_URL=https://api.gymrollins.com node ../scripts/upload-photos.mjs --target cloud
+curl -s "https://api.gymrollins.com/photos/exercises/manifest.json" | head -c 300
 ```
 
 - `--target cloud` writes with `wrangler r2 object put --remote` (the owner's login) and reads back through the
