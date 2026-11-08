@@ -3763,3 +3763,95 @@ git commit -m "chore(server): local server script, test-all and README"
    - what wasn't run.
 
    Commit it as `docs: plan 26 outcome`.
+
+## Outcome
+
+Built on 2026-11-07, on `feat-cloudflare`. Local only, not pushed, and no Cloudflare account was used. Each task was built by a fresh subagent, then reviewed: spec compliance first, then quality, and security for auth, sync and account.
+
+**Commits** (code; each `docs:` commit kept this plan in step with what was built)
+
+| Task | Commits |
+|---|---|
+| 1 Worker skeleton | `a9be198` |
+| 2 Sign-in | `993266f`, review fix `845e61f` |
+| 3 Schema and seeds | `7715d4b`, D1 pattern-limit fix `7b25a22` |
+| 4 Time and columns | `5e17843`, review fix `7baec99` |
+| 5 Row sync | `b3ffd52`, review follow-ups `386b81a` |
+| 6 Apple Health rules | `7c8c5be` |
+| 7 Gym links | `96dc2d3`, coverage tests `43cdd4c` |
+| 8 Workouts | `bbfc0b4`, indexes and tests `9d84af3` |
+| 9 Account deletion | `b1c4140`, safety tests `ceccf54` |
+| 10 Scripts and README | `67e1d49` |
+| Final review | `a79a8ee` |
+
+**Final counts**
+- Server: `Test Files  11 passed (11)`, `Tests  160 passed (160)`, and `tsc --noEmit` clean.
+- Seed generator tests: `# pass 5`, and both `--check` runs match.
+- The Supabase Deno suite is unchanged: `159 passed | 1 ignored`.
+- **Checked by hand:**
+  - `scripts/server-up.sh` applied migrations 0001–0004 to the local D1, answered `signed_out` JSON and took a sign-up.
+  - It refuses the example secret.
+
+**Where the build differs from the plan as first written.** Each difference is also recorded in its task.
+
+1. **Sign-in is deny-by-default (Task 2, step 7).**
+   - Better Auth checks an id token's nonce only when the client sends one. Without an id token, it starts a web redirect flow.
+   - `src/auth/routes.ts` lets five routes through and requires the token and a nonce.
+2. **D1 refuses LIKE and GLOB patterns over 50 bytes** (measured in workerd). The `sqlite3` CLI doesn't, unless `.limit like_pattern_length 50` is set.
+   - The timestamp and photo-name CHECKs are split into pieces of at most 48 bytes.
+   - A test scans every migration (Task 3, step 8).
+3. **Values (Task 4):**
+   - Dates must be real calendar days.
+   - Years before 100 parse as the app does: `setUTCFullYear`, not `Date.UTC`.
+   - `int` needs a safe integer.
+4. **Row sync (Task 5, step 8):**
+   - An empty `after` is refused.
+   - The body limit is 1 MiB, because one bound JSON value must stay under D1's ~2 MB.
+   - A test proves the upsert's own owner `WHERE` holds without the 403 pre-check.
+5. **Workouts (Task 8, step 7):**
+   - Two indexes were added: `workout_entries(workout_id)` and `workout_sets(entry_id)`.
+   - 10 rounds of two simultaneous saves each give one `ok` and one `stale`, never mixed.
+6. **Final review (`a79a8ee`):**
+   - A 16 KB body limit on `/api/auth/*`.
+   - Better Auth's errors come back in the API's `{"error": {code, message}}` shape, with lowercase codes such as `invalid_token` and `user_already_exists_use_another_email`.
+   - `/v1` accepts only `Authorization: Bearer`, never the session cookie.
+   - `server-up.sh` refuses the placeholder secret.
+7. **Extra tests from the reviews:**
+   - every gym and listing visibility rule (Task 7, step 7);
+   - account deletion stopping on a photo that appears mid-way, recounting a listing two people confirmed, and sparing other people's rows (Task 9, step 6).
+
+**Passed to later plans**
+- **Plan 27, iOS:**
+  - Map Better Auth's lowercase error codes in `AuthFailure`.
+  - Pull workouts with a smaller page than 500, because each page carries every entry and set.
+  - Send only `Authorization: Bearer`.
+- **Plan 28, gyms and photos:**
+  - `Entity` needs a pull scope and an owner column for gyms and listings.
+  - Give the visibility fragments a parameter for the caller rather than the fixed `?2`.
+  - Move the `json_extract` and column-list helpers that `table-sync.ts` and `workouts.ts` share into one module.
+  - SQLite's `lower()` folds ASCII only, so normalise brand and model in TypeScript.
+  - Store `loads` as compact JSON.
+  - Port `clean_text`'s invisible-character rules to TypeScript.
+  - R2 and D1 share no transaction: write a pending `photo_objects` row first.
+- **Plan 29, Claude:**
+  - Add the OAuth routes to the auth allowlist.
+  - Exercise search builds LIKE patterns from Claude's words, so keep them under D1's 50 bytes, or use `instr()`.
+  - Put the D1 `Db` beside the MCP code.
+
+**Before any deploy** (from the security review; for the Cloudflare checklist in plan 30)
+- **Config:**
+  - The real `database_id`.
+  - `PUBLIC_BASE_URL` set to the https origin.
+  - `wrangler secret put BETTER_AUTH_SECRET` with 32 or more random bytes.
+  - `ALLOW_PASSWORD_AUTH` staying `0`, with no dashboard override.
+- **Rate limits:** a Cloudflare rate-limit rule (or binding) on `/api/auth/*` and `/v1/*`. Better Auth's built-in limiter is per isolate, and is off unless NODE_ENV is production.
+- **Usage:** per-user row caps, plus spend and usage alerts.
+- **Dependencies:** `npm audit`, and `npm ci` in CI, because of `legacy-peer-deps`.
+- **Data safety:**
+  - D1 Time Travel backups.
+  - Back up the phone before the cutover.
+
+**Not run**
+- Nothing ran against a deployed Worker, and claude.ai wasn't involved: that's plan 29 and the deploy.
+- No iOS code changed, so `scripts/test-all.sh` wasn't run in full. Its iOS suites take long and nothing they test changed. Its server and seed steps ran on their own (above).
+- Apple sign-in was tested only with locally signed tokens against a mocked key URL. A real Apple token is first used in plan 27.
