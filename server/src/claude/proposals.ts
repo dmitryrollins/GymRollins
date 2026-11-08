@@ -33,6 +33,12 @@ export async function pendingProposals(db: D1Database, userId: string): Promise<
 
 const rejected = (field: string, message: string) => new ApiError(422, 'row_rejected', `${field}: ${message}`)
 
+/**
+ * Added after review: its own code, not `not_found`. The app counts only this 404 as a resolution sent (nothing
+ * left to resolve); a missing route's or a proxy's 404 keeps the resolution to send again.
+ */
+const noSuchProposal = () => new ApiError(404, 'no_such_proposal', 'No such proposal.')
+
 /** The app's update body, checked: refused fields answer 422 row_rejected, as Postgres's 22xxx/23xxx did. */
 export function parseResolution(body: unknown): Resolution {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
@@ -64,7 +70,7 @@ export function parseResolution(body: unknown): Resolution {
 
 /**
  * Resolves one of the account's proposals. An older edit than the stored one changes nothing, as lww_guard
- * did, and still answers the stored row; another account's or an unknown id answers 404.
+ * did, and still answers the stored row; another account's or an unknown id answers 404 no_such_proposal.
  */
 export async function resolveProposal(
   db: D1Database,
@@ -73,7 +79,7 @@ export async function resolveProposal(
   r: Resolution,
 ): Promise<{ id: string; updated_at: string }> {
   const key = id.toLowerCase()
-  if (!UUID.test(key)) throw new ApiError(404, 'not_found', 'No such proposal.')
+  if (!UUID.test(key)) throw noSuchProposal()
   const updated = await db.prepare(
     'UPDATE proposals SET status = ?3, applied_change_ids = ?4, resolved_at = ?5, client_updated_at = ?6, ' +
       `updated_at = ${laterStamp('updated_at', NOW_SQL)} ` +
@@ -83,7 +89,7 @@ export async function resolveProposal(
   if (updated) return updated
   const stored = await db.prepare('SELECT id, updated_at FROM proposals WHERE id = ?1 AND user_id = ?2')
     .bind(key, userId).first<{ id: string; updated_at: string }>()
-  if (!stored) throw new ApiError(404, 'not_found', 'No such proposal.')
+  if (!stored) throw noSuchProposal()
   return stored
 }
 

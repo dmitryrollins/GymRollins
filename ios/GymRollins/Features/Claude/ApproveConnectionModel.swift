@@ -45,9 +45,24 @@ final class ApproveConnectionModel {
 
     var isDone: Bool { phase == .approved || phase == .denied }
 
-    /// The field's new text: kept as code characters with the dash, and a changed code starts over.
+    /// Added after review: the field takes typing until a decision is sent. Changing a found code starts over, and so
+    /// does a code changed during its lookup (which cancels it); a decision on its way or made keeps the field.
+    var canEditCode: Bool {
+        switch phase {
+        case .typing, .lookingUp, .found: true
+        case .deciding, .approved, .denied: false
+        }
+    }
+
+    /// Added after review: the field holds text that can't become a code (a character outside the alphabet, or more
+    /// than 8). It is never sent, and the sheet says why.
+    var isInvalid: Bool { ConnectCode.isInvalid(typed) }
+
+    static let notACode = "That isn't a code. Claude's page shows 8 letters and digits, like 7K2M-9PQR."
+
+    /// The field's new text: code characters with the dash (other text as typed), and a changed code starts over.
     func type(_ text: String) {
-        guard !isDone else { return }
+        guard canEditCode else { return }
         let shown = ConnectCode.display(text)
         guard shown != typed else { return }
         typed = shown
@@ -56,31 +71,48 @@ final class ApproveConnectionModel {
     }
 
     /// Looks the complete code up once. A wrong one stays in the field with the reason; changing it tries again.
+    /// Added after review: only a code the server doesn't know is refused for good. After any other failure
+    /// (offline, 5xx, signed out, too many tries) retyping the same code sends it again. A lookup cancelled because
+    /// the code changed (the view's task follows it) writes nothing: it is no answer, and no refusal.
     func lookUp() async {
         guard let code = complete, phase == .typing, code != refused else { return }
         phase = .lookingUp
         do {
             let found = try await lookUpCall(code)
+            if Task.isCancelled { return }
             guard complete == code else { return } // retyped meanwhile
             phase = .found(found)
         } catch {
+            if Task.isCancelled { return }
             guard complete == code else { return }
             phase = .typing
-            refused = code
+            if case ConnectCodeError.unknownCode = error { refused = code }
             self.error = Self.message(for: error)
         }
     }
 
+    /// Approve or Deny the request shown. Added after review: it sends that request's own code, and writes its outcome
+    /// only while that decision is still the phase. When the code has died (expired or decided while the sheet was
+    /// open) or the tries are used up, the sheet goes back to the field and that code isn't sent again, so Approve
+    /// can't use more tries; any other failure keeps the request, to try again.
     func decide(_ decision: ConnectDecision) async {
-        guard case .found(let request) = phase, let code = complete else { return }
+        guard case .found(let request) = phase, let code = ConnectCode.complete(request.code) else { return }
         phase = .deciding(request)
         error = nil
         do {
             try await decideCall(code, decision)
+            guard phase == .deciding(request) else { return }
             phase = decision == .approve ? .approved : .denied
         } catch {
-            phase = .found(request)
+            guard phase == .deciding(request) else { return }
             self.error = Self.message(for: error)
+            switch error {
+            case ConnectCodeError.unknownCode, ConnectCodeError.tooManyAttempts:
+                phase = .typing
+                refused = code
+            default:
+                phase = .found(request)
+            }
         }
     }
 

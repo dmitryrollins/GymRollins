@@ -47,9 +47,14 @@ struct ApproveConnectionView: View {
                 .autocorrectionDisabled()
                 .keyboardType(.asciiCapable)
                 .focused($codeFocused)
-                .disabled(model.isDone)
+                .disabled(!model.canEditCode) // added after review: not while a decision is on its way
                 .accessibilityLabel("Code")
                 .accessibilityIdentifier("connect.code")
+            if model.isInvalid { // added after review: such text is never sent
+                Text(ApproveConnectionModel.notACode)
+                    .font(.footnote).foregroundStyle(Theme.destructive)
+                    .accessibilityIdentifier("connect.invalid")
+            }
             if model.phase == .lookingUp {
                 HStack { ProgressView(); Text("Checking the code\u{2026}").foregroundStyle(Theme.textSecondary) }
             }

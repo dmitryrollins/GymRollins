@@ -54,33 +54,53 @@ public enum ConnectCodeError: Error, Equatable, Sendable {
 }
 
 /// The approval code as the owner types it (spec section 5): 8 characters of Crockford's alphabet (no I, L, O or U),
-/// case-insensitive, shown as `XXXX-XXXX`. O, I and L read as 0, 1 and 1, as the server reads them.
+/// case-insensitive, shown as `XXXX-XXXX`. O, I and L read as 0, 1 and 1, and spaces and hyphens don't matter, as the
+/// server's `normalizeCode` reads them (server/src/claude/connect-code.ts).
 public enum ConnectCode {
     public static let length = 8
     private static let alphabet = Set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
 
-    /// What the owner typed, as at most `length` code characters: upper case, O/I/L as 0/1/1, anything else dropped.
-    public static func characters(of typed: String) -> String {
-        let read = typed.uppercased().map { (ch: Character) -> Character in
-            switch ch {
-            case "O": "0"
-            case "I", "L": "1"
-            default: ch
-            }
+    /// What the owner typed, as code characters: upper case, O/I/L as 0/1/1, spaces and hyphens left out. Nil when
+    /// anything else is there. Added after review: such a character used to be dropped, so "Code: ABCD-EFGH" was
+    /// sent as C0DEABCD and used a try, and `ß` upper-cased to "SS".
+    public static func characters(of typed: String) -> String? {
+        var code = ""
+        for ch in typed where !(ch.isWhitespace || ch == "-") {
+            guard ch.isASCII, let read = read(ch) else { return nil }
+            code.append(read)
         }
-        return String(read.filter { alphabet.contains($0) }.prefix(length))
+        return code
     }
 
-    /// The code as typed so far, with the dash after the fourth character: "AB", "ABCD-E", "ABCD-EFGH".
+    /// One ASCII character as a code character, or nil.
+    private static func read(_ ch: Character) -> Character? {
+        let upper = Character(ch.uppercased())
+        let read: Character = switch upper {
+        case "O": "0"
+        case "I", "L": "1"
+        default: upper
+        }
+        return alphabet.contains(read) ? read : nil
+    }
+
+    /// The code as typed so far, with the dash after the fourth character: "AB", "ABCD-E", "ABCD-EFGH". Text that is
+    /// no code is shown as typed, so the owner sees what to fix.
     public static func display(_ typed: String) -> String {
-        let code = characters(of: typed)
+        guard let code = characters(of: typed) else { return typed }
         guard code.count > 4 else { return code }
         return "\(code.prefix(4))-\(code.dropFirst(4))"
     }
 
-    /// The 8 characters once all are typed, else nil.
+    /// The 8 characters once exactly those are typed, else nil: the only text the sheet sends.
     public static func complete(_ typed: String) -> String? {
-        let code = characters(of: typed)
-        return code.count == length ? code : nil
+        guard let code = characters(of: typed), code.count == length else { return nil }
+        return code
+    }
+
+    /// Added after review: true when the text can't become a code by typing more (a character outside the alphabet,
+    /// or more than 8), so the sheet says so instead of waiting.
+    public static func isInvalid(_ typed: String) -> Bool {
+        guard let code = characters(of: typed) else { return true }
+        return code.count > length
     }
 }

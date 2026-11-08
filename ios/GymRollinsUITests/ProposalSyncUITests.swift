@@ -54,7 +54,7 @@ final class ProposalSyncUITests: XCTestCase {
         let proposalId = try XCTUnwrap(proposed.json["proposal_id"] as? String)
 
         // 3. The app pulls it: chip on Today → review → apply.
-        app.navigationBars.buttons.firstMatch.tap() // back to Settings
+        goBack(app, to: "Settings")
         syncNow(app)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
         app.tabBars.buttons["Today"].tap()
@@ -156,20 +156,63 @@ final class ProposalSyncUITests: XCTestCase {
     /// Settings keeps its scroll position after the Claude row was reached; the account's Sync now is at the top.
     private func syncNow(_ app: XCUIApplication) {
         let button = app.buttons["account.syncNow"]
-        for _ in 0..<8 where !(button.exists && button.isHittable) { app.swipeDown() }
+        scroll(app, to: button, from: .top)
         button.tap()
     }
 
     private func openApproveConnection(_ app: XCUIApplication) {
         // The Claude row sits below the fold of Settings' Form (rows load lazily): scroll until it is there.
         let claude = app.descendants(matching: .any)["settings.claude"]
-        for _ in 0..<8 where !(claude.exists && claude.isHittable) { app.swipeUp() }
-        XCTAssertTrue(claude.waitForExistence(timeout: 5))
+        scroll(app, to: claude, from: .bottom)
         claude.tap()
         let approve = app.buttons["claude.approveConnection"]
         XCTAssertTrue(approve.waitForExistence(timeout: 5))
         approve.tap()
         XCTAssertTrue(app.textFields["connect.code"].waitForExistence(timeout: 5))
+    }
+
+    /// Added after review: the navigation bar's own back button (not whichever bar button comes first), and the
+    /// screen it leads to.
+    private func goBack(_ app: XCUIApplication, to title: String, file: StaticString = #filePath, line: UInt = #line) {
+        let back = app.navigationBars.buttons["BackButton"].firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "No back button", file: file, line: line)
+        back.tap()
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "Back didn't reach \(title)",
+                      file: file, line: line)
+    }
+
+    enum ListEnd { case top, bottom }
+
+    /// Added after review: the most slow swipes `scroll` makes. Settings is about two screens long.
+    private static let maxSwipes = 15
+
+    /// Added after review: scrolls Settings' Form with slow swipes until `element` is on screen and hittable, at most
+    /// `maxSwipes` times, else fails saying so. A row the Form hasn't loaded yet (it loads lazily) is sought toward
+    /// the `end` it sits at; a loaded one off screen is sought on the side it lies, which undoes an overshoot.
+    private func scroll(_ app: XCUIApplication, to element: XCUIElement, from end: ListEnd,
+                        file: StaticString = #filePath, line: UInt = #line) {
+        for _ in 0..<Self.maxSwipes {
+            let area = visibleArea(app)
+            if element.exists, element.isHittable, area.contains(CGPoint(x: element.frame.midX, y: element.frame.midY)) {
+                return
+            }
+            let list = app.collectionViews.firstMatch
+            let surface = list.exists ? list : app
+            let above = element.exists ? element.frame.midY < area.minY : end == .top
+            if above { surface.swipeDown(velocity: .slow) } else { surface.swipeUp(velocity: .slow) }
+        }
+        XCTAssertTrue(element.exists && element.isHittable,
+                      "\(element.description) isn't on screen after \(Self.maxSwipes) slow swipes", file: file, line: line)
+    }
+
+    /// The part of the screen between the navigation bar and the tab bar, where a row can be tapped.
+    private func visibleArea(_ app: XCUIApplication) -> CGRect {
+        let window = app.windows.firstMatch.frame
+        let bar = app.navigationBars.firstMatch
+        let tabs = app.tabBars.firstMatch
+        let top = bar.exists ? bar.frame.maxY : window.minY
+        let bottom = tabs.exists ? tabs.frame.minY : window.maxY
+        return CGRect(x: window.minX, y: top, width: window.width, height: max(0, bottom - top))
     }
 
     private func signUp(_ app: XCUIApplication, email: String) {

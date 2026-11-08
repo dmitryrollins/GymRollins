@@ -55,13 +55,26 @@ struct ProposalTransportTests {
             "summary": "Add a Pull day",
             "changes": [["id": "c1", "type": "add-routine", "routineId": "new-pull", "name": "Pull"]],
         ])
-        guard case .valid(let proposal) = try #require(try await transport.pendingProposals().first) else { return }
+        // Added after review: a row that isn't valid fails the test, instead of passing it without a check.
+        let pulled = try #require(try await transport.pendingProposals().first)
+        guard case .valid(let proposal) = pulled else {
+            Issue.record("expected a valid proposal, got \(pulled)")
+            return
+        }
         let later = max(Date(), proposal.createdAt).addingTimeInterval(60)
         try await transport.resolveProposal(id: proposal.id, status: "dismissed", appliedChangeIds: [], at: later)
         try await transport.resolveProposal(id: proposal.id, status: "applied", appliedChangeIds: ["c1"],
                                             at: later.addingTimeInterval(-30))
         let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposal.id.uuidString.lowercased()])
         #expect(seen.json["status"] as? String == "dismissed")
+        try await user.deleteAccount()
+    }
+
+    /// Added after review: the Worker's answer for a proposal it doesn't have (`no_such_proposal`) is the one 404 the
+    /// app counts as sent.
+    @Test func aResolutionOfAProposalTheServerLacksCountsAsSent() async throws {
+        let user = try await Account.signUp()
+        try await user.transport.resolveProposal(id: UUID(), status: "dismissed", appliedChangeIds: [], at: Date())
         try await user.deleteAccount()
     }
 }

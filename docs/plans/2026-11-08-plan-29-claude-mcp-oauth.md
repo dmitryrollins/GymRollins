@@ -4506,6 +4506,8 @@ Expected after: `Tests  35 passed (35)` (24 and 11). This review's fixes are one
 - Modify: `server/src/claude/routes.ts`
 - Test: `server/test/claude-proposals.test.ts`
 
+*Added after the iOS review: a missing proposal (another account's, an unknown id) answers `404 no_such_proposal`, its own code rather than the routes' `not_found`, so the app counts only that 404 as a resolution sent. The code and test below were updated to match.*
+
 - [ ] **Step 1: Write the failing tests**
 
 `server/test/claude-proposals.test.ts`:
@@ -4592,13 +4594,17 @@ describe('PATCH /v1/claude/proposals/:id', () => {
     expect(row).toEqual({ status: 'dismissed' })
   })
 
-  it("answers 404 for another account's proposal and an unknown id", async () => {
+  // Added after review: its own code, so the app counts only this 404 as sent, never a missing route's
+  // (`not_found`) or a proxy's.
+  it("answers 404 no_such_proposal for another account's proposal and an unknown id", async () => {
     const { userId } = await signUp()
     const { id } = await propose(userId)
     const { token } = await signUp()
-    expect((await resolve(token, id, RESOLVED)).status).toBe(404)
-    expect((await resolve(token, crypto.randomUUID(), RESOLVED)).status).toBe(404)
-    expect((await resolve(token, 'not-a-uuid', RESOLVED)).status).toBe(404)
+    for (const unknown of [id, crypto.randomUUID(), 'not-a-uuid']) {
+      const res = await resolve(token, unknown, RESOLVED)
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: { code: 'no_such_proposal', message: 'No such proposal.' } })
+    }
   })
 
   it.each([
@@ -4678,6 +4684,12 @@ export async function pendingProposals(db: D1Database, userId: string): Promise<
 
 const rejected = (field: string, message: string) => new ApiError(422, 'row_rejected', `${field}: ${message}`)
 
+/**
+ * Added after review: its own code, not `not_found`. The app counts only this 404 as a resolution sent (nothing
+ * left to resolve); a missing route's or a proxy's 404 keeps the resolution to send again.
+ */
+const noSuchProposal = () => new ApiError(404, 'no_such_proposal', 'No such proposal.')
+
 /** The app's update body, checked: refused fields answer 422 row_rejected, as Postgres's 22xxx/23xxx did. */
 export function parseResolution(body: unknown): Resolution {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
@@ -4709,7 +4721,7 @@ export function parseResolution(body: unknown): Resolution {
 
 /**
  * Resolves one of the account's proposals. An older edit than the stored one changes nothing, as lww_guard
- * did, and still answers the stored row; another account's or an unknown id answers 404.
+ * did, and still answers the stored row; another account's or an unknown id answers 404 no_such_proposal.
  */
 export async function resolveProposal(
   db: D1Database,
@@ -4718,7 +4730,7 @@ export async function resolveProposal(
   r: Resolution,
 ): Promise<{ id: string; updated_at: string }> {
   const key = id.toLowerCase()
-  if (!UUID.test(key)) throw new ApiError(404, 'not_found', 'No such proposal.')
+  if (!UUID.test(key)) throw noSuchProposal()
   const updated = await db.prepare(
     'UPDATE proposals SET status = ?3, applied_change_ids = ?4, resolved_at = ?5, client_updated_at = ?6, ' +
       `updated_at = ${laterStamp('updated_at', NOW_SQL)} ` +
@@ -4728,7 +4740,7 @@ export async function resolveProposal(
   if (updated) return updated
   const stored = await db.prepare('SELECT id, updated_at FROM proposals WHERE id = ?1 AND user_id = ?2')
     .bind(key, userId).first<{ id: string; updated_at: string }>()
-  if (!stored) throw new ApiError(404, 'not_found', 'No such proposal.')
+  if (!stored) throw noSuchProposal()
   return stored
 }
 
@@ -6167,10 +6179,10 @@ The app's half of plan 29, after plan 28's iOS tasks.
    - Two calls are added: `connectRequest(code:)` and `decideConnect(code:decision:)`. They go through `SyncEngine` and `SyncCoordinator` to the sheet.
    - The protocol's defaults throw `URLError(.unsupportedURL)`, for Supabase and the test doubles.
    - `ApiSyncTransport` implements all six calls in `ApiSyncTransport+Claude.swift`, and `servesProposals` becomes true.
-2. **A resolution the server answers 404 counts as sent.** On Supabase, an update that matched no row raised nothing. The engine then marked the resolution sent, and still does. A refused value (`422 row_rejected`) is a `SyncRecordRejected`, as before.
+2. **A resolution the server answers `404 no_such_proposal` counts as sent.** On Supabase, an update that matched no row raised nothing. The engine then marked the resolution sent, and still does. A refused value (`422 row_rejected`) is a `SyncRecordRejected`, as before. Added after review: only that code counts; any other 404 (a missing route, a proxy) is an error, and the resolution stays to be sent again.
 3. **The code field (spec section 5):**
-   - `ConnectCode` in GymSync turns what is typed into code characters, then shows them as `XXXX-XXXX`: upper case, O/I/L read as 0/1/1, anything else dropped, at most 8. The server reads the code the same way.
-   - The sheet looks the code up once all 8 are in. A refused code isn't sent again until it changes, because each wrong code uses one of the account's 5 tries.
+   - `ConnectCode` in GymSync turns what is typed into code characters, then shows them as `XXXX-XXXX`: upper case, O/I/L read as 0/1/1, spaces and hyphens left out. The server reads the code the same way. Added after review: any other character, or more than 8, makes the text no code; it is shown as typed, the sheet says so, and it is never sent (dropping it sent another code and used a try).
+   - The sheet looks the code up once all 8 are in. A code the server doesn't know isn't sent again until it changes, because each wrong code uses one of the account's 5 tries. Added after review: after any other failure (offline, 5xx, 401, 429) retyping the same code sends it again, and a decision that finds the code dead or the tries used up goes back to the field.
 4. **The sheet:**
    - **Shows:** the client's name, the redirect host, and a warning when `known_host` is false.
    - **And where the code's page was opened** (added after the server's whole-flow review): one line, "Opened 2 min ago · Toronto, CA · Safari", leaving out what the server doesn't know, then the fixed caution "Approve only a code that's on your own screen, from a connection you started just now." Both show for every request: someone can add this server as a connector in their own claude.ai account, so the host is `claude.ai` and there is no warning, and then ask the owner to type their code.
@@ -6195,6 +6207,8 @@ The app's half of plan 29, after plan 28's iOS tasks.
 - Create: `ios/Packages/GymSync/Sources/GymSync/ClaudeConnect.swift`, `ios/Packages/GymSync/Sources/GymSync/ApiSyncTransport+Claude.swift`
 - Modify: `ios/Packages/GymSync/Sources/GymSync/SyncTransport.swift`, `SyncEngine.swift`, `ApiSyncTransport.swift`, `ios/Packages/GymSync/Tests/GymSyncTests/ApiSyncTransportTests.swift`
 - Test: `ios/Packages/GymSync/Tests/GymSyncTests/ApiClaudeTransportTests.swift`
+
+*Added after review: only `404 no_such_proposal` counts as a resolution sent. Any other 404 (a missing route's `not_found`, a proxy's `http_404`) is an error, so the engine keeps the resolution dirty. `ConnectCode` refuses text holding any character outside the alphabet, or more than 8, instead of dropping it: `characters(of:)` returns nil, `isInvalid` says so, and `display` shows such text as typed. The code and tests below were updated to match.*
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -6258,9 +6272,28 @@ import Testing
             try await ApiSyncTransport(api: refused.client())
                 .resolveProposal(id: proposalId, status: "pending", appliedChangeIds: [], at: Date())
         }
-        let gone = StubServer { _ in .json(404, #"{"error": {"code": "not_found", "message": "No such proposal."}}"#) }
+        let gone = StubServer { _ in
+            .json(404, #"{"error": {"code": "no_such_proposal", "message": "No such proposal."}}"#)
+        }
         try await ApiSyncTransport(api: gone.client())
             .resolveProposal(id: proposalId, status: "applied", appliedChangeIds: ["c1"], at: Date())
+    }
+
+    /// Added after review: only the server's `no_such_proposal` says the proposal is gone. A missing route (an older
+    /// or misrouted Worker) or a proxy's page is an error, so the engine keeps the resolution to send again.
+    @Test func anyOther404IsAnErrorThatKeepsTheResolution() async throws {
+        let noRoute = StubServer { _ in .json(404, #"{"error": {"code": "not_found", "message": "No such route."}}"#) }
+        await #expect(throws: ApiError(status: 404, code: "not_found", message: "No such route.")) {
+            try await ApiSyncTransport(api: noRoute.client())
+                .resolveProposal(id: proposalId, status: "applied", appliedChangeIds: ["c1"], at: Date())
+        }
+        let proxy = StubServer { _ in
+            StubAnswer(status: 404, headers: ["Content-Type": "text/html"], body: Data("<h1>Not Found</h1>".utf8))
+        }
+        await #expect(throws: ApiError.self) {
+            try await ApiSyncTransport(api: proxy.client())
+                .resolveProposal(id: proposalId, status: "applied", appliedChangeIds: ["c1"], at: Date())
+        }
     }
 
     @Test func lastUseIsNilUntilClaudeCallsATool() async throws {
@@ -6331,8 +6364,30 @@ import Testing
         #expect(ConnectCode.characters(of: "abcd-efgh") == "ABCDEFGH")
         #expect(ConnectCode.characters(of: " 7k2m 9pqr ") == "7K2M9PQR")
         #expect(ConnectCode.characters(of: "OIL0-1234") == "01101234")
-        #expect(ConnectCode.characters(of: "UUAB") == "AB")
-        #expect(ConnectCode.characters(of: "ABCDEFGHJK") == "ABCDEFGH")
+        #expect(ConnectCode.characters(of: "ab-cd\tef gh\n") == "ABCDEFGH")
+        #expect(ConnectCode.characters(of: "") == "")
+    }
+
+    /// Added after review: a character outside the alphabet makes the text no code at all. Dropping it would turn
+    /// "Code: ABCD-EFGH" into C0DEABCD, sent and using a try; `ß` would upper-case to "SS".
+    @Test func anythingElseIsRefusedNotDropped() {
+        #expect(ConnectCode.characters(of: "UUAB") == nil)
+        #expect(ConnectCode.characters(of: "Code: ABCD-EFGH") == nil)
+        #expect(ConnectCode.characters(of: "ABCDEFß") == nil)
+        #expect(ConnectCode.characters(of: "ABCD_EFGH") == nil)
+        #expect(ConnectCode.characters(of: "ABCD\u{2013}EFGH") == nil) // an en dash
+        #expect(ConnectCode.characters(of: "\u{FF21}BCDEFGH") == nil) // a full-width A
+        #expect(ConnectCode.complete("Code: ABCD-EFGH") == nil)
+        #expect(ConnectCode.complete("ABCDEFß") == nil && ConnectCode.complete("ABCDEFGß") == nil)
+        #expect(ConnectCode.isInvalid("Code: ABCD-EFGH") && ConnectCode.isInvalid("ABCDEFß"))
+        #expect(!ConnectCode.isInvalid("abcd-ef") && !ConnectCode.isInvalid(""))
+    }
+
+    /// Added after review: a ninth character is too many, never cut off to a code nobody showed.
+    @Test func moreThanEightIsNoCode() {
+        #expect(ConnectCode.complete("ABCDEFGHJK") == nil)
+        #expect(ConnectCode.isInvalid("ABCDEFGHJ"))
+        #expect(ConnectCode.display("abcdefghjk") == "ABCD-EFGHJK")
     }
 
     @Test func itShowsTheDashAfterFour() {
@@ -6340,11 +6395,19 @@ import Testing
         #expect(ConnectCode.display("abcd") == "ABCD")
         #expect(ConnectCode.display("abcde") == "ABCD-E")
         #expect(ConnectCode.display("ABCD-EFGH") == "ABCD-EFGH")
+        #expect(ConnectCode.display("ab cd-efgh") == "ABCD-EFGH")
+    }
+
+    /// Added after review: what isn't a code is shown as typed, so the owner sees what to fix.
+    @Test func whatIsNoCodeIsShownAsTyped() {
+        #expect(ConnectCode.display("Code: ABCD-EFGH") == "Code: ABCD-EFGH")
+        #expect(ConnectCode.display("abcdß") == "abcdß")
     }
 
     @Test func itIsCompleteAtEight() {
         #expect(ConnectCode.complete("ABCD-EFG") == nil)
         #expect(ConnectCode.complete("abcd-efgh") == "ABCDEFGH")
+        #expect(ConnectCode.complete(" o1l2-3456 ") == "01123456")
     }
 }
 ```
@@ -6431,34 +6494,54 @@ public enum ConnectCodeError: Error, Equatable, Sendable {
 }
 
 /// The approval code as the owner types it (spec section 5): 8 characters of Crockford's alphabet (no I, L, O or U),
-/// case-insensitive, shown as `XXXX-XXXX`. O, I and L read as 0, 1 and 1, as the server reads them.
+/// case-insensitive, shown as `XXXX-XXXX`. O, I and L read as 0, 1 and 1, and spaces and hyphens don't matter, as the
+/// server's `normalizeCode` reads them (server/src/claude/connect-code.ts).
 public enum ConnectCode {
     public static let length = 8
     private static let alphabet = Set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
 
-    /// What the owner typed, as at most `length` code characters: upper case, O/I/L as 0/1/1, anything else dropped.
-    public static func characters(of typed: String) -> String {
-        let read = typed.uppercased().map { (ch: Character) -> Character in
-            switch ch {
-            case "O": "0"
-            case "I", "L": "1"
-            default: ch
-            }
+    /// What the owner typed, as code characters: upper case, O/I/L as 0/1/1, spaces and hyphens left out. Nil when
+    /// anything else is there. Added after review: such a character used to be dropped, so "Code: ABCD-EFGH" was
+    /// sent as C0DEABCD and used a try, and `ß` upper-cased to "SS".
+    public static func characters(of typed: String) -> String? {
+        var code = ""
+        for ch in typed where !(ch.isWhitespace || ch == "-") {
+            guard ch.isASCII, let read = read(ch) else { return nil }
+            code.append(read)
         }
-        return String(read.filter { alphabet.contains($0) }.prefix(length))
+        return code
     }
 
-    /// The code as typed so far, with the dash after the fourth character: "AB", "ABCD-E", "ABCD-EFGH".
+    /// One ASCII character as a code character, or nil.
+    private static func read(_ ch: Character) -> Character? {
+        let upper = Character(ch.uppercased())
+        let read: Character = switch upper {
+        case "O": "0"
+        case "I", "L": "1"
+        default: upper
+        }
+        return alphabet.contains(read) ? read : nil
+    }
+
+    /// The code as typed so far, with the dash after the fourth character: "AB", "ABCD-E", "ABCD-EFGH". Text that is
+    /// no code is shown as typed, so the owner sees what to fix.
     public static func display(_ typed: String) -> String {
-        let code = characters(of: typed)
+        guard let code = characters(of: typed) else { return typed }
         guard code.count > 4 else { return code }
         return "\(code.prefix(4))-\(code.dropFirst(4))"
     }
 
-    /// The 8 characters once all are typed, else nil.
+    /// The 8 characters once exactly those are typed, else nil: the only text the sheet sends.
     public static func complete(_ typed: String) -> String? {
-        let code = characters(of: typed)
-        return code.count == length ? code : nil
+        guard let code = characters(of: typed), code.count == length else { return nil }
+        return code
+    }
+
+    /// Added after review: true when the text can't become a code by typing more (a character outside the alphabet,
+    /// or more than 8), so the sheet says so instead of waiting.
+    public static func isInvalid(_ typed: String) -> Bool {
+        guard let code = characters(of: typed) else { return true }
+        return code.count > length
     }
 }
 ```
@@ -6517,8 +6600,9 @@ extension ApiSyncTransport {
         return answer.rows
     }
 
-    /// A proposal the server no longer has (404) has nothing left to resolve, so the resolution counts as sent, as an
-    /// update of no row did on Supabase.
+    /// A proposal the server no longer has (`404 no_such_proposal`) has nothing left to resolve, so the resolution
+    /// counts as sent, as an update of no row did on Supabase. Added after review: any other 404 (a missing route's
+    /// `not_found`, a proxy's `http_404`) is an error, so the engine keeps the resolution to send again.
     public func resolveProposal(id: UUID, status: String, appliedChangeIds: [String], at: Date) async throws {
         let stamp = SyncDate.format(at)
         let body = try SyncJSON.encoder.encode(Resolution(status: status, appliedChangeIds: appliedChangeIds,
@@ -6527,7 +6611,7 @@ extension ApiSyncTransport {
             _ = try await Self.mappingRejections {
                 try await api.data("PATCH", "/v1/claude/proposals/\(id.uuidString.lowercased())", body: body)
             }
-        } catch let error as ApiError where error.status == 404 {
+        } catch let error as ApiError where error.status == 404 && error.code == "no_such_proposal" {
             return
         }
     }
@@ -6610,7 +6694,7 @@ In `ApiSyncTransport.swift`:
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
 
 Expected:
-- `Test run with N tests in M suites passed`, with 11 tests and 2 suites more than before this task (`ApiClaudeTransportTests` 8, `ConnectCodeTests` 3).
+- `Test run with N tests in M suites passed`, with 15 tests and 2 suites more than before this task (`ApiClaudeTransportTests` 9, `ConnectCodeTests` 6; 1 and 3 of them added after review).
 - On plan 27's tip that is 201 tests in 26 suites.
 - `GymSyncIntegrationTests` still builds; its suites skip without `API_URL`.
 
@@ -6633,6 +6717,8 @@ git commit -m "feat(sync): Claude's proposals, last use, revoke and approval cod
 - Create: `ios/GymRollins/Features/Claude/ApproveConnectionModel.swift`, `ios/GymRollins/Features/Claude/ApproveConnectionView.swift`
 - Modify: `ios/GymRollins/App/SyncCoordinator.swift`, `ios/GymRollins/App/SyncCoordinator+Factory.swift`, `ios/GymRollins/App/AppEnvironment+Claude.swift`, `ios/GymRollins/Features/Claude/ClaudeConnectionView.swift`, `ios/GymRollins/Features/Claude/ConnectorInstructions.swift`
 - Test: `ios/GymRollinsTests/ApproveConnectionModelTests.swift`, `ios/GymRollinsTests/ConnectorURLTests.swift`
+
+*Added after review: only an unknown code is refused for good; after offline, 5xx, 401 or 429 the same code is sent again once retyped, and a lookup cancelled by a changed code writes nothing. A decision sends the request's own code and writes its outcome only while it is still the phase; on `unknown_code` or `too_many_attempts` the sheet goes back to the field with that code refused, so Approve can't use more tries. The field takes no typing while a decision is on its way or made (`canEditCode`), and text that can't be a code says so (`connect.invalid`). The code and tests below were updated to match.*
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -6657,12 +6743,41 @@ import Testing
     private final class Calls {
         var lookedUp: [String] = []
         var decided: [(String, ConnectDecision)] = []
+        /// Added after review: the answers to the first lookups, in order; nil is the request, and later ones follow
+        /// the model's `lookUp`.
+        var lookUpAnswers: [Error?] = []
+    }
+
+    /// Added after review: a call that waits until the test answers it, so a test can act while it is in flight.
+    @MainActor private final class Gate<Answer: Sendable> {
+        private(set) var codes: [String] = []
+        private var waiting: [CheckedContinuation<Answer, Error>?] = []
+
+        func call(_ code: String) async throws -> Answer {
+            codes.append(code)
+            return try await withCheckedThrowingContinuation { waiting.append($0) }
+        }
+
+        /// Waits (a bounded number of turns) until `count` calls are in flight.
+        func untilWaiting(_ count: Int) async {
+            for _ in 0..<1_000 where waiting.count < count { await Task.yield() }
+        }
+
+        func answer(_ index: Int, with result: Result<Answer, Error>) {
+            guard waiting.indices.contains(index), let call = waiting[index] else {
+                Issue.record("no call \(index) is waiting (\(waiting.count) were made)")
+                return
+            }
+            waiting[index] = nil
+            call.resume(with: result)
+        }
     }
 
     private func model(lookUp: Error? = nil, decide: Error? = nil, calls: Calls = Calls()) -> ApproveConnectionModel {
         ApproveConnectionModel(lookUp: { code in
             calls.lookedUp.append(code)
-            if let lookUp { throw lookUp }
+            let answer = calls.lookUpAnswers.isEmpty ? lookUp : calls.lookUpAnswers.removeFirst()
+            if let answer { throw answer }
             return Self.request
         }, decide: { code, decision in
             calls.decided.append((code, decision))
@@ -6685,7 +6800,8 @@ import Testing
 
     @Test func aWrongCodeSaysWhyAndAChangedCodeTriesAgain() async {
         let calls = Calls()
-        let model = model(lookUp: ConnectCodeError.unknownCode, calls: calls)
+        calls.lookUpAnswers = [ConnectCodeError.unknownCode]
+        let model = model(calls: calls)
         model.type("ZZZZZZZZ")
         await model.lookUp()
         #expect(model.phase == .typing && model.error?.hasPrefix("No sign-in is waiting with this code") == true)
@@ -6693,6 +6809,87 @@ import Testing
         #expect(calls.lookedUp.count == 1) // the same code isn't sent again
         model.type("ZZZZZZZY")
         #expect(model.error == nil)
+        await model.lookUp() // added after review: the changed code is looked up
+        #expect(calls.lookedUp == ["ZZZZZZZZ", "ZZZZZZZY"] && model.request == Self.request)
+    }
+
+    /// Added after review: only an unknown code is refused for good. After any other failure the sheet says "try
+    /// again", and retyping the same code sends it again.
+    @Test(arguments: [URLError(.notConnectedToInternet), ApiError(status: 503, code: "http_503", message: ""),
+                      ApiError(status: 401, code: "signed_out", message: ""), ConnectCodeError.tooManyAttempts] as [any Error])
+    func aFailureThatIsntAboutTheCodeLetsItBeSentAgain(_ failure: any Error) async {
+        let calls = Calls()
+        calls.lookUpAnswers = [failure]
+        let model = model(calls: calls)
+        model.type("ABCDEFGH")
+        await model.lookUp()
+        #expect(model.phase == .typing && model.error == ApproveConnectionModel.message(for: failure))
+        model.type("ABCDEFG")
+        model.type("ABCDEFGH")
+        await model.lookUp()
+        #expect(calls.lookedUp == ["ABCDEFGH", "ABCDEFGH"])
+        #expect(model.phase == .found(Self.request) && model.error == nil)
+    }
+
+    /// Added after review: deleting and retyping a character cancels the lookup in flight (the view's task follows
+    /// the complete code). That cancellation is no answer: no error, no refusal, and the retyped code is sent.
+    @Test func aLookUpCancelledByARetypeIsNoRefusal() async {
+        let gate = Gate<ConnectRequest>()
+        let model = ApproveConnectionModel(lookUp: { try await gate.call($0) }, decide: { _, _ in })
+        model.type("ABCDEFGH")
+        let first = Task { await model.lookUp() }
+        await gate.untilWaiting(1)
+        model.type("ABCDEFG")
+        first.cancel()
+        model.type("ABCDEFGH")
+        gate.answer(0, with: .failure(URLError(.cancelled)))
+        await first.value
+        #expect(model.phase == .typing && model.error == nil)
+
+        let second = Task { await model.lookUp() }
+        await gate.untilWaiting(2)
+        gate.answer(1, with: .success(Self.request))
+        await second.value
+        #expect(gate.codes == ["ABCDEFGH", "ABCDEFGH"])
+        #expect(model.phase == .found(Self.request) && model.error == nil)
+    }
+
+    /// Added after review: the same, when the cancelled lookup's answer comes after the new one was sent.
+    @Test func aLateCancelledLookUpLeavesTheNewOneAlone() async {
+        let gate = Gate<ConnectRequest>()
+        let model = ApproveConnectionModel(lookUp: { try await gate.call($0) }, decide: { _, _ in })
+        model.type("ABCDEFGH")
+        let first = Task { await model.lookUp() }
+        await gate.untilWaiting(1)
+        model.type("ABCDEFG")
+        first.cancel()
+        model.type("ABCDEFGH")
+        let second = Task { await model.lookUp() }
+        await gate.untilWaiting(2)
+        gate.answer(0, with: .failure(URLError(.cancelled)))
+        await first.value
+        #expect(model.phase == .lookingUp && model.error == nil)
+        gate.answer(1, with: .success(Self.request))
+        await second.value
+        #expect(model.phase == .found(Self.request) && model.error == nil)
+    }
+
+    /// Added after review: text with a character outside the code's alphabet is no code. It stays as typed, says so,
+    /// and is never sent (dropping the character used to send another code and use a try).
+    @Test func textThatIsNoCodeIsNeverSent() async {
+        let calls = Calls()
+        let model = model(calls: calls)
+        model.type("Code: ABCD-EFGH")
+        #expect(model.typed == "Code: ABCD-EFGH" && model.complete == nil && model.isInvalid)
+        await model.lookUp()
+        model.type("ABCDEFGß")
+        await model.lookUp()
+        #expect(calls.lookedUp.isEmpty && model.isInvalid)
+        model.type("ABCD-EFG")
+        #expect(!model.isInvalid)
+        model.type("ABCD-EFGH")
+        await model.lookUp()
+        #expect(calls.lookedUp == ["ABCDEFGH"])
     }
 
     @Test func refusalsReadAsTheOwnerNeedsThem() {
@@ -6704,7 +6901,7 @@ import Testing
         #expect(ApproveConnectionModel.message(for: URLError(.notConnectedToInternet)).hasPrefix("Couldn't reach"))
     }
 
-    @Test func approveAndDenyDecideTheTypedCode() async {
+    @Test func approveAndDenyDecideTheRequestsCode() async {
         let calls = Calls()
         let approving = model(calls: calls)
         approving.type("ABCDEFGH")
@@ -6728,6 +6925,52 @@ import Testing
         await model.lookUp()
         await model.decide(.approve)
         #expect(model.request == Self.request && model.error?.hasPrefix("Couldn't reach") == true)
+        #expect(model.phase == .found(Self.request) && model.canEditCode)
+    }
+
+    /// Added after review: a code that died while the sheet was open (expired, decided elsewhere) or used-up tries
+    /// take Approve away, so tapping it again can't use more tries; the same code isn't sent again.
+    @Test(arguments: [ConnectCodeError.unknownCode, .tooManyAttempts])
+    func aDecisionOnADeadCodeGoesBackToTheField(_ failure: ConnectCodeError) async {
+        let calls = Calls()
+        let model = model(decide: failure, calls: calls)
+        model.type("ABCDEFGH")
+        await model.lookUp()
+        await model.decide(.approve)
+        #expect(model.phase == .typing && model.request == nil && model.canEditCode)
+        #expect(model.error == ApproveConnectionModel.message(for: failure))
+        await model.lookUp()
+        #expect(calls.lookedUp.count == 1 && calls.decided.count == 1)
+    }
+
+    /// Added after review: the field takes no typing while a decision is on its way, and the decision is for the
+    /// request on screen.
+    @Test func whileDecidingTheCodeCantChange() async {
+        let gate = Gate<Void>()
+        let model = ApproveConnectionModel(lookUp: { _ in Self.request }, decide: { code, _ in
+            try await gate.call(code)
+        })
+        model.type("ABCDEFGH")
+        await model.lookUp()
+        #expect(model.canEditCode)
+        let deciding = Task { await model.decide(.approve) }
+        await gate.untilWaiting(1)
+        #expect(model.phase == .deciding(Self.request) && !model.canEditCode)
+        model.type("ZZZZZZZZ")
+        #expect(model.typed == "ABCD-EFGH" && model.phase == .deciding(Self.request))
+        gate.answer(0, with: .success(()))
+        await deciding.value
+        #expect(model.phase == .approved && gate.codes == ["ABCDEFGH"] && !model.canEditCode)
+    }
+
+    /// Added after review: the decision sends the code of the request shown, not whatever the field holds.
+    @Test func theDecisionIsForTheRequestShown() async {
+        let calls = Calls()
+        let model = model(calls: calls) // answers ABCD-EFGH whatever is looked up
+        model.type("ZZZZZZZZ")
+        await model.lookUp()
+        await model.decide(.deny)
+        #expect(calls.decided.map(\.0) == ["ABCDEFGH"])
     }
 
     // Added after the server's whole-flow review: when and where the code's page was opened, in one line.
@@ -6846,9 +7089,24 @@ final class ApproveConnectionModel {
 
     var isDone: Bool { phase == .approved || phase == .denied }
 
-    /// The field's new text: kept as code characters with the dash, and a changed code starts over.
+    /// Added after review: the field takes typing until a decision is sent. Changing a found code starts over, and so
+    /// does a code changed during its lookup (which cancels it); a decision on its way or made keeps the field.
+    var canEditCode: Bool {
+        switch phase {
+        case .typing, .lookingUp, .found: true
+        case .deciding, .approved, .denied: false
+        }
+    }
+
+    /// Added after review: the field holds text that can't become a code (a character outside the alphabet, or more
+    /// than 8). It is never sent, and the sheet says why.
+    var isInvalid: Bool { ConnectCode.isInvalid(typed) }
+
+    static let notACode = "That isn't a code. Claude's page shows 8 letters and digits, like 7K2M-9PQR."
+
+    /// The field's new text: code characters with the dash (other text as typed), and a changed code starts over.
     func type(_ text: String) {
-        guard !isDone else { return }
+        guard canEditCode else { return }
         let shown = ConnectCode.display(text)
         guard shown != typed else { return }
         typed = shown
@@ -6857,31 +7115,48 @@ final class ApproveConnectionModel {
     }
 
     /// Looks the complete code up once. A wrong one stays in the field with the reason; changing it tries again.
+    /// Added after review: only a code the server doesn't know is refused for good. After any other failure
+    /// (offline, 5xx, signed out, too many tries) retyping the same code sends it again. A lookup cancelled because
+    /// the code changed (the view's task follows it) writes nothing: it is no answer, and no refusal.
     func lookUp() async {
         guard let code = complete, phase == .typing, code != refused else { return }
         phase = .lookingUp
         do {
             let found = try await lookUpCall(code)
+            if Task.isCancelled { return }
             guard complete == code else { return } // retyped meanwhile
             phase = .found(found)
         } catch {
+            if Task.isCancelled { return }
             guard complete == code else { return }
             phase = .typing
-            refused = code
+            if case ConnectCodeError.unknownCode = error { refused = code }
             self.error = Self.message(for: error)
         }
     }
 
+    /// Approve or Deny the request shown. Added after review: it sends that request's own code, and writes its outcome
+    /// only while that decision is still the phase. When the code has died (expired or decided while the sheet was
+    /// open) or the tries are used up, the sheet goes back to the field and that code isn't sent again, so Approve
+    /// can't use more tries; any other failure keeps the request, to try again.
     func decide(_ decision: ConnectDecision) async {
-        guard case .found(let request) = phase, let code = complete else { return }
+        guard case .found(let request) = phase, let code = ConnectCode.complete(request.code) else { return }
         phase = .deciding(request)
         error = nil
         do {
             try await decideCall(code, decision)
+            guard phase == .deciding(request) else { return }
             phase = decision == .approve ? .approved : .denied
         } catch {
-            phase = .found(request)
+            guard phase == .deciding(request) else { return }
             self.error = Self.message(for: error)
+            switch error {
+            case ConnectCodeError.unknownCode, ConnectCodeError.tooManyAttempts:
+                phase = .typing
+                refused = code
+            default:
+                phase = .found(request)
+            }
         }
     }
 
@@ -6986,9 +7261,14 @@ struct ApproveConnectionView: View {
                 .autocorrectionDisabled()
                 .keyboardType(.asciiCapable)
                 .focused($codeFocused)
-                .disabled(model.isDone)
+                .disabled(!model.canEditCode) // added after review: not while a decision is on its way
                 .accessibilityLabel("Code")
                 .accessibilityIdentifier("connect.code")
+            if model.isInvalid { // added after review: such text is never sent
+                Text(ApproveConnectionModel.notACode)
+                    .font(.footnote).foregroundStyle(Theme.destructive)
+                    .accessibilityIdentifier("connect.invalid")
+            }
             if model.phase == .lookingUp {
                 HStack { ProgressView(); Text("Checking the code\u{2026}").foregroundStyle(Theme.textSecondary) }
             }
@@ -7148,7 +7428,7 @@ xcrun xcresulttool get test-results summary --path "$(ls -td build/TestResults-o
 ```
 
 Expected:
-- 10 tests passed and 0 failed: `ApproveConnectionModelTests` 7 (2 added after the server's whole-flow review), `ConnectorURLTests` 1, `ClaudeConnectionBadgeTests` 2.
+- 17 tests passed and 0 failed: `ApproveConnectionModelTests` 14 (2 added after the server's whole-flow review, 7 after the app's review, two of those with arguments), `ConnectorURLTests` 1, `ClaudeConnectionBadgeTests` 2.
 - Then the same command with `-only-testing:GymRollinsUITests/AccessibilityAuditUITests/testClaudeConnectionAudit` passes. Its audit of the Claude screen now meets the new row.
 
 - [ ] **Step 7: Commit**
@@ -7180,6 +7460,8 @@ git commit -m "feat(app): Approve a connection in Settings › Claude; the conne
 - Create: `ios/Packages/GymSync/Tests/GymSyncIntegrationTests/ClaudeTestClient.swift`
 - Move and rewrite: `Tests/GymSyncIntegrationTests/SupabaseParked/ProposalTransportTests.swift` and `OAuthGrantTransportTests.swift`, to `Tests/GymSyncIntegrationTests/`
 - Modify: `scripts/test-server.sh`
+
+*Added after review: `anOlderResolutionLeavesTheNewerOne` records an issue, instead of passing, when the pulled row isn't valid, and `aResolutionOfAProposalTheServerLacksCountsAsSent` checks the Worker's `no_such_proposal` end to end. The `ProposalTransportTests` block below was updated to match.*
 
 - [ ] **Step 1: Give the test Worker its own address as its base URL**
 
@@ -7528,13 +7810,26 @@ struct ProposalTransportTests {
             "summary": "Add a Pull day",
             "changes": [["id": "c1", "type": "add-routine", "routineId": "new-pull", "name": "Pull"]],
         ])
-        guard case .valid(let proposal) = try #require(try await transport.pendingProposals().first) else { return }
+        // Added after review: a row that isn't valid fails the test, instead of passing it without a check.
+        let pulled = try #require(try await transport.pendingProposals().first)
+        guard case .valid(let proposal) = pulled else {
+            Issue.record("expected a valid proposal, got \(pulled)")
+            return
+        }
         let later = max(Date(), proposal.createdAt).addingTimeInterval(60)
         try await transport.resolveProposal(id: proposal.id, status: "dismissed", appliedChangeIds: [], at: later)
         try await transport.resolveProposal(id: proposal.id, status: "applied", appliedChangeIds: ["c1"],
                                             at: later.addingTimeInterval(-30))
         let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposal.id.uuidString.lowercased()])
         #expect(seen.json["status"] as? String == "dismissed")
+        try await user.deleteAccount()
+    }
+
+    /// Added after review: the Worker's answer for a proposal it doesn't have (`no_such_proposal`) is the one 404 the
+    /// app counts as sent.
+    @Test func aResolutionOfAProposalTheServerLacksCountsAsSent() async throws {
+        let user = try await Account.signUp()
+        try await user.transport.resolveProposal(id: UUID(), status: "dismissed", appliedChangeIds: [], at: Date())
         try await user.deleteAccount()
     }
 }
@@ -7614,8 +7909,9 @@ If plan 28 emptied `SupabaseParked/`, also remove its `exclude: ["SupabaseParked
 Run: `scripts/test-sync-integration.sh`
 
 Expected:
-- Every suite passes, these 5 among them:
+- Every suite passes, these 6 among them:
   - `aProposalFromClaudeIsPulledResolvedAndSeenApplied()`, `anOlderResolutionLeavesTheNewerOne()`,
+    `aResolutionOfAProposalTheServerLacksCountsAsSent()` (added after review),
   - `anApprovedCodeConnectsClaudeAndDisconnectEndsItsTokens()`, `aDeniedCodeSendsClaudeAccessDenied()`, `fiveWrongCodesThenNoMoreTries()`.
 - The script's D1 check after account deletion still finds no rows.
 
@@ -7636,6 +7932,8 @@ git commit -m "test(sync): Claude's proposals, approval codes and Disconnect aga
 **Files:**
 - Rewrite: `ios/GymRollinsUITests/ProposalSyncUITests.swift`
 - Modify: `ios/project.yml`, `scripts/ios-test-sync.sh`
+
+*Added after review: Settings is scrolled by one helper that swipes slowly at most 15 times, picks the direction from where the row is (which undoes an overshoot), and fails naming what isn't on screen; going back taps the bar's `BackButton` and waits for Settings. The block below is the file as it now is.*
 
 - [ ] **Step 1: Share Claude's test client with the UI tests**
 
@@ -7710,8 +8008,8 @@ final class ProposalSyncUITests: XCTestCase {
         let proposalId = try XCTUnwrap(proposed.json["proposal_id"] as? String)
 
         // 3. The app pulls it: chip on Today → review → apply.
-        app.navigationBars.buttons.firstMatch.tap() // back to Settings
-        app.buttons["account.syncNow"].tap()
+        goBack(app, to: "Settings")
+        syncNow(app)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
         app.tabBars.buttons["Today"].tap()
         let chip = app.buttons["today.proposal"]
@@ -7727,7 +8025,7 @@ final class ProposalSyncUITests: XCTestCase {
         // 4. The resolution syncs; Claude sees it applied, and the server's plan has the new weight.
         app.tabBars.buttons["Log"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
-        app.buttons["account.syncNow"].tap()
+        syncNow(app)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
         let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposalId])
         XCTAssertEqual(seen.json["status"] as? String, "applied")
@@ -7809,14 +8107,66 @@ final class ProposalSyncUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
     }
 
+    /// Settings keeps its scroll position after the Claude row was reached; the account's Sync now is at the top.
+    private func syncNow(_ app: XCUIApplication) {
+        let button = app.buttons["account.syncNow"]
+        scroll(app, to: button, from: .top)
+        button.tap()
+    }
+
     private func openApproveConnection(_ app: XCUIApplication) {
-        let claude = app.buttons["settings.claude"]
-        XCTAssertTrue(claude.waitForExistence(timeout: 5))
+        // The Claude row sits below the fold of Settings' Form (rows load lazily): scroll until it is there.
+        let claude = app.descendants(matching: .any)["settings.claude"]
+        scroll(app, to: claude, from: .bottom)
         claude.tap()
         let approve = app.buttons["claude.approveConnection"]
         XCTAssertTrue(approve.waitForExistence(timeout: 5))
         approve.tap()
         XCTAssertTrue(app.textFields["connect.code"].waitForExistence(timeout: 5))
+    }
+
+    /// Added after review: the navigation bar's own back button (not whichever bar button comes first), and the
+    /// screen it leads to.
+    private func goBack(_ app: XCUIApplication, to title: String, file: StaticString = #filePath, line: UInt = #line) {
+        let back = app.navigationBars.buttons["BackButton"].firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "No back button", file: file, line: line)
+        back.tap()
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "Back didn't reach \(title)",
+                      file: file, line: line)
+    }
+
+    enum ListEnd { case top, bottom }
+
+    /// Added after review: the most slow swipes `scroll` makes. Settings is about two screens long.
+    private static let maxSwipes = 15
+
+    /// Added after review: scrolls Settings' Form with slow swipes until `element` is on screen and hittable, at most
+    /// `maxSwipes` times, else fails saying so. A row the Form hasn't loaded yet (it loads lazily) is sought toward
+    /// the `end` it sits at; a loaded one off screen is sought on the side it lies, which undoes an overshoot.
+    private func scroll(_ app: XCUIApplication, to element: XCUIElement, from end: ListEnd,
+                        file: StaticString = #filePath, line: UInt = #line) {
+        for _ in 0..<Self.maxSwipes {
+            let area = visibleArea(app)
+            if element.exists, element.isHittable, area.contains(CGPoint(x: element.frame.midX, y: element.frame.midY)) {
+                return
+            }
+            let list = app.collectionViews.firstMatch
+            let surface = list.exists ? list : app
+            let above = element.exists ? element.frame.midY < area.minY : end == .top
+            if above { surface.swipeDown(velocity: .slow) } else { surface.swipeUp(velocity: .slow) }
+        }
+        XCTAssertTrue(element.exists && element.isHittable,
+                      "\(element.description) isn't on screen after \(Self.maxSwipes) slow swipes", file: file, line: line)
+    }
+
+    /// The part of the screen between the navigation bar and the tab bar, where a row can be tapped.
+    private func visibleArea(_ app: XCUIApplication) -> CGRect {
+        let window = app.windows.firstMatch.frame
+        let bar = app.navigationBars.firstMatch
+        let tabs = app.tabBars.firstMatch
+        let top = bar.exists ? bar.frame.maxY : window.minY
+        let bottom = tabs.exists ? tabs.frame.minY : window.maxY
+        return CGRect(x: window.minX, y: top, width: window.width, height: max(0, bottom - top))
     }
 
     private func signUp(_ app: XCUIApplication, email: String) {

@@ -14,8 +14,9 @@ extension ApiSyncTransport {
         return answer.rows
     }
 
-    /// A proposal the server no longer has (404) has nothing left to resolve, so the resolution counts as sent, as an
-    /// update of no row did on Supabase.
+    /// A proposal the server no longer has (`404 no_such_proposal`) has nothing left to resolve, so the resolution
+    /// counts as sent, as an update of no row did on Supabase. Added after review: any other 404 (a missing route's
+    /// `not_found`, a proxy's `http_404`) is an error, so the engine keeps the resolution to send again.
     public func resolveProposal(id: UUID, status: String, appliedChangeIds: [String], at: Date) async throws {
         let stamp = SyncDate.format(at)
         let body = try SyncJSON.encoder.encode(Resolution(status: status, appliedChangeIds: appliedChangeIds,
@@ -24,7 +25,7 @@ extension ApiSyncTransport {
             _ = try await Self.mappingRejections {
                 try await api.data("PATCH", "/v1/claude/proposals/\(id.uuidString.lowercased())", body: body)
             }
-        } catch let error as ApiError where error.status == 404 {
+        } catch let error as ApiError where error.status == 404 && error.code == "no_such_proposal" {
             return
         }
     }

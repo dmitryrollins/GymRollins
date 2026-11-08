@@ -79,13 +79,17 @@ describe('PATCH /v1/claude/proposals/:id', () => {
     expect(row).toEqual({ status: 'dismissed' })
   })
 
-  it("answers 404 for another account's proposal and an unknown id", async () => {
+  // Added after review: its own code, so the app counts only this 404 as sent, never a missing route's
+  // (`not_found`) or a proxy's.
+  it("answers 404 no_such_proposal for another account's proposal and an unknown id", async () => {
     const { userId } = await signUp()
     const { id } = await propose(userId)
     const { token } = await signUp()
-    expect((await resolve(token, id, RESOLVED)).status).toBe(404)
-    expect((await resolve(token, crypto.randomUUID(), RESOLVED)).status).toBe(404)
-    expect((await resolve(token, 'not-a-uuid', RESOLVED)).status).toBe(404)
+    for (const unknown of [id, crypto.randomUUID(), 'not-a-uuid']) {
+      const res = await resolve(token, unknown, RESOLVED)
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: { code: 'no_such_proposal', message: 'No such proposal.' } })
+    }
   })
 
   it.each([
