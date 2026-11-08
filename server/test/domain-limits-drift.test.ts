@@ -3,6 +3,7 @@ import swiftSource from '../../ios/Packages/GymCore/Sources/GymCore/DomainLimits
 import planChangeSource from '../../ios/Packages/GymCore/Sources/GymCore/Plan/PlanChange.swift?raw'
 import appSchema from '../migrations/0002_app_schema.sql?raw'
 import capsMigration from '../migrations/0005_gyms_photos.sql?raw'
+import accountCaps from '../migrations/0010_account_caps.sql?raw'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
 import { PlanChangeLimits } from '../src/shared/plan-validation.ts'
 
@@ -83,6 +84,34 @@ describe('domain limits', () => {
       const trigger = `id <> NEW.id) >= ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
       expect(capsMigration.split(trigger).length - 1, String(code)).toBe(2)
     }
+  })
+
+  it('keeps the account caps in their triggers at the same numbers', () => {
+    const counted = [
+      ['workouts', DomainLimits.workoutsMax, 'too_many_workouts'],
+      ['bodyweight', DomainLimits.bodyweightsMax, 'too_many_body_weights'],
+      ['routines', DomainLimits.routinesMax, 'too_many_routines'],
+      ['custom_exercises', DomainLimits.customExercisesMax, 'too_many_custom_exercises'],
+      ['exercise_prefs', DomainLimits.exercisePrefsMax, 'too_many_exercise_prefs'],
+      ['proposals', DomainLimits.proposalsMax, 'too_many_proposals'],
+      ['gyms', DomainLimits.privateGymsTotalMax, 'too_many_gyms_total'],
+      ['gym_equipment', DomainLimits.privateListingsTotalMax, 'too_many_listings_total'],
+    ] as const
+    for (const [table, max, code] of counted) {
+      const trigger = `tbl = '${table}'), 0) >= ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
+      expect(accountCaps.split(trigger).length - 1, code).toBe(1)
+    }
+    const logged = [
+      [DomainLimits.accountEntriesMax, 'too_many_logged_exercises'],
+      [DomainLimits.accountSetsMax, 'too_many_logged_sets'],
+    ] as const
+    for (const [max, code] of logged) {
+      const trigger = `NEW.n > OLD.n AND NEW.n > ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
+      expect(accountCaps.split(trigger).length - 1, code).toBe(1)
+    }
+    const pending = `status = 'pending') >= ${DomainLimits.pendingProposalsMax}\nBEGIN\n` +
+      "  SELECT RAISE(ABORT, 'too_many_pending_proposals');"
+    expect(accountCaps.split(pending).length - 1).toBe(1)
   })
 
   it("has PlanChange.swift's PlanChangeLimits in the server's plan validation", () => {

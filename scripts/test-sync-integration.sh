@@ -43,6 +43,7 @@ left=$(test_d1_count "select
   + (select count(*) from workout_entries where user_id in ($ids))
   + (select count(*) from workout_sets where user_id in ($ids))
   + (select count(*) from bodyweight where user_id in ($ids))
+  + (select count(*) from account_rows where user_id in ($ids))
   + (select count(*) from gyms where owner_id in ($ids) or created_by in ($ids))
   + (select count(*) from gym_equipment where owner_id in ($ids) or added_by in ($ids))
   + (select count(*) from equipment_items where created_by in ($ids))

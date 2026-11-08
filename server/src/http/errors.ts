@@ -1,4 +1,5 @@
 import type { Context } from 'hono'
+import { ACCOUNT_CAPS } from '../sync/caps.ts'
 
 /** The statuses the API answers errors with (spec section 6). */
 export type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500 | 503
@@ -26,10 +27,11 @@ export function constraintMessage(error: unknown): string | null {
   return message.replace(/^D1_ERROR:\s*/, '').replace(/:\s*SQLITE_CONSTRAINT\S*$/, '')
 }
 
-/** What the migrations' triggers RAISE (0005_gyms_photos.sql), with the app's words for each. */
+/** What the migrations' triggers RAISE (0005_gyms_photos.sql, 0010_account_caps.sql), with the app's words for each. */
 const RAISED: Readonly<Record<string, string>> = {
   too_many_gyms: "You've reached the limit of gyms on one account.",
   too_many_listings: "You've reached the limit of equipment on one account.",
+  ...ACCOUNT_CAPS,
 }
 
 /** The code a trigger raised, or null. D1 reports it as `D1_ERROR: <message>: SQLITE_CONSTRAINT (…)`. */

@@ -1,8 +1,9 @@
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
+import { countOf, seedRows } from './cap-fixtures.ts'
 import { genericItem, insertGym, insertListing, insertUser, listingsSharedToday } from './gym-fixtures.ts'
 import { request, signUp } from './helpers.ts'
-import { appUUID, T1 } from './samples.ts'
+import { appUUID, SAMPLES, T1 } from './samples.ts'
 
 // Requests that arrive together: each limit holds at its exact number, because every count sits in the statement that
 // writes and D1 runs writes one at a time (spec section 2, "Locks and limits"). share.test.ts and photos.test.ts do
@@ -65,5 +66,15 @@ describe('limits, with requests that arrive together', () => {
     const live = await env.DB.prepare('SELECT count(*) AS n FROM gyms WHERE owner_id = ?1 AND deleted_at IS NULL')
       .bind(userId).first<{ n: number }>()
     expect(live!.n).toBe(100)
+  })
+
+  it('keep 200 routines, deleted ones included', async () => {
+    const { token, userId } = await signUp()
+    await seedRows('routines', userId, 196)
+    const answers = await together(6, () => request('POST', '/v1/sync/routines', {
+      token, body: { rows: [SAMPLES.routines()] },
+    }))
+    expect(tally(answers)).toEqual({ 200: 4, 422: 2 })
+    expect(await countOf('routines', userId)).toBe(200)
   })
 })

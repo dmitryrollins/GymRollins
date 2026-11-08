@@ -98,6 +98,36 @@ describe('the D1 schema', () => {
     expect(plan.results.map((r) => r.detail).join('\n'), query).toMatch(new RegExp(`USING (COVERING )?INDEX ${index}\\b`))
   })
 
+  it.each([
+    'workouts_cap', 'bodyweight_cap', 'routines_cap', 'custom_exercises_cap', 'exercise_prefs_cap', 'proposals_cap',
+    'gyms_total_cap', 'gym_equipment_total_cap',
+  ])("%s finds the row and the account's count through primary keys, never by counting", async (name) => {
+    const { sql } = (await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?1")
+      .bind(name).first<{ sql: string }>())!
+    expect(sql).not.toMatch(/count\(/)
+    const lookups = [...sql.matchAll(/\((SELECT (?:1|n) FROM \w+ WHERE [^)]*)\)/g)].map((m) => m[1]!)
+    expect(lookups.length, sql).toBeGreaterThanOrEqual(1)
+    for (const lookup of lookups) {
+      const query = lookup.replace(/NEW\.\w+/g, '?1')
+      const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${query}`).bind(crypto.randomUUID())
+        .all<{ detail: string }>()
+      expect(plan.results.map((r) => r.detail).join('\n'), query)
+        .toMatch(/^SEARCH \w+ USING (COVERING )?INDEX sqlite_autoindex_\w+_1 \(/)
+    }
+  })
+
+  it("counts an account's pending proposals in proposals_pending_cap through proposals_user_pending", async () => {
+    const { sql } = (await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?1")
+      .bind('proposals_pending_cap').first<{ sql: string }>())!
+    const counted = /\(SELECT count\(\*\) FROM (\w+ WHERE [^)]*)\)/.exec(sql)
+    expect(counted, sql).not.toBeNull()
+    const query = `SELECT count(*) FROM ${counted![1]}`.replaceAll('NEW.user_id', '?1')
+    const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${query}`).bind(crypto.randomUUID())
+      .all<{ detail: string }>()
+    expect(plan.results.map((r) => r.detail).join('\n'), query)
+      .toMatch(/USING (COVERING )?INDEX proposals_user_pending\b/)
+  })
+
   it("indexes a workout's entries and an entry's sets", async () => {
     const { results } = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all<{ name: string }>()
     const names = results.map((r) => r.name)
