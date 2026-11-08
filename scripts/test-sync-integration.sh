@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # GymSync integration tests against a throwaway LOCAL Worker (scripts/test-server.sh): port 8788 and a state folder of
 # its own, removed afterwards, so server/.wrangler/state (the development data) is never touched. Every test makes its
-# accounts fresh, as sync-<uuid>@test.local by email and password (ALLOW_PASSWORD_AUTH=1 in server/.dev.vars). The
-# Supabase-only suites left (proposals, Claude's grants) are parked until plan 29.
+# accounts fresh, as sync-<uuid>@test.local by email and password (ALLOW_PASSWORD_AUTH=1 in server/.dev.vars).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/test-server.sh
