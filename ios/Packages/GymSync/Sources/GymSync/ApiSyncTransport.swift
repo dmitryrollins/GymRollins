@@ -10,9 +10,9 @@ import GymData
 /// - A workout goes up alone, with its entries, sets and base version, and is answered `{"status", "updated_at"}`.
 ///   Pulled workouts carry `entries[].sets[]`, so their pages are smaller.
 ///
-/// Gyms, listings, their photos and Claude's proposals aren't on the API until plans 28 and 29, so `servesGyms` and
-/// `servesProposals` are false and the engine leaves them out. Claude's last use and grants keep the protocol's
-/// defaults (never used, nothing to revoke) until plan 29.
+/// Private gyms, their listings and their photos are on the API since plan 28 (`ApiSyncTransport+Gyms.swift`). Claude's
+/// proposals aren't until plan 29, so `servesProposals` is false and the engine leaves them out; Claude's last use and
+/// grants keep the protocol's defaults (never used, nothing to revoke).
 public struct ApiSyncTransport: SyncTransport {
     public static let defaultPageSize = 500
     /// A workout page carries every entry and set. The owner averages 6 entries and 18 sets a workout, so 50 workouts
@@ -34,7 +34,7 @@ public struct ApiSyncTransport: SyncTransport {
         self.workoutPageSize = max(1, workoutPageSize)
     }
 
-    public var servesGyms: Bool { false }
+    public var servesGyms: Bool { true }
     public var servesProposals: Bool { false }
 
     // MARK: Push
@@ -128,7 +128,7 @@ public struct ApiSyncTransport: SyncTransport {
 
     // MARK: - Helpers
 
-    private func push<Row: Encodable>(_ rows: [Row], to entity: String) async throws -> [RowAck] {
+    func push<Row: Encodable>(_ rows: [Row], to entity: String) async throws -> [RowAck] {
         var acks: [RowAck] = []
         for start in stride(from: 0, to: rows.count, by: Self.pushBatchSize) {
             let batch = Array(rows[start..<min(start + Self.pushBatchSize, rows.count)])
@@ -140,7 +140,7 @@ public struct ApiSyncTransport: SyncTransport {
         return acks
     }
 
-    private func pull<Row: Decodable>(_ entity: String, tiebreak: String, pageSize: Int? = nil,
+    func pull<Row: Decodable>(_ entity: String, tiebreak: String, pageSize: Int? = nil,
                                       since: Date?) async throws -> [Row] {
         try await KeysetPager.collect(pageSize: pageSize ?? self.pageSize, since: since) { after, since, limit in
             var query = [URLQueryItem(name: "limit", value: String(limit))]
