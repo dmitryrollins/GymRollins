@@ -26,6 +26,18 @@ struct SyncBannerState: Equatable {
     }
 }
 
+/// One line of Account's refused rows: what they are, with how many when more than one, and the server's words.
+struct SyncFailureLine: Equatable, Identifiable {
+    struct Key: Hashable {
+        let entity: SyncEntity
+        let message: String
+    }
+
+    let title: String
+    let message: String
+    var id: String { "\(title)\n\(message)" }
+}
+
 /// Account-screen wording for sync state.
 enum SyncStatusText {
     /// "Just now", "2 min ago", "3 h ago", or a date; "Never" before the first sync.
@@ -55,6 +67,22 @@ enum SyncStatusText {
     /// "1 item couldn't sync" / "3 items couldn't sync".
     static func failures(_ count: Int) -> String {
         count == 1 ? "1 item couldn't sync" : "\(count) items couldn't sync"
+    }
+
+    /// Under the refused rows: they stay on this phone, and an edit sends one again.
+    static let failuresFooter = "They stay on this iPhone. Editing one tries again."
+
+    /// Account's refused rows, one line per kind of row and reason, in the store's order. At an account limit every
+    /// refused row has the same words, so 300 weigh-ins past it read as one line, not 300.
+    static func failureLines(_ failures: [SyncFailure]) -> [SyncFailureLine] {
+        let keys = failures.map { SyncFailureLine.Key(entity: $0.entity, message: $0.message) }
+        let counts = Dictionary(keys.map { ($0, 1) }, uniquingKeysWith: +)
+        let distinct = keys.reduce(into: [SyncFailureLine.Key]()) { if !$0.contains($1) { $0.append($1) } }
+        return distinct.map { key in
+            let name = entityName(key.entity)
+            let count = counts[key, default: 1]
+            return SyncFailureLine(title: count == 1 ? name : "\(name) \u{00B7} \(count)", message: key.message)
+        }
     }
 
     static func entityName(_ entity: SyncEntity) -> String {

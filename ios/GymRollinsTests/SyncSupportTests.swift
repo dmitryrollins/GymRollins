@@ -63,6 +63,22 @@ import Testing
         #expect(SyncStatusText.status(.conflicts([UUID()]), pending: 1, lastSyncedAt: now) == "1 workout needs review")
     }
 
+    /// At an account limit every refused row has the same words: Account shows one line for them, not hundreds.
+    @Test func refusedRowsReadAsOneLinePerKindAndReason() {
+        let full = "You've reached the limit of 20,000 weigh-ins on one account, deleted ones included. "
+            + "This one stays on this iPhone."
+        let check = "CHECK constraint failed: length(name) BETWEEN 1 AND 40"
+        let failures = (0..<300).map {
+            SyncFailure(entity: .bodyweight, id: "w\($0)", clientUpdatedAt: now, message: full)
+        } + [SyncFailure(entity: .routines, id: "r1", clientUpdatedAt: now, message: check)]
+        #expect(SyncStatusText.failureLines(failures) == [
+            SyncFailureLine(title: "Weigh-in \u{00B7} 300", message: full),
+            SyncFailureLine(title: "Routine", message: check),
+        ])
+        #expect(SyncStatusText.failures(failures.count) == "301 items couldn't sync")
+        #expect(SyncStatusText.failuresFooter == "They stay on this iPhone. Editing one tries again.")
+    }
+
     @Test func conflictSummary() {
         let start = now
         let workout = Workout(startedAt: start, endedAt: start.addingTimeInterval(600), name: "Push", entries: [

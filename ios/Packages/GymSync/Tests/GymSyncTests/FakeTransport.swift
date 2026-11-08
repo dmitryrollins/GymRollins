@@ -39,6 +39,11 @@ actor FakeTransport: SyncTransport {
     private var failure: URLError?
     /// Lowercased ids the "database" refuses with a CHECK violation (the whole batch fails, like Postgres).
     private var rejected: Set<String> = []
+    /// The account's weigh-in cap, as server/migrations/0010_account_caps.sql keeps it: a push holding a new row past
+    /// it is refused whole (one statement), with the server's words; edits of stored rows pass.
+    private var bodyweightCap: Int?
+    static let bodyweightCapWords = "You've reached the limit of 20,000 weigh-ins on one account, deleted ones "
+        + "included. This one stays on this iPhone."
     private var holdPulls = false
     private var heldPull: CheckedContinuation<Void, Never>?
     private var holdDownloads = false
@@ -59,6 +64,7 @@ actor FakeTransport: SyncTransport {
     func setFailDownloads(_ value: Bool) { failDownloads = value }
     func setFailDeletes(_ value: Bool) { failDeletes = value }
     func reject(ids: [String]) { rejected = Set(ids.map { $0.lowercased() }) }
+    func capBodyweight(at max: Int) { bodyweightCap = max }
 
     /// The next pull suspends until `releasePull()` (to overlap a round with sign-out).
     func holdNextPull() { holdPulls = true }
@@ -162,6 +168,9 @@ actor FakeTransport: SyncTransport {
     func push(bodyweight dtos: [BodyweightDTO]) throws -> [RowAck] {
         try gate()
         try checkRejected(dtos.map(\.id.uuidString))
+        if let cap = bodyweightCap, bodyweight.count + Set(dtos.map(\.id)).subtracting(bodyweight.keys).count > cap {
+            throw SyncRecordRejected(code: "too_many_body_weights", message: Self.bodyweightCapWords)
+        }
         return try dtos.compactMap { dto in
             try accept(dto, into: &bodyweight, key: dto.id).map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
         }

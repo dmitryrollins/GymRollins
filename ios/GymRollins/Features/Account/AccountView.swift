@@ -106,17 +106,17 @@ struct AccountSection: View {
         }
     }
 
-    /// Rows the server refused: a count plus what each one is and why.
+    /// Rows the server refused: a count, then one line per kind of row and reason.
     private var failures: some View {
         Section {
             DisclosureGroup {
-                ForEach(env.sync.syncFailures, id: \.id) { failure in
+                ForEach(SyncStatusText.failureLines(env.sync.syncFailures)) { line in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(SyncStatusText.entityName(failure.entity)).font(.subheadline.weight(.semibold))
-                        Text(failure.message).font(.caption).foregroundStyle(Theme.textSecondary)
+                        Text(line.title).font(.subheadline.weight(.semibold))
+                        Text(line.message).font(.caption).foregroundStyle(Theme.textSecondary)
                     }
                 }
-                Text("Edit the item to try again.").font(.caption).foregroundStyle(Theme.textTertiary)
+                Text(SyncStatusText.failuresFooter).font(.caption).foregroundStyle(Theme.textTertiary)
             } label: {
                 Text(SyncStatusText.failures(env.sync.syncFailures.count))
                     .foregroundStyle(Theme.destructive)
