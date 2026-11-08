@@ -2227,7 +2227,7 @@ async function refuseOthersRows(db: D1Database, userId: string, entity: Entity, 
   if (other) throw new ApiError(403, 'not_allowed', 'That row belongs to another account.')
 }
 
-function upsertSql(entity: Entity): string {
+export function upsertSql(entity: Entity): string {
   const names = entity.columns.map((c) => c.name)
   const updates = names.filter((n) => !entity.conflict.includes(n))
     .map((n) => `${n} = ${entity.onUpdate?.[n] ?? `excluded.${n}`}`)
@@ -2257,8 +2257,9 @@ export function parsePullQuery(query: Record<string, string | undefined>, tiebre
   let after: string | number | null = null
   if (query.after !== undefined) {
     if (since === null) throw bad('after needs since.')
+    if (query.after === '') throw bad('after must not be empty.')
+    if (tiebreak === 'int' && !/^\d+$/.test(query.after)) throw bad('after must be a whole number.')
     after = tiebreak === 'int' ? Number(query.after) : query.after
-    if (tiebreak === 'int' && !Number.isInteger(after)) throw bad('after must be a whole number.')
   }
   const limit = query.limit === undefined ? DEFAULT_PULL_LIMIT : Number(query.limit)
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PULL_LIMIT) throw bad(`limit must be 1 to ${MAX_PULL_LIMIT}.`)
@@ -2305,8 +2306,8 @@ import type { AppEnv } from './env.ts'
 import { errorBody, onError } from './http/errors.ts'
 import { syncRoutes } from './sync/routes.ts'
 
-/** A workout or 200 rows is far below this. */
-const MAX_BODY_BYTES = 4 * 1024 * 1024
+/** A workout or 200 rows is far below this, and one bound JSON value must stay under D1's ~2 MB. */
+const MAX_BODY_BYTES = 1024 * 1024
 
 const app = new Hono<AppEnv>()
 app.onError(onError)
@@ -2330,7 +2331,7 @@ export default app
 Run: `cd server && npx vitest run && npx tsc --noEmit`
 Expected:
 - `Test Files  7 passed (7)` and `Tests  103 passed (103)`.
-- `sync-rows.test.ts` adds 49 tests: 35 for the seven tables and 14 more.
+- `sync-rows.test.ts` adds 49 tests: 35 for the seven tables and 14 more. Step 8 adds 7, for 110.
 
 - [ ] **Step 7: Commit**
 
@@ -2338,6 +2339,24 @@ Expected:
 git add server
 git commit -m "feat(server): row sync for the profile, plan and body weight"
 ```
+
+- [ ] **Step 8: The review follow-ups (added after review)**
+
+**Changes:**
+- An empty `after` is refused, and an int `after` must be digits.
+- The body limit is 1 MiB: a push is one bound JSON value, and D1 caps one at about 2 MB.
+- `upsertSql` is exported for a test.
+
+**Seven tests added to `sync-rows.test.ts`:**
+- The upsert's own owner `WHERE`, run without the pre-check. Removing the condition makes this test fail.
+- The same key twice in one push.
+- A pulled tombstone.
+- A day going back to rest.
+- A day on a tombstoned routine.
+- The 413.
+- An empty and a non-numeric `after`.
+
+With them: `Tests  110 passed (110)`. Commit: `test(server): row sync review follow-ups (owner guard, duplicates, tombstones, limits)`.
 
 ### Task 6: Body weight from Apple Health
 
@@ -2451,7 +2470,7 @@ and add these two fields to the `bodyweight` entry:
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  8 passed (8)`, `Tests  107 passed (107)`.
+Expected: `Test Files  8 passed (8)`, `Tests  114 passed (114)`.
 
 - [ ] **Step 5: Commit**
 
@@ -2796,7 +2815,7 @@ export async function entryListings(
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  9 passed (9)`, `Tests  117 passed (117)`.
+Expected: `Test Files  9 passed (9)`, `Tests  124 passed (124)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3323,7 +3342,7 @@ syncRoutes.get('/workouts/:id', async (c) => c.json(await fetchWorkout(c.env.DB,
 - [ ] **Step 5: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  10 passed (10)`, `Tests  131 passed (131)`.
+Expected: `Test Files  10 passed (10)`, `Tests  138 passed (138)`.
 
 - [ ] **Step 6: Commit**
 
@@ -3556,7 +3575,7 @@ v1.route('/account', accountRoutes)
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  11 passed (11)`, `Tests  134 passed (134)`.
+Expected: `Test Files  11 passed (11)`, `Tests  141 passed (141)`.
 
 - [ ] **Step 5: Commit**
 
@@ -3682,7 +3701,7 @@ node scripts/gen-exercise-seed.mjs --check && node scripts/gen-equipment-seed.mj
 ```
 
 Expected:
-- `Test Files  11 passed (11)`, `Tests  134 passed (134)`.
+- `Test Files  11 passed (11)`, `Tests  141 passed (141)`.
 - The seed tests: `# pass 5`, and both checks match.
 - The Deno suite is unchanged: `159 passed … 1 ignored`. This plan doesn't touch it.
 
