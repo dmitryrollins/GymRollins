@@ -91,8 +91,9 @@ weren't folded into the fixes above.
 ## Owner decisions needed
 
 - **The deploy** — creating the Worker, D1 and the three R2 buckets per `docs/cloudflare-checklist.md`, each step
-  approved separately, and deciding when the phone moves to it. Before it: how to rate-limit on `workers.dev`, and
-  the caps plan 31 left open (the checklist's sections 1 and 5).
+  approved separately, and deciding when the phone moves to it. Before it: the custom domain the owner chose,
+  `https://api.gymrollins.com`, with its per-IP rate-limiting rules (the checklist's section 1, option A), and the
+  caps plan 31 left open (section 5).
 - **Exercise media — decided 2026-09-28: stopgap photos now, own AI media later.** The app shows
   public-domain start/end photos from `yuhonas/free-exercise-db` (Unlicense, pinned commit, see
   `docs/licenses/free-exercise-db.md`) for **300 / 1,324** library exercises (23 / 24 of the owner's

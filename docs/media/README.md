@@ -96,8 +96,8 @@ node scripts/upload-photos.mjs --dry-run      # what would be uploaded
 node scripts/upload-photos.mjs
 
 # the deployed Worker, only with the owner's approval for this upload (docs/cloudflare-checklist.md, section 8)
-GYM_CLOUD_APPROVED=1 WORKER_URL=https://gymrollins.<subdomain>.workers.dev node scripts/upload-photos.mjs --target cloud --dry-run
-GYM_CLOUD_APPROVED=1 WORKER_URL=https://gymrollins.<subdomain>.workers.dev node scripts/upload-photos.mjs --target cloud
+GYM_CLOUD_APPROVED=1 WORKER_URL=https://api.gymrollins.com node scripts/upload-photos.mjs --target cloud --dry-run
+GYM_CLOUD_APPROVED=1 WORKER_URL=https://api.gymrollins.com node scripts/upload-photos.mjs --target cloud
 ```
 
 - `--target worker` writes with `wrangler r2 object put --local` into `server/.wrangler/state` (`WORKER_STATE` names
