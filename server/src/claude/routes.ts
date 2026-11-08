@@ -11,6 +11,7 @@ import {
   takeAttempt,
   waitingRequest,
 } from './connect-requests.ts'
+import { lastClaudeUse, parseResolution, pendingProposals, resolveProposal } from './proposals.ts'
 
 /** Hosts the app shows without a warning: Claude's own. */
 const CLAUDE_HOSTS = new Set(['claude.ai', 'claude.com'])
@@ -71,3 +72,12 @@ function connectView(r: ConnectRequest) {
     expires_at: r.expires_at,
   }
 }
+
+claudeRoutes.get('/proposals', async (c) => c.json({ rows: await pendingProposals(c.env.DB, c.var.userId) }))
+
+claudeRoutes.patch('/proposals/:id', async (c) => {
+  const resolution = parseResolution(await jsonBody(c))
+  return c.json(await resolveProposal(c.env.DB, c.var.userId, c.req.param('id'), resolution))
+})
+
+claudeRoutes.get('/last-use', async (c) => c.json({ at: await lastClaudeUse(c.env.DB, c.var.userId) }))
