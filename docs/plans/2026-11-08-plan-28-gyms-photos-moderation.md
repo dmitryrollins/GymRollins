@@ -124,7 +124,8 @@ The Supabase code keeps working beside `server/` until plan 30.
     after the limits, so a bad request at its limit now hears about its text first.
 11. **Public photos** carry `ETag` and `Cache-Control`, and a matching `If-None-Match` answers 304.
     - There's no Cache API: it doesn't apply on `workers.dev`, which the spec keeps.
-    - A removed listing's photo is served until moderation deletes it, as Supabase's public URLs were.
+    - A shared photo is served only while a public listing that isn't removed names it (changed after review; see
+      "Added after review"). A removed listing's photo stops at once, and an unused upload isn't served.
 12. **Exercise photos.** The route belongs here. Its local filling does too:
     - `scripts/upload-photos.mjs --target worker` writes with `wrangler r2 object put --local` into
       `server/.wrangler/state`, the folder `wrangler dev` reads. It checks what is there through the Worker's own
@@ -8283,3 +8284,73 @@ Then add `## Outcome` to this plan, as plan 26 did:
 `ApiSyncTransport.privatePhotoPath`, `forgetOldCatalogue`, `GymIntegration.jpeg` / `signedOutCatalog` /
 `signedOutTransport` / `isServed`, `Account.catalog`, `HostedPhotoProvider`, `PhotoHostingConfig.apiURL`,
 `WORKER_STATE`.
+
+## Outcome
+
+Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudflare account was used. Each task was built by a fresh subagent, then reviewed: spec compliance first, then quality, and security for auth, sync, photos and account. The commits are interleaved with plan 27's on the branch.
+
+**Commits** (code; the `docs:` commits kept this plan in step with what was built)
+
+| Task | Commits |
+|---|---|
+| 1 R2 buckets and limits | `012a71d` |
+| 2 Shared SQL, caller parameter, entity extensions | `79f8c69` |
+| 3 Text rules, loads, case folding | `9635053` |
+| 4 Private gyms and listings in sync | `2f087d9` |
+| 5 Reading the shared catalogue | `f4d4f36` |
+| 6 Sharing and confirming | `2fb80c2` |
+| 7 Reports, blocks, admin queue | `8a9f233` |
+| 8 Gym photos | `037a42e` |
+| 9 Public photos, exercise photos | `93a2245` |
+| 10 Deletion with photos, isolation, limits | `1f4aae4` |
+| Server review fixes | `7e85e06` (first batch), `8e77d3d` (second batch) |
+| 11 API errors, photo bodies, owned photos | `f546ad6` |
+| 12 `ApiGymCatalogTransport` | `d4cfec2` |
+| 13 Gyms, listings, private photos in sync | `a192966` |
+| 14 The server move forgets the old catalogue | `5280104`, review fix `5e29177` |
+| 15 App on the catalogue API, exercise photos | `2d2a64e` |
+| 16 Gym suites and E2E on the Worker | `48c7f33` |
+| 17 Server-move check with gym links | `24f44bd` |
+| 18 Finish | `docs: plan 28 outcome` |
+
+**Final counts**
+- Server: `Test Files  25 passed (25)`, `Tests  322 passed (322)`, and `tsc --noEmit` clean.
+- Scripts: `# pass 29` for `upload-photos.test.mjs` and `gen-equipment-seed.test.mjs`; both seed `--check` runs match.
+- GymSync `--filter GymSyncTests`: 216 tests in 27 suites passed. GymData: 371 tests in 50 suites passed.
+- `scripts/test-sync-integration.sh`: 39 tests in 9 suites passed; account deletion verified, 60 users, 0 rows left.
+- `GYM_E2E=1 scripts/test-gym-e2e.sh`: 5 tests passed; "Stays on the phone verified" (5 markers absent, 1 control present).
+- `scripts/test-photo-hosting.sh` on the iPhone 17 Pro Max simulator: passed, and the second upload skipped both files.
+- Server-move check (Task 17), copy / D1:
+  - workouts 148/148, entries 836/836, sets 2685/2685, routines 6/6;
+  - body weights 23/23, custom exercises 42/42, week days 4/4, profile 1/1;
+  - exercise prefs 0/0, muscle targets 0/0;
+  - private gyms, listings, workouts at a gym and entries at a listing all 0/0 (the copy has no synced gyms; the link path is covered by the integration suite);
+  - 0 records unsynced; "Stores match apart from sync state".
+- The plan's expected counts (284, 207, 365) grew with the review tests.
+
+**Where the build differs from the plan as first written.** Each is also recorded under "Added after review".
+1. **Photos are served only while a listing uses them.** `GET /photos/shared/:name` answers 404 unless a public, non-removed listing names it. This replaces the last bullet of decision 11.
+2. **Refused deletes answer 403** (`not_allowed`), and detach skips removed listings so an admin can still delete their photos.
+3. **The upload re-checks its row after the R2 put.** If a delete took it, the object goes too and the answer is `422 photo_missing`, never 409.
+4. **Strict Apple nonce.** `400 bad_request` unless the id token's `nonce` claim is the SHA-256 hex of the raw nonce.
+5. **No stored id tokens.** Account hooks null `idToken`, `accessToken` and `refreshToken`.
+6. **Bearer-only sessions.** `requireUser` passes only the `authorization` header; no cookie fallback.
+7. **Password auth only on a local host** (`127.0.0.1` or `localhost` in `PUBLIC_BASE_URL`).
+8. **Live-row indexes for the cap triggers** (`gyms_owner_live`, `gym_equipment_owner_live`).
+9. **Final sigma.** `foldKey` maps `ς` to `σ`.
+10. **JSON strings checked.** `isStorableJson` rejects U+0000 and lone surrogates inside `json` values.
+11. **Confirm and report races closed.** The inserts repeat their checks, so a race stores nothing.
+12. **The catalogue has its own server marker**, so a server move forgets only the old server's catalogue.
+13. **`unsupported` is kept on converted listings.**
+14. **A signed-out catalogue refresh is handled quietly.**
+15. Smaller: public routes ignore a malformed `If-None-Match`; every photo answer carries a CSP; finishing an unfinished upload is refused while a listing names it.
+
+**What the reviews caught.** The three security reviews and the parity review found no CRITICAL issue. The one HIGH was the tombstone slowdown in the private-cap triggers, fixed with partial indexes over live rows. The rest were MEDIUM or lower and are the items above.
+
+**Passed to later plans**
+- Deploy-time rate limits on reads and pushes, and tombstone caps.
+- Invisible characters: the TypeScript port stays at parity with Postgres's `clean_text`; going further (`\p{Cf}`, repeated joiners) is left open.
+- Admins see a placeholder for a removed listing's photo.
+- Plan 29: proposals and grants still parked. Plan 30: delete `SupabaseGymCatalogTransport*`, `SupabaseStoragePhotoProvider`'s Supabase-era tests and `SUPABASE_*`; the remote R2 buckets and the exercise-photo upload to the deployed Worker belong in the Cloudflare checklist.
+
+**Not run**: the full app UI suite, deferred to plan 30, which runs it once at the end.

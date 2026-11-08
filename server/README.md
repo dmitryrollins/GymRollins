@@ -37,3 +37,6 @@ Exercise photos for the local Worker: `node ../scripts/upload-photos.mjs --targe
 The iOS integration and UI tests start a Worker of their own (`scripts/test-server.sh`): port 8788, a state folder that
 is removed afterwards, and email accounts each test makes fresh (`ALLOW_PASSWORD_AUTH=1` in `.dev.vars`). They never
 touch `.wrangler/state` or the Worker on 8787.
+
+The gym suites (`GymSyncIntegrationTests`, `scripts/test-gym-e2e.sh`) make `sync-admin-*@test.local` accounts admins with a
+trigger in their throwaway D1.
