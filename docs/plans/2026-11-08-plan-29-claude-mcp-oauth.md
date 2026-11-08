@@ -8284,3 +8284,99 @@ Expected: all pass. The hermetic suite (`scripts/ios-test.sh`) skips `ProposalSy
   - covered by plan 28's drift test: 2,
   - replaced by this plan's new tests: 10 Supabase-only ones.
 - **Section 8 names `@cloudflare/vitest-pool-workers`.** It is `@cloudflare/vitest-plugin`, as plan 26 found.
+
+## Outcome
+
+Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudflare account or claude.ai was used. The server tasks were built in a worktree branch and merged as `d92550e`; each was then reviewed (spec, quality, and security for auth, `/connect` and `/mcp`). The iOS tasks were built on the branch.
+
+**Commits**
+
+| Task | Commits |
+|---|---|
+| 1 Shared code on Vitest | `8ba623a` |
+| 2 MCP tools | `a80f5a4` |
+| 3 Claude's `Db` on D1 | `a8828ce` |
+| 4 OAuth: discovery, registration, authorize | `49d0817`, SDK and zod advisories `9d9d9e8`, review fix `4868b6a` |
+| 5 `/connect` | `bb352c1` |
+| 6 Approve a connection | `927fc42`, review fixes `39be224`, `4868b6a`, `6a2a756` |
+| 7 Proposals and last use | `864c344` |
+| 8 `/mcp` | `e222259`, review fix `debcca3` |
+| 9 `claude-local.mjs` | `d7194af` |
+| 10 README and suite | the `docs: plan 29 README, suite and outcome` commit |
+| 11 Claude's routes in `ApiSyncTransport` | `c40f6fe` |
+| 12 Approve a connection in the app | `5be3830`, review fix `a1bea21` |
+| 13 Integration suites on the Worker | `255a898` |
+| 14 UI tests on the Worker | `8bcfae5` |
+| 15 Finish the iOS part | this commit |
+
+**Final counts**
+- Server: `Test Files  43 passed (43)`, `Tests  602 passed (602)`, `tsc --noEmit` clean, `npm audit` 0 vulnerabilities.
+- The Deno suite (Supabase, until plan 30) is unchanged: `159 passed | 1 ignored`.
+- GymSync: `swift test --filter GymSyncTests` 231 tests in 29 suites. `scripts/test-sync-integration.sh`: 45 tests in 11 suites, and "Account deletion verified: 66 deleted users, 0 rows left".
+- GymData: 371 tests in 50 suites.
+- Sync UI suites on the Worker (`scripts/ios-test-sync.sh`, iPhone 17 Pro Max, iOS 26.2): `SyncUITests` and `ProposalSyncUITests`: 8 tests, 7 passed, 0 failed, 1 skipped (about 11.5 minutes).
+- **Checked by hand:** `node scripts/claude-local.mjs smoke` against a throwaway Worker on 8789 (`--persist-to` a temp folder, `PUBLIC_BASE_URL` set to it), 12 `ok` lines:
+  - discovery, registration, `/connect` under a strict CSP, the code seen in the app, approval, the callback with a code, tokens (scope `mcp offline_access`, 3600 s);
+  - an app session alone sent to `/connect` with no code, `initialize` with 15 tools and `get_profile`, last use, refresh rotation, and Disconnect Claude followed by 401.
+  - The Worker was stopped by PID and its folder removed; nothing was left on 8789.
+
+**Where the build differs from the plan as first written.** Each is also recorded in its task.
+
+*Spec corrections the plan recorded*
+1. **Sign-in hand-back.** The browser returns to Claude through `/connect`'s own hand-back, with a fallback page when it cannot.
+2. **Tokens are opaque, not JWTs.** `disableJwtPlugin: true`; they are stored hashed and looked up in D1 on every call, so a revoke is immediate.
+3. **Dynamic client registration only.** No client metadata documents.
+4. The spec named `@cloudflare/vitest-pool-workers`; it is `@cloudflare/vitest-plugin`, as plan 26 found.
+
+*Review fixes*
+5. `9d9d9e8`: MCP SDK 2.4.0 and zod 4.6.7, for the advisories in the older versions (the SDK's and zod's, four in all).
+6. `debcca3`: Claude's audit rows are pruned, custom exercise search is Unicode-aware, the private-listing rule is stricter, and JSON-RPC batches are refused on `/mcp`.
+7. `39be224`: Claude's browser session is marked `claudeConnect` (migration `0008`) and refused on `/v1`; OAuth tokens never reach `/v1`; the app's auth routes strip cookies.
+8. `e222259` (Task 8): the body limit on `/mcp`, and browser sessions revoked with Disconnect Claude.
+9. `4868b6a`:
+   - authorize ignores app sessions;
+   - client names are checked (length, control, bidi and invisible characters);
+   - the opener's details are stored (migration `0009`);
+   - the `mcp` scope is required;
+   - a revoke beats a racing refresh.
+10. `6a2a756`: the opener's city and country come from `request.cf`, never from client headers.
+11. `a1bea21` (app): the approve sheet retries cleanly, never burns tries on a dead code, and sends the code it shows; code parsing is strict; the proposal route answers 404 `no_such_proposal` only for a missing proposal.
+
+**What the reviews caught.** Three were real holes, all closed with tests:
+- **Claude's browser session reached `/v1` as a bearer.** Fixed in `39be224`.
+- **An app session could mint Claude tokens at authorize.** Fixed in `4868b6a`.
+- **JSON-RPC batches bypassed the per-request limit on `/mcp`.** Fixed in `debcca3`.
+
+Smaller findings:
+- approval-code phishing through a long or bidi `client_name` (fixed with the name check and the opener details on the sheet);
+- registration reading a session;
+- a refresh racing a revoke;
+- client-supplied location headers trusted.
+
+**Security advisories in old packages.** The MCP SDK and zod versions first pinned had published advisories (four between them); `9d9d9e8` moved to SDK 2.4.0 and zod 4.6.7, and `npm audit` reports 0 vulnerabilities.
+
+**Passed to later plans**
+
+*Plan 30 deploy checklist*
+- **Cloudflare per-IP rate-limit rules first** on `/api/auth/oauth2/register`, `/connect` and `/mcp`. The Worker's own caps aren't per IP:
+  - the registration cap (30 new clients an hour) is global, so anyone can use it up;
+  - `/connect`'s 20 sign-ins per 10 minutes are per client, and anyone can register more clients;
+  - `/mcp`'s 60 calls a minute are per account, and a refused token still costs a D1 lookup.
+- `PUBLIC_BASE_URL` as the https origin, because the MCP resource and the issuer are built from it.
+- Check on the deployed Worker that a `cf-ipcity` header the client sends is ignored.
+- Delete clients that never got a token.
+- Client metadata documents, only if claude.ai needs them (it may refuse dynamic registration).
+- **Deploy the server before or with this app build.** The app now relies on 404 `no_such_proposal` for a missing proposal, and the older server answers differently.
+
+*The manual Claude Code connection (owner)*
+- With `scripts/server-up.sh` running: `claude mcp add --transport http --scope local gymrollins-local http://127.0.0.1:8787/mcp`, then `/mcp` inside `claude` to authenticate.
+- Open the sign-in URL, sign in on `/connect`, and approve the code in the app (or `node scripts/claude-local.mjs approve CODE`).
+- Confirm a tool call works, that Settings shows the last use, and that Disconnect Claude makes the next call fail.
+
+*claude.ai after deploy*
+- Add the deployed `/mcp` as a connector, and run the spec's section 9 connection test.
+
+**Not run**
+- The full UI suite (`scripts/ios-test.sh`): it runs once, in plan 30.
+- Claude Code connected by hand: it is interactive and needs the owner. The scripted `smoke` stands in for it.
+- claude.ai: nothing here contacts it.

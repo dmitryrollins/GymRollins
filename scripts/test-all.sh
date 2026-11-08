@@ -22,10 +22,10 @@ echo "==> GymWatchLink (swift test) + Apple Watch app build (watchOS simulator +
 echo "==> iOS app unit + UI tests"
 "$ROOT/scripts/ios-test.sh"
 
-echo "==> MCP validator, tools and endpoint (deno test, FakeDb; HTTP e2e: MCP_E2E=1)"
+echo "==> MCP validator, tools and endpoint on Supabase (deno test, FakeDb; HTTP e2e: MCP_E2E=1; plan 30 removes them)"
 (cd "$ROOT/supabase/functions" && deno test --allow-read _shared/ mcp/)
 
-echo "==> API server (Cloudflare Worker: vitest in workerd, in-memory D1)"
+echo "==> API server (Cloudflare Worker: vitest in workerd, in-memory D1; includes the MCP tools and Claude's OAuth)"
 (cd "$ROOT/server" && { [[ -d node_modules ]] || npm ci; } && npx vitest run && npx tsc --noEmit)
 
 echo "==> OAuth consent server (node test)"
@@ -59,7 +59,7 @@ node --test "$ROOT/scripts/compare-stores.test.mjs"
 
 # Sync against a throwaway local Worker (no Docker; needs server/.dev.vars): opt in with SYNC_E2E=1.
 if [[ "${SYNC_E2E:-0}" == "1" ]]; then
-  echo "==> GymSync integration and iOS sync E2E (throwaway local Worker on :8788)"
+  echo "==> GymSync integration and iOS sync E2E (throwaway local Worker on :8788; includes Claude's proposals, approval codes and Disconnect)"
   "$ROOT/scripts/test-sync-integration.sh"
   "$ROOT/scripts/ios-test-sync.sh"
 fi
