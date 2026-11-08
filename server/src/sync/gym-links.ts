@@ -28,9 +28,9 @@ export async function workoutGym(
 ): Promise<string | null> {
   if (incoming === null || incoming === stored) {
     if (stored === null) return null
-    return (await idsWhere(db, 'gyms', 'g', gymLinkSurvives('g'), userId, [stored])).has(stored) ? stored : null
+    return (await idsWhere(db, 'gyms', 'g', gymLinkSurvives('g', '?2'), userId, [stored])).has(stored) ? stored : null
   }
-  return (await idsWhere(db, 'gyms', 'g', gymReadable('g'), userId, [incoming])).has(incoming) ? incoming : null
+  return (await idsWhere(db, 'gyms', 'g', gymReadable('g', '?2'), userId, [incoming])).has(incoming) ? incoming : null
 }
 
 export interface EntryLink {
@@ -51,8 +51,8 @@ export async function entryListings(
   const wanted = entries.map((e) => ({ id: e.id, listing: e.gymEquipmentId ?? previous.get(e.id) ?? null }))
   const listings = [...new Set(wanted.flatMap((w) => (w.listing === null ? [] : [w.listing])))]
   const [surviving, readable] = await Promise.all([
-    idsWhere(db, 'gym_equipment', 'e', listingLinkSurvives('e'), userId, listings),
-    idsWhere(db, 'gym_equipment', 'e', listingReadable('e'), userId, listings),
+    idsWhere(db, 'gym_equipment', 'e', listingLinkSurvives('e', '?2'), userId, listings),
+    idsWhere(db, 'gym_equipment', 'e', listingReadable('e', '?2'), userId, listings),
   ])
   return new Map(wanted.map(({ id, listing }): [string, string | null] => {
     if (listing === null) return [id, null]

@@ -18,7 +18,7 @@ syncRoutes.get('/workouts', async (c) => {
 syncRoutes.get('/workouts/:id', async (c) => c.json(await fetchWorkout(c.env.DB, c.var.userId, c.req.param('id'))))
 
 syncRoutes.post('/:entity', async (c) => {
-  const acks = await pushRows(c.env.DB, c.var.userId, entityNamed(c.req.param('entity')), await jsonBody(c))
+  const acks = await pushRows(c.env, c.var.userId, entityNamed(c.req.param('entity')), await jsonBody(c))
   return c.json({ acks })
 })
 

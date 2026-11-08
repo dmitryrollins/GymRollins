@@ -1,6 +1,7 @@
 import { ApiError } from '../http/errors.ts'
 import { type Column, RowError, storedRow, wireRow } from './columns.ts'
 import { entryListings, workoutGym } from './gym-links.ts'
+import { columnNames as names, extracted } from './sql.ts'
 import { afterSql, type PullQuery } from './table-sync.ts'
 import { laterStamp, NOW_SQL } from './time.ts'
 
@@ -53,9 +54,6 @@ const PUSH_ONLY: readonly Column[] = [
   { name: 'base_updated_at', kind: 'ts', nullable: true },
   { name: 'force', kind: 'bool', fallback: false },
 ]
-
-const names = (columns: readonly Column[]) => columns.map((c) => c.name).join(', ')
-const extracted = (columns: readonly Column[]) => columns.map((c) => `json_extract(value, '$.${c.name}')`).join(', ')
 
 /** Entries and sets are written only while the workout row is still this save's: ?1 the workout, ?2 the write id. */
 const STILL_THIS_SAVE = 'EXISTS (SELECT 1 FROM workouts WHERE id = ?1 AND write_id = ?2)'
