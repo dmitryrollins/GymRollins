@@ -38,6 +38,16 @@ async function ownRoutines(db: D1Database, userId: string, rows: readonly Record
   if (missing !== undefined) throw new RowError(`routine_id ${missing} is not one of your routines`)
 }
 
+/**
+ * A deletion that comes with an Apple Health sample id, of a weigh-in still live: Health's deletion, which wins over
+ * a newer edit (Postgres's health_tombstone_guard, which ran before last-write-wins).
+ */
+const HEALTH_DELETION = '(excluded.deleted_at IS NOT NULL AND bodyweight.deleted_at IS NULL ' +
+  'AND coalesce(bodyweight.health_sample_id, excluded.health_sample_id) IS NOT NULL)'
+/** A weigh-in Health deleted stays deleted: a live edit of it is skipped. */
+const HEALTH_DELETED = '(bodyweight.deleted_at IS NOT NULL AND bodyweight.health_sample_id IS NOT NULL ' +
+  'AND excluded.deleted_at IS NULL)'
+
 export const ENTITIES: Readonly<Record<string, Entity>> = {
   profile: {
     table: 'profiles',
@@ -105,6 +115,11 @@ export const ENTITIES: Readonly<Record<string, Entity>> = {
       col('id', 'uuid'), col('measured_at', 'ts'), col('w_kg', 'real'), opt('bf_pct', 'real'), opt('t', 'text'),
       opt('source', 'text'), opt('health_sample_id', 'uuid'), opt('health_fat_sample_id', 'uuid'), edited, deleted,
     ],
+    applies: `NOT ${HEALTH_DELETED} AND (excluded.client_updated_at >= bodyweight.client_updated_at OR ${HEALTH_DELETION})`,
+    onUpdate: {
+      client_updated_at: `CASE WHEN ${HEALTH_DELETION} ` +
+        'THEN max(excluded.client_updated_at, bodyweight.client_updated_at) ELSE excluded.client_updated_at END',
+    },
   },
 }
 
