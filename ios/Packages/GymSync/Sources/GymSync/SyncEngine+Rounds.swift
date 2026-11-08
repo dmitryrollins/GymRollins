@@ -26,8 +26,8 @@ extension SyncEngine {
         })
         try await pushBatch(.muscleTargets, rows: try store.dirtyMuscleTargets(), key: { $0.value.group.rawValue },
                             send: { try await self.transport.push(muscleTargets: $0.map(MuscleTargetDTO.init)) })
-        try await pushGyms()
-        try await pushProposals()
+        if transport.servesGyms { try await pushGyms() }
+        if transport.servesProposals { try await pushProposals() }
         try await pushBatch(.bodyweight, rows: try store.dirtyBodyweight(), key: { $0.value.id.uuidString }, send: {
             try await self.transport.push(bodyweight: $0.map(BodyweightDTO.init))
         })
@@ -164,7 +164,7 @@ extension SyncEngine {
         try await pull(.muscleTargets, fetch: { try await self.transport.pullMuscleTargets(since: $0) }, apply: {
             try self.store.applyRemote(muscleTargets: $0.compactMap { $0.toDomain() })
         })
-        try await pullGyms()
+        if transport.servesGyms { try await pullGyms() }
         try await pull(.bodyweight, fetch: { try await self.transport.pullBodyweight(since: $0) }, apply: {
             try self.store.applyRemote(bodyweight: $0.map { $0.toDomain() })
         })
@@ -172,7 +172,7 @@ extension SyncEngine {
         try await pull(.workouts, fetch: { try await self.transport.pullWorkouts(since: $0) }, apply: {
             conflicts = Set(try self.store.applyRemote(workouts: $0.map { $0.toDomain() }))
         })
-        try await pullProposals()
+        if transport.servesProposals { try await pullProposals() }
         return conflicts
     }
 

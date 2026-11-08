@@ -45,6 +45,15 @@ actor FakeTransport: SyncTransport {
     private var missPhoto = false
     private var heldDownload: CheckedContinuation<Void, Never>?
 
+    /// False makes the engine leave gyms (or proposals) out of the round, as with the API before plans 28 and 29.
+    nonisolated let servesGyms: Bool
+    nonisolated let servesProposals: Bool
+
+    init(servesGyms: Bool = true, servesProposals: Bool = true) {
+        self.servesGyms = servesGyms
+        self.servesProposals = servesProposals
+    }
+
     func fail(with error: URLError?) { failure = error }
     func setFailUploads(_ value: Bool) { failUploads = value }
     func setFailDownloads(_ value: Bool) { failDownloads = value }

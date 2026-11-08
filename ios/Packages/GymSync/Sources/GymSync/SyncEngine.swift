@@ -14,8 +14,8 @@ public enum SyncStatus: Equatable, Sendable {
 /// Offline-first sync: pushes dirty rows (profile, custom exercises, exercise preferences, routines, weekdays, weekly
 /// targets, bodyweight, then workouts
 /// one RPC each) and proposal resolutions, then pulls each entity since its cursor and applies it through `SyncStore`. Only one sync (or
-/// conflict resolution) runs at a time; network failures leave local data untouched and report `.offline`. A row the
-/// server refuses for its values is recorded as a `SyncFailure` and skipped, so it can't block the rest of the round.
+/// conflict resolution) runs at a time; network failures, a busy server and rate limits leave local data untouched and
+/// report `.offline`. A row the server refuses for its values is recorded as a `SyncFailure` and skipped, so it can't block the rest of the round.
 /// After the pull, pending proposals are auto-applied when the owner allows it (`autoApply`) and pushed at once.
 /// `shutdown()` (sign-out, account switch/deletion) stops the engine: after it, no response can reach the store.
 @MainActor @Observable
@@ -180,7 +180,8 @@ public final class SyncEngine {
     }
 
     static func status(for error: Error) -> SyncStatus {
-        if error is URLError || (error as NSError).domain == NSURLErrorDomain { return .offline }
+        // Network failures, a busy server (5xx) and rate limits (429) are worth trying again, not reporting.
+        if ApiError.isOffline(error) { return .offline }
         return .error("Couldn't sync. Your data is safe on this iPhone; we'll try again later.")
     }
 }

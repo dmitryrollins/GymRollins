@@ -4,6 +4,13 @@ import Foundation
 /// last-write-wins guard (the server holds a newer edit) gets no ack and stays dirty until a pull replaces it.
 /// Pulls return rows with `updated_at > since` (all rows when nil), oldest first.
 public protocol SyncTransport: Sendable {
+    /// Whether this server keeps private gyms, listings and their photos. When false the engine leaves them out of the
+    /// round, and they stay dirty here until a server that keeps them (the API from plan 28).
+    var servesGyms: Bool { get }
+    /// Whether this server keeps Claude's proposals. When false the engine neither pulls nor resolves them (the API
+    /// until plan 29).
+    var servesProposals: Bool { get }
+
     /// Upserts the caller's profile; nil when the server kept a newer edit.
     func push(profile: ProfileDTO) async throws -> RowAck?
     func push(customExercises: [CustomExerciseDTO]) async throws -> [RowAck]
@@ -50,6 +57,10 @@ public protocol SyncTransport: Sendable {
 }
 
 extension SyncTransport {
+    /// Supabase and the test doubles keep both.
+    public var servesGyms: Bool { true }
+    public var servesProposals: Bool { true }
+
     /// Test doubles that predate weekly targets store none (no acks, nothing to pull).
     public func push(muscleTargets: [MuscleTargetDTO]) async throws -> [RowAck] { [] }
     public func pullMuscleTargets(since: Date?) async throws -> [MuscleTargetDTO] { [] }
