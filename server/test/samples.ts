@@ -33,6 +33,11 @@ export const SAMPLES: Readonly<Record<string, () => Row>> = {
   }),
   weekdays: () => ({ weekday: 3, routine_id: null, client_updated_at: T1 }),
   'muscle-targets': () => ({ muscle: 'chest', min_sets: 10, max_sets: 16, client_updated_at: T1 }),
+  // a private gym as GymDTO encodes it
+  gyms: () => ({
+    id: appUUID(), visibility: 'private', name: 'Home gym', address: '1 Main St', latitude: 52.37, longitude: 4.89,
+    client_updated_at: T1, deleted_at: null,
+  }),
   bodyweight: () => ({
     id: appUUID(), measured_at: '2026-11-07T07:00:00.000000Z', w_kg: 75.5, bf_pct: null, t: '07:00', source: null,
     health_sample_id: null, health_fat_sample_id: null, client_updated_at: T1, deleted_at: null,
@@ -48,6 +53,7 @@ export const BAD: Readonly<Record<string, Row>> = {
   weekdays: { weekday: 8 },
   'muscle-targets': { min_sets: 20, max_sets: 10 },
   bodyweight: { w_kg: 500 },
+  gyms: { latitude: 91 },
 }
 
 /** The ack id the app matches for a row. */
@@ -59,6 +65,7 @@ export const KEY: Readonly<Record<string, (row: Row, userId: string) => string>>
   weekdays: (row) => String(row.weekday),
   'muscle-targets': (row) => String(row.muscle),
   bodyweight: (row) => String(row.id).toLowerCase(),
+  gyms: (row) => String(row.id).toLowerCase(),
 }
 
 /** What a pull answers for a pushed row: its UUID columns lowercased, plus updated_at (and user_id on the profile). */

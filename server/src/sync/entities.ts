@@ -1,6 +1,8 @@
 import type { Env } from '../env.ts'
 import { ApiError } from '../http/errors.ts'
 import { type Column, type Kind, RowError } from './columns.ts'
+import { checkPrivateListings, preparePrivateGym, preparePrivateListing } from './gym-rows.ts'
+import { NOW_SQL } from './time.ts'
 
 /** What a push's cross-row checks may read: the bindings (D1, the photo buckets) and the caller. */
 export interface PushContext {
@@ -47,6 +49,8 @@ export const ownerOf = (entity: Entity) => entity.owner ?? 'user_id'
 
 const col = (name: string, kind: Kind): Column => ({ name, kind })
 const opt = (name: string, kind: Kind): Column => ({ name, kind, nullable: true })
+/** visibility: the app always sends 'private'. Anything else breaks the table's *_private_has_owner CHECK. */
+const privateRow: Column = { name: 'visibility', kind: 'text', fallback: 'private' }
 const edited = col('client_updated_at', 'ts')
 const deleted = opt('deleted_at', 'ts')
 
@@ -144,6 +148,44 @@ export const ENTITIES: Readonly<Record<string, Entity>> = {
       client_updated_at: `CASE WHEN ${HEALTH_DELETION} ` +
         'THEN max(excluded.client_updated_at, bodyweight.client_updated_at) ELSE excluded.client_updated_at END',
     },
+  },
+  gyms: {
+    table: 'gyms',
+    owner: 'owner_id',
+    scope: "visibility = 'private'",
+    conflict: ['id'],
+    ackKey: 'id',
+    tiebreak: { column: 'id', kind: 'text' },
+    columns: [
+      col('id', 'uuid'), privateRow, col('name', 'text'), opt('address', 'text'), opt('latitude', 'real'),
+      opt('longitude', 'real'), edited, deleted,
+    ],
+    insertOnly: { created_by: '?2', created_at: NOW_SQL },
+    prepare: preparePrivateGym,
+  },
+  'gym-listings': {
+    table: 'gym_equipment',
+    owner: 'owner_id',
+    scope: "visibility = 'private'",
+    conflict: ['id'],
+    ackKey: 'id',
+    tiebreak: { column: 'id', kind: 'text' },
+    columns: [
+      col('id', 'uuid'), col('gym_id', 'uuid'), col('item_id', 'uuid'), privateRow, opt('photo_path', 'text'),
+      col('loads', 'json'), col('quantity', 'int'), opt('notes', 'text'), opt('private_brand', 'text'),
+      opt('private_model', 'text'), edited, deleted,
+    ],
+    insertOnly: { added_by: '?2', created_at: NOW_SQL },
+    // PostgREST embedded the item as equipment_items(kind_id); GymListingDTO reads it there.
+    pull: {
+      select: ['(SELECT kind_id FROM equipment_items WHERE equipment_items.id = gym_equipment.item_id) AS item_kind_id'],
+      shape: ({ item_kind_id, ...row }) => ({
+        ...row,
+        equipment_items: item_kind_id === null || item_kind_id === undefined ? null : { kind_id: item_kind_id },
+      }),
+    },
+    prepare: preparePrivateListing,
+    check: checkPrivateListings,
   },
 }
 

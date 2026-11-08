@@ -29,7 +29,7 @@ async function pull(token: string, entity: string, query = ''): Promise<Row[]> {
   return (await res.json<{ rows: Row[] }>()).rows
 }
 
-describe.each(Object.keys(ENTITIES))('%s', (entity) => {
+describe.each(Object.keys(SAMPLES))('%s', (entity) => {
   it('stores a row and answers it back as the app sent it', async () => {
     const { token, userId } = await signUp()
     const row = SAMPLES[entity]()

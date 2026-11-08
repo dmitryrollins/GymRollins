@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import swiftSource from '../../ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift?raw'
 import appSchema from '../migrations/0002_app_schema.sql?raw'
+import capsMigration from '../migrations/0005_gyms_photos.sql?raw'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
 
 // Fails when the server's limits drift from the Swift source of truth, or from the D1 CHECKs that enforce them. The
@@ -58,5 +59,13 @@ describe('domain limits', () => {
 
   it("keeps the D1 schema's CHECKs at the same numbers", () => {
     for (const check of SCHEMA_CHECKS) expect(appSchema, check).toContain(check)
+  })
+
+  it('keeps the cap triggers at the same numbers', () => {
+    const caps = [[DomainLimits.privateGymsMax, 'too_many_gyms'], [DomainLimits.privateListingsMax, 'too_many_listings']]
+    for (const [max, code] of caps) {
+      const trigger = `id <> NEW.id) >= ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
+      expect(capsMigration.split(trigger).length - 1, String(code)).toBe(2)
+    }
   })
 })

@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers'
+import { foldKey } from '../src/gyms/text.ts'
 
 // Gym rows written straight into D1. Plan 28 adds the routes that create them.
 
@@ -37,9 +38,9 @@ export async function genericItem(kind = 'dumbbells'): Promise<string> {
 export async function insertItem(i: { brand: string; model: string; createdBy: string; kind?: string }): Promise<string> {
   const id = crypto.randomUUID()
   await env.DB.prepare(
-    'INSERT INTO equipment_items (id, kind_id, brand, model, created_by, created_at, updated_at) ' +
-      'VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)',
-  ).bind(id, i.kind ?? 'dumbbells', i.brand, i.model, i.createdBy, T).run()
+    'INSERT INTO equipment_items (id, kind_id, brand, model, brand_key, model_key, created_by, created_at, updated_at) ' +
+      'VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)',
+  ).bind(id, i.kind ?? 'dumbbells', i.brand, i.model, foldKey(i.brand), foldKey(i.model), i.createdBy, T).run()
   return id
 }
 
@@ -113,4 +114,20 @@ export async function insertReport(r: {
     "INSERT INTO reports (id, target_type, target_id, reporter_id, reason, note, created_at) VALUES (?1, ?2, ?3, ?4, 'other', ?5, ?6)",
   ).bind(id, r.targetType, r.targetId, r.reporter, r.note, T).run()
   return id
+}
+
+/** The smallest bytes the server takes as a JPEG. */
+export const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])
+
+/** A photo the account uploaded: its photo_objects row and, unless `stored` is false, its R2 object. */
+export async function uploadedPhoto(
+  owner: string,
+  bucket: 'gym-photos' | 'gym-photos-private',
+  options: { stored?: boolean } = {},
+): Promise<string> {
+  const name = await insertPhoto(owner, bucket)
+  if (options.stored ?? true) {
+    await (bucket === 'gym-photos' ? env.GYM_PHOTOS : env.GYM_PHOTOS_PRIVATE).put(name, JPEG)
+  }
+  return name
 }
