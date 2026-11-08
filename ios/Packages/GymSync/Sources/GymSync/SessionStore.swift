@@ -14,13 +14,26 @@ public struct StoredSession: Codable, Equatable, Sendable {
     }
 }
 
+/// A session printed, dumped or put in a log line shows `<redacted>` for its token.
+extension StoredSession: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String {
+        "StoredSession(token: <redacted>, userId: \(userId), email: \(email.map { "\"\($0)\"" } ?? "nil"))"
+    }
+
+    public var debugDescription: String { description }
+
+    public var customMirror: Mirror {
+        Mirror(self, children: ["token": "<redacted>", "userId": userId, "email": email as Any], displayStyle: .struct)
+    }
+}
+
 /// Where the session lives: the Keychain in the app (`KeychainSessionStore`), memory in tests.
 public protocol SessionStore: Sendable {
     func load() -> StoredSession?
     func save(_ session: StoredSession) throws
     /// Forgets the session. With a token, only while the store still holds that one, so a 401 to an older request
-    /// can't end a session signed in since.
-    func clear(ifToken token: String?)
+    /// can't end a session signed in since. True when a session was forgotten.
+    @discardableResult func clear(ifToken token: String?) -> Bool
 }
 
 extension SessionStore {
@@ -38,9 +51,11 @@ public final class InMemorySessionStore: SessionStore, @unchecked Sendable {
 
     public func save(_ session: StoredSession) throws { lock.withLock { self.session = session } }
 
-    public func clear(ifToken token: String?) {
+    @discardableResult public func clear(ifToken token: String?) -> Bool {
         lock.withLock {
-            if token == nil || session?.token == token { session = nil }
+            guard let held = session, token == nil || held.token == token else { return false }
+            session = nil
+            return true
         }
     }
 }

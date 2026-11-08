@@ -54,16 +54,18 @@ Worker (Hono 4.13.17, Better Auth 1.7.18, wrangler 4.158.0 with local D1); bash 
    - Renewing a session moves its expiry only (checked in Better Auth's `get-session`), so the token never changes.
 2. **What "signed out" looks like.**
    - `/v1` answers `401 signed_out`. `ApiClient` forgets the token, but only if it is still the one it sent, so a 401
-     to an old request can't end a session signed in since. It then signals `AuthService`, which goes `.signedOut` and
-     calls `onExternalChange`. The coordinator drops the engine and keeps the data and its owner, as with a revoked
+     to an old request can't end a session signed in since. Only when it forgot it does it signal `AuthService`, which
+     goes `.signedOut` and calls `onExternalChange`. The coordinator drops the engine and keeps the data and its owner, as with a revoked
      Supabase session.
    - `get-session` answers **200 `null`**, not 401, for a dead or unknown token. `restore()` treats that as signed out
      and forgets the token.
    - `sign-out` answers 200 whatever the token, but 415 to a POST with no body, so the app sends `{}`. The app forgets
      the token first, then tells the server.
 3. **No cookies.** The URLSession is ephemeral with `httpCookieStorage = nil`, `httpShouldSetCookies = false`, cookies
-   refused, and no URL cache. The app sends only `Authorization: Bearer` (plan 26: `/v1` refuses the cookie anyway).
-4. **Offline.** URLError, 5xx and 429 are `ApiError.isOffline`.
+   refused, and no URL cache. The app sends only `Authorization: Bearer` (plan 26: `/v1` refuses the cookie anyway),
+   and follows no redirect, so the bearer never leaves the API.
+4. **Offline.** URLError, 5xx and 429 are `ApiError.isOffline`. `badURL` and `unsupportedURL` aren't: they are the
+   app's bugs.
    - `SyncEngine` shows `.offline` for them. Today a PostgREST 5xx showed `.error`; the spec's rule (section 6) is now
      the engine's too.
    - `restore()` keeps the stored account signed in.
@@ -311,6 +313,12 @@ struct StubAnswer: Sendable {
         StubAnswer(status: status, headers: ["Content-Type": "application/json"].merging(headers) { _, new in new },
                    body: Data(text.utf8))
     }
+
+    /// Where a 3xx with a `Location` points, resolved against the request's URL.
+    func redirect(from url: URL) -> URL? {
+        guard (300..<400).contains(status), let location = headers["Location"] else { return nil }
+        return URL(string: location, relativeTo: url)?.absoluteURL
+    }
 }
 
 /// A request as the stub saw it. URLSession hands a protocol the body as a stream; it is read here.
@@ -357,6 +365,12 @@ final class StubURLProtocol: URLProtocol {
             guard let response = HTTPURLResponse(url: url, statusCode: answer.status, httpVersion: "HTTP/1.1",
                                                  headerFields: answer.headers)
             else { throw URLError(.badServerResponse) }
+            if let target = answer.redirect(from: url) {
+                // URLSession asks its delegate whether to follow; a refusal delivers this answer as the response.
+                var next = request
+                next.url = target
+                client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: response)
+            }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: answer.body)
             client?.urlProtocolDidFinishLoading(self)
@@ -435,17 +449,27 @@ import Testing
         #expect(try request.json() as? [String: [String]] == ["rows": []])
     }
 
-    @Test func neverSendsOrKeepsCookies() async throws {
-        let server = StubServer { _ in .json(200, "{}", headers: ["Set-Cookie": "better-auth.session_token=abc; Path=/"]) }
-        let api = server.client(sessions: InMemorySessionStore(session))
-        let _: [String: String] = try await api.get("/api/auth/get-session")
-        let _: [String: String] = try await api.get("/api/auth/get-session")
-        #expect(server.requests.count == 2)
-        #expect(server.requests.allSatisfy { $0.headers["Cookie"] == nil })
-        let configuration = ApiClient.makeURLSession().configuration
+    /// Read off the client's own session: URLSession runs no cookie handling or cache for a stub URLProtocol, so a
+    /// round trip through the stub can't show either.
+    @Test func neverSendsOrKeepsCookies() {
+        let configuration = ApiClient(baseURL: URL(string: "http://127.0.0.1:9")!, sessions: InMemorySessionStore())
+            .configuration
         #expect(configuration.httpCookieStorage == nil)
         #expect(!configuration.httpShouldSetCookies)
+        #expect(configuration.httpCookieAcceptPolicy == .never)
         #expect(configuration.urlCache == nil)
+        #expect(configuration.requestCachePolicy == .reloadIgnoringLocalCacheData)
+    }
+
+    @Test func clearSaysWhetherItForgotASession() throws {
+        let sessions = InMemorySessionStore(session)
+        #expect(!sessions.clear(ifToken: "t2.sig"))
+        #expect(sessions.load() == session)
+        #expect(sessions.clear(ifToken: session.token))
+        #expect(sessions.load() == nil)
+        #expect(!sessions.clear(ifToken: nil), "nothing left to forget")
+        try sessions.save(session)
+        #expect(sessions.clear(ifToken: nil))
     }
 
     @Test func anErrorAnswerBecomesApiErrorWithItsCodeAndStatus() async throws {
@@ -507,6 +531,81 @@ import Testing
         #expect(sessions.load() == newer)
     }
 
+    @Test func a401ToAnOlderTokenSendsNoSignal() async throws {
+        let sessions = InMemorySessionStore(session)
+        let newer = StoredSession(token: "t2.sig", userId: session.userId, email: nil)
+        let answer = signedOut
+        let server = StubServer { _ in
+            try sessions.save(newer)
+            return .json(401, answer)
+        }
+        let api = server.client(sessions: sessions)
+        await #expect(throws: ApiError.self) {
+            let _: [String: String] = try await api.get("/v1/sync/routines")
+        }
+        #expect(await !signalled(api), "the session signed in since stays signed in")
+    }
+
+    @Test func a401ToASignInLeavesTheStoreAloneAndSendsNoSignal() async throws {
+        let server = StubServer { _ in
+            .json(401, #"{"error": {"code": "invalid_email_or_password", "message": "Invalid email or password"}}"#)
+        }
+        let sessions = InMemorySessionStore(session)
+        let api = server.client(sessions: sessions)
+        await #expect(throws: ApiError.self) {
+            _ = try await api.data("POST", "/api/auth/sign-in/email", body: Data("{}".utf8), bearer: .anonymous)
+        }
+        #expect(sessions.load() == session)
+        #expect(await !signalled(api))
+    }
+
+    @Test func a401ToASignOutLeavesTheStoreAloneAndSendsNoSignal() async throws {
+        let answer = signedOut
+        let server = StubServer { _ in .json(401, answer) }
+        let sessions = InMemorySessionStore(session)
+        let api = server.client(sessions: sessions)
+        let token = session.token
+        await #expect(throws: ApiError.self) {
+            _ = try await api.data("POST", "/api/auth/sign-out", body: Data("{}".utf8), bearer: .token(token))
+        }
+        #expect(sessions.load() == session, "even when the token it carried is the stored one")
+        #expect(await !signalled(api))
+    }
+
+    @Test func aRedirectComesBackAsItIsAndTheBearerStaysHome() async throws {
+        let elsewhere = StubServer { _ in .json(200, "{}") }
+        let target = elsewhere.baseURL.appending(path: "/v1/sync/routines").absoluteString
+        let server = StubServer { _ in .json(302, "{}", headers: ["Location": target]) }
+        let api = server.client(sessions: InMemorySessionStore(session))
+        let error = await #expect(throws: ApiError.self) {
+            let _: [String: String] = try await api.get("/v1/sync/routines")
+        }
+        #expect(error?.status == 302)
+        #expect(server.requests.count == 1)
+        #expect(elsewhere.requests.isEmpty, "the bearer never follows a redirect")
+    }
+
+    @Test func aRequestTheAppBuiltWrongIsNotOffline() {
+        #expect(!ApiError.isOffline(URLError(.badURL)))
+        #expect(!ApiError.isOffline(URLError(.unsupportedURL)))
+        #expect(!ApiError.isOffline(NSError(domain: NSURLErrorDomain, code: NSURLErrorBadURL)))
+        #expect(ApiError.isOffline(URLError(.cancelled)), "a cancelled request is tried again later")
+    }
+
+    @Test func aSessionOrABearerNeverShowsItsToken() {
+        let bearer = ApiClient.Bearer.token(session.token)
+        var printed = ""
+        print(session, bearer, to: &printed)
+        var dumped = ""
+        dump(session, to: &dumped)
+        dump(bearer, to: &dumped)
+        let shown = [printed, dumped, "\(session)", "\(bearer)", String(reflecting: session), String(reflecting: bearer)]
+        for text in shown {
+            #expect(!text.contains(session.token), "\(text)")
+            #expect(text.contains("<redacted>"), "\(text)")
+        }
+    }
+
     @Test func aRequestWithoutASessionCarriesNoAuthorization() async throws {
         let server = StubServer { _ in .json(200, "{}") }
         let _: [String: String] = try await server.client().get("/api/auth/get-session")
@@ -520,6 +619,24 @@ import Testing
         let request = try #require(server.requests.first)
         #expect(request.url.query(percentEncoded: true) == "after=a%2Bb")
         #expect(request.query["after"] == "a+b")
+    }
+}
+
+/// Whether `api.unauthorized` yields within a moment. The client buffers a signal before it throws, so one arrives at
+/// once; without one the wait wins.
+private func signalled(_ api: ApiClient) async -> Bool {
+    await withTaskGroup(of: Bool.self) { group in
+        group.addTask {
+            var signals = api.unauthorized.makeAsyncIterator()
+            return await signals.next() != nil
+        }
+        group.addTask {
+            try? await Task.sleep(for: .milliseconds(200))
+            return false
+        }
+        let first = await group.next() ?? false
+        group.cancelAll()
+        return first
     }
 }
 ```
@@ -555,11 +672,16 @@ public struct ApiError: LocalizedError, Equatable, Sendable {
     /// A busy or rate-limited server (5xx, 429): nothing is wrong with the request, so the app tries again later.
     public var isTemporary: Bool { status == 429 || (500...599).contains(status) }
 
-    /// Network failures, rate limits and server errors: what the app shows as offline and tries again.
+    /// Network failures (a cancelled request included), rate limits and server errors: what the app shows as offline
+    /// and tries again. A URL the app built wrong is a bug, not the network, so it isn't one.
     public static func isOffline(_ error: Error) -> Bool {
         if let api = error as? ApiError { return api.isTemporary }
-        return error is URLError || (error as NSError).domain == NSURLErrorDomain
+        let failure = error as NSError
+        return failure.domain == NSURLErrorDomain && !malformed.contains(failure.code)
     }
+
+    /// `URLError.badURL` and `.unsupportedURL`: trying again sends the same broken request.
+    private static let malformed: Set<Int> = [NSURLErrorBadURL, NSURLErrorUnsupportedURL]
 
     /// Reads an error answer. A body in another shape (a proxy's HTML page, an empty 502) still gives the status, with
     /// the code `http_<status>`.
@@ -603,13 +725,26 @@ public struct StoredSession: Codable, Equatable, Sendable {
     }
 }
 
+/// A session printed, dumped or put in a log line shows `<redacted>` for its token.
+extension StoredSession: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String {
+        "StoredSession(token: <redacted>, userId: \(userId), email: \(email.map { "\"\($0)\"" } ?? "nil"))"
+    }
+
+    public var debugDescription: String { description }
+
+    public var customMirror: Mirror {
+        Mirror(self, children: ["token": "<redacted>", "userId": userId, "email": email as Any], displayStyle: .struct)
+    }
+}
+
 /// Where the session lives: the Keychain in the app (`KeychainSessionStore`), memory in tests.
 public protocol SessionStore: Sendable {
     func load() -> StoredSession?
     func save(_ session: StoredSession) throws
     /// Forgets the session. With a token, only while the store still holds that one, so a 401 to an older request
-    /// can't end a session signed in since.
-    func clear(ifToken token: String?)
+    /// can't end a session signed in since. True when a session was forgotten.
+    @discardableResult func clear(ifToken token: String?) -> Bool
 }
 
 extension SessionStore {
@@ -627,9 +762,11 @@ public final class InMemorySessionStore: SessionStore, @unchecked Sendable {
 
     public func save(_ session: StoredSession) throws { lock.withLock { self.session = session } }
 
-    public func clear(ifToken token: String?) {
+    @discardableResult public func clear(ifToken token: String?) -> Bool {
         lock.withLock {
-            if token == nil || session?.token == token { session = nil }
+            guard let held = session, token == nil || held.token == token else { return false }
+            session = nil
+            return true
         }
     }
 }
@@ -645,24 +782,38 @@ import Foundation
 /// The GymRollins API (the Worker in `server/`) over URLSession. Requests carry the stored session token as
 /// `Authorization: Bearer` and JSON bodies; an answer outside 2xx is thrown as `ApiError`, a network failure as
 /// `URLError`. The session never sends or keeps cookies (the API takes only the bearer, spec section 7) and has no
-/// URL cache, so one account's answers can't be served to another.
+/// URL cache, so one account's answers can't be served to another. No redirect is followed, so the bearer can't go
+/// anywhere else: the API never redirects, and a 3xx is thrown as an `ApiError` like any answer outside 2xx.
 ///
 /// A 401 to a request that carried the stored token means the server ended that session (signed out elsewhere, expired,
 /// account deleted): the token is forgotten and `unauthorized` yields, which `AuthService` turns into a sign-out. The
-/// local data stays.
+/// local data stays. When the store already holds a newer session (a sign-in finished while the request was on the
+/// wire), nothing is forgotten and nothing yields.
 public struct ApiClient: Sendable {
-    /// Which token a request carries.
-    enum Bearer: Sendable {
+    /// Which token a request carries. Printed, dumped or logged, a given token shows as `<redacted>`.
+    enum Bearer: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
         case stored
         case anonymous
         case token(String)
+
+        var description: String {
+            switch self {
+            case .stored: "stored"
+            case .anonymous: "anonymous"
+            case .token: "token(<redacted>)"
+            }
+        }
+
+        var debugDescription: String { description }
+
+        var customMirror: Mirror { Mirror(self, children: [], displayStyle: .enum) }
     }
 
     /// The API's origin, e.g. `http://127.0.0.1:8787` (`ApiConfig.baseURL`).
     public let baseURL: URL
     let sessions: any SessionStore
     private let urlSession: URLSession
-    /// One element per 401 to a request that carried the stored token. `AuthService` is its only reader.
+    /// One element per 401 that ended the stored session. `AuthService` is its only reader.
     let unauthorized: AsyncStream<Void>
     private let signal: AsyncStream<Void>.Continuation
 
@@ -688,6 +839,9 @@ public struct ApiClient: Sendable {
         }
         return URLSession(configuration: configuration)
     }
+
+    /// The session's settings, for the tests.
+    var configuration: URLSessionConfiguration { urlSession.configuration }
 
     /// `GET`, the answer decoded with `SyncJSON.decoder`.
     func get<Response: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> Response {
@@ -717,11 +871,11 @@ public struct ApiClient: Sendable {
         case .token(let given): given
         }
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-        let (answer, response) = try await urlSession.data(for: request)
+        let (answer, response) = try await urlSession.data(for: request, delegate: RefusesRedirects.shared)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401, case .stored = bearer, let token {
-                sessions.clear(ifToken: token)
+            // Only when this 401 ended the stored session: a token since replaced leaves the newer one signed in.
+            if http.statusCode == 401, case .stored = bearer, let token, sessions.clear(ifToken: token) {
                 signal.yield()
             }
             throw ApiError.from(status: http.statusCode, body: answer)
@@ -741,12 +895,23 @@ public struct ApiClient: Sendable {
         return url
     }
 }
+
+/// Answers every redirect with nil, so URLSession hands back the 3xx instead of following it with the bearer. It is
+/// each request's own delegate, so a session passed to `ApiClient.init` refuses redirects too.
+final class RefusesRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+    static let shared = RefusesRedirects()
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
 ```
 
 - [ ] **Step 7: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 152 tests in 21 suites passed`.
+Expected: `Test run with 159 tests in 21 suites passed`.
 
 - [ ] **Step 8: Commit**
 
@@ -764,6 +929,39 @@ A fresh reviewer reads `git diff HEAD~1`:
    a cookie, and a 401 clears only the token that was sent.
 
 Fix CRITICAL and HIGH findings in a follow-up commit and re-run Step 7.
+
+- [ ] **Step 10: The review follow-ups (added after review)**
+
+The code blocks above already include them. Commit: `fix(sync): a stale 401 signals nothing; no redirects, redacted tokens`.
+
+**Changes:**
+- **A stale 401 signals nothing (HIGH).** `SessionStore.clear(ifToken:)` returns whether it forgot a session
+  (`@discardableResult`), and `ApiClient` yields `unauthorized` only then. Before, a 401 to a request sent with T1
+  after a sign-in as T2 left T2 in the store but signed the UI out. Task 7's `KeychainSessionStore` and
+  `UITestSessionStore` return it too.
+- **The cookie test reads the configuration.** URLSession runs no cookie handling for a custom URLProtocol, so the
+  two-request half of `neverSendsOrKeepsCookies` couldn't fail. The test now reads the client's own session through an
+  internal `configuration`: no cookie storage, no cookies set or accepted, no URL cache, `.reloadIgnoringLocalCacheData`.
+- **A bad URL isn't offline.** `URLError.badURL` and `.unsupportedURL` are the app's bugs, and trying again sends the
+  same request. `.cancelled` still counts as offline.
+- **Tokens are redacted.** `StoredSession` and `ApiClient.Bearer` show `<redacted>` for the token in `print`, `dump`,
+  interpolation and `String(reflecting:)` (`CustomStringConvertible`, `CustomDebugStringConvertible`,
+  `CustomReflectable`).
+- **No redirects.** Every request's delegate is `RefusesRedirects`, which answers nil, so a 3xx comes back as an
+  `ApiError` and the bearer never reaches the `Location`. It is the request's delegate rather than the session's, so a
+  session passed to `ApiClient.init` refuses redirects too. `StubServer` redirects a 3xx that has a `Location`, through
+  `wasRedirectedTo`: before the fix, the client followed it and the target got `Authorization: Bearer t1.sig`.
+
+**Seven tests added to `ApiClientTests.swift`:**
+- A 401 to an older token sends no signal (`signalled` races `next()` against a 200 ms sleep, and the sleep wins).
+- A 401 to an `.anonymous` request (a wrong sign-in) and to a `.token` request (sign-out) leaves the store alone and
+  sends no signal.
+- `clear(ifToken:)` answers whether it forgot a session.
+- A 302 comes back as it is, and its target sees no request.
+- `badURL` and `unsupportedURL` aren't offline; `cancelled` is.
+- No token in what a session or a bearer prints.
+
+With them, Step 7 reads `Test run with 159 tests in 21 suites passed`. The counts in later tasks include the seven.
 
 ### Task 2: `ApiConfig` and the `API_URL` setting
 
@@ -916,7 +1114,7 @@ Expected: `$(API_URL)`. (Info.plist is generated and gitignored.)
 - [ ] **Step 5: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 157 tests in 22 suites passed`.
+Expected: `Test run with 164 tests in 22 suites passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -1073,7 +1271,7 @@ In the class's doc comment, replace `network failures leave local data untouched
 - [ ] **Step 7: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 159 tests in 23 suites passed`.
+Expected: `Test run with 166 tests in 23 suites passed`.
 
 - [ ] **Step 8: Commit**
 
@@ -1534,7 +1732,7 @@ private struct AckList: Decodable {
 - [ ] **Step 5: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 170 tests in 24 suites passed`.
+Expected: `Test run with 177 tests in 24 suites passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -2468,8 +2666,9 @@ public struct AccountPhotoSteps: Sendable {
 /// Sign-in on the API's Better Auth: Sign in with Apple with the id token the app gets (plus email and password in
 /// DEBUG builds, for tests), sign-out, account deletion and session restore. Every failure is thrown as an
 /// `AuthFailure` with a user-facing message. The session (Better Auth's bearer token, and whose it is) lives in
-/// `api.sessions`, the Keychain on the phone, so `restore()` works offline. A 401 to any call that carried it signs the
-/// service out and is reported through `onExternalChange`; the local data stays.
+/// `api.sessions`, the Keychain on the phone, so `restore()` works offline. A 401 that ends it (to a call that carried
+/// it, while it is still the stored one) signs the service out and is reported through `onExternalChange`; the local
+/// data stays.
 @MainActor @Observable
 public final class AuthService {
     public private(set) var state: AuthState = .signedOut
@@ -2504,7 +2703,7 @@ public final class AuthService {
         onExternalChange?(next)
     }
 
-    /// Every 401 to a call that carried the session; the client has already forgotten the token.
+    /// Every 401 that ended the stored session; the client has already forgotten the token.
     private static func events(from api: ApiClient) -> AsyncStream<AuthEvent> {
         AsyncStream { continuation in
             let task = Task {
@@ -2979,7 +3178,7 @@ Expected: no output.
 - [ ] **Step 9: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 181 tests in 24 suites passed`. The integration target builds too, and its suites skip without
+Expected: `Test run with 188 tests in 24 suites passed`. The integration target builds too, and its suites skip without
 `API_URL`; Task 8 runs them.
 
 - [ ] **Step 10: Commit**
@@ -3036,10 +3235,11 @@ import Testing
         let second = StoredSession(token: "t2.sig", userId: first.userId, email: nil)
         try store.save(second)
         #expect(store.load() == second)
-        store.clear(ifToken: "t1.sig")
+        #expect(!store.clear(ifToken: "t1.sig"))
         #expect(store.load() == second, "a 401 to the older token leaves the newer session")
-        store.clear(ifToken: "t2.sig")
+        #expect(store.clear(ifToken: "t2.sig"))
         #expect(store.load() == nil)
+        #expect(!store.clear(ifToken: nil), "nothing left to forget")
     }
 
     @Test func twoServicesDontShareASession() throws {
@@ -3142,10 +3342,10 @@ public final class KeychainSessionStore: SessionStore, @unchecked Sendable {
         }
     }
 
-    public func clear(ifToken token: String?) {
+    @discardableResult public func clear(ifToken token: String?) -> Bool {
         lock.withLock {
-            if let token, read()?.token != token { return }
-            SecItemDelete(query as CFDictionary)
+            if let token, read()?.token != token { return false }
+            return SecItemDelete(query as CFDictionary) == errSecSuccess
         }
     }
 
@@ -3290,10 +3490,12 @@ final class UITestSessionStore: SessionStore, @unchecked Sendable {
         lock.withLock { defaults.set(data, forKey: Self.key) }
     }
 
-    func clear(ifToken token: String?) {
+    @discardableResult func clear(ifToken token: String?) -> Bool {
         lock.withLock {
-            if let token, read()?.token != token { return }
+            if let token, read()?.token != token { return false }
+            let held = defaults.data(forKey: Self.key) != nil
             defaults.removeObject(forKey: Self.key)
+            return held
         }
     }
 
@@ -3421,7 +3623,7 @@ xcrun xcresulttool get test-results summary --path "$(ls -td build/TestResults-p
 Expected: `"result" : "Passed"`, `failedTests` 0, and `passedTests` equal to `totalTestCount`. The new suites add 4 tests.
 
 Then run the package suites again: `(cd Packages/GymSync && swift test --filter GymSyncTests)`.
-Expected: `Test run with 181 tests in 24 suites passed`. The Keychain store is tested in the app, where the simulator's
+Expected: `Test run with 188 tests in 24 suites passed`. The Keychain store is tested in the app, where the simulator's
 Keychain works.
 
 - [ ] **Step 9: Commit**
@@ -4228,7 +4430,7 @@ DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' scripts/ios-test-sy
 Expected:
 - GymCore unchanged.
 - GymData: `Test run with 363 tests in 49 suites passed`.
-- GymSync: `Test run with 181 tests in 24 suites passed`.
+- GymSync: `Test run with 188 tests in 24 suites passed`.
 - Integration: `Test run with 15 tests in 4 suites passed`, then `Account deletion verified: 17 deleted users, 0 rows
   left`.
 - Store comparison: `# pass 2`.

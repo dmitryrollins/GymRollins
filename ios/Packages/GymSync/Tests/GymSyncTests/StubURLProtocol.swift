@@ -11,6 +11,12 @@ struct StubAnswer: Sendable {
         StubAnswer(status: status, headers: ["Content-Type": "application/json"].merging(headers) { _, new in new },
                    body: Data(text.utf8))
     }
+
+    /// Where a 3xx with a `Location` points, resolved against the request's URL.
+    func redirect(from url: URL) -> URL? {
+        guard (300..<400).contains(status), let location = headers["Location"] else { return nil }
+        return URL(string: location, relativeTo: url)?.absoluteURL
+    }
 }
 
 /// A request as the stub saw it. URLSession hands a protocol the body as a stream; it is read here.
@@ -57,6 +63,12 @@ final class StubURLProtocol: URLProtocol {
             guard let response = HTTPURLResponse(url: url, statusCode: answer.status, httpVersion: "HTTP/1.1",
                                                  headerFields: answer.headers)
             else { throw URLError(.badServerResponse) }
+            if let target = answer.redirect(from: url) {
+                // URLSession asks its delegate whether to follow; a refusal delivers this answer as the response.
+                var next = request
+                next.url = target
+                client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: response)
+            }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: answer.body)
             client?.urlProtocolDidFinishLoading(self)

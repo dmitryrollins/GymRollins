@@ -19,11 +19,16 @@ public struct ApiError: LocalizedError, Equatable, Sendable {
     /// A busy or rate-limited server (5xx, 429): nothing is wrong with the request, so the app tries again later.
     public var isTemporary: Bool { status == 429 || (500...599).contains(status) }
 
-    /// Network failures, rate limits and server errors: what the app shows as offline and tries again.
+    /// Network failures (a cancelled request included), rate limits and server errors: what the app shows as offline
+    /// and tries again. A URL the app built wrong is a bug, not the network, so it isn't one.
     public static func isOffline(_ error: Error) -> Bool {
         if let api = error as? ApiError { return api.isTemporary }
-        return error is URLError || (error as NSError).domain == NSURLErrorDomain
+        let failure = error as NSError
+        return failure.domain == NSURLErrorDomain && !malformed.contains(failure.code)
     }
+
+    /// `URLError.badURL` and `.unsupportedURL`: trying again sends the same broken request.
+    private static let malformed: Set<Int> = [NSURLErrorBadURL, NSURLErrorUnsupportedURL]
 
     /// Reads an error answer. A body in another shape (a proxy's HTML page, an empty 502) still gives the status, with
     /// the code `http_<status>`.

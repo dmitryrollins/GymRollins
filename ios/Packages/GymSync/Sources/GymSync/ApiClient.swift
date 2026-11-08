@@ -3,24 +3,38 @@ import Foundation
 /// The GymRollins API (the Worker in `server/`) over URLSession. Requests carry the stored session token as
 /// `Authorization: Bearer` and JSON bodies; an answer outside 2xx is thrown as `ApiError`, a network failure as
 /// `URLError`. The session never sends or keeps cookies (the API takes only the bearer, spec section 7) and has no
-/// URL cache, so one account's answers can't be served to another.
+/// URL cache, so one account's answers can't be served to another. No redirect is followed, so the bearer can't go
+/// anywhere else: the API never redirects, and a 3xx is thrown as an `ApiError` like any answer outside 2xx.
 ///
 /// A 401 to a request that carried the stored token means the server ended that session (signed out elsewhere, expired,
 /// account deleted): the token is forgotten and `unauthorized` yields, which `AuthService` turns into a sign-out. The
-/// local data stays.
+/// local data stays. When the store already holds a newer session (a sign-in finished while the request was on the
+/// wire), nothing is forgotten and nothing yields.
 public struct ApiClient: Sendable {
-    /// Which token a request carries.
-    enum Bearer: Sendable {
+    /// Which token a request carries. Printed, dumped or logged, a given token shows as `<redacted>`.
+    enum Bearer: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
         case stored
         case anonymous
         case token(String)
+
+        var description: String {
+            switch self {
+            case .stored: "stored"
+            case .anonymous: "anonymous"
+            case .token: "token(<redacted>)"
+            }
+        }
+
+        var debugDescription: String { description }
+
+        var customMirror: Mirror { Mirror(self, children: [], displayStyle: .enum) }
     }
 
     /// The API's origin, e.g. `http://127.0.0.1:8787` (`ApiConfig.baseURL`).
     public let baseURL: URL
     let sessions: any SessionStore
     private let urlSession: URLSession
-    /// One element per 401 to a request that carried the stored token. `AuthService` is its only reader.
+    /// One element per 401 that ended the stored session. `AuthService` is its only reader.
     let unauthorized: AsyncStream<Void>
     private let signal: AsyncStream<Void>.Continuation
 
@@ -46,6 +60,9 @@ public struct ApiClient: Sendable {
         }
         return URLSession(configuration: configuration)
     }
+
+    /// The session's settings, for the tests.
+    var configuration: URLSessionConfiguration { urlSession.configuration }
 
     /// `GET`, the answer decoded with `SyncJSON.decoder`.
     func get<Response: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> Response {
@@ -75,11 +92,11 @@ public struct ApiClient: Sendable {
         case .token(let given): given
         }
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-        let (answer, response) = try await urlSession.data(for: request)
+        let (answer, response) = try await urlSession.data(for: request, delegate: RefusesRedirects.shared)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401, case .stored = bearer, let token {
-                sessions.clear(ifToken: token)
+            // Only when this 401 ended the stored session: a token since replaced leaves the newer one signed in.
+            if http.statusCode == 401, case .stored = bearer, let token, sessions.clear(ifToken: token) {
                 signal.yield()
             }
             throw ApiError.from(status: http.statusCode, body: answer)
@@ -97,5 +114,16 @@ public struct ApiClient: Sendable {
         }
         guard let url = components.url else { throw URLError(.badURL) }
         return url
+    }
+}
+
+/// Answers every redirect with nil, so URLSession hands back the 3xx instead of following it with the bearer. It is
+/// each request's own delegate, so a session passed to `ApiClient.init` refuses redirects too.
+final class RefusesRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+    static let shared = RefusesRedirects()
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }
