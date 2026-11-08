@@ -171,6 +171,29 @@ import Testing
         #expect(kept.map(\.startedAt) == [base.addingTimeInterval(100)])
     }
 
+    /// A split workout's pieces stay or go with their first piece (plan 31). A re-import keeps them all, though each
+    /// piece starts a second after a workout already in the log; another app's copy of the session drops them all.
+    @Test func aSplitWorkoutsPiecesStayOrGoTogether() throws {
+        let base = Date(timeIntervalSince1970: 1_000_000)
+        let first = ImportedWorkout(id: UUID(), startedAt: base, entries: [])
+        let second = ImportedWorkout(id: UUID(), startedAt: base.addingTimeInterval(1), entries: [], part: 2,
+                                     splitFrom: first.id)
+        let again = try ImportService.withoutDuplicates(
+            [first, second], existing: [Workout(id: first.id, startedAt: base, name: "x")])
+        #expect(again.0.map(\.id) == [first.id, second.id] && again.1 == 0)
+        let otherApp = try ImportService.withoutDuplicates(
+            [first, second], existing: [Workout(startedAt: base.addingTimeInterval(30), name: "x")])
+        #expect(otherApp.0.isEmpty && otherApp.1 == 2)
+    }
+
+    @Test func piecesAfterTheFirstAreNumbered() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let untitled = ImportedWorkout(id: UUID(), startedAt: start, entries: [], part: 2, splitFrom: UUID())
+        #expect(ImportService.workout(from: untitled, exerciseIds: [:], source: .fitNotes).name == "FitNotes workout (2)")
+        let titled = ImportedWorkout(id: UUID(), startedAt: start, entries: [], name: "Push", part: 3, splitFrom: UUID())
+        #expect(ImportService.workout(from: titled, exerciseIds: [:], source: .hevy).name == "Push (3)")
+    }
+
     @Test func fitbodWorkoutsKeepTheirNameAndNote() async throws {
         _ = try await service.importAll(plan: ImportFixtures.samplePlan(), choices: choices)
         #expect(try allWorkouts().allSatisfy { $0.name == "Fitbod workout" && $0.note == "Imported from Fitbod" })
