@@ -14,11 +14,14 @@ async function propose(userId: string, summary = 'Bench +5 lb') {
 const resolve = (token: string, id: string, body: Record<string, unknown>) =>
   request('PATCH', `/v1/claude/proposals/${id}`, { token, body })
 
+/** `ms` from now, in the stored six-digit form: a resolution must be newer than the proposal Claude just wrote. */
+const fromNow = (ms: number) => new Date(Date.now() + ms).toISOString().replace(/Z$/, '000Z')
+
 const RESOLVED = {
   status: 'applied',
   applied_change_ids: ['c1'],
-  resolved_at: '2026-11-08T10:00:00.000000Z',
-  client_updated_at: '2026-11-08T10:00:00.000000Z',
+  resolved_at: fromNow(60 * 60_000),
+  client_updated_at: fromNow(60 * 60_000),
 }
 
 describe('GET /v1/claude/proposals', () => {
@@ -72,7 +75,7 @@ describe('PATCH /v1/claude/proposals/:id', () => {
     const { id } = await propose(userId)
     const newer =
       await (await resolve(token, id, { ...RESOLVED, status: 'dismissed', applied_change_ids: [] })).json()
-    const older = await resolve(token, id, { ...RESOLVED, client_updated_at: '2026-11-08T09:00:00.000000Z' })
+    const older = await resolve(token, id, { ...RESOLVED, client_updated_at: fromNow(30 * 60_000) })
     expect(older.status).toBe(200)
     expect(await older.json()).toEqual(newer)
     const row = await env.DB.prepare('SELECT status FROM proposals WHERE id = ?1').bind(id).first()
