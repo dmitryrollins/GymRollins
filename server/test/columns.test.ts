@@ -5,6 +5,13 @@ const col = (kind: Column['kind'], extra: Partial<Column> = {}): Column => ({ na
 const stored = (column: Column, raw: unknown) => storedValue(column, raw, 'rows[0]')
 
 describe('storedValue', () => {
+  it('refuses text holding U+0000 or half of a UTF-16 pair, which D1 would store past its length CHECKs', () => {
+    expect(stored(col('text'), 'Push day 💪')).toBe('Push day 💪')
+    for (const raw of ['a\u0000b', 'a\uD800b', '\uDC00']) {
+      expect(() => stored(col('text'), raw)).toThrow('rows[0].x is not a valid text')
+    }
+  })
+
   it('lowercases UUIDs and refuses anything else', () => {
     expect(stored(col('uuid'), 'A1B2C3D4-0000-4000-8000-00000000000F')).toBe('a1b2c3d4-0000-4000-8000-00000000000f')
     expect(() => stored(col('uuid'), 'not-a-uuid')).toThrow(RowError)

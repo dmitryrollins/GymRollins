@@ -30,6 +30,15 @@ function isCalendarDay(raw: string): boolean {
   return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === raw
 }
 
+/**
+ * U+0000, which D1 stores but SQLite's length() stops at (so it slips past every length CHECK), and half of a UTF-16
+ * pair, which D1 stores as invalid UTF-8. Postgres refused both.
+ */
+const UNSTORABLE = /\u0000|[\uD800-\uDFFF]/u
+
+/** Text D1 stores as it was sent. */
+export const isStorableText = (text: string) => !UNSTORABLE.test(text)
+
 /** `raw`, a value from the app's JSON, as D1 stores it; throws RowError naming `label.column` when it doesn't fit. */
 export function storedValue(column: Column, raw: unknown, label: string): unknown {
   if (raw === undefined || raw === null) {
@@ -45,7 +54,7 @@ export function storedValue(column: Column, raw: unknown, label: string): unknow
 function convert(kind: Kind, raw: unknown): unknown {
   switch (kind) {
     case 'text':
-      return typeof raw === 'string' ? raw : undefined
+      return typeof raw === 'string' && isStorableText(raw) ? raw : undefined
     case 'int':
       return Number.isSafeInteger(raw) ? raw : undefined
     case 'real':
