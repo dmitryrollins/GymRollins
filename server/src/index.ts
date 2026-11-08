@@ -5,6 +5,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { accountRoutes } from './account/routes.ts'
 import { authHandler } from './auth/routes.ts'
 import { requireUser } from './auth/session.ts'
+import { wellKnownRoutes } from './claude/well-known.ts'
 import type { AppEnv } from './env.ts'
 import { catalogueRoutes } from './gyms/routes.ts'
 import { errorBody, onError } from './http/errors.ts'
@@ -27,6 +28,9 @@ app.use('/api/auth/*', bodyLimit({
   onError: (c) => c.json(errorBody('too_large', 'The request body is too large.'), 413),
 }))
 app.on(['GET', 'POST'], '/api/auth/*', authHandler)
+
+// Claude: OAuth discovery, the sign-in page and the MCP server (spec section 3). CORS only on /mcp and discovery.
+app.route('/.well-known', wellKnownRoutes)
 
 const v1 = new Hono<AppEnv>()
 v1.use('*', bodyLimit({

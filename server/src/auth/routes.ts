@@ -1,13 +1,15 @@
 import type { Context } from 'hono'
-import type { AppEnv } from '../env.ts'
+import type { AppEnv, Env } from '../env.ts'
 import { errorBody } from '../http/errors.ts'
 import { createAuth } from './auth.ts'
+import { isAllowedRedirectUri } from './oauth.ts'
 
 /**
- * The Better Auth routes the app uses. Every other route Better Auth serves (its web redirect flow, account linking,
- * password reset, …) answers 404, so nothing the app doesn't use is reachable. Plan 29 adds Claude's OAuth routes.
+ * The Better Auth routes the app and Claude use. Every other route Better Auth serves (its web redirect flow,
+ * account linking, password reset, OAuth client and consent management, …) answers 404, so nothing unused is
+ * reachable.
  */
-const ALLOWED = new Set([
+const APP_ROUTES = new Set([
   'POST /api/auth/sign-in/social',
   'POST /api/auth/sign-up/email',
   'POST /api/auth/sign-in/email',
@@ -15,15 +17,82 @@ const ALLOWED = new Set([
   'GET /api/auth/get-session',
 ])
 
+/**
+ * Claude's OAuth: discovery, registration, authorize (a browser), token and revocation (Claude's servers).
+ */
+const OAUTH_ROUTES = new Set([
+  'GET /api/auth/.well-known/oauth-authorization-server',
+  'POST /api/auth/oauth2/register',
+  'GET /api/auth/oauth2/authorize',
+  'POST /api/auth/oauth2/token',
+  'POST /api/auth/oauth2/revoke',
+])
+
+/** Dynamic registration is open, so it's capped: at most this many new clients an hour, across everyone. */
+export const REGISTRATIONS_PER_HOUR = 30
+
+const registrationCap = (env: Env) => Number(env.OAUTH_REGISTRATIONS_PER_HOUR ?? REGISTRATIONS_PER_HOUR)
+
 export async function authHandler(c: Context<AppEnv>): Promise<Response> {
   const route = `${c.req.method} ${new URL(c.req.url).pathname}`
-  if (!ALLOWED.has(route)) return c.json(errorBody('not_found', 'No such route.'), 404)
+  if (OAUTH_ROUTES.has(route)) return await oauthHandler(c, route)
+  if (!APP_ROUTES.has(route)) return c.json(errorBody('not_found', 'No such route.'), 404)
   if (route === 'POST /api/auth/sign-in/social') {
     const refusal = await appleNonceRefusal(c.req.raw)
     if (refusal !== null) return c.json(errorBody('bad_request', refusal), 400)
   }
   const res = await createAuth(c.env).handler(c.req.raw)
   return res.status >= 400 ? inErrorShape(res) : res
+}
+
+/** OAuth answers keep RFC 6749's error shape ({error, error_description}), which Claude reads. */
+async function oauthHandler(c: Context<AppEnv>, route: string): Promise<Response> {
+  let request = c.req.raw
+  if (route === 'POST /api/auth/oauth2/register') {
+    const checked = await checkedRegistration(c)
+    if (checked instanceof Response) return checked
+    request = checked
+  }
+  return await createAuth(c.env).handler(request)
+}
+
+const oauthError = (error: string, description: string, status: 400 | 429) =>
+  Response.json({ error, error_description: description }, {
+    status,
+    headers: { 'cache-control': 'no-store' },
+  })
+
+/**
+ * A registration only for Claude's redirect URLs, within the hourly cap. Every client gets refresh tokens: a
+ * client that names no grant types is registered for authorization_code and refresh_token (RFC 7591's default
+ * is the first).
+ */
+async function checkedRegistration(c: Context<AppEnv>): Promise<Request | Response> {
+  const body = await c.req.raw.clone().json().catch(() => null) as Record<string, unknown> | null
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return oauthError('invalid_client_metadata', 'The body must be a JSON object.', 400)
+  }
+  const uris = body.redirect_uris
+  if (
+    !Array.isArray(uris) || uris.length === 0 ||
+    !uris.every((u) => typeof u === 'string' && isAllowedRedirectUri(u))
+  ) {
+    return oauthError('invalid_redirect_uri', "Only Claude's redirect URLs can be registered.", 400)
+  }
+  const hourAgo = new Date(Date.now() - 3_600_000).toISOString()
+  const recent = await c.env.DB.prepare('SELECT count(*) AS n FROM oauthClient WHERE createdAt > ?1').bind(
+    hourAgo,
+  )
+    .first<{ n: number }>()
+  if (recent!.n >= registrationCap(c.env)) {
+    return oauthError('too_many_requests', 'Too many registrations; try again in an hour.', 429)
+  }
+  const registration = body.grant_types === undefined
+    ? { ...body, grant_types: ['authorization_code', 'refresh_token'] }
+    : body
+  const headers = new Headers(c.req.raw.headers)
+  headers.delete('content-length')
+  return new Request(c.req.raw.url, { method: 'POST', headers, body: JSON.stringify(registration) })
 }
 
 /** Better Auth's error as the API's {"error": {"code", "message"}}, with its code lowercased (invalid_token, …). */

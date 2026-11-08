@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth'
 import { bearer } from 'better-auth/plugins'
 import type { Env } from '../env.ts'
+import { claudeOAuth } from './oauth.ts'
 
 /** Sessions last 60 days and renew once a day while the app uses them (spec section 4, Sign-in). */
 export const SESSION_EXPIRES_IN = 60 * 60 * 24 * 60
@@ -60,6 +61,7 @@ export function createAuth(env: Env) {
         update: { before: async (account) => withoutProviderTokens(account) },
       },
     },
-    plugins: [bearer()],
+    // bearer: the app's session token. claudeOAuth: Claude's OAuth.
+    plugins: [bearer(), claudeOAuth(env)],
   })
 }

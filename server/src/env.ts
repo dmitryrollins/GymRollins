@@ -14,6 +14,8 @@ export interface Env {
   PUBLIC_BASE_URL: string
   /** "1" turns on email and password sign-in: debug builds and tests only. */
   ALLOW_PASSWORD_AUTH?: string
+  /** New OAuth clients allowed per rolling hour (src/auth/routes.ts); 30 when unset. The tests raise it. */
+  OAUTH_REGISTRATIONS_PER_HOUR?: string
 }
 
 export interface AppEnv {
