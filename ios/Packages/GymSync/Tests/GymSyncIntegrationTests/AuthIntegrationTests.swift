@@ -17,7 +17,7 @@ struct AuthIntegrationTests {
         }
         #expect(email == user.email)
 
-        try await user.auth.signOut()
+        await user.auth.signOut()
         #expect(user.auth.state == .signedOut)
         await user.auth.restore()
         #expect(user.auth.state == .signedOut)

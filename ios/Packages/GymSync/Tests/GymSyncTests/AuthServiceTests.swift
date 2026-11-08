@@ -142,6 +142,14 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         #expect(server.requests.first?.path == "/api/auth/sign-in/email")
     }
 
+    /// Added after review: an empty `set-auth-token` header counts as missing.
+    @Test func theBodysTokenStandsInWhenTheHeaderIsEmpty() async throws {
+        let server = StubServer { _ in .json(200, signInBody, headers: ["set-auth-token": ""]) }
+        let sessions = InMemorySessionStore()
+        try await service(server, sessions: sessions).signIn(email: "a@test.local", password: "correct-horse")
+        #expect(sessions.load()?.token == "raw-token")
+    }
+
     @Test func signUpSendsTheEmptyNameBetterAuthRequires() async throws {
         let server = StubServer { _ in .json(200, signInBody, headers: ["set-auth-token": signedToken]) }
         let auth = service(server)
@@ -183,14 +191,16 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         #expect(sessions.load() == nil)
     }
 
-    /// Added after review: a sign-in that finishes while `get-session` is on the wire must not be signed out by the
-    /// answer about the old token.
-    @Test(arguments: [StubAnswer.json(200, "null"), StubAnswer.json(401, signedOutBody)])
-    func restoreLeavesASignInThatFinishedWhileItWasAsking(answer: StubAnswer) async throws {
+    /// Added after review: a sign-in that finishes while `get-session` is on the wire keeps the state it set, whatever
+    /// the answer about the old token: signed out, live, offline (nil) or unreadable.
+    @Test(arguments: [.json(200, "null"), .json(401, signedOutBody), .json(200, sessionBody), nil,
+                      .json(200, "<html>Sign in to the Wi-Fi</html>")] as [StubAnswer?])
+    func restoreLeavesASignInThatFinishedWhileItWasAsking(answer: StubAnswer?) async throws {
         let newer = StoredSession(token: "newer.c2ln", userId: UUID(), email: "b@test.local")
         let sessions = InMemorySessionStore(stored)
         let server = StubServer { _ in
             try sessions.save(newer) // the sign-in lands while the request is in flight
+            guard let answer else { throw URLError(.notConnectedToInternet) }
             return answer
         }
         let auth = service(server, sessions: sessions)
@@ -203,17 +213,35 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         #expect(seen.isEmpty)
     }
 
-    @Test func restoreTellsTheCoordinatorWhenItSignsOutForReal() async throws {
-        let server = StubServer { _ in .json(200, "null") }
+    /// `null`, or a 401 to the stored token (the client signals it), signs out and says so.
+    @Test(arguments: [StubAnswer.json(200, "null"), StubAnswer.json(401, signedOutBody)])
+    func restoreTellsTheCoordinatorWhenItSignsOutForReal(answer: StubAnswer) async throws {
+        let server = StubServer { _ in answer }
         let sessions = InMemorySessionStore(stored)
         let auth = service(server, sessions: sessions)
         auth.handle(.signedIn(userId: userId, email: "a@test.local"))
         var seen: [AuthState] = []
         auth.onExternalChange = { seen.append($0) }
         await auth.restore()
-        #expect(auth.state == .signedOut)
+        try await waitFor { auth.state == .signedOut }
         #expect(sessions.load() == nil)
         #expect(seen == [.signedOut])
+    }
+
+    /// Added after review: a captive portal's redirect (the client refuses it) or a page the app can't read is not the
+    /// server's answer, so the stored account stays signed in, as when offline.
+    @Test(arguments: [StubAnswer.json(302, "", headers: ["Location": "http://captive.test/login"]),
+                      .json(200, "<html>Sign in to the Wi-Fi</html>"), .json(200, #"{"ok": true}"#)])
+    func restoreKeepsTheStoredAccountWhenTheAnswerIsntTheServers(answer: StubAnswer) async throws {
+        let server = StubServer { _ in answer }
+        let sessions = InMemorySessionStore(stored)
+        let auth = service(server, sessions: sessions)
+        var seen: [AuthState] = []
+        auth.onExternalChange = { seen.append($0) }
+        await auth.restore()
+        #expect(auth.state == .signedIn(userId: userId, email: "a@test.local"))
+        #expect(sessions.load() == stored)
+        #expect(seen.isEmpty)
     }
 
     @Test func restoreOfflineOrWithTheServerBusyKeepsTheStoredAccount() async throws {
@@ -246,7 +274,7 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
             return .json(200, #"{"success": true}"#)
         }
         let auth = service(server, sessions: sessions)
-        try await auth.signOut()
+        await auth.signOut()
         #expect(auth.state == .signedOut)
         #expect(sessions.load() == nil)
         #expect(log.items == ["already forgotten"])
@@ -260,14 +288,29 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         let server = StubServer { _ in throw URLError(.notConnectedToInternet) }
         let sessions = InMemorySessionStore(stored)
         let auth = service(server, sessions: sessions)
-        try await auth.signOut()
+        await auth.signOut()
         #expect(auth.state == .signedOut)
         #expect(sessions.load() == nil)
     }
 
+    /// Added after review: once the phone has forgotten the token there is nothing to retry, so sign-out finishes
+    /// whatever the server answers, and the caller goes on to remove the local data.
+    @Test(arguments: [StubAnswer.json(302, "", headers: ["Location": "http://captive.test/login"]),
+                      .json(400, #"{"error": {"code": "bad_request", "message": "no"}}"#), .json(401, signedOutBody)])
+    func signOutFinishesLocallyWhateverTheServerAnswers(answer: StubAnswer) async throws {
+        let server = StubServer { _ in answer }
+        let sessions = InMemorySessionStore(stored)
+        let auth = service(server, sessions: sessions)
+        auth.handle(.signedIn(userId: userId, email: "a@test.local"))
+        await auth.signOut()
+        #expect(auth.state == .signedOut)
+        #expect(sessions.load() == nil)
+        #expect(server.requests.map(\.path) == ["/api/auth/sign-out"])
+    }
+
     @Test func signOutWithoutASessionIsANoOp() async throws {
         let server = StubServer { _ in .json(200, "{}") }
-        try await service(server).signOut()
+        await service(server).signOut()
         #expect(server.requests.isEmpty)
     }
 
@@ -284,6 +327,22 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         try await waitFor { auth.state == .signedOut }
         #expect(seen == [.signedOut])
         #expect(sessions.load() == nil)
+    }
+
+    /// Added after review: a 401 cleared the old token, then a sign-in saved a newer session before the signal
+    /// arrived. The signal ends nothing: the newer session stays signed in.
+    @Test func the401SignalLeavesASessionSavedSinceItCleared() async throws {
+        let newer = StoredSession(token: "newer.c2ln", userId: UUID(), email: "b@test.local")
+        let sessions = InMemorySessionStore(newer)
+        let server = StubServer { _ in .json(500, "{}") }
+        let auth = service(server, sessions: sessions)
+        auth.handle(.signedIn(userId: newer.userId, email: newer.email))
+        var seen: [AuthState] = []
+        auth.onExternalChange = { seen.append($0) }
+        auth.handle(.signedOut)
+        #expect(auth.state == .signedIn(userId: newer.userId, email: "b@test.local"))
+        #expect(sessions.load() == newer)
+        #expect(seen.isEmpty)
     }
 
     @Test func deleteAccountWhileSignedOutFailsWithoutCallingTheServer() async throws {

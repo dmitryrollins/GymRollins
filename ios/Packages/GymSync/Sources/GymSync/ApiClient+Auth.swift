@@ -45,7 +45,9 @@ extension ApiClient {
     private func signIn<Payload: Encodable>(_ path: String, payload: Payload) async throws -> StoredSession {
         let (body, response) = try await data("POST", path, body: SyncJSON.encoder.encode(payload), bearer: .anonymous)
         let answer = try SyncJSON.decoder.decode(SignInAnswer.self, from: body)
-        guard let token = response.value(forHTTPHeaderField: "set-auth-token") ?? answer.token, !token.isEmpty else {
+        // Added after review: an empty header counts as missing, so the body's token still stands in.
+        let header = response.value(forHTTPHeaderField: "set-auth-token").flatMap { $0.isEmpty ? nil : $0 }
+        guard let token = header ?? answer.token, !token.isEmpty else {
             throw ApiError(status: response.statusCode, code: "no_session", message: "The server gave no session.")
         }
         return StoredSession(token: token, userId: answer.user.id, email: answer.user.email)

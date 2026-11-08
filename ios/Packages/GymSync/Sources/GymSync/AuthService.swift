@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 public enum AuthState: Equatable, Sendable {
     case signedOut
@@ -46,6 +47,8 @@ public final class AuthService {
     @ObservationIgnored public var onExternalChange: (@MainActor (AuthState) -> Void)?
     @ObservationIgnored private var observer: Task<Void, Never>?
 
+    private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "auth")
+
     /// `events` replaces the API's 401 signal (tests inject their own).
     public init(api: ApiClient, events: AsyncStream<AuthEvent>? = nil) {
         self.api = api
@@ -60,10 +63,14 @@ public final class AuthService {
 
     isolated deinit { observer?.cancel() }
 
+    /// Added after review: a sign-out applies only while the store is empty. A sign-in that saved a newer session after
+    /// a 401 cleared the old one, and before its signal got here, stays signed in.
     func handle(_ event: AuthEvent) {
         let next: AuthState
         switch event {
-        case .signedOut: next = .signedOut
+        case .signedOut:
+            guard api.sessions.load() == nil else { return }
+            next = .signedOut
         case let .signedIn(userId, email): next = .signedIn(userId: userId, email: email)
         }
         guard next != state else { return }
@@ -82,27 +89,31 @@ public final class AuthService {
         }
     }
 
-    /// Restores the stored session on launch. The server says whether it still holds it (`get-session` answers `null`
-    /// when it doesn't). Offline, or with the server busy, the stored account stays signed in, and sync reports
-    /// `.offline` until the server answers. An answer the app can't read signs out for this launch and keeps the token.
+    /// Restores the stored session on launch. Only the server's word signs out: `get-session` answers `null` when it no
+    /// longer holds the session, and a 401 to the stored token is forgotten and signalled by the client. Anything else
+    /// (offline, the server busy, a redirect the client refuses such as a captive portal's, an answer the app can't
+    /// read) keeps the stored account signed in, and sync reports what it meets until the server answers.
+    ///
+    /// Added after review: once the answer is in, it sets nothing unless the store still holds the token it was about.
+    /// A sign-in that finished meanwhile owns the state, and a 401's own signal does the signing out.
     public func restore() async {
         guard let stored = api.sessions.load() else {
             state = .signedOut
             return
         }
-        do {
-            if let user = try await api.currentUser() {
-                state = .signedIn(userId: user.id, email: user.email)
-            } else {
-                endSession(checked: stored.token)
-            }
-        } catch where ApiError.isOffline(error) {
-            state = .signedIn(userId: stored.userId, email: stored.email)
-        } catch let refused as ApiError where refused.status == 401 {
-            // The client has forgotten the token it sent, if it was still the stored one, and has signalled.
+        let answer: Result<AuthUser?, any Error>
+        do { answer = .success(try await api.currentUser()) } catch { answer = .failure(error) }
+        guard api.sessions.load()?.token == stored.token else { return }
+        switch answer {
+        case .success(let user?):
+            state = .signedIn(userId: user.id, email: user.email)
+        case .success(nil):
             endSession(checked: stored.token)
-        } catch {
-            state = .signedOut
+        case .failure(let refused as ApiError) where refused.status == 401:
+            // Still stored only if the client couldn't forget it.
+            endSession(checked: stored.token)
+        case .failure:
+            state = .signedIn(userId: stored.userId, email: stored.email)
         }
     }
 
@@ -132,9 +143,11 @@ public final class AuthService {
     #endif
 
     /// Signs out. The phone forgets the session before telling the server, so it is signed out even when that request
-    /// fails (offline, say); the server's copy then just expires. Better Auth answers 200 even for a session already
-    /// gone.
-    public func signOut() async throws {
+    /// fails; the server's copy then just expires. Better Auth answers 200 even for a session already gone.
+    ///
+    /// Added after review: it never throws. Once the token is forgotten there is nothing to retry, and the caller must
+    /// go on (`signOutAndRemoveLocalData` wipes the phone next), so a server error is only logged.
+    public func signOut() async {
         let stored = api.sessions.load()
         api.sessions.clear()
         state = .signedOut
@@ -144,7 +157,7 @@ public final class AuthService {
         } catch where ApiError.isOffline(error) {
             // Forgotten here; the server's copy expires on its own.
         } catch {
-            throw AuthFailure(error, during: .signOut)
+            Self.log.error("Sign-out on the server failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

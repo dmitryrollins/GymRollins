@@ -150,7 +150,7 @@ final class SyncCoordinator {
     /// Backs out of signing in to a different account: signs out again and keeps the local data.
     func cancelAccountSwitch() async throws {
         accountSwitchPending = false
-        try await auth?.signOut()
+        await auth?.signOut()
         await dropEngine()
     }
 
@@ -220,7 +220,7 @@ final class SyncCoordinator {
     func signOutAndRemoveLocalData() async throws {
         await onWillSignOut()
         onSessionEnding()
-        try await auth?.signOut()
+        await auth?.signOut()
         accountSwitchPending = false
         try await wipeLocal()
     }

@@ -2322,6 +2322,14 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         #expect(server.requests.first?.path == "/api/auth/sign-in/email")
     }
 
+    /// Added after review: an empty `set-auth-token` header counts as missing.
+    @Test func theBodysTokenStandsInWhenTheHeaderIsEmpty() async throws {
+        let server = StubServer { _ in .json(200, signInBody, headers: ["set-auth-token": ""]) }
+        let sessions = InMemorySessionStore()
+        try await service(server, sessions: sessions).signIn(email: "a@test.local", password: "correct-horse")
+        #expect(sessions.load()?.token == "raw-token")
+    }
+
     @Test func signUpSendsTheEmptyNameBetterAuthRequires() async throws {
         let server = StubServer { _ in .json(200, signInBody, headers: ["set-auth-token": signedToken]) }
         let auth = service(server)
@@ -2363,14 +2371,16 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         #expect(sessions.load() == nil)
     }
 
-    /// Added after review: a sign-in that finishes while `get-session` is on the wire must not be signed out by the
-    /// answer about the old token.
-    @Test(arguments: [StubAnswer.json(200, "null"), StubAnswer.json(401, signedOutBody)])
-    func restoreLeavesASignInThatFinishedWhileItWasAsking(answer: StubAnswer) async throws {
+    /// Added after review: a sign-in that finishes while `get-session` is on the wire keeps the state it set, whatever
+    /// the answer about the old token: signed out, live, offline (nil) or unreadable.
+    @Test(arguments: [.json(200, "null"), .json(401, signedOutBody), .json(200, sessionBody), nil,
+                      .json(200, "<html>Sign in to the Wi-Fi</html>")] as [StubAnswer?])
+    func restoreLeavesASignInThatFinishedWhileItWasAsking(answer: StubAnswer?) async throws {
         let newer = StoredSession(token: "newer.c2ln", userId: UUID(), email: "b@test.local")
         let sessions = InMemorySessionStore(stored)
         let server = StubServer { _ in
             try sessions.save(newer) // the sign-in lands while the request is in flight
+            guard let answer else { throw URLError(.notConnectedToInternet) }
             return answer
         }
         let auth = service(server, sessions: sessions)
@@ -2383,17 +2393,35 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         #expect(seen.isEmpty)
     }
 
-    @Test func restoreTellsTheCoordinatorWhenItSignsOutForReal() async throws {
-        let server = StubServer { _ in .json(200, "null") }
+    /// `null`, or a 401 to the stored token (the client signals it), signs out and says so.
+    @Test(arguments: [StubAnswer.json(200, "null"), StubAnswer.json(401, signedOutBody)])
+    func restoreTellsTheCoordinatorWhenItSignsOutForReal(answer: StubAnswer) async throws {
+        let server = StubServer { _ in answer }
         let sessions = InMemorySessionStore(stored)
         let auth = service(server, sessions: sessions)
         auth.handle(.signedIn(userId: userId, email: "a@test.local"))
         var seen: [AuthState] = []
         auth.onExternalChange = { seen.append($0) }
         await auth.restore()
-        #expect(auth.state == .signedOut)
+        try await waitFor { auth.state == .signedOut }
         #expect(sessions.load() == nil)
         #expect(seen == [.signedOut])
+    }
+
+    /// Added after review: a captive portal's redirect (the client refuses it) or a page the app can't read is not the
+    /// server's answer, so the stored account stays signed in, as when offline.
+    @Test(arguments: [StubAnswer.json(302, "", headers: ["Location": "http://captive.test/login"]),
+                      .json(200, "<html>Sign in to the Wi-Fi</html>"), .json(200, #"{"ok": true}"#)])
+    func restoreKeepsTheStoredAccountWhenTheAnswerIsntTheServers(answer: StubAnswer) async throws {
+        let server = StubServer { _ in answer }
+        let sessions = InMemorySessionStore(stored)
+        let auth = service(server, sessions: sessions)
+        var seen: [AuthState] = []
+        auth.onExternalChange = { seen.append($0) }
+        await auth.restore()
+        #expect(auth.state == .signedIn(userId: userId, email: "a@test.local"))
+        #expect(sessions.load() == stored)
+        #expect(seen.isEmpty)
     }
 
     @Test func restoreOfflineOrWithTheServerBusyKeepsTheStoredAccount() async throws {
@@ -2426,7 +2454,7 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
             return .json(200, #"{"success": true}"#)
         }
         let auth = service(server, sessions: sessions)
-        try await auth.signOut()
+        await auth.signOut()
         #expect(auth.state == .signedOut)
         #expect(sessions.load() == nil)
         #expect(log.items == ["already forgotten"])
@@ -2440,14 +2468,29 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         let server = StubServer { _ in throw URLError(.notConnectedToInternet) }
         let sessions = InMemorySessionStore(stored)
         let auth = service(server, sessions: sessions)
-        try await auth.signOut()
+        await auth.signOut()
         #expect(auth.state == .signedOut)
         #expect(sessions.load() == nil)
     }
 
+    /// Added after review: once the phone has forgotten the token there is nothing to retry, so sign-out finishes
+    /// whatever the server answers, and the caller goes on to remove the local data.
+    @Test(arguments: [StubAnswer.json(302, "", headers: ["Location": "http://captive.test/login"]),
+                      .json(400, #"{"error": {"code": "bad_request", "message": "no"}}"#), .json(401, signedOutBody)])
+    func signOutFinishesLocallyWhateverTheServerAnswers(answer: StubAnswer) async throws {
+        let server = StubServer { _ in answer }
+        let sessions = InMemorySessionStore(stored)
+        let auth = service(server, sessions: sessions)
+        auth.handle(.signedIn(userId: userId, email: "a@test.local"))
+        await auth.signOut()
+        #expect(auth.state == .signedOut)
+        #expect(sessions.load() == nil)
+        #expect(server.requests.map(\.path) == ["/api/auth/sign-out"])
+    }
+
     @Test func signOutWithoutASessionIsANoOp() async throws {
         let server = StubServer { _ in .json(200, "{}") }
-        try await service(server).signOut()
+        await service(server).signOut()
         #expect(server.requests.isEmpty)
     }
 
@@ -2464,6 +2507,22 @@ private let stored = StoredSession(token: signedToken, userId: userId, email: "a
         try await waitFor { auth.state == .signedOut }
         #expect(seen == [.signedOut])
         #expect(sessions.load() == nil)
+    }
+
+    /// Added after review: a 401 cleared the old token, then a sign-in saved a newer session before the signal
+    /// arrived. The signal ends nothing: the newer session stays signed in.
+    @Test func the401SignalLeavesASessionSavedSinceItCleared() async throws {
+        let newer = StoredSession(token: "newer.c2ln", userId: UUID(), email: "b@test.local")
+        let sessions = InMemorySessionStore(newer)
+        let server = StubServer { _ in .json(500, "{}") }
+        let auth = service(server, sessions: sessions)
+        auth.handle(.signedIn(userId: newer.userId, email: newer.email))
+        var seen: [AuthState] = []
+        auth.onExternalChange = { seen.append($0) }
+        auth.handle(.signedOut)
+        #expect(auth.state == .signedIn(userId: newer.userId, email: "b@test.local"))
+        #expect(sessions.load() == newer)
+        #expect(seen.isEmpty)
     }
 
     @Test func deleteAccountWhileSignedOutFailsWithoutCallingTheServer() async throws {
@@ -2625,7 +2684,9 @@ extension ApiClient {
     private func signIn<Payload: Encodable>(_ path: String, payload: Payload) async throws -> StoredSession {
         let (body, response) = try await data("POST", path, body: SyncJSON.encoder.encode(payload), bearer: .anonymous)
         let answer = try SyncJSON.decoder.decode(SignInAnswer.self, from: body)
-        guard let token = response.value(forHTTPHeaderField: "set-auth-token") ?? answer.token, !token.isEmpty else {
+        // Added after review: an empty header counts as missing, so the body's token still stands in.
+        let header = response.value(forHTTPHeaderField: "set-auth-token").flatMap { $0.isEmpty ? nil : $0 }
+        guard let token = header ?? answer.token, !token.isEmpty else {
             throw ApiError(status: response.statusCode, code: "no_session", message: "The server gave no session.")
         }
         return StoredSession(token: token, userId: answer.user.id, email: answer.user.email)
@@ -2678,6 +2739,7 @@ Replace `ios/Packages/GymSync/Sources/GymSync/AuthService.swift` with:
 ```swift
 import Foundation
 import Observation
+import os
 
 public enum AuthState: Equatable, Sendable {
     case signedOut
@@ -2724,6 +2786,8 @@ public final class AuthService {
     @ObservationIgnored public var onExternalChange: (@MainActor (AuthState) -> Void)?
     @ObservationIgnored private var observer: Task<Void, Never>?
 
+    private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "auth")
+
     /// `events` replaces the API's 401 signal (tests inject their own).
     public init(api: ApiClient, events: AsyncStream<AuthEvent>? = nil) {
         self.api = api
@@ -2738,10 +2802,14 @@ public final class AuthService {
 
     isolated deinit { observer?.cancel() }
 
+    /// Added after review: a sign-out applies only while the store is empty. A sign-in that saved a newer session after
+    /// a 401 cleared the old one, and before its signal got here, stays signed in.
     func handle(_ event: AuthEvent) {
         let next: AuthState
         switch event {
-        case .signedOut: next = .signedOut
+        case .signedOut:
+            guard api.sessions.load() == nil else { return }
+            next = .signedOut
         case let .signedIn(userId, email): next = .signedIn(userId: userId, email: email)
         }
         guard next != state else { return }
@@ -2760,27 +2828,31 @@ public final class AuthService {
         }
     }
 
-    /// Restores the stored session on launch. The server says whether it still holds it (`get-session` answers `null`
-    /// when it doesn't). Offline, or with the server busy, the stored account stays signed in, and sync reports
-    /// `.offline` until the server answers. An answer the app can't read signs out for this launch and keeps the token.
+    /// Restores the stored session on launch. Only the server's word signs out: `get-session` answers `null` when it no
+    /// longer holds the session, and a 401 to the stored token is forgotten and signalled by the client. Anything else
+    /// (offline, the server busy, a redirect the client refuses such as a captive portal's, an answer the app can't
+    /// read) keeps the stored account signed in, and sync reports what it meets until the server answers.
+    ///
+    /// Added after review: once the answer is in, it sets nothing unless the store still holds the token it was about.
+    /// A sign-in that finished meanwhile owns the state, and a 401's own signal does the signing out.
     public func restore() async {
         guard let stored = api.sessions.load() else {
             state = .signedOut
             return
         }
-        do {
-            if let user = try await api.currentUser() {
-                state = .signedIn(userId: user.id, email: user.email)
-            } else {
-                endSession(checked: stored.token)
-            }
-        } catch where ApiError.isOffline(error) {
-            state = .signedIn(userId: stored.userId, email: stored.email)
-        } catch let refused as ApiError where refused.status == 401 {
-            // The client has forgotten the token it sent, if it was still the stored one, and has signalled.
+        let answer: Result<AuthUser?, any Error>
+        do { answer = .success(try await api.currentUser()) } catch { answer = .failure(error) }
+        guard api.sessions.load()?.token == stored.token else { return }
+        switch answer {
+        case .success(let user?):
+            state = .signedIn(userId: user.id, email: user.email)
+        case .success(nil):
             endSession(checked: stored.token)
-        } catch {
-            state = .signedOut
+        case .failure(let refused as ApiError) where refused.status == 401:
+            // Still stored only if the client couldn't forget it.
+            endSession(checked: stored.token)
+        case .failure:
+            state = .signedIn(userId: stored.userId, email: stored.email)
         }
     }
 
@@ -2810,9 +2882,11 @@ public final class AuthService {
     #endif
 
     /// Signs out. The phone forgets the session before telling the server, so it is signed out even when that request
-    /// fails (offline, say); the server's copy then just expires. Better Auth answers 200 even for a session already
-    /// gone.
-    public func signOut() async throws {
+    /// fails; the server's copy then just expires. Better Auth answers 200 even for a session already gone.
+    ///
+    /// Added after review: it never throws. Once the token is forgotten there is nothing to retry, and the caller must
+    /// go on (`signOutAndRemoveLocalData` wipes the phone next), so a server error is only logged.
+    public func signOut() async {
         let stored = api.sessions.load()
         api.sessions.clear()
         state = .signedOut
@@ -2822,7 +2896,7 @@ public final class AuthService {
         } catch where ApiError.isOffline(error) {
             // Forgotten here; the server's copy expires on its own.
         } catch {
-            throw AuthFailure(error, during: .signOut)
+            Self.log.error("Sign-out on the server failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -3105,7 +3179,7 @@ struct AuthIntegrationTests {
         }
         #expect(email == user.email)
 
-        try await user.auth.signOut()
+        await user.auth.signOut()
         #expect(user.auth.state == .signedOut)
         await user.auth.restore()
         #expect(user.auth.state == .signedOut)
@@ -3235,9 +3309,24 @@ Expected: no output.
 - [ ] **Step 9: Run the tests**
 
 Run: `cd ios/Packages/GymSync && swift test --filter GymSyncTests`
-Expected: `Test run with 193 tests in 24 suites passed` (188 plus the two review tests above and the three added in the Task 4 and 5 review follow-ups; a parameterized test
+Expected: `Test run with 197 tests in 24 suites passed` (188 plus the two review tests above, the three added in the Task 4 and 5 review follow-ups and the four security-review tests below; a parameterized test
 counts once). The integration target builds too, and its suites skip without
 `API_URL`; Task 8 runs them.
+
+Added after review (security), and shown in Steps 1, 3 and 4 above:
+- `restore()` sets nothing once `get-session` has answered unless the store still holds the token it asked about,
+  in every branch: a sign-in that finished meanwhile keeps its state, and a 401's own signal does the signing out.
+- Only `200 null`, or a 401 for that token, signs out. A redirect the client refuses (a captive portal) or an
+  answer the app can't read keeps the stored account signed in, as offline does.
+- `handle(.signedOut)` applies only while the store is empty, so a session saved after a 401 cleared the old one
+  stays signed in.
+- `signOut()` no longer throws. Once the token is forgotten, a server error is logged, and
+  `SyncCoordinator.signOutAndRemoveLocalData` always goes on to `wipeLocal()`. Its two `try await auth?.signOut()`
+  drop the `try`, as does `AuthIntegrationTests` (Step 7).
+- An empty `set-auth-token` header counts as missing, so the body's `token` stands in.
+
+Four tests are new. `restoreLeavesASignInThatFinishedWhileItWasAsking` and `restoreTellsTheCoordinatorWhenItSignsOutForReal`
+take more answers.
 
 - [ ] **Step 10: Commit**
 
@@ -3681,7 +3770,7 @@ xcrun xcresulttool get test-results summary --path "$(ls -td build/TestResults-p
 Expected: `"result" : "Passed"`, `failedTests` 0, and `passedTests` equal to `totalTestCount`. The new suites add 4 tests.
 
 Then run the package suites again: `(cd Packages/GymSync && swift test --filter GymSyncTests)`.
-Expected: `Test run with 193 tests in 24 suites passed` (188 plus the two review tests above and the three added in the Task 4 and 5 review follow-ups; a parameterized test
+Expected: `Test run with 197 tests in 24 suites passed` (Task 6's count, the four security-review tests included; a parameterized test
 counts once). The Keychain store is tested in the app, where the simulator's
 Keychain works.
 
@@ -4489,7 +4578,7 @@ DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' scripts/ios-test-sy
 Expected:
 - GymCore unchanged.
 - GymData: `Test run with 364 tests in 49 suites passed`.
-- GymSync: `Test run with 193 tests in 24 suites passed`.
+- GymSync: `Test run with 197 tests in 24 suites passed`.
 - Integration: `Test run with 15 tests in 4 suites passed`, then `Account deletion verified: 17 deleted users, 0 rows
   left`.
 - Store comparison: `# pass 2`.
