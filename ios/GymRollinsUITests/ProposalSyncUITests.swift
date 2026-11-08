@@ -1,6 +1,6 @@
 import XCTest
 
-/// End-to-end proposal flow against the LOCAL Supabase stack (run via `scripts/ios-test-sync.sh`; skipped otherwise):
+/// End-to-end proposal flow against the LOCAL Supabase stack (skipped unless SUPABASE_URL is set; plan 29 moves it):
 /// the owner signs up in the app (the seeded plan syncs up), a proposal is inserted as that user over PostgREST
 /// (as the MCP tool would), the app pulls it and shows the chip, the owner applies it, and the server's row ends up
 /// `applied`.
@@ -14,7 +14,7 @@ final class ProposalSyncUITests: XCTestCase {
         continueAfterFailure = false
         let env = ProcessInfo.processInfo.environment
         guard let url = env["SUPABASE_URL"], let key = env["SUPABASE_ANON_KEY"], !url.isEmpty, !key.isEmpty else {
-            throw XCTSkip("Local Supabase not configured; run scripts/ios-test-sync.sh")
+            throw XCTSkip("Proposals stay on Supabase until plan 29")
         }
         self.url = url
         anonKey = key
