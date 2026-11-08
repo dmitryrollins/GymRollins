@@ -84,8 +84,9 @@ final class ImportService {
     /// A workout with the same id is kept: saving it overwrites the earlier import of the same export.
     /// Date-only exports (FitNotes: every day starts at a made-up noon) are never matched by time, in either
     /// direction, since their start says nothing about when the session happened.
-    /// The pieces of a split workout (`ImportSplit`) stay or go with their first piece. They start a second apart, so on
-    /// their own a re-import would keep the first (its id is known) and drop the rest as its duplicates.
+    /// The pieces of a split workout (`ImportSplit`) stay or go with their first piece. They can start within
+    /// `duplicateWindow` of each other, so on their own a re-import would keep the first (its id is known) and drop the
+    /// rest as its duplicates, and another app's copy of the session would drop only the pieces near its start.
     static func withoutDuplicates(_ imported: [ImportedWorkout], source: ImportSource = .fitbod,
                                   existing: [Workout]) throws -> ([ImportedWorkout], Int) {
         guard !isDateOnly(source) else { return (imported, 0) }

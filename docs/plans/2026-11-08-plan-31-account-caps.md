@@ -183,13 +183,20 @@ Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0 in workerd), Swift 6.2 (`sw
     `ImportAssembler.result`, so all four importers do it).
     - An exercise with more than 50 sets goes on as another entry of the same exercise, in runs of 50; the next run
       goes into the next piece when this one is full. Exercises keep their order, and every set is kept.
-    - Each piece holds at most 50 entries. Piece 1 keeps the source's id, start, end, title and note. Piece k starts
-      k − 1 seconds after it, so the pieces sort next to each other in order; its id is made from the source's
-      (`ImportID`), the same on every import; it keeps the end time and note.
+    - Each piece holds at most 50 entries. Piece 1 keeps the source's id, title and note, and starts at its start.
+      Piece k's id is made from the source's (`ImportID`), the same on every import; it keeps the title and note.
+    - **Times** (changed after review): the pieces follow each other through the session, so Health, calories and
+      total time count it once. With an end time, each piece gets a share of the session by its sets (equal shares
+      when there are none), at least a second each: piece 1 starts at the source's start, each next one where the one
+      before ended, and the last ends at the source's end. Without an end time (Fitbod, FitNotes), or one less than a
+      second a piece after the start, piece k starts k − 1 seconds after the source and keeps the source's end, so the
+      pieces still sort next to each other in order.
     - **What the user sees:** "Push", "Push (2)", "Push (3)": the export's title, or the app's default ("FitNotes
       workout"), then the number, within the 80-character name limit (`ImportSplit.name`).
-    - **Duplicates:** the pieces stay or go with their first piece (`ImportService.withoutDuplicates`). They start a
-      second apart, so otherwise a re-import would keep piece 1 (its id is known) and drop the rest as its duplicates.
+    - **Duplicates:** the pieces stay or go with their first piece (`ImportService.withoutDuplicates`). Pieces can start
+      within a minute of each other (`ImportService.duplicateWindow`), so on their own a re-import would keep piece 1
+      (its id is known) and drop the rest as its duplicates; and another app's copy of the session would drop piece 1
+      but keep the pieces that start later.
     - **Workouts already on a phone past the caps stay there.** Sync refuses them with the cap's words, and Account
       lists them; nothing is lost on the phone. A one-time split on the phone was the other choice. It isn't taken:
       - the phone holds the only live copy of the training data, and a split rewrites stored workouts (new ids, entries
