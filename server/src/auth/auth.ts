@@ -22,6 +22,17 @@ export function passwordAuthAllowed(env: Env): boolean {
   }
 }
 
+/** The provider tokens Better Auth would keep on an `account` row. */
+const PROVIDER_TOKENS = ['idToken', 'accessToken', 'refreshToken'] as const
+
+/**
+ * An account row's data with no provider token kept. Nothing reads them back: the app signs in with a fresh Apple
+ * token every time, so a stored one would only be a signed copy of the user's email and Apple id for a leak to expose.
+ */
+function withoutProviderTokens(data: Record<string, unknown>): { data: Record<string, null> } {
+  return { data: Object.fromEntries(PROVIDER_TOKENS.filter((key) => key in data).map((key) => [key, null])) }
+}
+
 /** Built per request, because the D1 binding only exists on `env`. Better Auth recognises D1 by its shape. */
 export function createAuth(env: Env) {
   return betterAuth({
@@ -35,11 +46,18 @@ export function createAuth(env: Env) {
     socialProviders: {
       apple: {
         // Native Sign in with Apple only: the app sends Apple's id token, whose audience is the app's bundle id, and
-        // the raw nonce (Better Auth accepts the token's nonce claim as the raw value or its SHA-256). There is no web
-        // flow, so no Services ID and no client secret.
+        // the raw nonce, whose SHA-256 the token must carry (checked in routes.ts before Better Auth, which would also
+        // take the claim itself). There is no web flow, so no Services ID and no client secret.
         clientId: env.APPLE_BUNDLE_ID,
         clientSecret: 'unused-native-id-token-only',
         appBundleIdentifier: env.APPLE_BUNDLE_ID,
+      },
+    },
+    // encryptOAuthTokens would leave the id token in plain text (it covers access and refresh tokens only).
+    databaseHooks: {
+      account: {
+        create: { before: async (account) => withoutProviderTokens(account) },
+        update: { before: async (account) => withoutProviderTokens(account) },
       },
     },
     plugins: [bearer()],

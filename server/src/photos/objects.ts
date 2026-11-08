@@ -11,6 +11,15 @@ export type GymBucket = typeof SHARED_BUCKET | typeof PRIVATE_BUCKET
 /** guard_gym_photo's name rule: a lowercase UUID and .jpg. */
 export const PHOTO_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/
 
+/**
+ * On every photo answer, private and public: the bytes are never sniffed as another type, and a document opened from
+ * one runs nothing and loads nothing.
+ */
+export const PHOTO_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'content-security-policy': "default-src 'none'; sandbox",
+} as const
+
 export const bucketOf = (env: Env, bucket: GymBucket): R2Bucket =>
   bucket === SHARED_BUCKET ? env.GYM_PHOTOS : env.GYM_PHOTOS_PRIVATE
 

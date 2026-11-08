@@ -40,7 +40,7 @@ describe("one account's gym data, as another account meets it", () => {
     expect((await upload(b.token, `/v1/photos/private/${privateName}`, other)).status).toBe(409)
     expect((await upload(b.token, `/v1/photos/shared/${sharedName}`, other)).status).toBe(409)
     for (const path of [`/v1/photos/private/${privateName}`, `/v1/photos/shared/${sharedName}`]) {
-      expect((await request('DELETE', path, { token: b.token })).status).toBe(204)
+      expect((await request('DELETE', path, { token: b.token })).status).toBe(403)
     }
     const kept = await env.GYM_PHOTOS_PRIVATE.get(privateName)
     expect(new Uint8Array(await kept!.arrayBuffer())).toEqual(JPEG)

@@ -34,11 +34,14 @@ describe('private photos', () => {
     expect(read.status).toBe(200)
     expect(read.headers.get('content-type')).toBe('image/jpeg')
     expect(read.headers.get('cache-control')).toBe('private, no-store')
+    expect(read.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
     expect(new Uint8Array(await read.arrayBuffer())).toEqual(JPEG)
     expect((await request('GET', privatePath(name), { token: b.token })).status).toBe(404)
     expect(await mine(a.token)).toEqual([{ bucket_id: PRIVATE_BUCKET, name }])
     expect(await mine(b.token)).toEqual([])
-    expect((await request('DELETE', privatePath(name), { token: b.token })).status).toBe(204)
+    expect(await refusalOf(await request('DELETE', privatePath(name), { token: b.token }), 403)).toEqual({
+      code: 'not_allowed', message: 'Not allowed.',
+    })
     expect(await env.GYM_PHOTOS_PRIVATE.head(name)).not.toBeNull()
     expect((await request('DELETE', privatePath(name), { token: a.token })).status).toBe(204)
     expect(await env.GYM_PHOTOS_PRIVATE.head(name)).toBeNull()
@@ -144,6 +147,44 @@ describe('an upload', () => {
     expect(await rowsOf(name)).toBe(0)
   })
 
+  it.each([
+    ['a new upload', false],
+    ['finishing an unfinished upload', true],
+  ])('refuses %s with photo_missing, and keeps no object, when a delete takes its row while the object is written',
+    async (_, unfinished) => {
+      const { userId } = await signUp()
+      const name = unfinished ? await uploadedPhoto(userId, 'gym-photos-private', { stored: false }) : photo()
+      const real = env.GYM_PHOTOS_PRIVATE
+      // The app's delete-all (account deletion) lands while the put is in flight: the object isn't there yet, so the
+      // delete only takes the row.
+      const racing = new Proxy(real, {
+        get(target, key) {
+          if (key === 'put') {
+            return async (...args: Parameters<R2Bucket['put']>) => {
+              await env.DB.prepare('DELETE FROM photo_objects WHERE name = ?1').bind(name).run()
+              return target.put(...args)
+            }
+          }
+          const value: unknown = Reflect.get(target, key, target)
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      })
+      const racingEnv = { ...env, GYM_PHOTOS_PRIVATE: racing }
+      const attempt = uploadPhoto(racingEnv, userId, PRIVATE_BUCKET, name, 'image/jpeg', JPEG)
+      await expect(attempt).rejects.toMatchObject({ status: 422, code: 'photo_missing' })
+      expect(await real.head(name)).toBeNull()
+      expect(await rowsOf(name)).toBe(0)
+    })
+
+  it("refuses to finish an unfinished upload whose name a listing uses, and writes nothing", async () => {
+    const a = await signUp()
+    const name = await uploadedPhoto(a.userId, 'gym-photos-private', { stored: false })
+    const gym = await insertGym({ visibility: 'private', owner: a.userId })
+    await insertListing({ gym, item: await genericItem(), visibility: 'private', owner: a.userId, photo: name })
+    expect((await refusalOf(await upload(a.token, privatePath(name), JPEG))).code).toBe('photo_name_in_use')
+    expect(await env.GYM_PHOTOS_PRIVATE.head(name)).toBeNull()
+  })
+
   it('refuses an owner whose account is gone', async () => {
     const attempt = uploadPhoto(env, crypto.randomUUID(), PRIVATE_BUCKET, photo(), 'image/jpeg', JPEG)
     await expect(attempt).rejects.toMatchObject({ code: 'photo_owner_missing' })
@@ -169,7 +210,8 @@ describe('shared photos', () => {
     const gym = await insertGym({ visibility: 'public', createdBy: author.userId })
     const listing = await insertListing({ gym, item: await genericItem(), visibility: 'public', addedBy: author.userId, photo: name })
     for (const account of [other, boss]) {
-      expect((await request('DELETE', sharedPath(name), { token: account.token })).status).toBe(204)
+      expect((await refusalOf(await request('DELETE', sharedPath(name), { token: account.token }), 403)).code)
+        .toBe('not_allowed')
       expect(await env.GYM_PHOTOS.head(name)).not.toBeNull()
     }
     await setStatus('gym_equipment', listing, 'removed')
@@ -179,6 +221,15 @@ describe('shared photos', () => {
     const own = await uploadedPhoto(author.userId, 'gym-photos')
     expect((await request('DELETE', sharedPath(own), { token: author.token })).status).toBe(204)
     expect(await env.GYM_PHOTOS.head(own)).toBeNull()
+  })
+})
+
+describe('a delete', () => {
+  it('answers 204 when nothing is there, in either bucket, and for a name that could not be one', async () => {
+    const { token } = await signUp()
+    for (const path of [privatePath(photo()), sharedPath(photo()), privatePath('photo.jpg')]) {
+      expect((await request('DELETE', path, { token })).status, path).toBe(204)
+    }
   })
 })
 
@@ -209,5 +260,23 @@ describe('detaching photos', () => {
     }
     for (const id of [theirPublic, theirPrivate]) expect((await row(id))!.photo_path).not.toBeNull()
     expect((await request('GET', `/v1/gyms/${publicGym}/listings`, { token: b.token })).status).toBe(200)
+  })
+
+  it("leaves a removed listing's photo named, so the admin can still delete it", async () => {
+    const author = await signUp()
+    const boss = await signUp()
+    await makeAdmin(boss.userId)
+    const name = await uploadedPhoto(author.userId, 'gym-photos')
+    const gym = await insertGym({ visibility: 'public', createdBy: author.userId })
+    const listing = await insertListing({
+      gym, item: await genericItem(), visibility: 'public', addedBy: author.userId, photo: name, status: 'removed',
+    })
+    expect((await request('POST', '/v1/photos/detach', { token: author.token })).status).toBe(204)
+    const after = await env.DB.prepare('SELECT photo_path FROM gym_equipment WHERE id = ?1').bind(listing)
+      .first<{ photo_path: string | null }>()
+    expect(after!.photo_path).toBe(name)
+    expect((await request('DELETE', sharedPath(name), { token: boss.token })).status).toBe(204)
+    expect(await env.GYM_PHOTOS.head(name)).toBeNull()
+    expect(await rowsOf(name)).toBe(0)
   })
 })

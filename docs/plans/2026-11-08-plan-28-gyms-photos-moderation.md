@@ -4987,6 +4987,51 @@ Both were decided on 2026-11-08 by the controller, following the approved spec (
 2. **An admin deletes a shared photo only while a removed listing names it.** The Postgres policy let an admin delete
    any shared photo; the app never did more than this.
 
+### Added after review (plan 28 server)
+
+First batch (`7e85e06`):
+- **Cap triggers count live rows only.** `0005_gyms_photos.sql` adds `gyms_owner_live` and `gym_equipment_owner_live`
+  (`WHERE deleted_at IS NULL`), so the private-cap triggers never read tombstones. `schema.test.ts` checks each
+  trigger's query plan.
+- **Strings inside JSON columns.** `isStorableJson` (`sync/columns.ts`) checks every string and key in a `json` value.
+  U+0000 or half a UTF-16 pair answers `row_rejected`.
+- **Greek final sigma.** `foldKey` maps `ς` to `σ`, so `ΟΔΟΣ` and `οδοσ` are one item.
+- **Bearer-only sessions.** `requireUser` gives Better Auth only the `authorization` header, so a bearer that fails its
+  signature can't fall back to a session cookie.
+- **Check-then-write races.** The confirm insert repeats `CONFIRMABLE_WHERE`, and the report insert needs a live public
+  target. A race answers `unknown_listing` / `unknown_target` and stores nothing (`changedBeforeBatch` in the tests).
+- **Password sign-in on this machine only.** `passwordAuthAllowed` also needs a `PUBLIC_BASE_URL` host of `127.0.0.1`
+  or `localhost`.
+- **Tests that needed no code change:** reviving tombstones past the cap, an item leaving `/v1/items` with its only gym,
+  two listings naming one photo, restoring an active target resolving its reports, and `gym-listings` in the shared
+  sync samples.
+
+Second batch:
+- **An upload racing a delete.** After the put, the upload reads its `(bucket, name, owner)` row again. If a delete
+  took it meanwhile, the object goes too and the answer is `422 photo_missing`, never 409 (which the app takes as
+  uploaded). The same holds when finishing an unfinished upload.
+- **Shared photos are served only while a listing uses them.** `GET /photos/shared/:name` answers 404 unless a public
+  listing that isn't removed (active or flagged) names it. Items take their photo from such a listing, so every photo
+  the app shows is still served. An unused upload isn't served (no free file hosting), and a removed listing's photo
+  stops at once. This replaces the last bullet of decision 11.
+- **Detach skips removed listings**, so an admin can still delete their photos. Deleting a photo someone else owns,
+  outside the admin rule, answers `403 not_allowed`. A name with nothing there still answers 204.
+- **Finishing an unfinished upload** is refused with `422 photo_name_in_use` while a listing names it.
+- **The public routes' input.** An `If-None-Match` that isn't `*` or a list of strong or weak quoted ETags gets a plain
+  read; R2 threw "Invalid ETag" for it, a 500. Exercise names are `own-\d{1,6}-\d{1,6}`.
+- **CSP.** Every photo answer, private and public, carries `content-security-policy: default-src 'none'; sandbox` next
+  to `nosniff` (`PHOTO_HEADERS`).
+- **Strict Apple nonce.** `authHandler` decodes the id token's payload (unverified; Better Auth verifies it next). It
+  answers `400 bad_request` unless the `nonce` claim is the SHA-256 hex of the raw nonce sent. Better Auth alone also
+  took the claim itself sent back, so anyone holding a token could replay it for its hour. A wrong nonce is now 400,
+  not 401.
+- **No stored provider tokens.** `databaseHooks.account` (`create` and `update`, `before`) sets `idToken`,
+  `accessToken` and `refreshToken` to null. `encryptOAuthTokens` doesn't cover id tokens.
+- **For the iOS tasks.**
+  - In Task 16, `onlyTheOwnerCanDeleteAnUploadedPhoto` must expect an unlinked upload not to be served, and another
+    user's delete to throw `.notAllowed`.
+  - In the moderation queue, a removed listing whose photo still has to be deleted shows the placeholder thumbnail.
+
 ## iOS tasks
 
 Built on plan 27 as committed (`f3395a2` and the code after it): `ApiError`, `ApiClient`, `ApiConfig`,

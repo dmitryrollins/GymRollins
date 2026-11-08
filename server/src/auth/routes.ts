@@ -18,8 +18,9 @@ const ALLOWED = new Set([
 export async function authHandler(c: Context<AppEnv>): Promise<Response> {
   const route = `${c.req.method} ${new URL(c.req.url).pathname}`
   if (!ALLOWED.has(route)) return c.json(errorBody('not_found', 'No such route.'), 404)
-  if (route === 'POST /api/auth/sign-in/social' && !(await hasIdTokenAndNonce(c.req.raw))) {
-    return c.json(errorBody('bad_request', 'Sign in with Apple needs the id token and its nonce.'), 400)
+  if (route === 'POST /api/auth/sign-in/social') {
+    const refusal = await appleNonceRefusal(c.req.raw)
+    if (refusal !== null) return c.json(errorBody('bad_request', refusal), 400)
   }
   const res = await createAuth(c.env).handler(c.req.raw)
   return res.status >= 400 ? inErrorShape(res) : res
@@ -37,11 +38,43 @@ async function inErrorShape(res: Response): Promise<Response> {
 }
 
 /**
- * Better Auth checks an id token's nonce only when the client sends one, and without an id token it starts a web
- * redirect flow the app never uses. The app always sends both.
+ * Why a Sign in with Apple body is refused before Better Auth sees it, or null.
+ * - Better Auth checks an id token's nonce only when the client sends one, and without an id token it starts a web
+ *   redirect flow the app never uses. The app always sends both.
+ * - The app sends the raw nonce and gave Apple its SHA-256 hex, so the token's nonce claim must be that hash. Better
+ *   Auth also takes the claim itself sent back as the nonce, which anyone holding the token can do: no replay
+ *   protection. The claim is read without the signature here; Better Auth verifies the token next.
  */
-async function hasIdTokenAndNonce(request: Request): Promise<boolean> {
+async function appleNonceRefusal(request: Request): Promise<string | null> {
   const body = await request.clone().json().catch(() => null) as { idToken?: { token?: unknown; nonce?: unknown } } | null
   const idToken = body?.idToken
-  return typeof idToken?.token === 'string' && typeof idToken.nonce === 'string' && idToken.nonce.length > 0
+  if (typeof idToken?.token !== 'string' || typeof idToken.nonce !== 'string' || idToken.nonce.length === 0) {
+    return 'Sign in with Apple needs the id token and its nonce.'
+  }
+  const claim = unverifiedClaims(idToken.token)?.nonce
+  if (typeof claim !== 'string' || claim !== (await sha256Hex(idToken.nonce))) {
+    return "The nonce doesn't match the id token."
+  }
+  return null
+}
+
+/** A JWT's payload, unverified, or null when it isn't one. */
+function unverifiedClaims(token: string): Record<string, unknown> | null {
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const bytes = Uint8Array.from(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')), (ch) => ch.charCodeAt(0))
+    const claims: unknown = JSON.parse(new TextDecoder().decode(bytes))
+    const isObject = typeof claims === 'object' && claims !== null && !Array.isArray(claims)
+    return isObject ? claims as Record<string, unknown> : null
+  } catch {
+    return null
+  }
+}
+
+/** Lowercase hex SHA-256 of the UTF-8 text, as the app's AppleNonce.sha256 gives Apple. */
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }

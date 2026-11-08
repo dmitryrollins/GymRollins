@@ -36,7 +36,10 @@ export async function mockAppleKeys(): Promise<AppleKeys> {
   return keys
 }
 
-/** An id token as Apple signs one for the app: RS256, Apple's issuer, ten minutes. */
+/**
+ * An id token as Apple signs one for the app: RS256, Apple's issuer, ten minutes. The app sends Apple the SHA-256 hex
+ * of its raw nonce, so a real token's `nonce` claim is `await sha256Hex(raw)`, and the sign-in sends `raw`.
+ */
 export async function appleIdToken(keys: AppleKeys, claims: Record<string, unknown>): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   const header = base64url(JSON.stringify({ alg: 'RS256', kid: keys.jwk.kid, typ: 'JWT' }))

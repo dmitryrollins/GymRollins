@@ -1,7 +1,7 @@
 import { type Context, Hono } from 'hono'
 import type { AppEnv } from '../env.ts'
 import { errorBody } from '../http/errors.ts'
-import { type GymBucket, PRIVATE_BUCKET, SHARED_BUCKET } from './objects.ts'
+import { type GymBucket, PHOTO_HEADERS, PRIVATE_BUCKET, SHARED_BUCKET } from './objects.ts'
 import { deletePhoto, detachMyPhotos, myPhotos, privatePhoto, uploadPhoto } from './store.ts'
 
 /** /v1/photos: the caller's gym photos (spec section 3, "Photos"). Shared photos are read at /photos/shared. */
@@ -31,7 +31,7 @@ photoRoutes.get('/private/:name', async (c) => {
   const object = await privatePhoto(c.env, c.var.userId, c.req.param('name'))
   if (object === null) return c.json(errorBody('not_found', 'No such photo.'), 404)
   return new Response(object.body, {
-    headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' },
+    headers: { ...PHOTO_HEADERS, 'content-type': 'image/jpeg', 'cache-control': 'private, no-store' },
   })
 })
 

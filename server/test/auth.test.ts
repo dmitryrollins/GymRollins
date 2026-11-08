@@ -118,9 +118,44 @@ describe('Sign in with Apple, with the id token the app gets', () => {
     const claims = { sub: 'apple-3', nonce: await sha256Hex('n') }
     const status = async (idToken: string, nonce: string) => (await signInWithApple(idToken, nonce)).status
     expect(await status(await appleIdToken(keys, { ...claims, aud: 'com.other.app' }), 'n')).toBe(401)
-    expect(await status(await appleIdToken(keys, { ...claims, aud: env.APPLE_BUNDLE_ID }), 'other')).toBe(401)
+    expect(await status(await appleIdToken(keys, { ...claims, aud: env.APPLE_BUNDLE_ID }), 'other')).toBe(400)
     const stranger = await appleKeyPair()
     expect(await status(await appleIdToken(stranger, { ...claims, aud: env.APPLE_BUNDLE_ID }), 'n')).toBe(401)
+  })
+
+  it("refuses the token's own nonce claim sent back as the nonce: anyone with the token could replay it", async () => {
+    const keys = await mockAppleKeys()
+    const hashed = await sha256Hex('raw-nonce')
+    const tokens = [
+      [await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub: 'apple-6', nonce: hashed }), hashed],
+      // Apple was given the raw nonce: the claim is the raw value, which Better Auth alone would also take.
+      [await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub: 'apple-6', nonce: 'raw-nonce' }), 'raw-nonce'],
+      [await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub: 'apple-6' }), 'raw-nonce'],
+      ['not-a-jwt', 'raw-nonce'],
+      [`x.${btoa('{"nonce":').replace(/=+$/, '')}.y`, 'raw-nonce'],
+    ]
+    for (const [token, nonce] of tokens) {
+      const res = await signInWithApple(token, nonce)
+      expect(res.status, token).toBe(400)
+      expect(await res.json()).toMatchObject({ error: { code: 'bad_request' } })
+      expect(res.headers.get('set-auth-token')).toBeNull()
+    }
+    const accounts = await env.DB.prepare("SELECT count(*) AS n FROM account WHERE accountId = 'apple-6'")
+      .first<{ n: number }>()
+    expect(accounts!.n).toBe(0)
+  })
+
+  it("stores none of Apple's tokens, on the first sign-in or the next", async () => {
+    const keys = await mockAppleKeys()
+    const sub = `apple-${crypto.randomUUID()}`
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const idToken = await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub, nonce: await sha256Hex(`n${attempt}`) })
+      expect((await signInWithApple(idToken, `n${attempt}`)).status).toBe(200)
+      const { results } = await env.DB.prepare(
+        "SELECT idToken, accessToken, refreshToken FROM account WHERE providerId = 'apple' AND accountId = ?1",
+      ).bind(sub).all()
+      expect(results).toEqual([{ idToken: null, accessToken: null, refreshToken: null }])
+    }
   })
 
   it('refuses a sign-in that leaves the nonce out', async () => {
