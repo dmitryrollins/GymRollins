@@ -1175,6 +1175,7 @@ CREATE TABLE workout_entries (
   gym_equipment_id TEXT REFERENCES gym_equipment(id) ON DELETE SET NULL CHECK (length(gym_equipment_id) = 36)
 );
 CREATE INDEX workout_entries_user_exercise ON workout_entries (user_id, exercise_id);
+CREATE INDEX workout_entries_workout ON workout_entries (workout_id);
 
 CREATE TABLE workout_sets (
   id TEXT PRIMARY KEY CHECK (length(id) = 36),
@@ -1193,6 +1194,7 @@ CREATE TABLE workout_sets (
   CONSTRAINT workout_sets_min_range CHECK (min BETWEEN 0 AND 1440),
   CONSTRAINT workout_sets_dist_m_range CHECK (dist_m BETWEEN 0 AND 1000000)
 );
+CREATE INDEX workout_sets_entry ON workout_sets (entry_id);
 
 -- Body ----------------------------------------------------------------------------------------------------------
 CREATE TABLE bodyweight (
@@ -3366,6 +3368,20 @@ git add server/src/sync server/test/samples.ts server/test/sync-workouts.test.ts
 git commit -m "feat(server): workout save, pull and fetch"
 ```
 
+- [ ] **Step 7: The review follow-ups (added after review)**
+
+The review found the port faithful, and in 20 of 20 runs of two simultaneous saves on one version, one won and one answered `stale`, never mixed. It also found that no index covered a workout's entries or an entry's sets, so every save and pull scanned both tables.
+
+**Index:** `0002_app_schema.sql` gains `workout_entries_workout` and `workout_sets_entry`. The Task 3 SQL block above includes them, and `schema.test.ts` checks them with `EXPLAIN QUERY PLAN`.
+
+**Tests added to `sync-workouts.test.ts`:**
+- 10 rounds of two saves at once;
+- pulled workouts carry only the app's keys;
+- entries and sets come back in position order;
+- a deleted workout can still be fetched.
+
+With them: `Tests  151 passed (151)`. Commit: `fix(server): index workout entries and sets; workout race, shape and order tests`.
+
 ### Task 9: Deleting an account
 
 `DELETE /v1/account` is `delete_my_account` (`20261030000006_gym_moderation.sql`).
@@ -3590,7 +3606,7 @@ v1.route('/account', accountRoutes)
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  11 passed (11)`, `Tests  149 passed (149)`.
+Expected: `Test Files  11 passed (11)`, `Tests  154 passed (154)`.
 
 - [ ] **Step 5: Commit**
 
@@ -3716,7 +3732,7 @@ node scripts/gen-exercise-seed.mjs --check && node scripts/gen-equipment-seed.mj
 ```
 
 Expected:
-- `Test Files  11 passed (11)`, `Tests  149 passed (149)`.
+- `Test Files  11 passed (11)`, `Tests  154 passed (154)`.
 - The seed tests: `# pass 5`, and both checks match.
 - The Deno suite is unchanged: `159 passed … 1 ignored`. This plan doesn't touch it.
 
