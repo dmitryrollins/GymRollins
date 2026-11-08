@@ -7,11 +7,16 @@
     "dev": "wrangler dev --local",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "gen:auth-schema": "node scripts/gen-auth-schema.mjs > migrations/0001_better_auth.sql"
+    "gen:auth-schema": "node scripts/gen-auth-schema.mjs > migrations/0001_better_auth.sql",
+    "gen:oauth-schema": "node scripts/gen-oauth-schema.mjs > migrations/0006_oauth_provider.sql"
   },
   "dependencies": {
+    "@better-auth/mcp": "1.7.18",
+    "@better-auth/oauth-provider": "1.7.18",
+    "@modelcontextprotocol/server": "2.4.0",
     "better-auth": "1.7.18",
-    "hono": "4.13.17"
+    "hono": "4.13.17",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.6.0",

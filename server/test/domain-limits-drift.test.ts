@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import swiftSource from '../../ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift?raw'
+import planChangeSource from '../../ios/Packages/GymCore/Sources/GymCore/Plan/PlanChange.swift?raw'
 import appSchema from '../migrations/0002_app_schema.sql?raw'
 import capsMigration from '../migrations/0005_gyms_photos.sql?raw'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
+import { PlanChangeLimits } from '../src/shared/plan-validation.ts'
 
 // Fails when the server's limits drift from the Swift source of truth, or from the D1 CHECKs that enforce them. The
 // Swift file is read as text: `public static let name = 40` and `public static let name: ClosedRange<T> = lo...hi`.
@@ -48,6 +50,21 @@ const SCHEMA_CHECKS = [
   `length(note) <= ${L.reportNoteMax}`,
 ]
 
+/**
+ * PlanChange.swift's `enum PlanChangeLimits`, with `(DomainLimits.name - n)` worked out from the Swift
+ * values.
+ */
+function swiftPlanChangeLimits(source: string): Record<string, Limit> {
+  const body = /public enum PlanChangeLimits \{([\s\S]*?)\n\}/.exec(source)?.[1]
+  if (body === undefined) throw new Error("PlanChange.swift has no 'enum PlanChangeLimits'")
+  return swiftLimits(
+    body.replace(
+      /\(DomainLimits\.(\w+) - (\d+)\)/g,
+      (_, name: string, n: string) => String(Number(swift[name]) - Number(n)),
+    ),
+  )
+}
+
 describe('domain limits', () => {
   it('finds the Swift constants (a parser that matched nothing would pass everything)', () => {
     expect(Object.keys(swift).length).toBeGreaterThanOrEqual(40)
@@ -67,5 +84,11 @@ describe('domain limits', () => {
       const trigger = `id <> NEW.id) >= ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
       expect(capsMigration.split(trigger).length - 1, String(code)).toBe(2)
     }
+  })
+
+  it("has PlanChange.swift's PlanChangeLimits in the server's plan validation", () => {
+    const planChange = swiftPlanChangeLimits(planChangeSource)
+    expect(Object.keys(planChange).length).toBeGreaterThanOrEqual(9)
+    expect(PlanChangeLimits).toEqual(planChange)
   })
 })

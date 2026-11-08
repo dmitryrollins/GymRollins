@@ -17,6 +17,7 @@ export default defineConfig(async () => {
             BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret-000001',
             APPLE_BUNDLE_ID: 'com.rollins.gymrollins',
             PUBLIC_BASE_URL: 'http://localhost',
+            OAUTH_REGISTRATIONS_PER_HOUR: '1000',
           },
         },
       }),

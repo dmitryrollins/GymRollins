@@ -5,9 +5,15 @@ import { bodyLimit } from 'hono/body-limit'
 import { accountRoutes } from './account/routes.ts'
 import { authHandler } from './auth/routes.ts'
 import { requireUser } from './auth/session.ts'
+import { connectPage } from './claude/connect-page.ts'
+import { mcpRoute } from './claude/mcp-route.ts'
+import { claudeRoutes } from './claude/routes.ts'
+import { wellKnownRoutes } from './claude/well-known.ts'
 import type { AppEnv } from './env.ts'
 import { catalogueRoutes } from './gyms/routes.ts'
+import { withCors } from './http/cors.ts'
 import { errorBody, onError } from './http/errors.ts'
+import { MAX_BODY_BYTES as MAX_MCP_BODY_BYTES } from './mcp/app.ts'
 import { moderationRoutes } from './moderation/routes.ts'
 import { publicPhotoRoutes } from './photos/public.ts'
 import { photoRoutes } from './photos/routes.ts'
@@ -28,6 +34,17 @@ app.use('/api/auth/*', bodyLimit({
 }))
 app.on(['GET', 'POST'], '/api/auth/*', authHandler)
 
+// Claude: OAuth discovery, the sign-in page and the MCP server (spec section 3). CORS only on /mcp and discovery.
+app.route('/.well-known', wellKnownRoutes)
+app.get('/connect', connectPage)
+// Added after review: the limit reads a chunked body (no Content-Length) before /mcp does, so the batch
+// check and the MCP handler only ever see a bounded body. The 413 keeps /mcp's CORS, for browser clients.
+app.use('/mcp', bodyLimit({
+  maxSize: MAX_MCP_BODY_BYTES,
+  onError: (c) => withCors(c.json(errorBody('too_large', 'The request body is too large.'), 413)),
+}))
+app.on(['GET', 'POST', 'DELETE', 'OPTIONS'], '/mcp', mcpRoute)
+
 const v1 = new Hono<AppEnv>()
 v1.use('*', bodyLimit({
   maxSize: MAX_BODY_BYTES,
@@ -36,6 +53,7 @@ v1.use('*', bodyLimit({
 v1.use('*', requireUser)
 v1.route('/sync', syncRoutes)
 v1.route('/account', accountRoutes)
+v1.route('/claude', claudeRoutes)
 v1.route('/', catalogueRoutes)
 v1.route('/', moderationRoutes)
 v1.route('/photos', photoRoutes)
