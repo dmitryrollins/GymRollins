@@ -1,0 +1,23 @@
+// The GymRollins API: one Worker with D1 (R2 comes in plan 28). Local only: `wrangler dev --local` and
+// `wrangler d1 migrations apply gymrollins --local` need no Cloudflare account. The deploy (owner's approval) replaces
+// database_id and sets BETTER_AUTH_SECRET with `wrangler secret put`.
+{
+  "name": "gymrollins",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ALLOW_PASSWORD_AUTH": "0",
+    "APPLE_BUNDLE_ID": "com.rollins.gymrollins",
+    "PUBLIC_BASE_URL": "http://127.0.0.1:8787"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gymrollins",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "dev": { "ip": "127.0.0.1", "port": 8787 }
+}
