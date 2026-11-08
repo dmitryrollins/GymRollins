@@ -23,7 +23,7 @@
     {
       "binding": "DB",
       "database_name": "gymrollins",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "b7acfb0b-499b-4471-a430-96a9491fde57",
       "migrations_dir": "migrations"
     }
   ],
