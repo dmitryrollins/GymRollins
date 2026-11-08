@@ -72,6 +72,8 @@ targets:
           GymRollins uses your location to find gyms near you on Apple Maps. GymRollins doesn't store it.
         NSLocalNetworkUsageDescription: >-
           GymRollins syncs with a development server on your local network.
+        # The GymRollins API (Config/Base.xcconfig): sign-in and sync.
+        API_URL: $(API_URL)
         SUPABASE_URL: $(SUPABASE_URL)
         SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
         # bundle | storage (Config/Base.xcconfig): where GymRollins' own exercise photos come from.
