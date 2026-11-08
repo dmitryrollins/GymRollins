@@ -3379,65 +3379,180 @@ the file's full new text or an exact replacement.
 
 ## Outcome
 
-Built on …, on `feat-cloudflare`, from base `…` (Task 1, Step 1). Local only, not pushed. No Cloudflare account,
+Built on 2026-11-08, on `feat-cloudflare`, from base `74a319f` (Task 1, Step 1). Local only, not pushed. No Cloudflare account,
 resource or deploy; nothing on the phone or claude.ai.
 
 **Commits**
 
 | Task | Commits |
 |---|---|
-| 1 The last links | `…` |
-| 2 The photo uploader | `…` |
-| 3 Delete the old backend | `…` |
-| 4 GymSync without the SDK | `…` |
-| 5 The app on `API_URL` | `…` |
-| 6 Docs and the checklist | `…` |
-| 7 The last mentions and the guard | `…` |
-| 8 Review fixes | `…` |
+| 1 The last links | `09242d5` |
+| 2 The photo uploader | `a94fb97` |
+| 3 Delete the old backend | `d455fa5`; then `be0bcbc`, a server test whose fixed date had passed (proposal resolutions now use times relative to now) |
+| 4 GymSync without the SDK | `a831b44` |
+| 5 The app on `API_URL` | `304ca2f` |
+| 6 Docs and the checklist | `c5320a2` |
+| 7 The last mentions and the guard | `9c45d5f` |
+| 8 Review fixes | none: Step 5's review wasn't run (see "Not run"). The full run's one fix: `113f989`, the proposal sync UI test |
 
-**Proof before deletion** (Tasks 1 and 3)
-- Same-code check: …
-- Moved tests: Deno `…`, Vitest `…`
-- Live readers found: …
-- With the folder away: …
+**Proof before deletion** (Tasks 1 and 3). The tasks left no record of their runs, so Task 8 re-derived each from git
+history, in a scratch folder outside the repo.
+- Same-code check: Task 1's script, on the tree at `a94fb97` (the last commit with the folder): `All 18 copies match
+  their originals apart from imports.`
+- Moved tests: Deno `ok | 136 passed | 0 failed` (same tree, `deno test --cached-only --allow-read`, the five paths of
+  Task 1, Step 2); Vitest at HEAD `Test Files  11 passed (11)`, `Tests  136 passed (136)`.
+- Live readers found: none.
+  - In `server/` at the base, only `scripts/copy-from-deno.mjs` read the folder in code, plus one `server/README.md`
+    line, as Task 1, Step 3 expects.
+  - Task 3, Step 1's grep, run on `a94fb97`, prints two lines, both in `web/consent/` (deleted with it): a CDN import in
+    `consent.js` and a skip message in `e2e.test.mjs`. The filter's `web/consent/` alternative needs `[^:]*` to drop a
+    file inside that folder.
+- With the folder away: at HEAD the folder has no tracked file, and the server suite, every Node suite and both seed
+  checks pass (below). The untracked leftovers on disk aren't read: the guard finds no tracked file outside the history
+  docs that names the folder.
 
-**Final counts** (Task 8, Step 2)
-- Guard: …
-- Server: `Test Files  … passed (…)`, `Tests  … passed (…)`; `tsc` …
-- GymCore …; GymData …; GymSync `Test run with … tests in … suites passed` (before Task 4: …); GymHealth …;
-  GymWatchLink …
-- Integration: `Test run with … tests in … suites passed`; `Account deletion verified: …`
-- App unit and UI suite: … passed, … skipped, 0 failed
-- Sync UI: …
-- Node: uploader `# pass …`; seeds `# pass …`; strength `# pass …`; store comparison `# pass …`; others …
-- `MCP_E2E`: …; `PHOTO_E2E`: …; `GYM_E2E`: …
+**Final counts** (Task 8, Step 2; `DEST='platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2'` with `SYNC_E2E`,
+`MCP_E2E`, `PHOTO_E2E` and `GYM_E2E`)
+- Guard: `Old backend gone: no folder, no name outside docs/plans, docs/specs and docs/research, no script running Docker.`
+- Server: `Test Files  43 passed (43)`, `Tests  602 passed (602)`; `tsc --noEmit` clean.
+- GymCore `Test run with 533 tests in 64 suites passed`; GymData 371 tests in 50 suites; GymSync `Test run with 214
+  tests in 26 suites passed` (before Task 4: 231 in 29, plan 29's count); GymHealth 85 in 17; GymWatchLink 63 in 8. The
+  Watch app builds for `watchsimulator` and `watchos` (the watchOS 26.2 SDKs are installed).
+- Integration: `Test run with 45 tests in 11 suites passed`; `Account deletion verified: 66 deleted users, 0 rows left`.
+- App unit and UI suite: 1,135 passed, 18 skipped, 1 failed on the first run (`testClaudeConnectionAudit`, below; it
+  passed when re-run alone). The second full run, at `113f989`, had the same totals with a different failure:
+  `testUnblockEveryoneAudit` failed, and `testClaudeConnectionAudit` passed.
+  - Skipped, all opt-in: `SyncUITests` 5 and `ProposalSyncUITests` 3 (need a Worker), `StoragePhotoIntegrationTests` 1
+    (`PHOTO_E2E`), `ReadmeScreenshotsUITests` 8 (`README_SCREENSHOTS_DIR`), `RealExportImportTests` 1
+    (`GYM_REAL_EXPORT`). `scripts/ios-test.sh` leaves out `PerformanceUITests`.
+- Sync UI: 8 tests, 7 passed (`SyncUITests` 4, `ProposalSyncUITests` 3), 1 skipped (the server-move test), 0 failed,
+  after `113f989`. Before it, `testClaudeConnectsThroughTheSheetAndItsProposalIsApplied` failed on both runs.
+- Node: share page `# pass 17`; photo matcher 13; wger 21; alias tables 13; photo prompts and generator 32; strength
+  `# pass 14`; uploader `# pass 22`; seeds `# pass 3`, and both `--check` runs match; store comparison `# pass 4`.
+  Every one `# fail 0`.
+- `MCP_E2E`: 12 `ok` lines, from `discovery: 401 on /mcp points at the resource metadata` to `Disconnect Claude removed
+  1 connection(s); the next call got 401`.
+- `PHOTO_E2E`: `done: 2 uploaded`, then `done: 0 uploaded, 2 skipped, 0 failed; manifest unchanged (1 exercises)`, then
+  `Test uploadedPhotosLoadThroughTheManifestAndProvider() passed`.
+- `GYM_E2E`: `Test run with 5 tests in 1 suite passed`; `Stays on the phone verified: 5 markers absent from gyms,
+  gym_equipment, equipment_items; 1 control present`.
+- No single run of `scripts/test-all.sh` ended `exit 0`. Both full runs stopped at the app suite (`exit 65`), each on
+  one accessibility audit that is intermittent before the migration too (below). Every block after the app suite
+  passed at HEAD in the runs listed above.
 
-**The server-move check** (numbers only): workouts …, entries …, sets …, routines …, body weights …, custom exercises
-…, week days …, profile …, exercise preferences …, muscle targets …, private gyms …, private listings …, workouts at a
-gym …, entries at a listing …; unsynced …; stores …
+**The failures**
+1. **`ProposalSyncUITests/testClaudeConnectsThroughTheSheetAndItsProposalIsApplied`, caused by the migration (plan 29).**
+   - It failed the same way on two runs: `Failed to tap "Today" Button`, because the tab bar showed only `Log, value:
+     Collapsed`.
+   - The app minimizes the tab bar on scroll down (`RootView`'s `.tabBarMinimizeBehavior(.onScrollDown)`, there since
+     the first release).
+   - Plan 29's review fix `a1bea21` changed the test's scrolling from quick swipes to slow ones. Slow swipes up don't
+     bring the bar back, so the test reached Today's tap with only Log showing. Plan 29's count of 7 passed predates
+     that change.
+   - `113f989` (test only) adds `tapTab`: when the tab is missing it swipes down quickly, as a person would, then taps
+     the tab. The test passed alone, then in the whole sync UI suite. No app code changed.
+2. **`AccessibilityAuditUITests/testClaudeConnectionAudit`, intermittent and not caused by the migration.**
+   - It failed once, on `Contrast failed … id='claude.coach.showAll' label='Show all'`, and passed when re-run alone.
+   - Measured on the failure's own screenshot, at rest, "Show all" is 6.16:1 (#FF6B72 on #1C1C1E). "Copy prompt", in
+     the same colour, wasn't flagged.
+   - The test audits right after its swipes, without the `waitUntilSettled` the other audits use. The test's own
+     comment already lists "Show all" among the Claude screen's rows flagged mid-scroll.
+   - Plan 30's only change on that screen is a doc comment in `ClaudePrompts.swift`. Left as it is; a settle wait
+     before the audit is the fix, for a later change.
+3. **`AccessibilityAuditUITests/testUnblockEveryoneAudit`, intermittent and older than the migration.**
+   - It failed in the second full run, on `Contrast failed … label='Apple Health'` and `… label='Data'` (Settings'
+     section headers).
+   - Alone at HEAD it failed 3 runs of 3. It passed in the first full run.
+   - The same test, on the code before the migration (`ff3739e`, `feat-claude-prompts`, built from `git archive` outside
+     the repo, on the same simulator), failed 1 run of 3 with the same two headers.
+   - `SettingsView.swift`, `UnblockEveryoneRow.swift` and the test are unchanged since `ff3739e`.
+   - Measured on the failure's screenshot, all four headers ("Apple Health", "Data", "Privacy", "About") are 6.28:1
+     (#919199 on #0B0B10), yet only the top two were flagged.
+   - The audit sampled a transient state, as `01265b9` (2026-11-03) found for this test before. Left as it is, for a
+     later change.
+
+**The server-move check** (numbers only; phone and D1 equal on every line): workouts 148, entries 836, sets 2,685,
+routines 6, body weights 23, custom exercises 42, week days 4, profile 1, exercise preferences 0, muscle targets 0,
+private gyms 0, private listings 0, workouts at a gym 0, entries at a listing 0; unsynced 0; stores `Stores match apart
+from sync state.`, then `Server move verified.` It took about 4 minutes.
 
 **Acceptance criteria**
 
 | # | Result and evidence |
 |---|---|
-| 1 | … |
-| 2 | … |
-| 3 | … |
-| 4 | … |
-| 5 | … |
-| 6 | … |
-| 7 | … |
-| 8 | … |
-| 9 | … |
+| 1 | **Met, with the one allowed line.** The guard's pass line. `git ls-files supabase web/consent` lists nothing. `grep -c 'supabase-swift' ios/Packages/GymSync/Package.swift` prints `0`, and GymSync has no `Package.resolved`. No `Supabase*` file is tracked under `ios/`. `API_URL` is at `ios/Config/Base.xcconfig:7` and `ios/project.yml:76`. The exceptions: decision 10's Keychain service line in `OldServerKeychain.swift`, and the history docs (decision 9). No script runs Docker (the guard's third check). |
+| 2 | **Met locally.** Server `Tests  602 passed (602)` (`sync-*`, `catalogue`, `share`, `photos`, `public-photos`, `moderation`, `admin`, `limits`, `account`, `test/mcp/**`). Integration: 45 tests, and account deletion leaves 0 rows. `ConflictUITests` 2 passed; `SyncUITests` 4 and `ProposalSyncUITests` 3 passed; `GYM_E2E` 5; `PHOTO_E2E`; `MCP_E2E`'s `MCP: initialize, 15 tools, get_profile`. The messages: `GymCatalogErrorsApiTests` and `AuthServiceTests` pass in GymSync. "The same as on the Supabase branch" rests on these ported tests; the old stack is gone, so nothing ran side by side. |
+| 3 | **Met.** `(cd server && npx vitest run test/gym-isolation.test.ts test/sync-rows.test.ts test/claude-connection.test.ts test/mcp/d1-db.test.ts)`: `Test Files  4 passed (4)`, `Tests  114 passed (114)`. |
+| 4 | **Met locally; a real Apple token isn't shown.** `npx vitest run test/auth.test.ts`: 17 passed. `server/wrangler.jsonc:10` has `"ALLOW_PASSWORD_AUTH": "0"`. Email sign-in is under `#if DEBUG` at `AuthService.swift:133`, `ApiClient+Auth.swift:17` and `:82`, `AccountView.swift:162` and `AccountForms.swift:3`. The tests sign Apple tokens locally against a mocked key URL; a real one is first used at the cutover (checklist, section 10). |
+| 5 | **Met.** `npx vitest run test/connect-page.test.ts test/connect-approve.test.ts`: 36 passed, among them "says a code has expired after 10 minutes", "works once: a second decision finds nothing…" and "continues only in the browser that showed the code". `ProposalSyncUITests` 3 passed (approve, deny, a wrong code). `MCP_E2E`'s `/connect shows … under a strict CSP`, `the app sees …`, `approved …` and `the browser went back to the callback with a code`. |
+| 6 | **Met.** `MCP_E2E`'s last line: `Disconnect Claude removed 1 connection(s); the next call got 401`. `claude-connection.test.ts` "removes every grant and token: the next call is 401 and the refresh token is dead" passed in criterion 3's run. |
+| 7 | **Met, on a copy.** The server-move check above: phone and D1 equal on all 14 lines (148 workouts, 836 entries, 2,685 sets), 0 unsynced, `Stores match apart from sync state.`, `Server move verified.` The phone itself moves at the cutover (checklist, section 10). |
+| 8 | **Met in the config.** `grep -n -E 'kv_namespaces\|durable_objects\|"unsafe"' server/wrangler.jsonc` prints nothing. The bindings are D1 `DB` and R2 `GYM_PHOTOS`, `GYM_PHOTOS_PRIVATE` and `EXERCISE_PHOTOS`. R2 may still ask for a payment method (checklist, section 2; "What this plan found", item 4). |
+| 9 | **Met.** `server/wrangler.jsonc:18` keeps the zero `database_id`. `git grep -n -E 'wrangler (login\|deploy)' -- scripts server ':!docs'` prints nothing. Every wrangler call in `scripts/` and `server/package.json` has `--local`, except `upload-photos.mjs`'s `--remote`; `runWrangler` refuses that without `GYM_CLOUD_APPROVED=1` (`upload-photos.test.mjs:302`), and it never ran. Nothing is pushed: `git branch -vv` shows `feat-cloudflare` with no upstream, and the only remote refs are `origin/main` and `origin/HEAD` at `6258972`. No Cloudflare account, resource or deploy was created, claude.ai was never contacted, and the phone wasn't touched. |
 
-**Tests deleted with the old backend, and what covers them:** …
+**Not shown locally:** claude.ai's connection; Claude Code connected by hand (interactive, and needs the owner;
+`MCP_E2E`'s scripted smoke stands in); a real Apple id token; anything on the deployed Worker (the discovery `curl`s, a
+phone sync, the `cf-ipcity` check).
 
-**The unused-client query, as checked** (Task 6, Step 4): …
+**Tests deleted with the old backend, and what covers them:**
+- With the SDK, `a831b44` deleted 17 GymSync tests in 3 suites:
+  - `SupabaseConfigTests`, 5: the old config and its in-memory auth storage;
+  - `GymCatalogDTOTests`, 10: the old error mapping (5), the old photo URL (`PhotoURLTests`, 1), push refusals by
+    SQLSTATE (`GymPushRefusalTests`, 3) and the old listing read cap (1);
+  - `ModerationRowsTests`, 2.
+- `DTOTests`' `decodesCapturedPostgRESTWorkout` became `decodesANestedWorkout`.
+- The API's cases are covered by `GymCatalogErrorsApiTests` (4) and `ApiGymCatalogTransportTests` (9: refusals, pages
+  of 500, the Worker's public photo route).
+- The Postgres foreign-key retry (23503, `aForeignKeyRefusalOnAShareReadsAsARetry`) has no API form (decision 11).
+- With the folder, `d455fa5` deleted the Deno suite and the pgTAP tests. The Deno code's 136 tests run as Vitest
+  (above). The pgTAP list wasn't compared with the server tests here: that is Step 5's security review.
+
+**The unused-client query, as checked** (Task 6, Step 4; re-run in Task 8 on a throwaway Worker): the checklist's query
+(section 5) unchanged. The probe printed `201`, `201`, a `createdAt` of `2026-11-08T12:32:40.000Z` (an ISO string, so the
+string comparison holds), then `2` and `0`. `oauthClientResource` references the client `on delete cascade`, so no
+extra `DELETE` is needed.
 
 **Where the build differs from this plan:**
-1. …
+1. **Step 1's `ls -d supabase web/consent` lists both folders.** They are untracked leftovers with 0 tracked files:
+   `supabase/` holds `snippets`, `.branches`, `.temp` and two `.env.local` files, and `web/consent/` holds
+   `node_modules`. The guard scans tracked files only, as its header says. They are the owner's to delete.
+2. **Task 3, Step 1's filter** lets two lines in `web/consent/` through (above). Its `web/consent/` alternative needs
+   `[^:]*`.
+3. **The proposal sync UI test** failed every time until `113f989` (above).
+4. **`MCP_E2E` prints 12 `ok` lines, not ten,** as plan 29's Outcome already counts.
+5. **`scripts/test-all.sh` stops at the first failing block** (`set -e`). The first run stopped after the app suite.
+   The blocks after it ran from a copy of `test-all.sh`'s own lines, from the server block to the end. After the fix,
+   the sync UI suite and the photo, MCP and gym blocks ran again. Then the whole command ran once more. It stopped at
+   the app suite again, on `testUnblockEveryoneAudit`, a pre-existing flake (above).
+6. **Tasks 1 and 3 left no record of the proof before deletion.** Task 8 re-derived it from git history (above).
+7. **The server-move check took about 4 minutes,** not 15–25.
 
 **For the owner:** the deploy follows `docs/cloudflare-checklist.md`, in its order, one approved step at a time. Open:
-"Questions for the owner" above, as answered or still open: …
+"Questions for the owner" above, as answered or still open: all five are still open.
 
-**Not run:** anything on Cloudflare, the phone or claude.ai; `scripts/test-db.sh` (deleted unrun); …
+**Owner decisions before deploy**
+1. **Rate limits.** A custom domain with Cloudflare rate-limiting rules, or the Workers rate-limit binding in a plan of
+   its own (checklist, section 1). The free `workers.dev` address takes no rules.
+2. **Caps.** Numbers for the per-user row caps, and for the tombstone caps (or a purge age). Both are code for a plan
+   of their own (checklist, section 5).
+3. **`PUBLIC_BASE_URL`.** Pass `--var PUBLIC_BASE_URL:<origin>` on every deploy (the checklist's way), or put the https
+   value in `wrangler.jsonc` and move the local one into `server/.dev.vars` (checklist, sections 3 and 4).
+4. **The old local containers and the leftovers.** When to stop this project's old local containers
+   (`supabase_*_gymrollins`, and whether to remove their volumes). When to delete the untracked `supabase/` and
+   `web/consent/` folders (checklist, section 12).
+5. **`OldServerKeychain`.** When to drop it, with the guard's one exception, once the phone has moved (checklist,
+   section 12).
+6. **Client metadata documents,** only if claude.ai needs them. It may refuse dynamic registration (checklist, section
+   11; plan 29's Outcome).
+
+**Not run:**
+- Anything on Cloudflare, the phone or claude.ai.
+- `scripts/test-db.sh` (deleted unrun).
+- Claude Code connected by hand.
+- Task 8, Step 5's whole-plan review (the `code-reviewer` and `security-reviewer` agents, and the pgTAP comparison):
+  not part of this pass.
+- `scripts/test-perf.sh` (`PerformanceUITests`).
+- **Not cleaned up:** the server-move check's work folder, with copies of the phone's store, outside the repo. The
+  session's permissions refused its `rm -rf`, so the owner deletes
+  `<scratchpad>/p30-move`.
+  The script deleted its simulator itself.
