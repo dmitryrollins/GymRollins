@@ -3606,7 +3606,7 @@ v1.route('/account', accountRoutes)
 - [ ] **Step 4: Run the tests and the typecheck**
 
 Run: `cd server && npx vitest run && npx tsc --noEmit`
-Expected: `Test Files  11 passed (11)`, `Tests  154 passed (154)`.
+Expected: `Test Files  11 passed (11)`, `Tests  154 passed (154)`. Step 6 brings it to 157.
 
 - [ ] **Step 5: Commit**
 
@@ -3614,6 +3614,15 @@ Expected: `Test Files  11 passed (11)`, `Tests  154 passed (154)`.
 git add server
 git commit -m "feat(server): account deletion"
 ```
+
+- [ ] **Step 6: The review follow-up (added after review)**
+
+The review found every step faithful to `delete_my_account`, and proved three things with probes. These are now permanent tests in `account.test.ts`:
+- **A photo appearing after the first check stops the whole batch.** It answers `photos_remain` and nothing changes. The test hides the photo from the first check through a wrapped db.
+- **A listing two people confirmed is recounted to 1.**
+- **Other people's listings, words and items are left alone.**
+
+With them: `Tests  157 passed (157)`. Commit: `test(server): account deletion stops on a late photo, recounts, and spares others`.
 
 ### Task 10: Scripts, README and finish
 
@@ -3732,7 +3741,7 @@ node scripts/gen-exercise-seed.mjs --check && node scripts/gen-equipment-seed.mj
 ```
 
 Expected:
-- `Test Files  11 passed (11)`, `Tests  154 passed (154)`.
+- `Test Files  11 passed (11)`, `Tests  157 passed (157)`.
 - The seed tests: `# pass 5`, and both checks match.
 - The Deno suite is unchanged: `159 passed … 1 ignored`. This plan doesn't touch it.
 
