@@ -1,4 +1,4 @@
-// The MCP endpoint (ported from supabase/functions/mcp/app.ts): bearer auth with Claude tokens only → a
+// The MCP endpoint (ported from the old Deno server): bearer auth with Claude tokens only → a
 // rate-limit slot → MCP Streamable HTTP, stateless (a new McpServer per request, no sessions, no Durable
 // Objects). Dependencies are injected: src/claude/mcp-route.ts wires the D1 ones, test/mcp/app.test.ts fakes.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server'

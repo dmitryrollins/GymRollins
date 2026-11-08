@@ -1,5 +1,5 @@
 {
- "_comment": "Shared by GymCore (StrengthFixtureTests.swift) and the MCP server (_shared/strength-levels.test.ts): the same inputs on the bundled strength-standards.json must give the same e1RM, level, percentile and next target on both sides. Numbers rounded to 0.01; comparisons allow 0.01.",
+ "_comment": "Shared by GymCore (StrengthFixtureTests.swift) and the MCP server (server/test/shared/strength-levels.test.ts): the same inputs on the bundled strength-standards.json must give the same e1RM, level, percentile and next target on both sides. Numbers rounded to 0.01; comparisons allow 0.01.",
  "cases": [
   {
    "name": "owner: 81 kg man, 35, knee note; bench 130 lb x 10, squat paused, sumo deadlift counts",

@@ -1,8 +1,8 @@
 // Claude's Db on D1 (spec section 4, "Permissions and Claude"). Postgres's RLS for an OAuth client becomes
 // code here: every query filters by the token's user, each read checks its Settings › Claude toggle first (as
 // mcp_flag did) and answers as if the rows were hidden, and the only writes are a pending proposal, a body
-// weight, the audit row and the rate-limit slot. supabase/functions/mcp/supabase_db.ts and the policies in
-// supabase/migrations are the reference.
+// weight, the audit row and the rate-limit slot. The old Deno server's data layer and the Postgres
+// policies were the reference.
 import { claudeReadsPrivateListing, claudeReadsPublicListing } from '../gyms/visibility.ts'
 import { inJson } from '../sync/sql.ts'
 import { normalizeTimestamp, NOW_SQL } from '../sync/time.ts'

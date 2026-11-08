@@ -1,6 +1,6 @@
 import { DomainLimits } from '../shared/domain-limits.ts'
 
-// A listing's loads (gym_private.valid_loads and valid_kg, supabase/migrations/20261030000001_gyms.sql): exact keys and
+// A listing's loads (gym_private.valid_loads and valid_kg, the Postgres migration 20261030000001_gyms.sql): exact keys and
 // numbers within the limits, because every client decodes these rows and one unreadable row would break a whole gym.
 // Stored as compact JSON rebuilt from the checked values, so what D1 holds is short and in one key order.
 

@@ -1,5 +1,5 @@
 // In-process tests of the MCP request path (auth, rate limit, MCP transport, tool registration and audit)
-// with FakeDb and a fake token check, ported from supabase/functions/mcp/app_test.ts with the same
+// with FakeDb and a fake token check, ported from the old Deno server's test with the same
 // assertions. The RFC 9728 document is Better Auth's now (test/oauth-discovery.test.ts).
 import { test } from 'vitest'
 import { createMcpApp, type McpCaller, RATE_LIMIT_PER_MINUTE } from '../../src/mcp/app.ts'

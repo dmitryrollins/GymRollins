@@ -156,6 +156,7 @@ owner deploys the Worker, its https `API_URL` (see `docs/cloudflare-checklist.md
 | Suite | Command |
 |---|---|
 | Everything (opt-in end-to-end suites, each on a throwaway local Worker: `SYNC_E2E=1`, `MCP_E2E=1`, `PHOTO_E2E=1`, `GYM_E2E=1`) | `scripts/test-all.sh` |
+| The old backend is gone: no folder, no name outside `docs/plans`, `docs/specs` and `docs/research`, no script running Docker (the first step of `test-all.sh`) | `scripts/check-old-backend.sh` |
 | API server (Vitest in workerd with in-memory D1 and R2: sync, gyms, photos, moderation, account deletion, the MCP tools, Claude's OAuth and `/connect`, the domain-limits drift test) | `cd server && npx vitest run && npx tsc --noEmit` |
 | GymCore unit tests | `cd ios/Packages/GymCore && swift test` |
 | GymCore coverage (≥ 90%) | `scripts/coverage-gymcore.sh` |

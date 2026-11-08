@@ -8,7 +8,6 @@ import { PlanChangeLimits } from '../src/shared/plan-validation.ts'
 
 // Fails when the server's limits drift from the Swift source of truth, or from the D1 CHECKs that enforce them. The
 // Swift file is read as text: `public static let name = 40` and `public static let name: ClosedRange<T> = lo...hi`.
-// The Deno test beside supabase/functions/_shared checks the Supabase copy until plan 30.
 
 type Limit = number | { readonly min: number; readonly max: number }
 

@@ -1,6 +1,6 @@
-// TypeScript port of ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift, for the server. It is a copy of
-// supabase/functions/_shared/domain-limits.ts until plan 30 removes that one. test/domain-limits-drift.test.ts fails
-// when it drifts from the Swift source. Keep in sync by hand: nothing here is generated.
+// TypeScript port of ios/Packages/GymCore/Sources/GymCore/DomainLimits.swift, for the server.
+// test/domain-limits-drift.test.ts fails when it drifts from the Swift source. Keep in sync by hand: nothing here is
+// generated.
 //
 // Value limits shared with the Swift app and the D1 CHECKs (migrations/0002_app_schema.sql). Anything saved must fit
 // these, or the row would be rejected when it syncs.

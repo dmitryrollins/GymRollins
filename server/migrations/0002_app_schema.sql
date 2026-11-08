@@ -1,4 +1,4 @@
--- GymRollins app schema for Cloudflare D1 (SQLite), translated from supabase/migrations/*.sql (the final state of
+-- GymRollins app schema for Cloudflare D1 (SQLite), translated from the Postgres migrations (the final state of
 -- every table). Plan 26; design in docs/specs/2026-11-07-cloudflare-backend-design.md.
 --
 -- Conventions: ids are TEXT (36-char uuid); timestamps are TEXT 'YYYY-MM-DDTHH:MM:SS.ffffffZ' (UTC); dates are TEXT

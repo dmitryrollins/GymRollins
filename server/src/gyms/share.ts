@@ -10,7 +10,7 @@ import { Refusals } from './refusals.ts'
 import { foldKey, requireCleanText, trimmedOrNull, trimSpaces } from './text.ts'
 import { blockedAuthor } from './visibility.ts'
 
-// Writing public gym data: find_or_create_gym, share_listing and confirm_listing (supabase/migrations/
+// Writing public gym data: find_or_create_gym, share_listing and confirm_listing (the Postgres migration
 // 20261030000002_gym_functions.sql). Each daily limit sits in the one statement or batch that writes, so requests that
 // arrive together can't each see a count under it: D1 runs writes one at a time. When nothing was written, a read
 // afterwards says why.

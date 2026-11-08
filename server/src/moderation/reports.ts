@@ -5,7 +5,7 @@ import { DomainLimits } from '../shared/domain-limits.ts'
 import { DAY_AGO_SQL, laterStamp, NOW_SQL } from '../sync/time.ts'
 import { publicTarget, type Target, TARGET_TABLE } from './targets.ts'
 
-// report_content, block_author and unblock_all (supabase/migrations/20261030000006_gym_moderation.sql). Each daily
+// report_content, block_author and unblock_all (the Postgres migration 20261030000006_gym_moderation.sql). Each daily
 // limit sits in the one batch that writes.
 
 /** Unresolved reports from this many existing accounts hide a target until an admin decides. */

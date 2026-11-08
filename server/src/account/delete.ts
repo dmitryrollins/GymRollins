@@ -2,7 +2,7 @@ import { ApiError } from '../http/errors.ts'
 import { NOW_SQL } from '../sync/time.ts'
 
 // Deleting an account, after the app removed its gym photos (delete_my_account,
-// supabase/migrations/20261030000006_gym_moderation.sql). Shared gyms and listings stay without their author, because
+// the Postgres migration 20261030000006_gym_moderation.sql). Shared gyms and listings stay without their author, because
 // they describe the gym, but the author's own words go: a listing's notes and photo, the brand and model of an item
 // only they used (their listings fall back to the kind's generic item), and the note on every report they filed. Then
 // the account goes, and its rows cascade (D1 enforces the foreign keys).

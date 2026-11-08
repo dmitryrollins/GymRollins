@@ -23,7 +23,7 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         ("2026-09-26T13:00:00-05:00", 1_790_445_600.0),
         ("1969-12-31T23:59:59.5Z", -0.5),
     ])
-    func parsesPostgresTimestamps(raw: String, epoch: Double) throws {
+    func parsesServerTimestamps(raw: String, epoch: Double) throws {
         let date = try #require(SyncDate.parse(raw))
         #expect(abs(date.timeIntervalSince1970 - epoch) < 0.000_000_5)
     }

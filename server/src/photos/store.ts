@@ -5,7 +5,7 @@ import { DomainLimits } from '../shared/domain-limits.ts'
 import { DAY_AGO_SQL, laterStamp, NOW_SQL } from '../sync/time.ts'
 import { bucketOf, type GymBucket, PHOTO_NAME, PRIVATE_BUCKET, SHARED_BUCKET } from './objects.ts'
 
-// Gym photos (Storage with guard_gym_photo and the bucket policies, supabase/migrations/20261030000003_gym_photos_
+// Gym photos (Storage with guard_gym_photo and the bucket policies, the Postgres migration 20261030000003_gym_photos_
 // buckets.sql). R2 and D1 share no transaction, so:
 // - an upload claims its photo_objects row first, in one conditional statement that holds every rule, then writes
 //   the object; if the object can't be written, the row goes;
@@ -136,7 +136,7 @@ export async function privatePhoto(env: Env, me: string, name: string): Promise<
 
 /**
  * my_gym_photos: the caller's photos in both buckets, by owner and not by listing, so an upload that was never linked
- * is listed too. PostgREST capped it at 1,000 rows; the app lists again after each pass.
+ * is listed too. the old REST API capped it at 1,000 rows; the app lists again after each pass.
  */
 export async function myPhotos(db: D1Database, me: string): Promise<{ bucket_id: string; name: string }[]> {
   const { results } = await db.prepare(

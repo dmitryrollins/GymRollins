@@ -176,7 +176,7 @@ export const ENTITIES: Readonly<Record<string, Entity>> = {
       opt('private_model', 'text'), edited, deleted,
     ],
     insertOnly: { added_by: '?2', created_at: NOW_SQL },
-    // PostgREST embedded the item as equipment_items(kind_id); GymListingDTO reads it there.
+    // The old REST API embedded the item as equipment_items(kind_id); GymListingDTO reads it there.
     pull: {
       select: ['(SELECT kind_id FROM equipment_items WHERE equipment_items.id = gym_equipment.item_id) AS item_kind_id'],
       shape: ({ item_kind_id, ...row }) => ({

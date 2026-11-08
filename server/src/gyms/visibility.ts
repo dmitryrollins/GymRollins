@@ -1,5 +1,5 @@
 // Who may read a gym, an item or a listing, and when a workout's link to one survives: the Postgres read policies and
-// gym_link_survives / listing_link_survives (supabase/migrations/20261030000001_gyms.sql), for the app's own session.
+// gym_link_survives / listing_link_survives (the Postgres migration 20261030000001_gyms.sql), for the app's own session.
 // Claude's side is at the end (plan 29). Each fragment takes `me`, the SQL parameter that holds the
 // caller's user id (such as '?2'), so a statement binds the caller wherever its other parameters leave room. The
 // fragments use the aliases rg, ri, sg, si and ie inside; a query that uses them must not use those aliases itself.

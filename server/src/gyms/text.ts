@@ -1,6 +1,6 @@
 import { RowError } from '../sync/columns.ts'
 
-// The text rules on shared gym data (gym_private.clean_text, supabase/migrations/20261030000001_gyms.sql), and the
+// The text rules on shared gym data (gym_private.clean_text, the Postgres migration 20261030000001_gyms.sql), and the
 // trimming and case folding the sharing functions did. D1's CHECKs keep only the control-character part: SQLite has no
 // Unicode classes, and its lower() folds ASCII only.
 

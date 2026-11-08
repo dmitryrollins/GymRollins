@@ -6,7 +6,7 @@ import { afterSql, type PullQuery } from './table-sync.ts'
 import { laterStamp, NOW_SQL } from './time.ts'
 
 // Workouts sync as a whole: the row, its entries and their sets, as upsert_workout stored them
-// (supabase/migrations/20261030000005_workout_gym_links.sql). The fallbacks are its coalesce(…) defaults.
+// (the Postgres migration 20261030000005_workout_gym_links.sql). The fallbacks are its coalesce(…) defaults.
 
 const WORKOUT: readonly Column[] = [
   { name: 'id', kind: 'uuid' },

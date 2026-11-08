@@ -90,7 +90,7 @@ export const KEY: Readonly<Record<string, (row: Row, userId: string) => string>>
   'gym-listings': (row) => String(row.id).toLowerCase(),
 }
 
-/** What a pull adds to a pushed row beyond its columns: a listing's item kind, embedded as PostgREST did. */
+/** What a pull adds to a pushed row beyond its columns: a listing's item kind, embedded as the old REST API did. */
 const PULL_ADDS: Readonly<Record<string, Row>> = {
   'gym-listings': { equipment_items: { kind_id: 'dumbbells' } },
 }

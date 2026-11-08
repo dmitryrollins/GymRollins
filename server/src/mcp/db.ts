@@ -1,6 +1,6 @@
-// The data access surface the MCP tools use — and nothing else. `SupabaseDb` (supabase_db.ts) implements it with
-// a user-scoped client, so RLS applies to every call; tests use `FakeDb` (tools/fake_db.ts).
-// Row shapes mirror the tables in supabase/migrations/*_schema.sql (weights in kg).
+// The data access surface the MCP tools use — and nothing else. `D1Db` (d1-db.ts) implements it on D1: every
+// query filters by the token's user and every read checks its toggle. Tests use `FakeDb` (test/mcp/fake-db.ts).
+// Row shapes mirror the tables in migrations/0002_app_schema.sql (weights in kg).
 
 export type WeightUnit = 'kg' | 'lb'
 
@@ -237,7 +237,7 @@ export interface Db {
   myPublicGyms(limit: number): Promise<GymRow[]>
   /** Active listings at one gym visible to the owner (RLS: blocked authors and flagged rows are already out), at most `limit`. */
   gymListings(gymId: string, limit: number): Promise<GymListingRow[]>
-  /** All of them, paged past PostgREST's response cap. */
+  /** All of them. */
   exerciseRequirements(): Promise<ExerciseRequirementRow[]>
   insertProposal(p: { summary: string; changes: unknown[] }): Promise<{ id: string; created_at: string }>
   proposal(id: string): Promise<ProposalRow | null>

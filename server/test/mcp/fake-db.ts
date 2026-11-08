@@ -1,5 +1,5 @@
 // In-memory Db for unit tests, built from JSON fixtures (testdata/owner.json). Records writes and queries so tests
-// can assert on them. Behaves like SupabaseDb for the owner's own data (RLS is out of scope here).
+// can assert on them. Behaves like D1Db for the owner's own data (RLS is out of scope here).
 import ownerText from './testdata/owner.json?raw'
 import type {
   BodyweightRow,
@@ -124,7 +124,7 @@ export class FakeDb implements Db {
     const rows = this.data.bodyweight
       .filter((b) => (since ? time(b.measured_at) >= time(since) : true))
       .sort((a, b) => time(a.measured_at) - time(b.measured_at))
-    return Promise.resolve(rows.slice(0, 1000)) // SupabaseDb: oldest first, at most MAX_ROWS
+    return Promise.resolve(rows.slice(0, 1000)) // D1Db: oldest first, at most MAX_ROWS
   }
 
   latestBodyweight(until: string): Promise<BodyweightRow | null> {

@@ -1,6 +1,6 @@
 // Proposals for the app (spec section 3, "Routes"): the pending ones it pulls, and how it marks one resolved.
-// Same rows and fields as SupabaseTransport.pendingProposals and resolveProposal read and wrote through
-// PostgREST.
+// Same rows and fields as the old app transport's pendingProposals and resolveProposal read and wrote through
+// the old REST API.
 import { ApiError } from '../http/errors.ts'
 import { laterStamp, normalizeTimestamp, NOW_SQL } from '../sync/time.ts'
 

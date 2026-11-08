@@ -1,5 +1,5 @@
 // The app's side of Claude's data (spec section 3, "Routes"): pending proposals, resolving one, and when
-// Claude was last used. Bodies keep the fields ProposalDTO and SupabaseTransport read and wrote.
+// Claude was last used. Bodies keep the fields ProposalDTO and the old transport read and wrote.
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { D1Db } from '../src/mcp/d1-db.ts'

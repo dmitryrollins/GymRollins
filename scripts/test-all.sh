@@ -5,6 +5,9 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+echo "==> The old backend is gone (no folder, no name outside the history docs, no script running Docker)"
+"$ROOT/scripts/check-old-backend.sh"
+
 echo "==> GymCore (swift test)"
 (cd "$ROOT/ios/Packages/GymCore" && swift test)
 

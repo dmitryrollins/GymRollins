@@ -2,7 +2,7 @@ import { badRequest } from '../http/input.ts'
 import { gymReadable, itemReadable, listingReadable } from './visibility.ts'
 
 // What the app reads of the shared catalogue: the public_gyms, public_gym_equipment and public_equipment_items views
-// (supabase/migrations/20261030000001_gyms.sql) under the read policies they ran under, for the caller (?1). Author ids
+// (the Postgres migration 20261030000001_gyms.sql) under the read policies they ran under, for the caller (?1). Author ids
 // never leave the server: is_mine, confirmed_by_me and item_is_mine say what is the caller's.
 
 /** find_or_create_gym's place rule, also the gyms CHECK. */
@@ -10,7 +10,7 @@ export const PLACE_ID = /^[A-Za-z0-9._:+/=-]{1,200}$/
 export const KIND_ID = /^[a-z0-9-]{1,40}$/
 /** A gym holds at most 300 active public listings, so the app reads one page, two at most. */
 export const LISTINGS_PAGE = 500
-/** PostgREST's max_rows, which capped the items view. */
+/** The old REST API's max_rows, which capped the items view. */
 const ITEMS_MAX = 1000
 const OFFSET_MAX = 100_000
 
@@ -29,7 +29,7 @@ function whole(raw: string | undefined, name: string, fallback: number, min: num
   return value
 }
 
-/** `?offset=&limit=`, as PostgREST's range: up to 500 listings a page. */
+/** `?offset=&limit=`, as the old REST API's range: up to 500 listings a page. */
 export const pageOf = (query: Record<string, string | undefined>): Page => ({
   offset: whole(query.offset, 'offset', 0, 0, OFFSET_MAX),
   limit: whole(query.limit, 'limit', LISTINGS_PAGE, 1, LISTINGS_PAGE),

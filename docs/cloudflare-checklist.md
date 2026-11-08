@@ -246,13 +246,12 @@ sqlite3 "$READ/default.store" "select count(*) from ZWORKOUTRECORD"
 
 - [ ] This project's local containers of the old backend are still running: plans 26–30 never stopped them.
   - Stopping them is a separate decision for the owner.
-  - They are the ones whose names look like `supabase_*_gymrollins`: `docker ps --format '{{.Names}}' | grep '_gymrollins$'`.
-  - Plan 30 deleted `supabase/config.toml`, the only record of how to address them. Its `project_id` was `gymrollins`.
-    Stop them with `npx supabase stop --project-id gymrollins` (which works without a config file), or with
-    `docker stop` on each container named `supabase_*_gymrollins`.
+  - They are the containers whose names end in `_gymrollins`: `docker ps --format '{{.Names}}' | grep '_gymrollins$'`.
+  - Plan 30 deleted the old config file, the only record of how to address them as a group. Its project id was
+    `gymrollins`. Stop them with `docker stop` on each container the command above lists.
   - Containers of other projects are never touched, and the data volumes stay until the owner removes them.
-- [ ] Untracked leftovers of the old backend stay on disk: `supabase/` and `web/consent/`, with their `.env.local` files
+- [ ] Untracked leftovers of the old backend stay on disk: its folder and `web/consent/`, with their `.env.local` files
       (gitignored, so git never removed them). Nothing in the repo uses them. The owner deletes them by hand:
-      `rm -rf supabase web/consent`.
+      delete the old backend's folder and `web/consent`.
 - [ ] Once the phone has moved, `OldServerKeychain` can go, with its one exception in the old-backend guard
       (`scripts/check-old-backend.sh`, added by plan 30's last task), in a change of their own. During the move it deletes the old sign-in SDK's Keychain items.

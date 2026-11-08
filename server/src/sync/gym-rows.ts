@@ -6,7 +6,7 @@ import { RowError } from './columns.ts'
 import type { PushContext } from './entities.ts'
 import { inJson } from './sql.ts'
 
-// The rules Postgres kept in CHECKs and triggers on private gyms and listings (supabase/migrations/
+// The rules Postgres kept in CHECKs and triggers on private gyms and listings (the Postgres migration
 // 20261030000001_gyms.sql): clean_text on their text, valid_loads, and gym_equipment_check. The caps are triggers in
 // migrations/0005_gyms_photos.sql.
 
