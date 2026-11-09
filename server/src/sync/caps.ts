@@ -51,3 +51,26 @@ export const CLAUDE_CAPS = {
     `The owner's account already holds ${grouped(DomainLimits.bodyweightsMax)} weigh-ins, deleted ones included, ` +
     'the most it can. Nothing was saved.',
 } as const
+
+/**
+ * An agent's words when a cap refuses a workout it adds with log_workout (src/mcp/d1-db.ts, plan 32): the workout's
+ * refusal names the code and says this. Nothing of that workout was saved; the others in the call are checked on their
+ * own.
+ */
+export const AGENT_WORKOUT_CAPS = {
+  too_many_workouts:
+    `The owner's account already holds ${grouped(DomainLimits.workoutsMax)} workouts, deleted ones included, the ` +
+    'most it can. This workout was not added.',
+  too_many_logged_exercises:
+    `The owner's account already holds ${grouped(DomainLimits.accountEntriesMax)} logged exercises, deleted ` +
+    'workouts included, the most it can. This workout was not added.',
+  too_many_logged_sets:
+    `The owner's account already holds ${grouped(DomainLimits.accountSetsMax)} logged sets, deleted workouts ` +
+    'included, the most it can. This workout was not added.',
+  too_many_workout_exercises:
+    `A workout can have up to ${DomainLimits.workoutEntriesMax} exercises. This workout was not added: split it ` +
+    'into several.',
+  too_many_exercise_sets:
+    `An exercise in a workout can have up to ${DomainLimits.entrySetsMax} sets. This workout was not added: split ` +
+    'it into several.',
+} as const

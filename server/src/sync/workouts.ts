@@ -60,8 +60,12 @@ const PUSH_ONLY: readonly Column[] = [
 /** Entries and sets are written only while the workout row is still this save's: ?1 the workout, ?2 the write id. */
 const STILL_THIS_SAVE = 'EXISTS (SELECT 1 FROM workouts WHERE id = ?1 AND write_id = ?2)'
 
-const UPSERT = `INSERT INTO workouts (${names(WORKOUT)}, user_id, write_id, updated_at)
-VALUES (${WORKOUT.map((_, i) => `?${i + 1}`).join(', ')}, ?14, ?15, ${NOW_SQL})
+/**
+ * ?14 the caller, ?15 the write id, ?16 force, ?17 the base version, ?18 added_by. added_by is written when the row is
+ * inserted and never updated, so a save from the app (?18 null) keeps an agent's name (plan 32).
+ */
+const UPSERT = `INSERT INTO workouts (${names(WORKOUT)}, user_id, write_id, added_by, updated_at)
+VALUES (${WORKOUT.map((_, i) => `?${i + 1}`).join(', ')}, ?14, ?15, ?18, ${NOW_SQL})
 ON CONFLICT (id) DO UPDATE SET ${WORKOUT.filter((c) => c.name !== 'id').map((c) => `${c.name} = excluded.${c.name}`).join(', ')},
   write_id = excluded.write_id, updated_at = ${laterStamp('workouts.updated_at', 'excluded.updated_at')}
 WHERE workouts.user_id = excluded.user_id AND (?16 = 1 OR (workouts.client_updated_at <= excluded.client_updated_at
@@ -161,21 +165,71 @@ export async function pushWorkout(db: D1Database, userId: string, body: unknown)
     previous,
   )
   const entryRows = entries.map(({ row }) => ({ ...row, gym_equipment_id: listings.get(row.id as string) ?? null }))
-  const setRows = entries.flatMap(({ row, sets }) => sets.map((set) => ({ ...set, entry_id: row.id })))
-  const writeId = crypto.randomUUID()
   const values = WORKOUT.map((c) => {
     if (c.name === 'client_updated_at') return storedEdit
     if (c.name === 'gym_id') return gymId
     return workout[c.name]
   })
+  return await writeSave(db, userId, { id, values, entryRows, setRows: setRowsOf(entries), force, base, addedBy: null })
+}
+
+/**
+ * A past workout an agent adds with log_workout (plan 32, src/mcp/d1-db.ts): parsed and capped as a save from the app
+ * is, and written by the same batch, so the per-workout caps, the account's caps and its logged counts all hold. Its
+ * id is new (the caller makes it), so there is no stored row to read first; it has no gym and no listings. added_by
+ * names the agent, and no later save changes it.
+ */
+export async function addWorkout(
+  db: D1Database,
+  userId: string,
+  body: unknown,
+  addedBy: string,
+): Promise<WorkoutPushResult> {
+  const { workout, entries } = parseWorkout(body)
+  const entryRows = entries.map(({ row }) => ({ ...row, gym_equipment_id: null }))
+  const values = WORKOUT.map((c) => (c.name === 'gym_id' ? null : workout[c.name]))
+  return await writeSave(db, userId, {
+    id: workout.id as string,
+    values,
+    entryRows,
+    setRows: setRowsOf(entries),
+    force: false,
+    base: null,
+    addedBy,
+  })
+}
+
+/** Every set of the save, each naming its entry. */
+const setRowsOf = (entries: Parsed['entries']) =>
+  entries.flatMap(({ row, sets }) => sets.map((set) => ({ ...set, entry_id: row.id })))
+
+/** One save's rows, ready for its batch. */
+interface Save {
+  readonly id: string
+  /** The WORKOUT columns' values, in their order. */
+  readonly values: readonly unknown[]
+  readonly entryRows: readonly Record<string, unknown>[]
+  readonly setRows: readonly Record<string, unknown>[]
+  readonly force: boolean
+  readonly base: string | null
+  /** Written only when the save inserts the row. */
+  readonly addedBy: string | null
+}
+
+/**
+ * The save's batch: the row, the moves of the logged counts, the entries and sets (only while the row is still this
+ * save's), then the stored stamp and whether this save won.
+ */
+async function writeSave(db: D1Database, userId: string, s: Save): Promise<WorkoutPushResult> {
+  const writeId = crypto.randomUUID()
   const results = await db.batch([
-    db.prepare(UPSERT).bind(...values, userId, writeId, force ? 1 : 0, base),
-    db.prepare(MOVE_ENTRIES).bind(id, writeId, userId, entryRows.length),
-    db.prepare(MOVE_SETS).bind(id, writeId, userId, setRows.length),
-    db.prepare(DELETE_ENTRIES).bind(id, writeId),
-    db.prepare(INSERT_ENTRIES).bind(id, writeId, userId, JSON.stringify(entryRows)),
-    db.prepare(INSERT_SETS).bind(id, writeId, userId, JSON.stringify(setRows)),
-    db.prepare('SELECT updated_at, write_id FROM workouts WHERE id = ?1').bind(id),
+    db.prepare(UPSERT).bind(...s.values, userId, writeId, s.force ? 1 : 0, s.base, s.addedBy),
+    db.prepare(MOVE_ENTRIES).bind(s.id, writeId, userId, s.entryRows.length),
+    db.prepare(MOVE_SETS).bind(s.id, writeId, userId, s.setRows.length),
+    db.prepare(DELETE_ENTRIES).bind(s.id, writeId),
+    db.prepare(INSERT_ENTRIES).bind(s.id, writeId, userId, JSON.stringify(s.entryRows)),
+    db.prepare(INSERT_SETS).bind(s.id, writeId, userId, JSON.stringify(s.setRows)),
+    db.prepare('SELECT updated_at, write_id FROM workouts WHERE id = ?1').bind(s.id),
   ])
   const after = results[6].results[0] as { updated_at: string; write_id: string }
   return { status: after.write_id === writeId ? 'ok' : 'stale', updated_at: after.updated_at }

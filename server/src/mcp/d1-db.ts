@@ -4,10 +4,12 @@
 // weight, the audit row and the rate-limit slot. The old Deno server's data layer and the Postgres
 // policies were the reference.
 import { claudeReadsPrivateListing, claudeReadsPublicListing } from '../gyms/visibility.ts'
-import { raisedCode } from '../http/errors.ts'
-import { CLAUDE_CAPS } from '../sync/caps.ts'
+import { ApiError, constraintMessage, raisedCode } from '../http/errors.ts'
+import { AGENT_WORKOUT_CAPS, CLAUDE_CAPS } from '../sync/caps.ts'
+import { RowError } from '../sync/columns.ts'
 import { inJson } from '../sync/sql.ts'
 import { normalizeTimestamp, NOW_SQL } from '../sync/time.ts'
+import { addWorkout } from '../sync/workouts.ts'
 import type {
   BodyweightRow,
   Db,
@@ -19,12 +21,14 @@ import type {
   ExerciseSession,
   GymListingRow,
   GymRow,
+  LoggedWorkout,
   MuscleTargetRow,
   Profile,
   ProposalRow,
   RoutineRow,
   ScheduleRow,
   SetRow,
+  WorkoutAdded,
   WorkoutQuery,
   WorkoutRow,
 } from './db.ts'
@@ -50,6 +54,8 @@ export interface Permissions {
   body: boolean
   gyms: boolean
   propose: boolean
+  /** Add workouts (plan 32): off by default, so off without a profile too. */
+  logWorkouts: boolean
 }
 
 type Raw = Record<string, unknown>
@@ -92,6 +98,60 @@ function setRow(r: Raw): SetRow {
 const agentNameSql = (param: string) =>
   `(SELECT name FROM oauthClient WHERE clientId = ${param} AND length(name) BETWEEN 1 AND 64)`
 
+/**
+ * Why the save refused a workout log_workout adds, as its refusal: a cap's code with an agent's words, or `invalid`
+ * with what D1 or the save's parser refused (the tool checks values first, so this is the backstop). Null for any
+ * other error, which stays an error.
+ */
+function workoutRefusal(error: unknown): { reason: string; message: string } | null {
+  const code = error instanceof ApiError ? error.code : raisedCode(error)
+  if (code !== null && Object.hasOwn(AGENT_WORKOUT_CAPS, code)) {
+    return { reason: code, message: AGENT_WORKOUT_CAPS[code as keyof typeof AGENT_WORKOUT_CAPS] }
+  }
+  if (error instanceof RowError) return { reason: 'invalid', message: error.message }
+  const constraint = constraintMessage(error)
+  return constraint === null ? null : { reason: 'invalid', message: constraint }
+}
+
+/**
+ * A workout log_workout adds, as the app's save sends one (src/sync/workouts.ts): an import with done sets, no gym,
+ * no routine and no records, and its volume as the app counts it (working sets, weight × reps).
+ */
+function loggedBody(id: string, w: LoggedWorkout, editedAt: string): Record<string, unknown> {
+  const working = w.exercises.flatMap((e) => e.sets).filter((s) => !s.warmup)
+  return {
+    id,
+    started_at: w.started_at,
+    ended_at: w.ended_at,
+    paused_sec: 0,
+    routine_id: null,
+    name: w.name,
+    source: 'import',
+    note: w.note,
+    vol_kg: working.reduce((sum, s) => sum + s.weight_kg * s.reps, 0),
+    records: [],
+    gym_id: null,
+    client_updated_at: editedAt,
+    deleted_at: null,
+    entries: w.exercises.map((e, position) => ({
+      id: crypto.randomUUID(),
+      exercise_id: e.exercise_id,
+      position,
+      sets: e.sets.map((s, j) => ({
+        id: crypto.randomUUID(),
+        position: j,
+        w_kg: s.weight_kg,
+        r: s.reps,
+        sec: s.sec,
+        dist_m: s.dist_m,
+        done: true,
+        warmup: s.warmup,
+        multiplier: 1,
+      })),
+    })),
+  }
+}
+
 /** `write`, with the refusal of one of its caps (migrations/0010_account_caps.sql) as words for Claude. */
 async function capped<T>(write: Promise<T>, ...codes: (keyof typeof CLAUDE_CAPS)[]): Promise<T> {
   try {
@@ -120,14 +180,15 @@ export class D1Db implements Db {
   /** The toggles, read once per request; a missing profile allows everything, as mcp_flag's coalesce did. */
   allowed(): Promise<Permissions> {
     this.permissions ??= this.db.prepare(
-      'SELECT mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, mcp_propose FROM profiles ' +
-        'WHERE user_id = ?1',
+      'SELECT mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, mcp_propose, mcp_log_workouts ' +
+        'FROM profiles WHERE user_id = ?1',
     ).bind(this.userId).first<Raw>().then((p) => ({
       plan: p ? bool(p.mcp_read_plan) : true,
       workouts: p ? bool(p.mcp_read_workouts) : true,
       body: p ? bool(p.mcp_read_body) : true,
       gyms: p ? bool(p.mcp_read_gyms) : true,
       propose: p ? bool(p.mcp_propose) : true,
+      logWorkouts: p ? bool(p.mcp_log_workouts) : false,
     }))
     return this.permissions
   }
@@ -555,6 +616,44 @@ export class D1Db implements Db {
         `VALUES (?1, ?2, ?3, ?4, ?5, ${NOW_SQL}, ${NOW_SQL})`,
     ).bind(r.id.toLowerCase(), this.userId, stamp(r.measured_at), r.w_kg, r.bf_pct ?? null).run(),
     'too_many_body_weights')
+  }
+
+  async mayLogWorkouts(): Promise<boolean> {
+    return (await this.allowed()).logWorkouts
+  }
+
+  /** The agent's own ids, checked: the answer says only which of them exist. */
+  async loggableExerciseIds(list: string[]): Promise<Set<string>> {
+    if (list.length === 0) return new Set()
+    const rows = await this.all<{ id: string }>(
+      `SELECT id FROM exercises WHERE ${inJson('id', '?2')} UNION ` +
+        `SELECT id FROM custom_exercises WHERE user_id = ?1 AND deleted_at IS NULL AND ${inJson('id', '?2')}`,
+      this.userId,
+      ids(list),
+    )
+    return new Set(rows.map((r) => r.id))
+  }
+
+  async agentName(): Promise<string | null> {
+    const row = await this.db.prepare(`SELECT ${agentNameSql('?1')} AS name`).bind(this.clientId)
+      .first<{ name: string | null }>()
+    return row?.name ?? null
+  }
+
+  /** A new workout, while Add workouts is on, through the app's own save (src/sync/workouts.ts, addWorkout). */
+  async insertWorkout(w: LoggedWorkout, addedBy: string): Promise<WorkoutAdded> {
+    if (!(await this.allowed()).logWorkouts) throw new ToolError(NOT_ALLOWED)
+    const id = crypto.randomUUID()
+    try {
+      const saved = await addWorkout(this.db, this.userId, loggedBody(id, w, stamp(new Date().toISOString())), addedBy)
+      // A fresh random id can't meet a stored row; if one ever did, the save answers stale, and that is an error.
+      if (saved.status !== 'ok') throw new Error(`log_workout: workout ${id} met a stored row`)
+      return { added: true, id }
+    } catch (error) {
+      const refusal = workoutRefusal(error)
+      if (refusal === null) throw error
+      return { added: false, ...refusal }
+    }
   }
 
   async audit(tool: string, ok: boolean, argsDigest: string): Promise<void> {

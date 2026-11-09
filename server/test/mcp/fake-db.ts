@@ -11,11 +11,13 @@ import type {
   ExerciseSession,
   GymListingRow,
   GymRow,
+  LoggedWorkout,
   MuscleTargetRow,
   Profile,
   ProposalRow,
   RoutineRow,
   ScheduleRow,
+  WorkoutAdded,
   WorkoutQuery,
   WorkoutRow,
 } from '../../src/mcp/db.ts'
@@ -243,6 +245,30 @@ export class FakeDb implements Db {
   insertBodyweight(r: { id: string; measured_at: string; w_kg: number; bf_pct?: number }): Promise<void> {
     this.insertedBodyweight.push(r)
     return Promise.resolve()
+  }
+
+  /** The Add workouts switch; off unless a test turns it on. */
+  logWorkouts = false
+  readonly insertedWorkouts: { workout: LoggedWorkout; addedBy: string }[] = []
+  /** The calling client's name (D1Db reads oauthClient). */
+  agent: string | null = 'Claude'
+
+  mayLogWorkouts(): Promise<boolean> {
+    return Promise.resolve(this.logWorkouts)
+  }
+
+  loggableExerciseIds(ids: string[]): Promise<Set<string>> {
+    const known = new Set(this.allExercises.map((e) => e.id))
+    return Promise.resolve(new Set(ids.filter((id) => known.has(id))))
+  }
+
+  agentName(): Promise<string | null> {
+    return Promise.resolve(this.agent)
+  }
+
+  insertWorkout(workout: LoggedWorkout, addedBy: string): Promise<WorkoutAdded> {
+    this.insertedWorkouts.push({ workout, addedBy })
+    return Promise.resolve({ added: true, id: `workout-${this.insertedWorkouts.length}` })
   }
 
   audit(tool: string, ok: boolean, argsDigest: string): Promise<void> {

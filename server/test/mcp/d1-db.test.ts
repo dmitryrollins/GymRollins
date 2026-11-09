@@ -369,11 +369,11 @@ describe("Claude's writes", () => {
       .rejects.toThrow(ToolError)
   })
 
-  it('has no other way to change data than proposals, body weight, the audit and the call slots', () => {
+  it('has no other way to change data than proposals, body weight, added workouts, the audit and the call slots', () => {
     const methods = Object.getOwnPropertyNames(D1Db.prototype).filter((m) =>
       /^(insert|update|delete|upsert|save|set)/i.test(m)
     )
-    expect(methods.sort()).toEqual(['insertBodyweight', 'insertProposal'])
+    expect(methods.sort()).toEqual(['insertBodyweight', 'insertProposal', 'insertWorkout'])
   })
 
   it('audits a call with the client id', async () => {

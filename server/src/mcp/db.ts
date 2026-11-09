@@ -191,6 +191,29 @@ export interface ExerciseRequirementRow {
   groups: unknown
 }
 
+/** One set of a workout log_workout adds (plan 32): what the agent sent, checked, in kg. */
+export interface LoggedSet {
+  reps: number
+  weight_kg: number
+  sec: number | null
+  dist_m: number | null
+  warmup: boolean
+}
+
+/** A workout log_workout adds: times in the stored form, ended_at after started_at, exercises in order. */
+export interface LoggedWorkout {
+  started_at: string
+  ended_at: string
+  name: string
+  note: string | null
+  exercises: { exercise_id: string; sets: LoggedSet[] }[]
+}
+
+/** What became of one workout log_workout added: its new id, or the cap or rule that refused it. */
+export type WorkoutAdded =
+  | { added: true; id: string }
+  | { added: false; reason: string; message: string }
+
 export interface Db {
   profile(): Promise<Profile | null>
   /** Not deleted, ordered by position. */
@@ -242,6 +265,20 @@ export interface Db {
   insertProposal(p: { summary: string; changes: unknown[] }): Promise<{ id: string; created_at: string }>
   proposal(id: string): Promise<ProposalRow | null>
   insertBodyweight(r: { id: string; measured_at: string; w_kg: number; bf_pct?: number }): Promise<void>
+  /** The owner's Add workouts switch (profiles.mcp_log_workouts): false when no profile is saved, its default. */
+  mayLogWorkouts(): Promise<boolean>
+  /**
+   * Which of `ids` a workout may log: library ids and the owner's custom exercises that aren't deleted, whatever
+   * mcp_read_plan says.
+   */
+  loggableExerciseIds(ids: string[]): Promise<Set<string>>
+  /** The calling client's registered name (1 to 64 characters), or null. */
+  agentName(): Promise<string | null>
+  /**
+   * A new workout in the owner's history, marked as added by `addedBy`, while Add workouts is on (else ToolError).
+   * A cap's refusal, or a value D1 refuses, is the answer, not an error.
+   */
+  insertWorkout(w: LoggedWorkout, addedBy: string): Promise<WorkoutAdded>
   audit(tool: string, ok: boolean, argsDigest: string): Promise<void>
   /**
    * Atomically takes one rate-limit slot for the caller (public.mcp_take_call: 60 per trailing minute). False when
