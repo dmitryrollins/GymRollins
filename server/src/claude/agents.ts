@@ -71,3 +71,38 @@ export async function connectedAgents(db: D1Database, userId: string): Promise<C
     }
   })
 }
+
+/**
+ * An unredeemed authorization code of the account (?1) for the client (?2). Better Auth keeps each code as a
+ * verification row whose value is JSON: {type: 'authorization_code', query: {client_id, …}, userId, sessionId, …}
+ * (@better-auth/oauth-provider 1.7.18, redirectWithAuthorizationCode). A redeemed code's row is gone already.
+ */
+const UNREDEEMED_CODE = "json_valid(value) AND json_extract(value, '$.type') = 'authorization_code' " +
+  "AND json_extract(value, '$.userId') = ?1 AND json_extract(value, '$.query.client_id') = ?2"
+
+/**
+ * The /connect browser sessions for this account and client: the ones its connect_requests recorded, and the ones
+ * its unredeemed codes name. Only marked sessions (claudeConnect = 1) are ever deleted, never the app's.
+ */
+const CONNECT_SESSIONS =
+  'SELECT session_id FROM connect_requests WHERE user_id = ?1 AND client_id = ?2 AND session_id IS NOT NULL ' +
+  `UNION SELECT json_extract(value, '$.sessionId') FROM verification WHERE ${UNREDEEMED_CODE}`
+
+/**
+ * Disconnect one agent (section 3.2): in one batch, for this account and this client only, its access and refresh
+ * tokens, its consent, its unredeemed codes, its connect_requests and the /connect sessions they made. Its client
+ * registration stays (decision 6). Sessions go first, while the rows that name them are still there; access tokens
+ * before refresh tokens, which they name. False when the account held no token and no consent for it: 404.
+ */
+export async function disconnectAgent(db: D1Database, userId: string, clientId: string): Promise<boolean> {
+  const results = await db.batch([
+    db.prepare(`DELETE FROM session WHERE userId = ?1 AND claudeConnect = 1 AND id IN (${CONNECT_SESSIONS})`)
+      .bind(userId, clientId),
+    db.prepare('DELETE FROM oauthAccessToken WHERE userId = ?1 AND clientId = ?2').bind(userId, clientId),
+    db.prepare('DELETE FROM oauthRefreshToken WHERE userId = ?1 AND clientId = ?2').bind(userId, clientId),
+    db.prepare('DELETE FROM oauthConsent WHERE userId = ?1 AND clientId = ?2').bind(userId, clientId),
+    db.prepare(`DELETE FROM verification WHERE ${UNREDEEMED_CODE}`).bind(userId, clientId),
+    db.prepare('DELETE FROM connect_requests WHERE user_id = ?1 AND client_id = ?2').bind(userId, clientId),
+  ])
+  return results.slice(1, 4).some((r) => r.meta.changes > 0)
+}
