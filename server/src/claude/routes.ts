@@ -11,11 +11,9 @@ import {
   takeAttempt,
   waitingRequest,
 } from './connect-requests.ts'
+import { CLAUDE_HOSTS } from './hosts.ts'
 import { lastClaudeUse, parseResolution, pendingProposals, resolveProposal } from './proposals.ts'
 import { revokeClaude } from './revoke.ts'
-
-/** Hosts the app shows without a warning: Claude's own. */
-const CLAUDE_HOSTS = new Set(['claude.ai', 'claude.com'])
 
 export const claudeRoutes = new Hono<AppEnv>()
 
