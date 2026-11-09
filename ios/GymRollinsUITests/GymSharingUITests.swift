@@ -59,7 +59,9 @@ final class GymSharingUITests: XCTestCase {
     private func openTile(_ app: XCUIApplication, _ kind: String, containing part: String? = nil) {
         let tiles = app.buttons.matching(identifier: "gymEquipment.listing.\(kind)")
         let tile = part.map { tiles.matching(NSPredicate(format: "label CONTAINS %@", $0)).firstMatch } ?? tiles.firstMatch
-        XCTAssertTrue(tile.waitForExistence(timeout: 15), "no \(kind) tile")
+        _ = tile.waitForExistence(timeout: 5) // the shared catalogue's tiles come in after the screen opens
+        app.scrollToHittable(tile) // the sections below the fold (Benches) aren't built yet
+        XCTAssertTrue(tile.exists, "no \(kind) tile")
         tile.tap()
         XCTAssertTrue(text(app, "listing.shareStatus").waitForExistence(timeout: 5), "detail didn't open")
     }
@@ -87,7 +89,7 @@ final class GymSharingUITests: XCTestCase {
         let app = launch(["-gymPhotoFixture"])
         openEquipment(app)
         let tile = app.buttons["gymEquipment.listing.flat-bench"]
-        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        app.scrollToHittable(tile) // Benches is below the fold
         XCTAssertTrue(waitForLabel(tile, contains: "Other gym"), "the tile borrows another gym's photo: \(tile.label)")
         tile.tap()
         XCTAssertTrue(text(app, "listing.catalogPhoto").waitForExistence(timeout: 10), "the capsule shows")
@@ -102,7 +104,12 @@ final class GymSharingUITests: XCTestCase {
         XCTAssertTrue(text(app, "listing.catalogPhotoNote").waitForNonExistence(timeout: 5))
         app.navigationBars.buttons.firstMatch.tap()
         let back = app.buttons["gymEquipment.listing.flat-bench"]
-        XCTAssertTrue(app.buttons["gymEquipment.listing.lat-pulldown"].waitForExistence(timeout: 10), "the screen loaded")
+        // The catalogue loaded (so the tile's photo below is final), looked for at the top: the screen comes back
+        // scrolled down to Benches, where the grid may have dropped the Cables row.
+        let pulldown = app.buttons["gymEquipment.listing.lat-pulldown"]
+        app.scrollToHittable(pulldown)
+        XCTAssertTrue(pulldown.exists, "the screen loaded")
+        app.scrollToHittable(back)
         XCTAssertFalse(back.label.contains("Other gym"), "the tile shows their photo: \(back.label)")
         back.tap()
         XCTAssertTrue(app.buttons["listing.save"].waitForExistence(timeout: 5), "reopened")
@@ -121,7 +128,7 @@ final class GymSharingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["listing.share"].exists)
         app.navigationBars.buttons.firstMatch.tap()
         let tile = app.buttons["gymEquipment.listing.flat-bench"]
-        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        app.scrollToHittable(tile)
         XCTAssertTrue(tile.label.contains("Only me"), tile.label)
     }
 

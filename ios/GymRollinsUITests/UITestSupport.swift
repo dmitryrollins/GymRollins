@@ -77,6 +77,29 @@ extension XCUIApplication {
     }
 }
 
+extension XCUIApplication {
+    /// A `List` (Settings) or a lazy grid (a gym's equipment) builds only the rows near the screen, so a row further
+    /// down isn't in the accessibility tree until scrolled close, and one scrolled well past is dropped again. Swipes
+    /// toward `element` until it can take a touch: while it exists, toward its side of the screen; while it's missing,
+    /// further down first (where an unbuilt row usually is), then back up for the second half of the swipes (a row
+    /// above the screen after coming back to a list left scrolled down).
+    func scrollToHittable(_ element: XCUIElement, maxSwipes: Int = 12, file: StaticString = #filePath,
+                          line: UInt = #line) {
+        let middle = windows.firstMatch.frame.midY
+        var missing = 0
+        for _ in 0..<maxSwipes {
+            if element.waitForExistence(timeout: 1.5), element.isHittable { return }
+            if element.exists {
+                if element.frame.midY < middle { swipeDown() } else { swipeUp() }
+            } else {
+                missing += 1
+                if missing <= maxSwipes / 2 { swipeUp() } else { swipeDown() }
+            }
+        }
+        XCTAssertTrue(element.exists && element.isHittable, "couldn't scroll to \(element)", file: file, line: line)
+    }
+}
+
 extension XCUIElement {
     /// Waits until the element can take a touch (a sheet that is still sliding in reports buttons that aren't hittable
     /// yet), then taps it.

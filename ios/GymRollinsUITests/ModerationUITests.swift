@@ -25,7 +25,8 @@ final class ModerationUITests: XCTestCase {
         let app = launch(["-fakeGymAdmin"])
         openSettings(app)
         let row = app.buttons["settings.moderation"]
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "an admin sees the row")
+        app.scrollToHittable(row) // below the fold since Settings grew (Training, AI agents)
+        XCTAssertTrue(row.exists, "an admin sees the row")
         row.tap()
         XCTAssertTrue(app.buttons["moderation.restore.\(pulldown)"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Life Fitness Pulldown"].exists)

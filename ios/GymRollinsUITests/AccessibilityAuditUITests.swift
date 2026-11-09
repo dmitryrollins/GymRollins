@@ -318,7 +318,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         app.tabBars.buttons["Log"].tap()
         app.buttons["log.settings"].tap()
         let row = app.buttons["settings.moderation"]
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        app.scrollToHittable(row) // below the fold since Settings grew (Training, AI agents)
         row.tap()
         let remove = app.buttons["moderation.remove.00000000-0000-4000-8000-0000000000D1"]
         XCTAssertTrue(remove.waitForExistence(timeout: 10))
@@ -449,7 +449,8 @@ final class AccessibilityAuditUITests: XCTestCase {
     }
 
     private func openListing(_ app: XCUIApplication, _ tile: XCUIElement) {
-        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        _ = tile.waitForExistence(timeout: 5)
+        app.scrollToHittable(tile) // Benches is below the fold; Cables is above it once scrolled there
         tile.tap()
         XCTAssertTrue(app.descendants(matching: .any)["listing.shareStatus"].waitForExistence(timeout: 5))
     }

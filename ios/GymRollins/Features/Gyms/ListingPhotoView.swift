@@ -119,14 +119,18 @@ struct ListingPhotoView: View {
                 Image(uiImage: image).resizable().scaledToFill().accessibilityHidden(true)
                     .frame(width: width, height: displayHeight).clipped()
             }
-            .overlay(alignment: .topLeading) { capsuleLabel(capsule, identifier: identifier) }
             .clipShape(.rect(cornerRadius: cornerRadius))
+            // Over the clip, not inside it: the capsule is inset from the corners so it's never cut, and inside the
+            // clip the accessibility audit reports its text as clipped.
+            .overlay(alignment: .topLeading) { capsuleLabel(capsule, identifier: identifier) }
     }
 
     /// The look of the "AI" badge's capsule, without being a button.
     private func capsuleLabel(_ text: String, identifier: String) -> some View {
         Text(text)
             .font(compact ? .caption2.weight(.heavy) : .caption.weight(.heavy))
+            .lineLimit(1)
+            .fixedSize() // one word, always whole
             .foregroundStyle(.white)
             .padding(.horizontal, compact ? 5 : 8)
             .padding(.vertical, compact ? 3 : 5)
