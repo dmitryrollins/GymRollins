@@ -1,6 +1,7 @@
 // In-memory Db for unit tests, built from JSON fixtures (testdata/owner.json). Records writes and queries so tests
 // can assert on them. Behaves like D1Db for the owner's own data (RLS is out of scope here).
 import ownerText from './testdata/owner.json?raw'
+import { normalizeTimestamp } from '../../src/sync/time.ts'
 import type {
   BodyweightRow,
   Db,
@@ -264,6 +265,14 @@ export class FakeDb implements Db {
 
   agentName(): Promise<string | null> {
     return Promise.resolve(this.agent)
+  }
+
+  workoutTimes(since: string, until: string): Promise<{ started_at: string; ended_at: string | null }[]> {
+    const rows = this.data.workouts.filter((w) => time(w.started_at) >= time(since) && time(w.started_at) < time(until))
+    return Promise.resolve(rows.map((w) => ({
+      started_at: normalizeTimestamp(w.started_at)!,
+      ended_at: w.ended_at === null ? null : normalizeTimestamp(w.ended_at),
+    })))
   }
 
   insertWorkout(workout: LoggedWorkout, addedBy: string): Promise<WorkoutAdded> {

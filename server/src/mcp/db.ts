@@ -277,6 +277,11 @@ export interface Db {
   /** The calling client's registered name (1 to 64 characters), or null. */
   agentName(): Promise<string | null>
   /**
+   * The times of the owner's workouts that aren't deleted and start in [since, until), in the stored form, whatever
+   * mcp_read_workouts says: log_workout's overlap check, which tells the agent only that a time is taken.
+   */
+  workoutTimes(since: string, until: string): Promise<{ started_at: string; ended_at: string | null }[]>
+  /**
    * A new workout in the owner's history, marked as added by `addedBy`, while Add workouts is on (else ToolError).
    * A cap's refusal, or a value D1 refuses, is the answer, not an error.
    */

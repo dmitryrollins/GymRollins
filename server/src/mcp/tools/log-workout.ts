@@ -109,6 +109,42 @@ function checked(w: WorkoutArg, index: number, now: Date): LoggedWorkout | Refus
 
 const isRefused = (c: LoggedWorkout | Refused): c is Refused => 'status' in c
 
+/** A workout's time, [start, end) in the stored form. A stored workout with no length is the moment it started. */
+interface Span {
+  start: string
+  end: string
+}
+
+const spanOf = (t: { started_at: string; ended_at: string | null }): Span => ({
+  start: t.started_at,
+  end: t.ended_at !== null && t.ended_at > t.started_at ? t.ended_at : t.started_at,
+})
+
+/** True when a new workout's span `w` meets `other`: they overlap, or `other`'s moment falls inside `w`. */
+function overlaps(other: Span, w: Span): boolean {
+  if (other.end === other.start) return w.start <= other.start && other.start < w.end
+  return other.start < w.end && w.start < other.end
+}
+
+/** The earliest time the stored form can hold, for a lookback that would go before it. */
+const FIRST_STAMP = '0000-01-01T00:00:00.000000Z'
+
+/**
+ * The stored workouts that may overlap the candidates: those that start from a day (MAX_WORKOUT_MS) before the
+ * earliest candidate, up to the latest candidate's end. A stored workout over a day long that started earlier is
+ * still missed: the app's own workouts are that long only when left running.
+ */
+async function storedSpans(db: ToolCtx['db'], candidates: LoggedWorkout[]): Promise<Span[]> {
+  const earliest = Math.min(...candidates.map((w) => msOf(w.started_at)))
+  const since = normalizeTimestamp(new Date(earliest - MAX_WORKOUT_MS).toISOString()) ?? FIRST_STAMP
+  const until = candidates.map((w) => w.ended_at).reduce((a, b) => (a > b ? a : b))
+  return (await db.workoutTimes(since, until)).map(spanOf)
+}
+
+const OVERLAPS_HISTORY = "It overlaps a workout already in the owner's history, so it was not added."
+const overlapsSibling = (index: number) =>
+  `It overlaps workout ${index} of this call, which was added, so it was not added.`
+
 /** The ids among the workout's that the owner can't log, each once, in the order sent. */
 const unknownIds = (w: LoggedWorkout, known: Set<string>) =>
   [...new Set(w.exercises.map((e) => e.exercise_id))].filter((id) => !known.has(id))
@@ -136,13 +172,20 @@ export async function logWorkouts({ db, now }: ToolCtx, args: LogWorkoutArgs): P
   const candidates = all.filter((c): c is LoggedWorkout => !isRefused(c))
   if (candidates.length === 0) return answer(all as Refused[])
   const known = await db.loggableExerciseIds(candidates.flatMap((w) => w.exercises.map((e) => e.exercise_id)))
+  const stored = await storedSpans(db, candidates)
   const agent = (await db.agentName()) ?? UNNAMED_AGENT
-  /** One checked workout, in the call's order: refused for its exercises, or written. */
+  const added: { index: number; span: Span }[] = []
+  /** One checked workout, in the call's order: refused for its exercises or its time, or written. */
   const add = async (w: LoggedWorkout, index: number): Promise<Outcome> => {
     const unknown = unknownIds(w, known)
     if (unknown.length > 0) return unknownExercise(index, unknown)
+    const span = spanOf(w)
+    const sibling = added.find((a) => overlaps(a.span, span))
+    if (sibling !== undefined) return refused(index, 'overlaps', overlapsSibling(sibling.index))
+    if (stored.some((s) => overlaps(s, span))) return refused(index, 'overlaps', OVERLAPS_HISTORY)
     const written = await db.insertWorkout(w, agent)
     if (!written.added) return refused(index, written.reason, written.message)
+    added.push({ index, span })
     return { index, status: 'added', workout_id: written.id }
   }
   const results: Outcome[] = []

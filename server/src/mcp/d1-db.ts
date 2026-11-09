@@ -641,6 +641,17 @@ export class D1Db implements Db {
     return row?.name ?? null
   }
 
+  /** Through workouts_user_started (user_id, started_at). At most the account's 10,000 workouts. */
+  async workoutTimes(since: string, until: string): Promise<{ started_at: string; ended_at: string | null }[]> {
+    return await this.all<{ started_at: string; ended_at: string | null }>(
+      'SELECT started_at, ended_at FROM workouts WHERE user_id = ?1 AND deleted_at IS NULL ' +
+        'AND started_at >= ?2 AND started_at < ?3 ORDER BY started_at',
+      this.userId,
+      stamp(since),
+      stamp(until),
+    )
+  }
+
   /** A new workout, while Add workouts is on, through the app's own save (src/sync/workouts.ts, addWorkout). */
   async insertWorkout(w: LoggedWorkout, addedBy: string): Promise<WorkoutAdded> {
     if (!(await this.allowed()).logWorkouts) throw new ToolError(NOT_ALLOWED)

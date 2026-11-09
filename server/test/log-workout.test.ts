@@ -9,6 +9,7 @@ import { AGENT_WORKOUT_CAPS } from '../src/sync/caps.ts'
 import { countOf, seedRows } from './cap-fixtures.ts'
 import { connectAgent, connectClaude, type Connection, mcp } from './claude.ts'
 import { request } from './helpers.ts'
+import { workoutSample } from './samples.ts'
 import { readRpc, toolJson } from './mcp/rpc.ts'
 
 const T = '2026-11-07T10:00:00.000000Z'
@@ -140,5 +141,81 @@ describe('log_workout', () => {
       { index: 1, status: 'refused', reason: 'too_many_workouts', message: AGENT_WORKOUT_CAPS.too_many_workouts },
     ])
     expect(await countOf('workouts', c.userId)).toBe(DomainLimits.workoutsMax)
+  })
+})
+
+/** A workout the phone saved, from `started` to `ended` (null: none, as a Fitbod import has), deleted or not. */
+async function savedByPhone(appToken: string, started: string, ended: string | null, deleted: string | null = null) {
+  const res = await request('POST', '/v1/sync/workouts', {
+    token: appToken,
+    body: workoutSample({ started_at: started, ended_at: ended, deleted_at: deleted }),
+  })
+  expect(res.status).toBe(200)
+}
+
+const OVERLAPS_HISTORY = "It overlaps a workout already in the owner's history, so it was not added."
+
+describe('log_workout and the time a workout takes', () => {
+  it('refuses a workout overlapping one in the history, or one added earlier in the call', async () => {
+    const c = await owner()
+    await savedByPhone(c.appToken, '2026-10-06T17:30:00.000000Z', '2026-10-06T18:30:00.000000Z')
+    const { isError, results } = await logWorkout(c.tokens.access_token, [
+      session(6),
+      session(8),
+      session(8, { started_at: '2026-10-08T17:30:00Z', ended_at: '2026-10-08T18:30:00Z' }),
+      session(9),
+    ])
+    expect(isError).toBe(false)
+    expect(results).toEqual([
+      { index: 0, status: 'refused', reason: 'overlaps', message: OVERLAPS_HISTORY },
+      { index: 1, status: 'added', workout_id: expect.any(String) },
+      {
+        index: 2,
+        status: 'refused',
+        reason: 'overlaps',
+        message: 'It overlaps workout 1 of this call, which was added, so it was not added.',
+      },
+      { index: 3, status: 'added', workout_id: expect.any(String) },
+    ])
+    expect(await countOf('workouts', c.userId)).toBe(3)
+  })
+
+  it('takes a stored workout with no end as the moment it started', async () => {
+    const c = await owner()
+    await savedByPhone(c.appToken, '2026-10-06T17:00:00.000000Z', null)
+    await savedByPhone(c.appToken, '2026-10-07T17:30:00.000000Z', null)
+    const { results } = await logWorkout(c.tokens.access_token, [
+      session(6),
+      session(7),
+      session(7, { started_at: '2026-10-07T18:00:00Z', ended_at: '2026-10-07T19:00:00Z' }),
+    ])
+    expect(results.map((r) => r.reason ?? r.status)).toEqual(['overlaps', 'overlaps', 'added'])
+  })
+
+  it('ignores deleted workouts, and one that ends as the new one starts', async () => {
+    const c = await owner()
+    await savedByPhone(c.appToken, '2026-10-06T17:00:00.000000Z', '2026-10-06T18:00:00.000000Z', T)
+    await savedByPhone(c.appToken, '2026-10-08T16:00:00.000000Z', '2026-10-08T17:00:00.000000Z')
+    const { results } = await logWorkout(c.tokens.access_token, [session(6), session(8)])
+    expect(results.map((r) => r.status)).toEqual(['added', 'added'])
+  })
+
+  it("checks the history even while the owner hides workouts from agents, and says only that it's taken", async () => {
+    const c = await owner()
+    await env.DB.prepare('UPDATE profiles SET mcp_read_workouts = 0 WHERE user_id = ?1').bind(c.userId).run()
+    await savedByPhone(c.appToken, '2026-10-06T17:30:00.000000Z', '2026-10-06T18:30:00.000000Z')
+    expect((await logWorkout(c.tokens.access_token, [session(6)])).results)
+      .toEqual([{ index: 0, status: 'refused', reason: 'overlaps', message: OVERLAPS_HISTORY }])
+  })
+
+  it('adds nothing when the same workouts are sent again', async () => {
+    const c = await owner()
+    const muse = await connectAgent(c.appToken, { name: 'Muse' })
+    expect((await logWorkout(muse.tokens.access_token, [session(6), session(8)])).isError).toBe(false)
+    const again = await logWorkout(muse.tokens.access_token, [session(6), session(8)])
+    expect(again.isError).toBe(true)
+    expect(again.results.map((r) => r.reason)).toEqual(['overlaps', 'overlaps'])
+    expect(await countOf('workouts', c.userId)).toBe(2)
+    expect((await pulled(c.appToken)).map((w) => w.added_by)).toEqual(['Muse', 'Muse'])
   })
 })

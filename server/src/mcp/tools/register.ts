@@ -240,8 +240,10 @@ export const TOOL_SPECS = [
       'missing from GymRollins (check list_workouts first). Weights are kg: convert from lb. exercise_id is a ' +
       "library id from search_exercises or one of the owner's custom exercises. Each workout is checked on its " +
       'own, and the result lists each one as added (with its workout_id) or refused with a reason: not_allowed (the ' +
-      "owner hasn't allowed agents to add workouts), unknown_exercise, invalid, or a storage cap (too_many_…). " +
-      'Only works if the owner allowed agents to add workouts.',
+      "owner hasn't allowed agents to add workouts), overlaps (its time overlaps a workout already in the history, " +
+      'or one added earlier in this call), unknown_exercise, invalid, or a storage cap (too_many_…). Sending the ' +
+      'same workouts again adds nothing: each overlaps its first copy. Only works if the owner allowed agents to ' +
+      'add workouts.',
     input: schemas.logWorkout,
     annotations: WRITE,
     run: (ctx, a) => logWorkouts(ctx, a),
