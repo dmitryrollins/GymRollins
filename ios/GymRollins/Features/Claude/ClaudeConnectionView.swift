@@ -93,7 +93,8 @@ struct ClaudeConnectionView: View {
                 NavigationLink { ProposalReviewView(proposalId: p.id) } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.summary).lineLimit(2)
-                        Text(p.createdAt.formatted(.dateTime.day().month(.abbreviated)) + " \u{00B7} Review")
+                        Text(AgentText.caption([p.createdAt.formatted(.dateTime.day().month(.abbreviated)),
+                                                p.fromAgent.map(AgentText.from), "Review"]))
                             .font(.caption).foregroundStyle(Theme.textSecondary)
                     }
                 }
@@ -103,8 +104,9 @@ struct ClaudeConnectionView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.summary).lineLimit(2)
-                        Text(p.autoApplied ? "Applied automatically" : "Applied").font(.caption)
-                            .foregroundStyle(Theme.textSecondary)
+                        Text(AgentText.caption([p.autoApplied ? "Applied automatically" : "Applied",
+                                                p.fromAgent.map(AgentText.from)]))
+                            .font(.caption).foregroundStyle(Theme.textSecondary)
                     }
                     Spacer()
                     Button("Undo") { undo(p.id) }.buttonStyle(.glass)

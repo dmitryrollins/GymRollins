@@ -132,4 +132,17 @@ final class AgentsUITests: XCTestCase {
         XCTAssertTrue(revoked.waitForExistence(timeout: 5))
         XCTAssertTrue(revoked.label.hasPrefix("Every agent's access was revoked"), revoked.label)
     }
+
+    func testProposalsSayWhoSentThem() {
+        openAgents(["-seedProposal"])
+        let row = app.buttons["claude.proposal.C1A0DE00-0000-4000-8000-000000000001"]
+        scrollTo(row)
+        XCTAssertTrue(row.isHittable)
+        XCTAssertTrue(row.label.contains("From Claude"), row.label)
+        row.tap()
+        let from = app.staticTexts["proposal.from"]
+        XCTAssertTrue(from.waitForExistence(timeout: 5))
+        XCTAssertEqual(from.label, "From Claude")
+        XCTAssertTrue(app.descendants(matching: .any)["proposal.review"].exists)
+    }
 }

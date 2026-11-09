@@ -130,4 +130,11 @@ import Testing
         #expect(AgentText.addedBy("Muse") == "Added by Muse")
         #expect(AgentText.none == "No agents connected.")
     }
+
+    /// A proposal row's second line: the parts joined with " · ", leaving out a sender the server didn't know.
+    @Test func aProposalsCaptionNamesItsSenderWhenKnown() {
+        #expect(AgentText.caption(["25 Sep", AgentText.from("Muse"), "Review"]) == "25 Sep \u{00B7} From Muse \u{00B7} Review")
+        #expect(AgentText.caption(["25 Sep", nil, "Review"]) == "25 Sep \u{00B7} Review")
+        #expect(AgentText.caption(["Applied", nil]) == "Applied")
+    }
 }

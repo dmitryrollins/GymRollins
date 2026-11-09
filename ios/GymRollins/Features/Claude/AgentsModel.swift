@@ -121,4 +121,9 @@ enum AgentText {
     static func from(_ name: String) -> String { "From \(name)" }
 
     static func addedBy(_ name: String) -> String { "Added by \(name)" }
+
+    /// A proposal row's second line: the parts joined with " · ", leaving out a sender the server didn't know.
+    static func caption(_ parts: [String?]) -> String {
+        parts.compactMap { $0 }.joined(separator: " \u{00B7} ")
+    }
 }

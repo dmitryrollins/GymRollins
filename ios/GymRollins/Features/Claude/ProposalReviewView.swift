@@ -2,7 +2,8 @@ import GymCore
 import GymData
 import SwiftUI
 
-/// Reviews one Claude proposal: a card per change with a toggle (valid ones on by default; changes that don't fit
+/// Reviews one agent's proposal ("From Muse" when the server knows who sent it): a card per change with a toggle
+/// (valid ones on by default; changes that don't fit
 /// the current plan are disabled with the reason), then "Apply N changes" or "Dismiss all". Applying saves a
 /// snapshot; Today then offers "Undo" (and Claude's screen does, for 7 days).
 struct ProposalReviewView: View {
@@ -45,7 +46,11 @@ struct ProposalReviewView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(p.createdAt.formatted(.dateTime.day().month(.abbreviated)))
                 .font(.footnote).foregroundStyle(Theme.textSecondary)
-            DisplayTitle(text: "Plan change from Claude", size: 34)
+            if let from = p.fromAgent {
+                Text(AgentText.from(from)).font(.footnote.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("proposal.from")
+            }
+            DisplayTitle(text: "Plan change", size: 34)
                 .accessibilityIdentifier("proposal.review")
             Text(p.summary).foregroundStyle(Theme.textPrimary).accessibilityIdentifier("proposal.summary")
             if p.status != .pending {
