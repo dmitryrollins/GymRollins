@@ -53,7 +53,7 @@ Every other agent keeps working. `POST /v1/claude/revoke` stays as **Disconnect 
 
 ### 3.3 Proposals by agent
 
-`proposals` gains `from_agent TEXT` (nullable): `propose_plan_changes` stores the calling client's name at the time.
+`proposals` gains `from_agent TEXT` (nullable): `propose_plan_changes` stores the calling client's label at the time: its registered name, with its host beside it unless the host is claude.ai or claude.com ("Muse (agent.meta.ai)", "Claude Code (local)" for a loopback callback), or the host alone when it gave no name. Any client can register any name, "Claude" included, so the host is what can't be faked (added after the server review).
 `GET /v1/claude/proposals` and the proposal sync include it.
 
 ### 3.4 `log_workout`
@@ -80,7 +80,7 @@ reason, so one bad workout doesn't block the rest:
 | `invalid` | `ended_at` isn't after `started_at`, a date is in the future, or a value is out of range. |
 | a cap code | The existing per-workout caps (50 exercises, 50 sets each) or the account caps (plan 31). |
 
-An added workout gets `source = 'import'`, `added_by` = the client's name, and the server's own timestamps, so the
+An added workout gets `source = 'import'`, `added_by` = the client's label (as in 3.3), and the server's own timestamps, so the
 phone pulls it on its next sync like any other. The call is audited like every MCP call. Weights are kg; the agent
 converts. A second identical call adds nothing new: every workout overlaps its first copy.
 
