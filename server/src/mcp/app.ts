@@ -47,7 +47,7 @@ export function bearerToken(req: Request): string | null {
 
 function unauthorized(resourceMetadataUrl: string): Response {
   return jsonResponse(
-    { error: 'invalid_token', error_description: 'A valid GymRollins access token for Claude is required.' },
+    { error: 'invalid_token', error_description: 'A valid GymRollins access token is required.' },
     401,
     { 'www-authenticate': `Bearer resource_metadata="${resourceMetadataUrl}"` },
   )

@@ -66,6 +66,10 @@ describe('registration', () => {
     'http://127.0.0.1/cb',
     CLAUDE_AI,
     'https://claude.com/api/mcp/auth_callback',
+    // Other agents (owner, 2026-11-09): any https callback. The owner still approves each one in the app, which
+    // shows its host and warns when it isn't Claude's.
+    'https://agent.meta.ai/api/hatch/oauth/callback',
+    'https://agent.example:8443/oauth/callback?client=gym',
   ])('takes %s, with refresh tokens even when not asked', async (uri) => {
     const res = await register({ client_name: 'Claude', redirect_uris: [uri] })
     expect(res.status).toBe(201)
@@ -77,19 +81,26 @@ describe('registration', () => {
   })
 
   it.each([
-    'https://evil.example/api/mcp/auth_callback',
-    'https://claude.ai/other',
     'http://claude.ai/api/mcp/auth_callback',
     'http://localhost.evil.example/cb',
     'http://[::1]:5000/cb',
     'http://127.0.0.1:5000/cb#x',
     'myapp://callback',
+    'javascript:alert(1)',
+    'https://agent.example/cb#x',
+    'https://user:secret@agent.example/cb',
+    'https://203.0.113.7/cb',
+    'https://[2001:db8::1]/cb',
+    'https://localhost/cb',
+    'https://intranet/cb',
+    'https:///cb',
+    'https://agent.example/' + 'a'.repeat(500),
   ])('refuses %s', async (uri) => {
     const res = await register({ client_name: 'X', redirect_uris: [LOOPBACK, uri] })
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({
       error: 'invalid_redirect_uri',
-      error_description: "Only Claude's redirect URLs can be registered.",
+      error_description: 'A redirect URL must be https on a domain name, or http on localhost or 127.0.0.1.',
     })
   })
 

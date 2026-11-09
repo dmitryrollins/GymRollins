@@ -160,7 +160,8 @@ function isClientName(name: unknown): boolean {
 }
 
 /**
- * A registration only for Claude's redirect URLs, within the hourly cap. Every client gets refresh tokens: a
+ * A registration for redirect URLs isAllowedRedirectUri takes (any agent's https callback, or loopback), within the
+ * hourly cap. Every client gets refresh tokens: a
  * client that names no grant types is registered for authorization_code and refresh_token (RFC 7591's default
  * is the first). Added after review: its client_name is checked (isClientName).
  */
@@ -181,7 +182,11 @@ async function checkedRegistration(c: Context<AppEnv>): Promise<Request | Respon
     !Array.isArray(uris) || uris.length === 0 ||
     !uris.every((u) => typeof u === 'string' && isAllowedRedirectUri(u))
   ) {
-    return oauthError('invalid_redirect_uri', "Only Claude's redirect URLs can be registered.", 400)
+    return oauthError(
+      'invalid_redirect_uri',
+      'A redirect URL must be https on a domain name, or http on localhost or 127.0.0.1.',
+      400,
+    )
   }
   const hourAgo = new Date(Date.now() - 3_600_000).toISOString()
   const recent = await c.env.DB.prepare('SELECT count(*) AS n FROM oauthClient WHERE createdAt > ?1').bind(

@@ -16,15 +16,28 @@ export const REFRESH_TOKEN_PREFIX = 'grr_'
 /** Claude's sign-in page: Better Auth's login and consent steps both send the browser here. */
 export const CONNECT_PATH = '/connect'
 
-const CLAUDE_CALLBACKS = new Set([
-  'https://claude.ai/api/mcp/auth_callback',
-  'https://claude.com/api/mcp/auth_callback',
-])
 const LOOPBACK_CALLBACK = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?\/[^?#]*$/
+/** A public DNS name as the URL parser leaves it (lower case): two labels or more, the last one not a number. */
+const DOMAIN_NAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/
+const REDIRECT_URI_MAX = 512
 
-/** claude.ai's and claude.com's callbacks, or a loopback address on any port (Claude Code). */
+/**
+ * Any agent's https callback on a domain name (claude.ai's, Meta's, …), or a loopback address on any port (Claude
+ * Code). Opened to every agent on 2026-11-09 (the owner): the app still shows each connection's host before Approve
+ * and warns when it isn't Claude's. No fragment, no credentials, no IP address, no control characters or spaces.
+ */
 export function isAllowedRedirectUri(uri: string): boolean {
-  return CLAUDE_CALLBACKS.has(uri) || LOOPBACK_CALLBACK.test(uri)
+  if (uri.length > REDIRECT_URI_MAX || /[\s\u0000-\u001f\u007f#]/.test(uri)) return false
+  if (LOOPBACK_CALLBACK.test(uri)) return true
+  if (!uri.startsWith('https://')) return false
+  let url: URL
+  try {
+    url = new URL(uri)
+  } catch {
+    return false
+  }
+  return url.protocol === 'https:' && url.username === '' && url.password === '' && DOMAIN_NAME.test(url.hostname) &&
+    url.hostname !== 'localhost' && !url.hostname.endsWith('.localhost')
 }
 
 /** The MCP server's address: the resource every Claude token is issued for. */
@@ -53,7 +66,7 @@ export function claudeOAuth(env: Env) {
     disableJwtPlugin: true,
     storeTokens: { hash: (token) => hashToken(token) },
     prefix: { opaqueAccessToken: ACCESS_TOKEN_PREFIX, refreshToken: REFRESH_TOKEN_PREFIX },
-    // Claude registers itself (RFC 7591). src/auth/routes.ts refuses any redirect URL but Claude's first.
+    // Agents register themselves (RFC 7591); src/auth/routes.ts refuses what isAllowedRedirectUri doesn't take.
     allowDynamicClientRegistration: true,
     allowUnauthenticatedClientRegistration: true,
     clientRegistrationDefaultApplicationType: 'infer',
