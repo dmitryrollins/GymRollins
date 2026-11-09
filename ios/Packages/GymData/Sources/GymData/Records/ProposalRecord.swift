@@ -9,6 +9,8 @@ public final class ProposalRecord {
     @Attribute(.unique) public var id: UUID
     public var createdAt: Date
     public var source: String
+    /// The agent that sent it (`Proposal.fromAgent`, plan 32); nil for older proposals.
+    public var fromAgent: String?
     public var summary: String
     public var changesData: Data
     public var statusRaw: String

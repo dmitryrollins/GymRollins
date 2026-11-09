@@ -76,6 +76,31 @@ struct ProposalFixture {
         #expect(try f.proposals.pending().map(\.id) == [b.id])
     }
 
+    /// Plan 32: the sender's name is stored with a new proposal, and one pulled before the app knew senders learns it
+    /// from the next pull. A name, once stored, stays.
+    @Test func theSendersNameIsKeptAndFilledInOnce() throws {
+        let unnamed = f.kneeBreak()
+        try f.proposals.upsertRemote([unnamed])
+        #expect(try f.proposals.proposal(unnamed.id)?.fromAgent == nil)
+
+        let named = Proposal(id: unnamed.id, createdAt: unnamed.createdAt, summary: unnamed.summary,
+                             changes: unnamed.changes, fromAgent: "Muse")
+        try f.proposals.upsertRemote([named])
+        #expect(try f.proposals.proposal(unnamed.id)?.fromAgent == "Muse")
+        let renamed = Proposal(id: unnamed.id, createdAt: unnamed.createdAt, summary: unnamed.summary,
+                               changes: unnamed.changes, fromAgent: "Claude")
+        try f.proposals.upsertRemote([renamed])
+        #expect(try f.proposals.proposal(unnamed.id)?.fromAgent == "Muse")
+
+        let fresh = Proposal(id: UUID(), createdAt: f.clock.now, summary: "Add dips", changes: [
+            PlanChange(id: "c1", type: .addExercise, routineId: f.id(f.push), exerciseId: "dips", sets: 3, reps: 10),
+        ], fromAgent: "Claude")
+        try f.proposals.upsertRemote([named, fresh])
+        #expect(try f.proposals.proposal(fresh.id)?.fromAgent == "Claude")
+        try f.proposals.dismiss(fresh.id)
+        #expect(try f.proposals.proposal(fresh.id)?.fromAgent == "Claude") // a resolution keeps it
+    }
+
     @Test func markAppliedStoresSnapshotAndGoesDirty() throws {
         let p = f.kneeBreak()
         try f.proposals.upsertRemote([p])
