@@ -12,8 +12,10 @@ One Cloudflare Worker serves everything the app and Claude use (spec: `docs/spec
   - moderation: `/v1/reports`, `/v1/blocks`, `/v1/admin`,
   - gym photos: `/v1/photos`,
   - Claude: `/v1/claude/proposals`, `/v1/claude/last-use`, `/v1/claude/connect/:code`, `/v1/claude/revoke`,
+  - the connected agents: `/v1/agents` and `/v1/agents/:clientId/disconnect` (section "Agents" below),
   - `DELETE /v1/account`.
-- **Claude** at `/mcp`, the MCP server with the 15 tools, behind Better Auth's OAuth (`@better-auth/mcp`):
+- **Agents** (Claude, Meta's Muse, any MCP client) at `/mcp`, the MCP server with the 16 tools, behind Better Auth's
+  OAuth (`@better-auth/mcp`):
   - discovery at `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server[/api/auth]`,
   - registration (dynamic only), authorize and token at `/api/auth/oauth2/*`; tokens are opaque and checked in D1 on every call,
   - the sign-in page `/connect`, whose code the owner approves in the app.
@@ -44,6 +46,8 @@ Schema:
   numbers are `DomainLimits`', and `test/domain-limits-drift.test.ts` checks them. The words are in `src/sync/caps.ts`.
 - `0007_claude_connect.sql` holds the approval codes and their tries, `0008_connect_session.sql` marks Claude's browser
   session (`claudeConnect`), and `0009_connect_opener.sql` keeps where the sign-in page was opened.
+- `0011_ai_agents.sql` (plan 32) adds the Add workouts switch (`profiles.mcp_log_workouts`, off), the agent that added a
+  workout (`workouts.added_by`) and the agent that sent a proposal (`proposals.from_agent`).
 
 Exercise photos for the local Worker: `node ../scripts/upload-photos.mjs --target worker` while the server runs.
 
@@ -80,3 +84,24 @@ call fail.
 
 The MCP tools in `src/mcp` and the shared rules in `src/shared` came from the earlier Deno server in plan 29; that code
 is in git history before plan 30.
+
+## Agents
+
+Any agent connects the way Claude does (plan 32; `docs/specs/2026-11-09-ai-agents-design.md`). One set of switches
+serves them all; each agent can be disconnected on its own. `src/claude/agents.ts` and `src/claude/agent-routes.ts`:
+- `GET /v1/agents` answers `{"agents": [{client_id, name, host, known_host, connected_at, last_used_at}]}`, newest
+  connection first: every OAuth client with a consent or a live refresh token for the account. `name` is the registered
+  `client_name`, or the host; `host` is its first redirect URL's; `known_host` is true for claude.ai and claude.com
+  (`src/claude/hosts.ts`, which the approve sheet uses too); `last_used_at` is its newest audited call, or null.
+- `POST /v1/agents/:clientId/disconnect` answers `{"disconnected": true}`, or 404 `unknown_agent`. One batch removes,
+  for this account and client only, the access and refresh tokens, the consent, the unredeemed codes (`verification`
+  rows whose JSON has `$.userId` and `$.query.client_id`), the `connect_requests` rows and the `/connect` sessions
+  they made. The client's registration stays. `POST /v1/claude/revoke` stays as Disconnect all.
+- `propose_plan_changes` stores the client's name in `proposals.from_agent`; `GET /v1/claude/proposals` serves it.
+- `log_workout` (`src/mcp/tools/log-workout.ts`) adds up to 5 past workouts per call straight to the history while the owner's
+  Add workouts switch is on. Each is checked on its own: `not_allowed`, `invalid` (times, ranges, at most 24 hours,
+  not in the future), `unknown_exercise`, `overlaps` (a workout already stored, or one added earlier in the call; a
+  stored workout with no end is the moment it started) and the storage caps (`too_many_…`). An added workout is an
+  `import` with `added_by` set to the agent's name (`Agent` when it registered none), written by the app's own save
+  (`addWorkout` in `src/sync/workouts.ts`), so the caps hold and the phone pulls it. No save from the app changes
+  `added_by`.

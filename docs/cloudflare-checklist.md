@@ -187,6 +187,15 @@ npx wrangler d1 migrations apply gymrollins --remote            # only when the 
 npx wrangler deploy
 ```
 
+**Plan 32 (AI agents) brings migration `0011_ai_agents.sql`.** It only adds columns, each with its default, so the app
+on the phone keeps working with it: a profile pushed without `mcp_log_workouts` is stored with Add workouts off. In
+this order, from `server/` with `CLOUDFLARE_ACCOUNT_ID` exported:
+1. Note a Time Travel bookmark (section 7): `npx wrangler d1 time-travel info gymrollins`.
+2. `npx wrangler d1 migrations apply gymrollins --remote`: it lists `0011_ai_agents.sql` alone; confirm.
+3. `npx wrangler deploy`, then the checks below. With `BASE` set as they set it,
+   `curl -s -o /dev/null -w '%{http_code}\n' "$BASE/v1/agents"` prints 401 (the route is there, behind the session).
+4. Only then the app build that shows Settings › AI agents.
+
 Then check from any machine. These need no account:
 
 ```bash
