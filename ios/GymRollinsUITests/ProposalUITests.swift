@@ -118,7 +118,7 @@ final class ProposalUITests: XCTestCase {
         claude.tap()
         XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
         let autoApply = app.switches["claude.perm.autoApply"]
-        scrollTo(autoApply) // the Use with Claude section pushes it below the fold
+        scrollTo(autoApply) // the agents and Connect sections push it below the fold
         XCTAssertTrue(autoApply.isHittable)
         XCTAssertEqual(autoApply.value as? String, "0")
         flip(autoApply)
@@ -148,20 +148,37 @@ final class ProposalUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["claude.url"].label.hasSuffix("/mcp"), app.staticTexts["claude.url"].label)
         app.buttons["claude.copyURL"].tap()
         XCTAssertEqual(app.buttons["claude.copyURL"].label, "Copied")
-        XCTAssertEqual(app.staticTexts["claude.status"].label, "Not connected yet")
+        let status = app.staticTexts["claude.status"]
+        let none = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "No agents connected."),
+                                             object: status)
+        XCTAssertEqual(XCTWaiter().wait(for: [none], timeout: 5), .completed, status.label)
         let pendingRow = app.buttons["claude.proposal.C1A0DE00-0000-4000-8000-000000000001"]
         scrollTo(pendingRow)
         XCTAssertTrue(pendingRow.isHittable)
 
         let disconnect = app.buttons["claude.disconnect"]
         scrollTo(disconnect)
+        XCTAssertEqual(disconnect.label, "Disconnect all")
         disconnect.tap()
         app.buttons["claude.disconnect.confirm"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["claude.disconnected"].waitForExistence(timeout: 5))
-        for id in ["readWorkouts", "readBody", "readPlan", "readGyms", "propose", "autoApply"] {
-            let toggle = app.switches["claude.perm.\(id)"]
-            scrollTo(toggle)
+        // The switches sit above Use with Claude now: from the bottom, back up through them (decision A3).
+        let switches = ["claude.perm.autoApply", "claude.perm.propose", "agents.perm.logWorkouts", "claude.perm.readGyms",
+                        "claude.perm.readPlan", "claude.perm.readBody", "claude.perm.readWorkouts"]
+        for id in switches {
+            let toggle = app.switches[id]
+            scrollBack(to: toggle)
+            XCTAssertTrue(toggle.isHittable, id)
             XCTAssertEqual(toggle.value as? String, "0", id)
+        }
+    }
+
+    /// Like `scrollTo`, for an element above the screen.
+    private func scrollBack(to element: XCUIElement, maxSwipes: Int = 12) {
+        var swipes = 0
+        while !element.isHittable && swipes < maxSwipes {
+            app.swipeDown()
+            swipes += 1
         }
     }
 

@@ -106,21 +106,21 @@ extension AppEnvironment {
     }
 }
 
-/// Which step of "Disconnect Claude" failed (the permissions are off on this iPhone either way).
+/// Which step of "Disconnect all" failed (what agents can do is off on this iPhone either way).
 enum ClaudeDisconnectError: Error, Equatable {
     /// The server didn't store the permissions-off profile (offline, refused, or kept a newer edit).
     case permissionsNotSaved
-    /// The permissions are off in the account, but the OAuth grant couldn't be revoked.
+    /// The permissions are off in the account, but the OAuth grants couldn't be revoked.
     case accessNotRevoked
 
     var message: String {
         switch self {
         case .permissionsNotSaved:
-            "Claude's permissions are off on this iPhone but couldn't be saved to your account, so Claude may still "
-                + "have access. Check your connection and tap Disconnect Claude again."
+            "What agents can do is off on this iPhone but couldn't be saved to your account, so agents may still have "
+                + "access. Check your connection and tap Disconnect all again."
         case .accessNotRevoked:
-            "Claude's permissions are off, but its access couldn't be revoked. Check your connection and tap "
-                + "Disconnect Claude again."
+            "What agents can do is off, but their access couldn't be revoked. Check your connection and tap "
+                + "Disconnect all again."
         }
     }
 }

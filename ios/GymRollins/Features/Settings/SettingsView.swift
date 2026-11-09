@@ -156,13 +156,13 @@ struct SettingsView: View {
         Binding(get: { env.profile.deloadPct * 100 }, set: { save(env.profile.with(deloadPct: $0 / 100)) })
     }
 
-    // MARK: Claude
+    // MARK: AI agents
 
     private var claudeSection: some View {
-        Section("Claude") {
+        Section("AI agents") {
             NavigationLink { ClaudeConnectionView() } label: {
                 HStack {
-                    Text("Claude connection")
+                    Text("AI agents")
                     Spacer()
                     Badge(text: claudeBadge.text, kind: claudeBadge.kind)
                         .accessibilityIdentifier("settings.claude.badge")
