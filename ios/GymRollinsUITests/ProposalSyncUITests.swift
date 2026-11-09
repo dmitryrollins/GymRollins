@@ -2,8 +2,8 @@ import XCTest
 
 /// Claude end to end against a throwaway LOCAL Worker (run via `scripts/ios-test-sync.sh`, which passes its URL as
 /// `TEST_RUNNER_API_URL`; Xcode hands it to the runner as `API_URL`). Skipped otherwise. Claude is played by
-/// `ClaudeTestClient` (a real OAuth client and MCP caller); the owner signs up in the app, approves Claude's code in
-/// Settings › Claude › Approve a connection, and reviews what Claude proposes.
+/// `ClaudeTestClient` (a real OAuth client and MCP caller); the owner signs up in the app, approves the agent's code in
+/// Settings › AI agents › Approve a connection, and reviews what it proposes or sees what it added.
 @MainActor
 final class ProposalSyncUITests: XCTestCase {
     static let password = "Passw0rd!"
@@ -36,10 +36,14 @@ final class ProposalSyncUITests: XCTestCase {
         waitForLabel(app.staticTexts["connect.client"], "Claude Code", timeout: 10)
         XCTAssertEqual(app.staticTexts["connect.host"].label, "127.0.0.1:53682")
         XCTAssertTrue(app.staticTexts["connect.warning"].exists, "a loopback callback isn't Claude's own host")
+        XCTAssertEqual(app.staticTexts["connect.warning"].label,
+                       "Approve only if you started this connection yourself, in 127.0.0.1:53682.")
         app.buttons["connect.approve"].tap()
         waitForLabel(app.staticTexts["connect.result"], "Approved. Your browser returns to Claude in a moment.")
         let tokens = try await claude.exchange(signIn, code: try await claude.finish(signIn))
         app.buttons["connect.done"].tap()
+        waitForLabel(app.staticTexts["agents.name.\(signIn.clientId)"], "Claude Code", timeout: 10)
+        XCTAssertEqual(app.staticTexts["agents.host.\(signIn.clientId)"].label, "Connected from 127.0.0.1:53682")
 
         // 2. Claude proposes a heavier bench on the synced Push + Arms.
         let session = try await appSession(email: email)
@@ -63,6 +67,7 @@ final class ProposalSyncUITests: XCTestCase {
         chip.tap()
         XCTAssertTrue(app.buttons["proposal.apply"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["proposal.apply"].label, "Apply 1 change")
+        XCTAssertEqual(app.staticTexts["proposal.from"].label, "From Claude Code (local)")
         app.buttons["proposal.apply"].tap()
         let bench = app.descendants(matching: .any)["today.row.0025"]
         let heavier = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS '145 lb'"), object: bench)
@@ -108,6 +113,73 @@ final class ProposalSyncUITests: XCTestCase {
         XCTAssertTrue(error.waitForExistence(timeout: 10))
         XCTAssertTrue(error.label.hasPrefix("No sign-in is waiting with this code."))
         XCTAssertFalse(app.buttons["connect.approve"].exists)
+    }
+
+    /// Plan 32: with Add workouts on, Muse adds a past workout straight into history; both agents are listed, and
+    /// disconnecting Muse from its row leaves Claude Code working. The workout reaches the phone as "Added by Muse (local)".
+    func testAnAgentAddsAWorkoutAndDisconnectingItLeavesTheOther() async throws {
+        let app = launch()
+        openSettings(app)
+        signUp(app, email: "ui-\(UUID().uuidString.lowercased())@test.local")
+        waitForLabel(app.staticTexts["account.status"], "Up to date")
+
+        // 1. Add workouts on, and in the account.
+        openAgents(app)
+        let addWorkouts = app.switches["agents.perm.logWorkouts"]
+        scroll(app, to: addWorkouts, from: .bottom)
+        turnOn(addWorkouts)
+        goBack(app, to: "Settings")
+        syncNow(app)
+        waitForLabel(app.staticTexts["account.status"], "Up to date")
+
+        // 2. Muse, then Claude Code, connect through the sheet.
+        let muse = ClaudeTestClient(base: apiURL)
+        let museSignIn = try await muse.startSignIn(clientId: try await muse.register(name: "Muse"))
+        openApproveConnection(app)
+        approve(app, museSignIn, name: "Muse")
+        let museTokens = try await muse.exchange(museSignIn, code: try await muse.finish(museSignIn))
+        app.buttons["connect.done"].tap()
+        let claude = ClaudeTestClient(base: apiURL)
+        let claudeSignIn = try await claude.startSignIn(clientId: try await claude.register())
+        openApproveSheet(app)
+        approve(app, claudeSignIn, name: "Claude Code")
+        let claudeTokens = try await claude.exchange(claudeSignIn, code: try await claude.finish(claudeSignIn))
+        app.buttons["connect.done"].tap()
+
+        // 3. Both are listed, the newest connection first.
+        let museRow = app.staticTexts["agents.name.\(museSignIn.clientId)"]
+        let claudeRow = app.staticTexts["agents.name.\(claudeSignIn.clientId)"]
+        waitForLabel(claudeRow, "Claude Code", timeout: 10)
+        waitForLabel(museRow, "Muse")
+        XCTAssertLessThan(claudeRow.frame.minY, museRow.frame.minY)
+
+        // 4. Muse adds a past workout.
+        let logged = try await muse.callTool(museTokens.access, "log_workout", ["workouts": [[
+            "started_at": "2026-09-20T17:02:00Z", "ended_at": "2026-09-20T18:05:00Z", "name": "Fitbod upper",
+            "exercises": [["exercise_id": "0025", "sets": [["reps": 8, "weight_kg": 63.5], ["reps": 7, "weight_kg": 63.5]]]],
+        ]]])
+        XCTAssertFalse(logged.isError, "\(logged.json)")
+
+        // 5. Disconnect Muse from its row: it is refused; Claude Code still works.
+        app.buttons["agents.disconnect.\(museSignIn.clientId)"].tap()
+        app.buttons["agents.disconnect.confirm"].firstMatch.tap()
+        XCTAssertTrue(museRow.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(claudeRow.exists)
+        let refused = try await muse.mcp(museTokens.access, method: "tools/list").status
+        XCTAssertEqual(refused, 401)
+        let served = try await claude.mcp(claudeTokens.access, method: "tools/list").status
+        XCTAssertEqual(served, 200)
+
+        // 6. The workout reaches the phone, marked with the agent that added it.
+        goBack(app, to: "Settings")
+        syncNow(app)
+        waitForLabel(app.staticTexts["account.status"], "Up to date")
+        app.navigationBars.buttons["BackButton"].firstMatch.tap()
+        let card = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'log.workout.'")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        card.tap()
+        waitForLabel(app.staticTexts["detail.addedBy"], "Added by Muse (local)", timeout: 10)
     }
 
     // MARK: Helpers (local Worker only)
@@ -160,15 +232,41 @@ final class ProposalSyncUITests: XCTestCase {
         button.tap()
     }
 
+    /// From Settings: Settings › AI agents.
+    private func openAgents(_ app: XCUIApplication) {
+        // The AI agents row sits below the fold of Settings' Form (rows load lazily): scroll until it is there.
+        let row = app.descendants(matching: .any)["settings.claude"]
+        scroll(app, to: row, from: .bottom)
+        row.tap()
+        XCTAssertTrue(app.buttons["claude.approveConnection"].waitForExistence(timeout: 5))
+    }
+
     private func openApproveConnection(_ app: XCUIApplication) {
-        // The Claude row sits below the fold of Settings' Form (rows load lazily): scroll until it is there.
-        let claude = app.descendants(matching: .any)["settings.claude"]
-        scroll(app, to: claude, from: .bottom)
-        claude.tap()
-        let approve = app.buttons["claude.approveConnection"]
-        XCTAssertTrue(approve.waitForExistence(timeout: 5))
-        approve.tap()
+        openAgents(app)
+        openApproveSheet(app)
+    }
+
+    /// On Settings › AI agents: opens Approve a connection.
+    private func openApproveSheet(_ app: XCUIApplication) {
+        app.buttons["claude.approveConnection"].tap()
         XCTAssertTrue(app.textFields["connect.code"].waitForExistence(timeout: 5))
+    }
+
+    /// In the open sheet: types `signIn`'s code, checks who asks, and approves.
+    private func approve(_ app: XCUIApplication, _ signIn: ClaudeTestClient.SignIn, name: String) {
+        type(signIn.code, into: app.textFields["connect.code"])
+        waitForLabel(app.staticTexts["connect.client"], name, timeout: 10)
+        app.buttons["connect.approve"].tap()
+        waitForLabel(app.staticTexts["connect.result"], "Approved. Your browser returns to Claude in a moment.")
+    }
+
+    /// Turns a SwiftUI `Toggle` on (the inner switch when there is one, else the right edge where the knob is).
+    private func turnOn(_ toggle: XCUIElement) {
+        guard toggle.value as? String != "1" else { return }
+        let inner = toggle.switches.firstMatch
+        if inner.exists { inner.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
+        let on = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: toggle)
+        XCTAssertEqual(XCTWaiter().wait(for: [on], timeout: 5), .completed)
     }
 
     /// Added after review: the navigation bar's own back button (not whichever bar button comes first), and the
