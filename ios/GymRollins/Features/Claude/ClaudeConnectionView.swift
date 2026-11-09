@@ -209,6 +209,7 @@ struct ClaudeConnectionView: View {
             try await env.disconnectClaude()
             error = nil
             disconnected = true
+            agents.removeAll()
         } catch {
             AppEnvironment.log.error("Disconnect all failed: \(error.localizedDescription, privacy: .public)")
             self.error = (error as? ClaudeDisconnectError ?? .permissionsNotSaved).message

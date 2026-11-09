@@ -22,7 +22,7 @@ final class AccessibilityAuditUITests: XCTestCase {
                 let summary = "\(issue.compactDescription) on " + (issue.element.map {
                     "type=\($0.elementType.rawValue) id='\($0.identifier)' label='\($0.label)' frame=\($0.frame)"
                 } ?? "no element")
-                if let reason = Self.exclusionReason(issue, windowHeight: windowHeight) {
+                if let reason = Self.exclusionReason(issue, windowHeight: windowHeight, screen: screen) {
                     print("A11Y-AUDIT [\(screen)] excluded (\(reason)): \(summary)")
                 } else {
                     print("A11Y-AUDIT [\(screen)] ISSUE: \(summary)")
@@ -69,6 +69,16 @@ final class AccessibilityAuditUITests: XCTestCase {
     /// screenshot at 6.3:1 on #0B0B10 (peak glyph pixel (145,145,153)), flagged only by the audit's sampling.
     static let measuredContrastFooterIdentifiers: Set<String> = ["claude.gymsNote", "agents.logWorkoutsNote"]
 
+    /// Use with Claude's footer (plan 32): a plain `Text` in a text style that scales, flagged for clipping and Dynamic
+    /// Type only while the longer AI agents screen leaves it under the tab bar's scroll-edge effect.
+    static let underTabBarFooterIdentifier = "claude.coach.note"
+
+    /// The audits of Settings › AI agents, the only screens the switch-label exclusions apply to: elsewhere a label
+    /// such as "Gyms" is a different element (added after review).
+    static func isAgentsScreen(_ screen: String) -> Bool {
+        screen == "Claude connection" || screen == "Use with Claude" || screen.hasPrefix("AI agents")
+    }
+
     /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
     /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first. The report
     /// sheet's "Send report" is the same button, also 7.14:1, flagged on 3 runs of 9. The injury note's "Save" is the
@@ -76,7 +86,8 @@ final class AccessibilityAuditUITests: XCTestCase {
     static let measuredContrastIdentifiers: Set<String> = ["addEquipment.save", "report.send", "limits.edit.save"]
 
     /// Why an issue is a false positive, or nil when it's a real issue. Each exclusion is narrow and justified.
-    static func exclusionReason(_ issue: XCUIAccessibilityAuditIssue, windowHeight: CGFloat) -> String? {
+    static func exclusionReason(_ issue: XCUIAccessibilityAuditIssue, windowHeight: CGFloat,
+                                screen: String) -> String? {
         guard let element = issue.element else {
             // Raised against system chrome with no element (status bar, scroll-edge effect views).
             return "system chrome"
@@ -88,6 +99,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         }
         let type = element.elementType
         let frame = element.frame
+        let agentSwitchLabel = isAgentsScreen(screen) && type == .staticText && agentSwitchLabels.contains(element.label)
         switch issue.auditType {
         case .contrast:
             // iOS 26 dims scrolled content under the floating bottom bar and tab bar (scroll-edge effect) by design;
@@ -99,7 +111,7 @@ final class AccessibilityAuditUITests: XCTestCase {
             // straddles the bar's edge was flagged (toggle labels, "Show all", the prompt text), all 17:1 when measured.
             if frame.minY < topEdgeBand { return "under top scroll-edge effect" }
             if measuredContrastLabels.contains(element.label) { return "measured on glass" }
-            if type == .staticText, agentSwitchLabels.contains(element.label) { return "measured switch label" }
+            if agentSwitchLabel { return "measured switch label" }
             if measuredContrastFooterIdentifiers.contains(element.identifier) { return "measured footer" }
             if measuredContrastIdentifiers.contains(element.identifier) { return "measured on glass" }
             // `.searchable`'s placeholder is system-styled.
@@ -112,8 +124,8 @@ final class AccessibilityAuditUITests: XCTestCase {
             // Plan 32: the AI agents screen is long enough that Use with Claude's footer sits under the tab bar's
             // scroll-edge effect, and the switch labels above it are flagged although the screenshots show every
             // switch label whole, on one line.
-            if type == .staticText, frame.maxY > windowHeight - bottomEdgeBand { return "under bottom scroll-edge effect" }
-            if type == .staticText, agentSwitchLabels.contains(element.label) { return "switch label shown whole" }
+            if element.identifier == underTabBarFooterIdentifier { return "under bottom scroll-edge effect" }
+            if agentSwitchLabel { return "switch label shown whole" }
             // The glass capsule's label: identical SecondaryGlassButton "Skip for now" below it isn't flagged, and the
             // screenshot shows the whole label.
             if element.identifier == "onboarding.email" { return "glass button false positive" }
@@ -129,7 +141,7 @@ final class AccessibilityAuditUITests: XCTestCase {
             if issue.compactDescription.contains("partially") { return "scales; truncates at AX5" }
             // Plan 32: Use with Claude's footer is a plain `Text` (a text style that scales); it is flagged only while
             // it sits under the tab bar's scroll-edge effect.
-            if type == .staticText, frame.maxY > windowHeight - bottomEdgeBand { return "under bottom scroll-edge effect" }
+            if element.identifier == underTabBarFooterIdentifier { return "under bottom scroll-edge effect" }
             // Toolbar "Close" is a system bar button.
             if type == .button && element.identifier == "workout.close" { return "system toolbar button" }
             return nil

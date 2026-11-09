@@ -26,6 +26,7 @@ struct UseWithClaudeSection: View {
         } footer: {
             Text("In Claude, create a Project and paste this into its instructions. Then chat in that project: ask for "
                  + "a workout, or anything about your training.")
+                .accessibilityIdentifier("claude.coach.note")
         }
     }
 }

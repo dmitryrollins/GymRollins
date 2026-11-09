@@ -83,6 +83,8 @@ import Testing
         #expect(model.statusText == "Sign in to GymRollins to see your agents.")
         server.listed = .failure(URLError(.timedOut))
         await model.load(server.calls)
+        #expect(model.statusText
+            == "Couldn't reach GymRollins to list your agents. Check your connection and try again.")
         server.listed = .failure(ApiError(status: 401, code: "signed_out", message: "Sign in."))
         await model.load(server.calls)
         #expect(model.statusText == "Sign in to GymRollins to see your agents.")
@@ -136,6 +138,41 @@ import Testing
         #expect(model.agents == [Self.claude])
     }
 
+    /// A newer load that never answers (its task cancelled, say by leaving pull-to-refresh) doesn't leave
+    /// "Checking…" up: the older answer still shows.
+    @Test func aCancelledNewerLoadLetsTheOlderAnswerShow() async {
+        let model = AgentsModel()
+        let first = HeldList(), second = HeldList()
+        let calls = { (held: HeldList) in AgentCalls(list: { await held.list([Self.muse]) }, disconnect: { _ in }) }
+        let older = Task { await model.load(calls(first)) }
+        while !first.isWaiting { await Task.yield() }
+        let newer = Task { await model.load(calls(second)) }
+        while !second.isWaiting { await Task.yield() }
+        newer.cancel()
+        second.answer()
+        await newer.value
+        first.answer()
+        await older.value
+        #expect(model.agents == [Self.muse] && model.statusText == nil)
+    }
+
+    /// After Disconnect all worked no row stays, even when the reload after it fails or a list asked before it
+    /// answers late.
+    @Test func removeAllLeavesNoRowWhateverAnswersAfter() async {
+        let (model, server) = await loaded([Self.muse, Self.claude])
+        let held = HeldList()
+        let late = Task { await model.load(AgentCalls(list: { await held.list([Self.muse, Self.claude]) },
+                                                      disconnect: server.calls.disconnect)) }
+        while !held.isWaiting { await Task.yield() }
+        model.removeAll()
+        held.answer()
+        await late.value
+        #expect(model.statusText == "No agents connected.")
+        server.listed = .failure(URLError(.notConnectedToInternet))
+        await model.load(server.calls)
+        #expect(model.agents.isEmpty)
+    }
+
     /// A cancelled Disconnect may have reached the server, so the list is asked again instead of saying the agent
     /// still has access.
     @Test func aCancelledDisconnectAsksForTheListAgain() async {
@@ -186,6 +223,7 @@ import Testing
         #expect(AgentText.lastUsed(now - 3 * 3_600, now: now) == "Last used 3 h ago")
         #expect(AgentText.confirmDisconnect("Muse") == "Disconnect Muse? It loses access until you approve it again.")
         #expect(AgentText.disconnectLabel("Muse") == "Disconnect Muse")
+        #expect(AgentText.connectedFrom("agent.meta.ai") == "Connected from agent.meta.ai")
         #expect(AgentText.from("Muse") == "From Muse")
         #expect(AgentText.addedBy("Muse") == "Added by Muse")
         #expect(AgentText.none == "No agents connected.")

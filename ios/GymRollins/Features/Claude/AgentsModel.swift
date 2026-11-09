@@ -29,9 +29,12 @@ final class AgentsModel {
     private(set) var disconnecting: String?
     /// Why the last Disconnect, or a reload of a list already shown, didn't work.
     private(set) var error: String?
-    /// Moves on with each load and each Disconnect that removed a row. A load whose answer arrives after it moved on
-    /// (a newer load, or a Disconnect) is stale, and would put a disconnected agent back (added after review).
-    private var revision = 0
+    /// Numbers each load and each change made here (a Disconnect that removed a row, Disconnect all) in the order they
+    /// started; `shown` is the newest whose list is on screen. A load's answer applies only while nothing newer is
+    /// shown, so a list asked before a Disconnect can't put the agent back, and a newer load that never answers (its
+    /// task cancelled) doesn't keep an older answer off the screen (added after review).
+    private var started = 0
+    private var shown = 0
 
     var agents: [ConnectedAgent] {
         if case .loaded(let agents) = phase { return agents }
@@ -50,15 +53,16 @@ final class AgentsModel {
     /// Asks for the list. A failed reload keeps the rows already shown and says why below them; a stale answer is
     /// dropped.
     func load(_ calls: AgentCalls) async {
-        revision += 1
-        let asked = revision
+        started += 1
+        let asked = started
         do {
             let listed = try await calls.list()
-            if Task.isCancelled || asked != revision { return }
+            if Task.isCancelled || asked < shown { return }
+            shown = asked
             phase = .loaded(listed)
             error = nil
         } catch {
-            if Task.isCancelled || asked != revision { return }
+            if Task.isCancelled || asked < shown { return }
             let message = Self.loadMessage(for: error)
             if case .loaded = phase {
                 self.error = message
@@ -88,9 +92,22 @@ final class AgentsModel {
         }
     }
 
+    /// After Disconnect all worked: the server holds no grant, so no row stays, even if the reload that follows fails
+    /// (added after review).
+    func removeAll() {
+        show(.loaded([]))
+        error = nil
+    }
+
     private func removeRow(_ agent: ConnectedAgent) {
-        revision += 1
-        phase = .loaded(agents.filter { $0.clientId != agent.clientId })
+        show(.loaded(agents.filter { $0.clientId != agent.clientId }))
+    }
+
+    /// A change made here: newer than any load already asked.
+    private func show(_ new: Phase) {
+        started += 1
+        shown = started
+        phase = new
     }
 
     static func isCancellation(_ error: Error) -> Bool {
@@ -136,6 +153,9 @@ enum AgentText {
     }
 
     static func disconnectLabel(_ name: String) -> String { "Disconnect \(name)" }
+
+    /// What VoiceOver reads for a row's host: a String, so nothing in it is read as a localization key.
+    static func connectedFrom(_ host: String) -> String { "Connected from \(host)" }
 
     static func from(_ name: String) -> String { "From \(name)" }
 
