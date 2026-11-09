@@ -43,6 +43,7 @@ describe('GET /v1/claude/proposals', () => {
       status: 'pending',
       applied_change_ids: [],
       resolved_at: null,
+      from_agent: null,
     })
   })
 })

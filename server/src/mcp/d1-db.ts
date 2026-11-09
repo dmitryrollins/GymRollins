@@ -84,6 +84,14 @@ function setRow(r: Raw): SetRow {
   }
 }
 
+/**
+ * The calling client's registered name (oauthClient.name), as an SQL expression on the client id in `param`; null when
+ * it gave none, or one that proposals.from_agent and workouts.added_by can't hold (1 to 64 characters,
+ * migrations/0011_ai_agents.sql). Registration takes at most 64 (src/auth/routes.ts, CLIENT_NAME_MAX).
+ */
+const agentNameSql = (param: string) =>
+  `(SELECT name FROM oauthClient WHERE clientId = ${param} AND length(name) BETWEEN 1 AND 64)`
+
 /** `write`, with the refusal of one of its caps (migrations/0010_account_caps.sql) as words for Claude. */
 async function capped<T>(write: Promise<T>, ...codes: (keyof typeof CLAUDE_CAPS)[]): Promise<T> {
   try {
@@ -507,17 +515,16 @@ export class D1Db implements Db {
     return rows.map((r) => ({ exercise_id: r.exercise_id as string, groups: json(r.groups) }))
   }
 
-  /** A pending proposal, while Claude may propose (proposals_insert). */
+  /** A pending proposal, while Claude may propose (proposals_insert), marked with the calling agent's name. */
   async insertProposal(
     p: { summary: string; changes: unknown[] },
   ): Promise<{ id: string; created_at: string }> {
     if (!(await this.allowed()).propose) throw new ToolError(NOT_ALLOWED)
     const row = await capped(this.db.prepare(
       'INSERT INTO proposals (id, user_id, created_at, summary, changes, status, applied_change_ids, ' +
-        `client_updated_at, updated_at) VALUES (?1, ?2, ${NOW_SQL}, ?3, ?4, 'pending', '[]', ${NOW_SQL}, ` +
-        `${NOW_SQL}) ` +
-        'RETURNING id, created_at',
-    ).bind(crypto.randomUUID(), this.userId, p.summary, JSON.stringify(p.changes)).first<
+        `client_updated_at, updated_at, from_agent) VALUES (?1, ?2, ${NOW_SQL}, ?3, ?4, 'pending', '[]', ` +
+        `${NOW_SQL}, ${NOW_SQL}, ${agentNameSql('?5')}) RETURNING id, created_at`,
+    ).bind(crypto.randomUUID(), this.userId, p.summary, JSON.stringify(p.changes), this.clientId).first<
       { id: string; created_at: string }
     >(), 'too_many_pending_proposals', 'too_many_proposals')
     return row!

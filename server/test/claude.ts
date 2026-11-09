@@ -226,3 +226,37 @@ export const initialize = (token: string) =>
     capabilities: {},
     clientInfo: { name: 't', version: '0' },
   })
+
+/** Meta's agent's kind of callback: https on a host that isn't Claude's. */
+export const AGENT_CALLBACK = 'https://agent.meta.ai/oauth/callback'
+
+export interface AgentConnection {
+  clientId: string
+  tokens: Tokens
+}
+
+/**
+ * Another agent connected to an account that exists already (plan 32): its own registration, with `name` as its
+ * client_name (none when undefined), the owner's approval in the app, and its tokens.
+ */
+export async function connectAgent(
+  appToken: string,
+  agent: { name?: string; redirectUri?: string } = {},
+): Promise<AgentConnection> {
+  const redirectUri = agent.redirectUri ?? AGENT_CALLBACK
+  const registered = await register({
+    ...(agent.name === undefined ? {} : { client_name: agent.name }),
+    redirect_uris: [redirectUri],
+    token_endpoint_auth_method: 'none',
+  })
+  if (registered.status !== 201) throw new Error(`registration failed: ${registered.status} ${await registered.text()}`)
+  const clientId = (await registered.json<{ client_id: string }>()).client_id
+  const flow = await startFlow(clientId, redirectUri)
+  const browser = new Browser()
+  const { code } = await openConnect(browser, flow)
+  const decided = await decideCode(appToken, code, 'approve')
+  if (decided.status !== 200) throw new Error(`approve failed: ${decided.status} ${await decided.text()}`)
+  const res = await exchangeCode(flow, await finishInBrowser(browser, flow))
+  if (res.status !== 200) throw new Error(`token exchange failed: ${res.status} ${await res.text()}`)
+  return { clientId, tokens: await res.json<Tokens>() }
+}

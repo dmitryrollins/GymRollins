@@ -17,10 +17,13 @@ export interface Resolution {
   client_updated_at: string
 }
 
-/** Pending proposals, oldest first: `changes` and `applied_change_ids` as JSON, times in the stored form. */
+/**
+ * Pending proposals, oldest first: `changes` and `applied_change_ids` as JSON, times in the stored form, and from_agent,
+ * the name of the agent that sent each (plan 32; null when it gave none, and for older proposals).
+ */
 export async function pendingProposals(db: D1Database, userId: string): Promise<Record<string, unknown>[]> {
   const { results } = await db.prepare(
-    'SELECT id, created_at, source, summary, changes, status, applied_change_ids, resolved_at FROM ' +
+    'SELECT id, created_at, source, summary, changes, status, applied_change_ids, resolved_at, from_agent FROM ' +
       'proposals ' +
       "WHERE user_id = ?1 AND status = 'pending' ORDER BY created_at, id LIMIT ?2",
   ).bind(userId, MAX_PENDING).all<Record<string, unknown>>()
