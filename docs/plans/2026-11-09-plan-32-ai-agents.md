@@ -8062,3 +8062,37 @@ git commit -m "docs: plan 32 app half outcome"
 - The app never sends `added_by`, and an old app's workout push can't either: the server must keep a stored
   `added_by` when a push updates the workout.
 - `host` for a loopback client is expected as `127.0.0.1:53682` (host and port), like `connect_requests.redirect_host`.
+
+---
+
+## Outcome (app half, A10–A16)
+
+**Commits:** A10 `17072b2`, A11 `08bc508`, A12 `a0c3d3f`, A13 `6254efa`, A14 `bee5427` (host label fix) and `f589f2d`
+(audits), A15 `1a48216`.
+
+**Counts:** GymData 377 tests passed; GymSync unit 228 passed; app unit (`-only-testing:GymRollinsTests`) 950 passed,
+2 skipped (952 total; base 950 + A11 1 + A13 1); GymSync integration (`scripts/test-sync-integration.sh`) 48 tests in
+12 suites passed, `AgentsTransportTests` 3, "Account deletion verified: 69 deleted users, 0 rows left"; local-Worker UI
+(`scripts/ios-test-sync.sh`) 8 passed, 1 skipped (the server-move test); full `scripts/ios-test.sh` 1168 passed, 7
+failed, 19 skipped. The 7 failures all fail the same way on A9's tip (`b034cd7`) and are not plan 32's:
+`testGymEquipmentWithSamplePhotosAudit`, `testModerationAudit`, `testSharedListingDetailsAudit`,
+`testAListingWithoutAPhotoBorrowsTheCataloguePhoto`, `testReportingABorrowedPhotoRemovesItAndKeepsTheListing`,
+`testShareAsksForSignIn`, `testRestoreAndRemoveEmptyTheList` (no flat-bench tile in the catalogue; "Sample" label
+clipped).
+
+**Upgrade check (simulator, iPhone 17 Pro iOS 26.2):** the store made by `de2bda6` with `-seedOwner -seedHistory` held 45
+rows in 7 tables (profile 1, routines 4, routine exercises 26, weekdays 4, workouts 2, entries 2, sets 6). The branch build
+installed over it opened the store without a crash and without migration errors, and the rows are identical (same
+per-table counts, 45); the new columns exist (`ZMCPLOGWORKOUTS` = 0 on the profile, `ZADDEDBY`, `ZFROMAGENT`). The
+screenshot could not be taken (headless simulator: "Timeout waiting for screen surfaces"), so Today and Settings were not
+looked at by eye.
+
+**Deviations:** (1) A14: the host line in each agent row reads "Connected from <host>" to VoiceOver, because the audit
+flagged the bare host ("Label not human-readable"); `AgentsUITests` and A15 expect that label. (2) A14: the existing
+Claude-screen audits (`testClaudeConnectionAudit`, `testUseWithClaudeAudit`) and `testAgentsAudit` flagged false positives
+once the screen got longer (switch labels "clipped" although whole in the screenshot, footers at 6.3:1 measured, Use with
+Claude's footer under the tab bar's fade), so `exclusionReason` got narrow exclusions for them. (3) A15: agents with a
+loopback callback are labelled "<name> (local)" by the server (`fc40a1e`), so the tests expect "Muse (local)" and "From
+Claude Code (local)"; the agents list keeps the bare names.
+
+**Still open (owner):** the three questions above.
