@@ -85,6 +85,9 @@ it):
     `/api/auth/*` and `/connect*`.
   - counted per IP, 20 requests per 10 seconds, action Block, duration 10 seconds (the Free plan's only window and
     timeout).
+  - Done on 2026-11-09 as "API sign-in limit", right after the first deploy. Checked with 30 quick requests to
+    `/api/auth/get-session`: 25 answered 200, then 429. `/v1/sync/profile` still answered meanwhile, and the block
+    lifted after 10 seconds. The count is approximate (Cloudflare counts per data center).
 - [ ] It covers registration (`/api/auth/oauth2/register`), sign-in, authorize and token, and `/connect`, which
       share its limit. `/v1/*` and `/mcp` keep only the Worker's own caps (above). Widening the rule to them is the
       owner's call.
