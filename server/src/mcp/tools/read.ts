@@ -14,6 +14,7 @@ import {
   weight,
   workingSets,
 } from './format.ts'
+import { requireReads, switchedOff, withheld } from './permissions.ts'
 import { compact, ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
 export { getExerciseHistory } from './history.ts'
@@ -24,6 +25,14 @@ export const LIST_LIMIT = { min: 1, max: 60, default: 20 }
 export const SEARCH_LIMIT = { min: 1, max: 25, default: 10 }
 
 export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
+  // With "Read your plan and profile" off, the profile is withheld, not unsaved: say so, with the read switches.
+  if ((await switchedOff(db, 'plan')).length > 0) {
+    const { plan, workouts, body, gyms } = await db.readPermissions()
+    return ok({
+      profile: withheld(['plan'], 'The profile'),
+      permissions: { read_plan: plan, read_workouts: workouts, read_body: body, read_gyms: gyms },
+    })
+  }
   const p = await db.profile()
   if (!p) {
     return ok({
@@ -59,6 +68,7 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
 }
 
 export async function getPlan({ db }: ToolCtx): Promise<ToolResult> {
+  await requireReads(db, 'plan')
   const [unit, routines, schedule, prefs] = await Promise.all([
     ownerUnit(db),
     db.routines(),
@@ -147,6 +157,7 @@ export async function listWorkouts(
   { db, now }: ToolCtx,
   args: { since?: string; until?: string; limit?: number },
 ): Promise<ToolResult> {
+  await requireReads(db, 'workouts')
   const since = args.since ? parseBound(args.since, 'since') : daysBefore(now, DEFAULT_WINDOW_DAYS)
   const until = args.until ? parseBound(args.until, 'until', 'end') : undefined
   const limit = clamp(Math.trunc(args.limit ?? LIST_LIMIT.default), LIST_LIMIT.min, LIST_LIMIT.max)
@@ -190,6 +201,7 @@ function entryDetail(e: EntryRow, names: Map<string, ExerciseRow>, unit: WeightU
 }
 
 export async function getWorkout({ db }: ToolCtx, args: { id: string }): Promise<ToolResult> {
+  await requireReads(db, 'workouts')
   const [unit, w] = await Promise.all([ownerUnit(db), db.workout(args.id)])
   if (!w) throw new ToolError('Workout not found. Use list_workouts to find workout ids.')
   const names = await exerciseMap(db, w.workout_entries.map((e) => e.exercise_id))
@@ -212,6 +224,7 @@ export async function getWorkout({ db }: ToolCtx, args: { id: string }): Promise
 const SLOPE_WINDOW_DAYS = 28
 
 export async function getBodyweight({ db, now }: ToolCtx, args: { since?: string }): Promise<ToolResult> {
+  await requireReads(db, 'body')
   const since = args.since ? parseBound(args.since, 'since') : daysBefore(now, DEFAULT_WINDOW_DAYS)
   const slopeFrom = daysBefore(now, SLOPE_WINDOW_DAYS)
   const fetchFrom = since < slopeFrom ? since : slopeFrom
@@ -238,7 +251,10 @@ export async function searchExercises(
   const limit = clamp(Math.trunc(args.limit ?? SEARCH_LIMIT.default), SEARCH_LIMIT.min, SEARCH_LIMIT.max)
   const rows = await db.searchExercises({ query, bodyPart, equipment, limit })
   const prefs = await preferenceMap(db, rows.map((r) => r.id))
+  // The library is always there; the owner's custom exercises need "Read your plan and profile".
+  const hidden = await switchedOff(db, 'plan')
   return ok({
+    ...(hidden.length > 0 ? { withheld: [withheld(hidden, "The owner's custom exercises")] } : {}),
     results: rows.map((r) =>
       compact({
         id: r.id,

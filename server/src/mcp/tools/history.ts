@@ -3,6 +3,7 @@
 import type { Db, ExerciseRow } from '../db.ts'
 import { ownerUnit } from './common.ts'
 import { bestE1rm, isoDate, parseBound, round, topSet, weight, workingSets } from './format.ts'
+import { requireReads } from './permissions.ts'
 import { compact, ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
 const MAX_SESSIONS = 30
@@ -39,6 +40,7 @@ export async function getExerciseHistory(
   { db }: ToolCtx,
   args: { exercise: string; since?: string },
 ): Promise<ToolResult> {
+  await requireReads(db, 'workouts')
   const since = args.since ? parseBound(args.since, 'since').toISOString() : undefined
   const exercise = await resolveExercise(db, args.exercise)
   const [unit, sessions] = await Promise.all([ownerUnit(db), db.exerciseSets(exercise.id, since)])

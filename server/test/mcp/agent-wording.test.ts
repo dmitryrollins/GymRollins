@@ -7,6 +7,7 @@ import { D1Db } from '../../src/mcp/d1-db.ts'
 import { listGyms } from '../../src/mcp/tools/gyms.ts'
 import { getTrainingInsights } from '../../src/mcp/tools/insights.ts'
 import { TOOL_SPECS } from '../../src/mcp/tools/register.ts'
+import { notAllowed } from '../../src/mcp/tools/permissions.ts'
 import { getStrengthLevels } from '../../src/mcp/tools/strength.ts'
 import { signUp } from '../helpers.ts'
 import { FakeDb, loadOwnerData } from './fake-db.ts'
@@ -29,16 +30,10 @@ describe("what the tools say about the owner's permissions", () => {
     const data = await loadOwnerData()
     data.profile = { ...data.profile!, mcp_read_workouts: false, mcp_read_gyms: false }
     const ctx = { db: new FakeDb(data), now: NOW }
-    await expect(getTrainingInsights(ctx, {})).rejects.toThrow(
-      "Not allowed: insights need the owner's permission for agents to read workouts and read the plan in the app.",
-    )
-    await expect(getStrengthLevels(ctx, {})).rejects.toThrow(
-      "Not allowed: strength levels need the owner's permission for agents to read workouts, body and the plan in " +
-        'the app.',
-    )
-    await expect(listGyms(ctx)).rejects.toThrow(
-      'Reading gyms is turned off: the owner can switch it on under AI agents in the GymRollins app.',
-    )
+    await expect(getTrainingInsights(ctx, {})).rejects.toThrow(notAllowed(['workouts']))
+    await expect(getStrengthLevels(ctx, {})).rejects.toThrow(notAllowed(['workouts']))
+    await expect(listGyms(ctx)).rejects.toThrow(notAllowed(['gyms']))
+    for (const words of [notAllowed(['workouts']), notAllowed(['gyms'])]) expect(words).not.toContain('Claude')
   })
 
   it('refuses a write in words for any agent', async () => {

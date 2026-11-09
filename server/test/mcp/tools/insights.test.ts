@@ -135,7 +135,7 @@ test('get_training_insights: refused when the plan is hidden (goal, targets, lim
   const c = await ctx((d) => {
     d.profile = { ...d.profile!, mcp_read_plan: false }
   })
-  await assertRejects(() => getTrainingInsights(c, {}), ToolError, 'read the plan')
+  await assertRejects(() => getTrainingInsights(c, {}), ToolError, '“Read your plan and profile”')
 })
 
 test('get_training_insights: no profile and no history → defaults, all fresh', async () => {

@@ -13,6 +13,7 @@ import {
   WINDOW_DAYS,
 } from '../../shared/strength-levels.ts'
 import { round, weight } from './format.ts'
+import { requireReads } from './permissions.ts'
 import { ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 import { FUTURE_SLACK_MS } from './write.ts'
 
@@ -32,13 +33,7 @@ export async function getStrengthLevels(ctx: ToolCtx, _args: Record<string, neve
   const { db, now } = ctx
   // Workouts give the e1RMs, body the bodyweight, and the plan permission covers the profile (sex, birth year,
   // limits note), which RLS hides otherwise.
-  const allowed = await db.readPermissions()
-  if (!allowed.workouts || !allowed.body || !allowed.plan) {
-    throw new ToolError(
-      "Not allowed: strength levels need the owner's permission for agents to read workouts, body and the plan in " +
-        'the app.',
-    )
-  }
+  await requireReads(db, 'workouts', 'body', 'plan')
   const profile = await db.profile()
   const unit = profile?.unit ?? 'lb'
   const since = new Date(now.getTime() - WINDOW_DAYS * DAY_MS).toISOString()

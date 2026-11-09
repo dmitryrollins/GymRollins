@@ -17,6 +17,7 @@ import {
 import type { ExerciseRow, MuscleTargetRow } from '../db.ts'
 import { exerciseMap } from './common.ts'
 import { round } from './format.ts'
+import { requireReads } from './permissions.ts'
 import { ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
 const WINDOW_DAYS = 28
@@ -47,12 +48,7 @@ export async function getTrainingInsights(
   }
   // Workouts give the numbers; the plan permission covers the profile (weekly goal, limits note), custom exercises
   // and weekly targets, which RLS hides otherwise. Without it the goal/targets would be silent guesses.
-  const allowed = await db.readPermissions()
-  if (!allowed.workouts || !allowed.plan) {
-    throw new ToolError(
-      "Not allowed: insights need the owner's permission for agents to read workouts and read the plan in the app.",
-    )
-  }
+  await requireReads(db, 'workouts', 'plan')
   const profile = await db.profile()
   const since = new Date(now.getTime() - WINDOW_DAYS * 86_400_000).toISOString()
   const [workouts, dates, targetRows] = await Promise.all([

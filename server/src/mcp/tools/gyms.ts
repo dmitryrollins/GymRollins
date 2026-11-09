@@ -5,6 +5,7 @@
 // every requirement group needs a listing of one of its kinds, read from public.exercise_requirements (the table the
 // app's bundled JSON seeds, with a drift check), so there is no copy to keep in step.
 import type { Db, GymListingRow, GymRow } from '../db.ts'
+import { requireReads } from './permissions.ts'
 import { compact, ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
 export const PRIVATE_GYMS_MAX = 100
@@ -14,13 +15,7 @@ export const GYM_LIST_MAX = PRIVATE_GYMS_MAX + PUBLIC_GYMS_MAX
 export const GYM_LISTINGS_MAX = 300
 const MAX_FIXED_WEIGHTS = 60
 
-async function requireGymsOn(db: Db): Promise<void> {
-  if (!(await db.readPermissions()).gyms) {
-    throw new ToolError(
-      'Reading gyms is turned off: the owner can switch it on under AI agents in the GymRollins app.',
-    )
-  }
-}
+const requireGymsOn = (db: Db): Promise<void> => requireReads(db, 'gyms')
 
 /** Private gyms, then public gyms the owner trained at or shared to; the only gyms Claude can name. */
 async function visibleGyms(db: Db): Promise<GymRow[]> {

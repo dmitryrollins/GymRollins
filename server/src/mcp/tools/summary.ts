@@ -15,6 +15,7 @@ import {
   weight,
   workingSets,
 } from './format.ts'
+import { requireReads, switchedOff, withheld } from './permissions.ts'
 import { ok, type ToolCtx, type ToolResult } from './result.ts'
 
 export const SUMMARY_WEEKS = { min: 1, max: 12, default: 4 }
@@ -129,13 +130,16 @@ export async function getTrainingSummary(
   { db, now }: ToolCtx,
   args: { weeks?: number },
 ): Promise<ToolResult> {
+  await requireReads(db, 'workouts')
+  const bodyOff = await switchedOff(db, 'body')
   const weeks = clamp(Math.trunc(args.weeks ?? SUMMARY_WEEKS.default), SUMMARY_WEEKS.min, SUMMARY_WEEKS.max)
   const windowStart = new Date(mondayOf(now).getTime() - (weeks - 1) * WEEK_MS)
   const lookback = new Date(windowStart.getTime() - LOOKBACK_WEEKS * WEEK_MS)
   const [unit, workouts, bodyweight] = await Promise.all([
     ownerUnit(db),
     db.workouts({ since: lookback.toISOString(), limit: MAX_WORKOUTS }),
-    db.bodyweight(daysBefore(now, BODYWEIGHT_LOOKBACK_DAYS).toISOString()),
+    // Not read at all while "Read bodyweight" is off: the summary says it was withheld instead.
+    bodyOff.length > 0 ? Promise.resolve([]) : db.bodyweight(daysBefore(now, BODYWEIGHT_LOOKBACK_DAYS).toISOString()),
   ])
   const names = await exerciseMap(db, workouts.flatMap((w) => w.workout_entries.map((e) => e.exercise_id)))
   const byExercise = sessionsByExercise(workouts)
@@ -160,5 +164,6 @@ export async function getTrainingSummary(
         ),
       }
       : null,
+    ...(bodyOff.length > 0 ? { withheld: [withheld(bodyOff, 'Bodyweight')] } : {}),
   })
 }
