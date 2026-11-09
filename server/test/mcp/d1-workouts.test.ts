@@ -145,16 +145,16 @@ describe('what an agent may log', () => {
     expect(await agentDb(userId).loggableExerciseIds([])).toEqual(new Set())
   })
 
-  it('names the agent by its registered name, when the columns can hold it', async () => {
+  it('labels the agent by its registered name and its host (src/claude/hosts.ts, agentLabel)', async () => {
     const { userId } = await owner()
     const client = (name: string | null) => {
       const clientId = crypto.randomUUID()
       return DB.prepare('INSERT INTO oauthClient (id, clientId, name, redirectUris) VALUES (?1, ?2, ?3, ?4)')
         .bind(crypto.randomUUID(), clientId, name, '["https://agent.meta.ai/cb"]').run().then(() => clientId)
     }
-    expect(await agentDb(userId, await client('Muse')).agentName()).toBe('Muse')
-    expect(await agentDb(userId, await client(null)).agentName()).toBeNull()
-    expect(await agentDb(userId, await client('x'.repeat(65))).agentName()).toBeNull()
+    expect(await agentDb(userId, await client('Muse')).agentName()).toBe('Muse (agent.meta.ai)')
+    expect(await agentDb(userId, await client(null)).agentName()).toBe('agent.meta.ai')
+    expect(await agentDb(userId, await client('x'.repeat(65))).agentName()).toBe('agent.meta.ai')
     expect(await agentDb(userId, 'no-such-client').agentName()).toBeNull()
   })
 })

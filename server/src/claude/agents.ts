@@ -1,7 +1,7 @@
 // The agents connected to the account (plan 32; docs/specs/2026-11-09-ai-agents-design.md, section 3.1): every OAuth
 // client that holds a consent or a live refresh token for it. Settings › AI agents lists them.
 import { normalizeTimestamp } from '../sync/time.ts'
-import { CLAUDE_HOSTS } from './hosts.ts'
+import { CLAUDE_HOSTS, hostOf } from './hosts.ts'
 
 export interface ConnectedAgent {
   client_id: string
@@ -44,16 +44,6 @@ interface ListRow {
   redirect_uri: string | null
   connected_at: string
   last_used_at: string | null
-}
-
-/** A redirect URL's host as the approve sheet has it (src/claude/connect-page.ts), or '' when it isn't a URL. */
-function hostOf(uri: string | null): string {
-  if (uri === null) return ''
-  try {
-    return new URL(uri).host
-  } catch {
-    return ''
-  }
 }
 
 /** The account's agents, newest connection first. */

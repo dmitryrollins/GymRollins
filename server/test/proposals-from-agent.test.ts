@@ -1,5 +1,6 @@
 // Which agent sent a proposal (plan 32; docs/specs/2026-11-09-ai-agents-design.md, section 3.3): propose_plan_changes
-// stores the calling client's registered name, and the app's pull of pending proposals serves it as from_agent.
+// stores the calling client's label (its registered name with its host, src/claude/hosts.ts agentLabel), and the app's
+// pull of pending proposals serves it as from_agent.
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { D1Db } from '../src/mcp/d1-db.ts'
@@ -24,23 +25,30 @@ async function pendingFromAgents(appToken: string): Promise<unknown[]> {
 }
 
 describe("a proposal's agent", () => {
-  it("is the calling client's registered name, stored and served to the app", async () => {
+  it("is the calling client's name with its host, stored and served to the app", async () => {
     const c = await connectClaude()
     const muse = await connectAgent(c.appToken, { name: 'Muse' })
     await propose(c.tokens.access_token)
     await propose(muse.tokens.access_token)
     // Two proposals can share a millisecond, and then their order is their ids'.
-    expect((await pendingFromAgents(c.appToken)).sort()).toEqual(['Claude Code', 'Muse'])
+    expect((await pendingFromAgents(c.appToken)).sort()).toEqual(['Claude Code (local)', 'Muse (agent.meta.ai)'])
     const stored = await env.DB.prepare('SELECT from_agent FROM proposals WHERE user_id = ?1 ORDER BY from_agent')
       .bind(c.userId).all()
-    expect(stored.results).toEqual([{ from_agent: 'Claude Code' }, { from_agent: 'Muse' }])
+    expect(stored.results).toEqual([{ from_agent: 'Claude Code (local)' }, { from_agent: 'Muse (agent.meta.ai)' }])
   })
 
-  it('is null when the client registered no name', async () => {
+  it('is the host when the client registered no name', async () => {
     const c = await connectClaude()
     const unnamed = await connectAgent(c.appToken)
     await propose(unnamed.tokens.access_token)
-    expect(await pendingFromAgents(c.appToken)).toEqual([null])
+    expect(await pendingFromAgents(c.appToken)).toEqual(['agent.meta.ai'])
+  })
+
+  it('shows the host beside a name that claims to be Claude from elsewhere', async () => {
+    const c = await connectClaude()
+    const fake = await connectAgent(c.appToken, { name: 'Claude' })
+    await propose(fake.tokens.access_token)
+    expect(await pendingFromAgents(c.appToken)).toEqual(['Claude (agent.meta.ai)'])
   })
 
   it('is null for a proposal whose client is gone', async () => {

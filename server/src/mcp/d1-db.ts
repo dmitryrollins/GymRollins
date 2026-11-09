@@ -3,6 +3,7 @@
 // mcp_flag did) and answers as if the rows were hidden, and the only writes are a pending proposal, a body
 // weight, the audit row and the rate-limit slot. The old Deno server's data layer and the Postgres
 // policies were the reference.
+import { agentLabel } from '../claude/hosts.ts'
 import { claudeReadsPrivateListing, claudeReadsPublicListing } from '../gyms/visibility.ts'
 import { ApiError, constraintMessage, raisedCode } from '../http/errors.ts'
 import { AGENT_WORKOUT_CAPS, CLAUDE_CAPS } from '../sync/caps.ts'
@@ -89,14 +90,6 @@ function setRow(r: Raw): SetRow {
     multiplier: r.multiplier as number,
   }
 }
-
-/**
- * The calling client's registered name (oauthClient.name), as an SQL expression on the client id in `param`; null when
- * it gave none, or one that proposals.from_agent and workouts.added_by can't hold (1 to 64 characters,
- * migrations/0011_ai_agents.sql). Registration takes at most 64 (src/auth/routes.ts, CLIENT_NAME_MAX).
- */
-const agentNameSql = (param: string) =>
-  `(SELECT name FROM oauthClient WHERE clientId = ${param} AND length(name) BETWEEN 1 AND 64)`
 
 /**
  * Why the save refused a workout log_workout adds, as its refusal: a cap's code with an agent's words, or `invalid`
@@ -582,11 +575,12 @@ export class D1Db implements Db {
     p: { summary: string; changes: unknown[] },
   ): Promise<{ id: string; created_at: string }> {
     if (!(await this.allowed()).propose) throw new ToolError(NOT_ALLOWED)
+    const from = await this.agentName()
     const row = await capped(this.db.prepare(
       'INSERT INTO proposals (id, user_id, created_at, summary, changes, status, applied_change_ids, ' +
         `client_updated_at, updated_at, from_agent) VALUES (?1, ?2, ${NOW_SQL}, ?3, ?4, 'pending', '[]', ` +
-        `${NOW_SQL}, ${NOW_SQL}, ${agentNameSql('?5')}) RETURNING id, created_at`,
-    ).bind(crypto.randomUUID(), this.userId, p.summary, JSON.stringify(p.changes), this.clientId).first<
+        `${NOW_SQL}, ${NOW_SQL}, ?5) RETURNING id, created_at`,
+    ).bind(crypto.randomUUID(), this.userId, p.summary, JSON.stringify(p.changes), from).first<
       { id: string; created_at: string }
     >(), 'too_many_pending_proposals', 'too_many_proposals')
     return row!
@@ -635,10 +629,16 @@ export class D1Db implements Db {
     return new Set(rows.map((r) => r.id))
   }
 
+  /**
+   * The calling client's label for proposals.from_agent and workouts.added_by: its registered name, with its host
+   * beside it unless it is one of Claude's (src/claude/hosts.ts, agentLabel); null when the client is gone.
+   */
   async agentName(): Promise<string | null> {
-    const row = await this.db.prepare(`SELECT ${agentNameSql('?1')} AS name`).bind(this.clientId)
-      .first<{ name: string | null }>()
-    return row?.name ?? null
+    const row = await this.db.prepare(
+      'SELECT name, CASE WHEN json_valid(redirectUris) THEN json_extract(redirectUris, \'$[0]\') END AS uri ' +
+        'FROM oauthClient WHERE clientId = ?1',
+    ).bind(this.clientId).first<{ name: string | null; uri: string | null }>()
+    return row === null ? null : agentLabel(row.name, row.uri)
   }
 
   /** Through workouts_user_started (user_id, started_at). At most the account's 10,000 workouts. */

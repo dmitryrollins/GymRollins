@@ -74,18 +74,18 @@ describe('log_workout', () => {
       ended_at: '2026-10-06T18:00:00.000000Z',
       name: 'Upper',
       source: 'import',
-      added_by: 'Claude Code',
+      added_by: 'Claude Code (local)',
       vol_kg: 1016,
       entries: [{ exercise_id: '0025', sets: [{ w_kg: 63.5, r: 8, done: true }, { w_kg: 63.5, r: 8, done: true }] }],
     })
     expect(await lastAudit(c.userId)).toEqual({ ok: 1 })
   })
 
-  it('marks a workout "Agent" when its client registered no name', async () => {
+  it("marks a workout with its client's host when the client registered no name", async () => {
     const c = await owner()
     const unnamed = await connectAgent(c.appToken)
     expect((await logWorkout(unnamed.tokens.access_token, [session(6)])).results[0]!.status).toBe('added')
-    expect((await pulled(c.appToken)).map((w) => w.added_by)).toEqual(['Agent'])
+    expect((await pulled(c.appToken)).map((w) => w.added_by)).toEqual(['agent.meta.ai'])
   })
 
   it('refuses every workout while Add workouts is off, as a failed call, and adds nothing', async () => {
@@ -216,6 +216,6 @@ describe('log_workout and the time a workout takes', () => {
     expect(again.isError).toBe(true)
     expect(again.results.map((r) => r.reason)).toEqual(['overlaps', 'overlaps'])
     expect(await countOf('workouts', c.userId)).toBe(2)
-    expect((await pulled(c.appToken)).map((w) => w.added_by)).toEqual(['Muse', 'Muse'])
+    expect((await pulled(c.appToken)).map((w) => w.added_by)).toEqual(['Muse (agent.meta.ai)', 'Muse (agent.meta.ai)'])
   })
 })

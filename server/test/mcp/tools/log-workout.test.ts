@@ -199,3 +199,37 @@ describe('each workout', () => {
     ])
   })
 })
+
+// Added after review (plan 32): a failed write mid-call answers what was already added, and a date before 2000 is a
+// mistake (a wrong year), not a past workout.
+describe('a write that fails mid-call', () => {
+  it('keeps the workouts already added in the answer and refuses the one that failed', async () => {
+    const db = await fakeDb()
+    const insert = db.insertWorkout.bind(db)
+    let calls = 0
+    db.insertWorkout = (w, by) => (++calls === 2 ? Promise.reject(new Error('D1 hiccup')) : insert(w, by))
+    const r = await run(db, [UPPER, later(1), later(2)])
+    expect(r.isError).toBeFalsy()
+    expect(results(r)).toEqual([
+      { index: 0, status: 'added', workout_id: 'workout-1' },
+      {
+        index: 1,
+        status: 'refused',
+        reason: 'error',
+        message: 'The server could not save this workout, so none of it was saved. Send it again.',
+      },
+      { index: 2, status: 'added', workout_id: 'workout-2' },
+    ])
+  })
+})
+
+describe('the earliest date', () => {
+  it('refuses a workout that starts before 2000', async () => {
+    const db = await fakeDb()
+    const r = await run(db, [{ ...UPPER, started_at: '1999-12-31T23:00:00Z', ended_at: '2000-01-01T00:30:00Z' }])
+    expect(results(r)).toEqual([
+      { index: 0, status: 'refused', reason: 'invalid', message: 'The workout starts before 2000.' },
+    ])
+    expect(db.insertedWorkouts).toEqual([])
+  })
+})

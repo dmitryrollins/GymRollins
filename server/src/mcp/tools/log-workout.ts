@@ -24,6 +24,9 @@ export const END_SLACK_MS = 5 * 60_000
 export const MAX_WORKOUT_MS = 24 * 3_600_000
 export const NOT_ALLOWED_WORKOUTS =
   "Not allowed: the owner hasn't turned on Add workouts for agents in the app. Nothing was added."
+/** The earliest start taken (added after review): an earlier one is a wrong year, not a past workout. */
+const EARLIEST_START = '2000-01-01T00:00:00.000000Z'
+const WRITE_FAILED = 'The server could not save this workout, so none of it was saved. Send it again.'
 
 type Refused = { index: number; status: 'refused'; reason: string; message: string }
 type Outcome = { index: number; status: 'added'; workout_id: string } | Refused
@@ -91,6 +94,7 @@ function checked(w: WorkoutArg, index: number, now: Date): LoggedWorkout | Refus
   const invalid = (message: string) => refused(index, 'invalid', message)
   const started = normalizeTimestamp(w.started_at)
   if (started === null) return invalid("started_at isn't a timestamp like 2026-10-08T17:02:00Z.")
+  if (started < EARLIEST_START) return invalid('The workout starts before 2000.')
   const ended = normalizeTimestamp(w.ended_at)
   if (ended === null) return invalid("ended_at isn't a timestamp like 2026-10-08T18:05:00Z.")
   if (ended <= started) return invalid('ended_at must be after started_at.')
@@ -183,7 +187,15 @@ export async function logWorkouts({ db, now }: ToolCtx, args: LogWorkoutArgs): P
     const sibling = added.find((a) => overlaps(a.span, span))
     if (sibling !== undefined) return refused(index, 'overlaps', overlapsSibling(sibling.index))
     if (stored.some((s) => overlaps(s, span))) return refused(index, 'overlaps', OVERLAPS_HISTORY)
-    const written = await db.insertWorkout(w, agent)
+    // A write that fails for any other reason (D1 itself) refuses this workout only: its batch is all or nothing, and
+    // the answer still lists the ones already added (added after review).
+    let written: Awaited<ReturnType<typeof db.insertWorkout>>
+    try {
+      written = await db.insertWorkout(w, agent)
+    } catch (error) {
+      console.error('log_workout write failed', error instanceof Error ? error.message : String(error))
+      return refused(index, 'error', WRITE_FAILED)
+    }
     if (!written.added) return refused(index, written.reason, written.message)
     added.push({ index, span })
     return { index, status: 'added', workout_id: written.id }
