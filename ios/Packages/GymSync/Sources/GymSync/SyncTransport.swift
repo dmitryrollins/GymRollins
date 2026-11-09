@@ -51,9 +51,14 @@ public protocol SyncTransport: Sendable {
     func pendingProposals() async throws -> [PulledProposal]
     func resolveProposal(id: UUID, status: String, appliedChangeIds: [String], at: Date) async throws
     func lastMcpUse() async throws -> Date?
-    /// Revokes every OAuth grant the signed-in user has given (the Claude connector is GymRollins' only OAuth
-    /// client); returns how many were revoked.
+    /// Revokes every OAuth grant the signed-in user has given, every agent's (Disconnect all); returns how many were
+    /// revoked.
     func revokeOAuthGrants() async throws -> Int
+    /// The agents connected to this account, newest connection first (plan 32).
+    func connectedAgents() async throws -> [ConnectedAgent]
+    /// Ends one agent's access; the others keep theirs. Throws `AgentError.unknownAgent` when the account has no grant
+    /// for it.
+    func disconnectAgent(clientId: String) async throws
     /// A Claude sign-in waiting for this account's approval, by the code its page shows. Throws `ConnectCodeError`
     /// when no sign-in waits with that code.
     func connectRequest(code: String) async throws -> ConnectRequest
@@ -83,6 +88,10 @@ extension SyncTransport {
     public func lastMcpUse() async throws -> Date? { nil }
 
     public func revokeOAuthGrants() async throws -> Int { 0 }
+
+    /// Test doubles that predate plan 32 have no agents: nothing listed, nothing to disconnect.
+    public func connectedAgents() async throws -> [ConnectedAgent] { [] }
+    public func disconnectAgent(clientId: String) async throws { throw AgentError.unknownAgent }
 
     /// The test doubles have no approval codes.
     public func connectRequest(code: String) async throws -> ConnectRequest { throw URLError(.unsupportedURL) }

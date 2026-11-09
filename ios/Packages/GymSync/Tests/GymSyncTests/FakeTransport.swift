@@ -18,6 +18,8 @@ actor FakeTransport: SyncTransport {
     private var malformedProposals: [UUID: String] = [:]
     private(set) var grants: [UUID] = []
     private(set) var revokedGrants: [UUID] = []
+    /// The agents connected to the account (plan 32), newest connection first.
+    private(set) var agents: [ConnectedAgent] = []
 
     private(set) var gyms: [UUID: GymDTO] = [:]
     private(set) var gymListings: [UUID: GymListingDTO] = [:]
@@ -108,6 +110,7 @@ actor FakeTransport: SyncTransport {
     func seed(proposal: ProposalDTO) { proposals[proposal.id] = proposal }
     /// OAuth clients the user has granted access (e.g. Claude's connector).
     func seed(grants clientIds: [UUID]) { grants = clientIds }
+    func seed(agents list: [ConnectedAgent]) { agents = list }
     /// A pending row the app's strict decoder refuses (`changes` is raw JSON), as the server may hold.
     func seed(malformedProposal id: UUID, createdAt: Date, changes: String) {
         let stamp = SyncDate.format(createdAt)
@@ -343,6 +346,18 @@ actor FakeTransport: SyncTransport {
         revokedGrants += revoked
         grants = []
         return revoked.count
+    }
+
+    func connectedAgents() throws -> [ConnectedAgent] {
+        if let failure { throw failure } // a read: not counted in pushCalls
+        return agents
+    }
+
+    /// `POST /v1/agents/:clientId/disconnect`: only that agent goes; one the account doesn't have is `unknown_agent`.
+    func disconnectAgent(clientId: String) throws {
+        try gate()
+        guard agents.contains(where: { $0.clientId == clientId }) else { throw AgentError.unknownAgent }
+        agents = agents.filter { $0.clientId != clientId }
     }
 
     // MARK: - Rules

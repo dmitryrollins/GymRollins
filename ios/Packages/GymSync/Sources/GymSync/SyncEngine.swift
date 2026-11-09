@@ -152,9 +152,19 @@ public final class SyncEngine {
         try await transport.lastMcpUse()
     }
 
-    /// Revokes the OAuth grants this account gave (Claude's connector); returns how many.
+    /// Revokes the OAuth grants this account gave, every agent's (Disconnect all); returns how many.
     public func revokeOAuthGrants() async throws -> Int {
         try await transport.revokeOAuthGrants()
+    }
+
+    /// The agents connected to this account, newest connection first (Settings › AI agents).
+    public func connectedAgents() async throws -> [ConnectedAgent] {
+        try await transport.connectedAgents()
+    }
+
+    /// Disconnects one agent; the others keep their access.
+    public func disconnectAgent(clientId: String) async throws {
+        try await transport.disconnectAgent(clientId: clientId)
     }
 
     /// The Claude sign-in waiting with `code` (Approve a connection).
