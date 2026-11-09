@@ -122,6 +122,12 @@ final class ApproveConnectionModel {
     /// this server to their own claude.ai account (host `claude.ai`, no warning) and ask the owner to type the code.
     static let caution = "Approve only a code that's on your own screen, from a connection you started just now."
 
+    /// Plan 32: for a host that isn't Claude's own (claude.ai, claude.com), a warning that names it, worded for any
+    /// agent; none for Claude's.
+    static func hostWarning(for request: ConnectRequest) -> String? {
+        request.knownHost ? nil : "Approve only if you started this connection yourself, in \(request.redirectHost)."
+    }
+
     /// Added after review: "Opened 2 min ago · Toronto, CA · Safari", leaving out what the server doesn't know.
     /// A code lasts 10 minutes, so minutes are enough; a phone clock behind the server's reads "just now".
     static func openedLine(for request: ConnectRequest, now: Date) -> String {

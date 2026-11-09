@@ -1,7 +1,7 @@
 import GymSync
 import SwiftUI
 
-/// Settings › Claude › Approve a connection (spec section 5). Claude's sign-in page in the browser shows a code; the
+/// Settings › AI agents › Approve a connection (spec section 5). The agent's sign-in page in the browser shows a code; the
 /// owner types it here, sees which app asks and where an approval sends the browser (with a warning when that isn't
 /// Claude's), when and where the page was opened, and a caution (added after the server's whole-flow review), then
 /// approves or denies. Approve and Deny each sit on their own row: a Form row fires every button it holds.
@@ -73,9 +73,8 @@ struct ApproveConnectionView: View {
                     .foregroundStyle(Theme.textSecondary)
                     .accessibilityIdentifier("connect.opened")
             }
-            if !request.knownHost {
-                Text("This isn't Claude's address. Approve only if you started this connection yourself, for example "
-                     + "in Claude Code on your computer.")
+            if let warning = ApproveConnectionModel.hostWarning(for: request) {
+                Text(warning)
                     .font(.footnote).foregroundStyle(Theme.destructive)
                     .accessibilityIdentifier("connect.warning")
             }
@@ -102,7 +101,7 @@ struct ApproveConnectionView: View {
                 .disabled(deciding)
                 .accessibilityIdentifier("connect.deny")
         } footer: {
-            Text("Claude can then use what Settings \u{203A} Claude allows, until you disconnect it.")
+            Text("It can then use what Settings \u{203A} AI agents allows, until you disconnect it.")
         }
     }
 

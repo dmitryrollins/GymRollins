@@ -278,4 +278,18 @@ import Testing
         #expect(ApproveConnectionModel.caution
             == "Approve only a code that's on your own screen, from a connection you started just now.")
     }
+
+    /// Plan 32: for a host that isn't Claude's own the sheet warns, naming the host and not Claude; Claude's own hosts
+    /// get no warning, as before.
+    @Test func theWarningNamesAHostThatIsntClaudes() {
+        #expect(ApproveConnectionModel.hostWarning(for: Self.request)
+            == "Approve only if you started this connection yourself, in 127.0.0.1:53682.")
+        let muse = ConnectRequest(code: "ABCD-EFGH", clientName: "Muse", redirectHost: "agent.meta.ai", knownHost: false,
+                                  expiresAt: Self.opened + 600, openedAt: Self.opened)
+        #expect(ApproveConnectionModel.hostWarning(for: muse)
+            == "Approve only if you started this connection yourself, in agent.meta.ai.")
+        let claude = ConnectRequest(code: "ABCD-EFGH", clientName: "Claude", redirectHost: "claude.ai", knownHost: true,
+                                    expiresAt: Self.opened + 600, openedAt: Self.opened)
+        #expect(ApproveConnectionModel.hostWarning(for: claude) == nil)
+    }
 }
