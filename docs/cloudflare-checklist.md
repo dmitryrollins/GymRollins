@@ -164,6 +164,12 @@ The last line makes the secret (48 random bytes) and hands it to the Worker's fi
 never printed or saved. wrangler 4.158.0 reads `--secrets-file` as a dotenv file, and refuses an empty one. It lists
 `api.gymrollins.com (custom domain)` as the target.
 
+Done on 2026-11-09 (versions 3106d03f, then e589e8da). The first deploy printed `Uploaded gymrollins`, then failed
+with `This Worker does not exist on your account. [code: 10007]`: Cloudflare didn't know the new Worker yet when
+wrangler asked for it to attach the domain. The upload had landed with the secret (`npx wrangler secret list` showed
+`BETTER_AUTH_SECRET`), so a plain `npx wrangler deploy` attached `api.gymrollins.com`. If it happens again, don't
+send a second secret: check the list, then run the plain deploy.
+
 Every deploy after the first keeps the secret it has:
 
 ```bash
