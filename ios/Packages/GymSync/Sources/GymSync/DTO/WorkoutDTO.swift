@@ -22,6 +22,8 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
     public let entries: [WorkoutEntryDTO]
     /// The server's id of the gym (never a "This phone only" gym's); sent only when there is one.
     public let gymId: UUID?
+    /// The agent that added it (`added_by`, plan 32): read from pulls and never encoded, because the server owns it.
+    public let addedBy: String?
     public let clientUpdatedAt: Date
     public let deletedAt: Date?
     public var updatedAt: Date?
@@ -35,7 +37,7 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
         case startedAt = "started_at", endedAt = "ended_at", pausedSec = "paused_sec", routineId = "routine_id"
         case volKg = "vol_kg", workoutEntries = "workout_entries", gymId = "gym_id"
         case clientUpdatedAt = "client_updated_at", deletedAt = "deleted_at", updatedAt = "updated_at"
-        case baseUpdatedAt = "base_updated_at", force
+        case baseUpdatedAt = "base_updated_at", force, addedBy = "added_by"
     }
 
     public init(_ row: SyncRow<WorkoutSnapshot>, force: Bool = false) {
@@ -52,6 +54,7 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
         records = row.value.records
         entries = w.entries.enumerated().map { WorkoutEntryDTO($1, position: $0) }
         gymId = w.gymId
+        addedBy = row.value.addedBy
         clientUpdatedAt = row.clientUpdatedAt
         deletedAt = row.deletedAt
         updatedAt = row.serverUpdatedAt
@@ -75,6 +78,7 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
             ?? c.decodeIfPresent([WorkoutEntryDTO].self, forKey: .workoutEntries) ?? [])
             .sorted { $0.position < $1.position }
         gymId = try c.decodeIfPresent(UUID.self, forKey: .gymId)
+        addedBy = try c.decodeIfPresent(String.self, forKey: .addedBy)
         clientUpdatedAt = try c.decode(Date.self, forKey: .clientUpdatedAt)
         deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
@@ -100,13 +104,14 @@ public struct WorkoutDTO: Codable, Sendable, Equatable, ServerStamped {
         try c.encode(deletedAt, forKey: .deletedAt)
         try c.encode(baseUpdatedAt, forKey: .baseUpdatedAt)
         try c.encode(force, forKey: .force)
+        // `added_by` is never written: the server keeps it through the owner's edits (plan 32).
     }
 
     public func toDomain() -> SyncRow<WorkoutSnapshot> {
         let workout = Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSec,
                               routineId: routineId, name: name, entries: entries.map(\.domain),
                               source: WorkoutSource(rawValue: source) ?? .app, note: note, gymId: gymId)
-        return SyncRow(value: WorkoutSnapshot(workout: workout, records: records, volumeKg: volKg),
+        return SyncRow(value: WorkoutSnapshot(workout: workout, records: records, volumeKg: volKg, addedBy: addedBy),
                        clientUpdatedAt: clientUpdatedAt, deletedAt: deletedAt, serverUpdatedAt: updatedAt)
     }
 }

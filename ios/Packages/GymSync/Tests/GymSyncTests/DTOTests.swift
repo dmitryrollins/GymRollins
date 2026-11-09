@@ -230,6 +230,28 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(w.entries[1].gymListingId == nil)
     }
 
+    /// Plan 32: a pulled workout says which agent added it (null or absent: nobody); a push never names one, whatever
+    /// the phone holds, because the server owns it.
+    @Test func addedByIsReadFromPullsAndNeverSent() throws {
+        let json = #"{"id":"8f7c0a2e-3b1d-4c55-9a51-2f7e0b8c9d10","started_at":"2026-10-08T17:02:00Z","#
+            + #""ended_at":"2026-10-08T18:05:00Z","name":"Upper","source":"import","#
+            + #""client_updated_at":"2026-11-09T01:31:12Z","updated_at":"2026-11-09T01:31:12Z","#
+            + #""added_by":"Muse","entries":[]}"#
+        let pulled = try SyncJSON.decoder.decode(WorkoutDTO.self, from: Data(json.utf8))
+        #expect(pulled.addedBy == "Muse")
+        #expect(pulled.toDomain().value.addedBy == "Muse")
+        #expect(pulled.toDomain().value.workout.source == .import)
+
+        let unnamed = json.replacingOccurrences(of: #""added_by":"Muse","#, with: #""added_by":null,"#)
+        #expect(try SyncJSON.decoder.decode(WorkoutDTO.self, from: Data(unnamed.utf8)).addedBy == nil)
+        let older = json.replacingOccurrences(of: #""added_by":"Muse","#, with: "")
+        #expect(try SyncJSON.decoder.decode(WorkoutDTO.self, from: Data(older.utf8)).addedBy == nil)
+
+        let sent = String(decoding: try SyncJSON.encoder.encode(WorkoutDTO(pulled.toDomain())), as: UTF8.self)
+        #expect(!sent.contains("added_by"))
+        #expect(!sent.contains("Muse"))
+    }
+
     /// A workout with its entries and sets nested (unordered), the shape `GET /v1/sync/workouts` answers.
     @Test func decodesANestedWorkout() throws {
         let json = """
