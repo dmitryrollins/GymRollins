@@ -72,7 +72,8 @@ extension SyncStore {
         r.sourceRaw = w.source.rawValue
         r.note = w.note
         r.gymId = w.gymId
-        r.addedBy = row.value.addedBy
+        // The server never clears added_by, so a row without one (a server from before plan 32) keeps the stored name.
+        r.addedBy = row.value.addedBy ?? r.addedBy
         r.isActive = false
         r.volumeKg = row.value.volumeKg
         r.recordsData = row.value.records.isEmpty ? nil : try JSONEncoder().encode(row.value.records)

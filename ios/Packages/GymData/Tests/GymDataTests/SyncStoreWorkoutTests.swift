@@ -60,6 +60,21 @@ func sampleWorkout(id: UUID = UUID(), name: String = "Push", at date: Date, weig
         #expect(dirty.value.addedBy == nil) // the push leaves it to the server
     }
 
+    /// The server never clears added_by, so a row without one (a server from before plan 32) keeps the stored name.
+    @Test func aRowWithoutAnAgentKeepsTheStoredOne() throws {
+        defer { f.tearDown() }
+        let w = sampleWorkout(at: f.clock.now)
+        try f.store.applyRemote(workouts: [SyncRow(value: WorkoutSnapshot(workout: w, records: [], volumeKg: 0,
+                                                                          addedBy: "Muse"),
+                                                   clientUpdatedAt: f.clock.now, serverUpdatedAt: f.clock.now)])
+        f.clock.advance()
+        let renamed = sampleWorkout(id: w.id, name: "Upper", at: w.startedAt)
+        try f.store.applyRemote(workouts: [SyncRow(value: WorkoutSnapshot(workout: renamed, records: [], volumeKg: 0),
+                                                   clientUpdatedAt: f.clock.now, serverUpdatedAt: f.clock.now)])
+        #expect(try f.workouts.workout(w.id)?.name == "Upper")
+        #expect(try f.workouts.addedBy(w.id) == "Muse")
+    }
+
     @Test func theOwnersWorkoutsNameNoAgentAndADeletedOneNone() throws {
         defer { f.tearDown() }
         let mine = sampleWorkout(at: f.clock.now)

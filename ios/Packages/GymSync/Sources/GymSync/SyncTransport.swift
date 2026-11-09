@@ -89,9 +89,10 @@ extension SyncTransport {
 
     public func revokeOAuthGrants() async throws -> Int { 0 }
 
-    /// Test doubles that predate plan 32 have no agents: nothing listed, nothing to disconnect.
+    /// Test doubles that predate plan 32 have no agents: nothing listed, and a Disconnect fails rather than reads as
+    /// done (`AgentError.unknownAgent` would remove the row; added after review).
     public func connectedAgents() async throws -> [ConnectedAgent] { [] }
-    public func disconnectAgent(clientId: String) async throws { throw AgentError.unknownAgent }
+    public func disconnectAgent(clientId: String) async throws { throw URLError(.unsupportedURL) }
 
     /// The test doubles have no approval codes.
     public func connectRequest(code: String) async throws -> ConnectRequest { throw URLError(.unsupportedURL) }
