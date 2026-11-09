@@ -145,4 +145,44 @@ final class AgentsUITests: XCTestCase {
         XCTAssertEqual(from.label, "From Claude")
         XCTAssertTrue(app.descendants(matching: .any)["proposal.review"].exists)
     }
+
+    /// The workout Muse added says so, and still does after the owner edits it (the edit is saved and read back).
+    func testAWorkoutAnAgentAddedSaysWhoAndKeepsItThroughAnEdit() {
+        app = XCUIApplication.launchReady(["-seedAgentWorkout"])
+        app.tabBars.buttons["Log"].tap()
+        let card = app.descendants(matching: .any)["log.workout.AD0ED000-0000-4000-8000-000000000001"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        card.tap()
+        let added = app.staticTexts["detail.addedBy"]
+        XCTAssertTrue(added.waitForExistence(timeout: 5))
+        XCTAssertEqual(added.label, "Added by Muse")
+
+        app.buttons["detail.menu"].tap()
+        XCTAssertTrue(app.buttons["detail.edit"].waitForExistence(timeout: 5))
+        app.buttons["detail.edit"].tap()
+        let reps = app.textFields["detail.set.0.0.reps"]
+        XCTAssertTrue(reps.waitForExistence(timeout: 5))
+        reps.clearAndType("9")
+        app.dismissKeyboardIfPresent()
+        app.buttons["detail.save"].tap()
+        let edited = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "1 9 \u{00D7}")).firstMatch
+        XCTAssertTrue(edited.waitForExistence(timeout: 5))
+
+        app.buttons["detail.back"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        card.tap()
+        XCTAssertTrue(added.waitForExistence(timeout: 5))
+        XCTAssertEqual(added.label, "Added by Muse")
+        XCTAssertTrue(edited.waitForExistence(timeout: 5)) // the edit was saved, and read back with the name
+    }
+
+    func testTheOwnersWorkoutsSayNothing() {
+        app = XCUIApplication.launchReady(["-seedHistory"])
+        app.tabBars.buttons["Log"].tap()
+        let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'log.workout.'"))
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
+        cards.firstMatch.tap()
+        XCTAssertTrue(app.buttons["detail.menu"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["detail.addedBy"].exists)
+    }
 }
