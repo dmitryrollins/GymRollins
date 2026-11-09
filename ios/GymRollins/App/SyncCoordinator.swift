@@ -170,10 +170,11 @@ final class SyncCoordinator {
         }
     }
 
-    /// The agents connected to this account, newest connection first (Settings › AI agents). None while signed out:
-    /// there's no session to ask with.
+    /// The agents connected to this account, newest connection first (Settings › AI agents). Signed out there's no
+    /// session to ask with, which isn't the same as no agents (added after review).
     func connectedAgents() async throws -> [ConnectedAgent] {
-        try await engine?.connectedAgents() ?? []
+        guard let engine else { throw SyncUnavailableError() }
+        return try await engine.connectedAgents()
     }
 
     /// Ends one agent's access; the others keep theirs. Signed out there's no session to do it with.

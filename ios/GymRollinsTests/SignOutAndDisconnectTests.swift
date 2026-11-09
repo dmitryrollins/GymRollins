@@ -230,10 +230,10 @@ private func makeEnv(_ transport: SwitchableTransport) async throws -> AppEnviro
         await #expect(throws: URLError.self) { try await calls.list() }
     }
 
-    @Test func withoutASessionNothingIsListedAndDisconnectNeedsASignIn() async throws {
+    @Test func withoutASessionListingAndDisconnectBothNeedASignIn() async throws {
         let defaults = try #require(UserDefaults(suiteName: "AgentCallsTests.\(UUID())"))
         let env = try AppEnvironment(options: LaunchOptions(arguments: ["-uiTesting"]), defaults: defaults)
-        #expect(try await env.agentCalls.list().isEmpty)
+        await #expect(throws: SyncUnavailableError.self) { try await env.agentCalls.list() }
         await #expect(throws: SyncUnavailableError.self) { try await env.agentCalls.disconnect(Self.muse.clientId) }
     }
 }

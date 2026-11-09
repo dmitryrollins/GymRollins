@@ -29,6 +29,9 @@ final class AgentsModel {
     private(set) var disconnecting: String?
     /// Why the last Disconnect, or a reload of a list already shown, didn't work.
     private(set) var error: String?
+    /// Moves on with each load and each Disconnect that removed a row. A load whose answer arrives after it moved on
+    /// (a newer load, or a Disconnect) is stale, and would put a disconnected agent back (added after review).
+    private var revision = 0
 
     var agents: [ConnectedAgent] {
         if case .loaded(let agents) = phase { return agents }
@@ -44,15 +47,18 @@ final class AgentsModel {
         }
     }
 
-    /// Asks for the list. A failed reload keeps the rows already shown and says why below them.
+    /// Asks for the list. A failed reload keeps the rows already shown and says why below them; a stale answer is
+    /// dropped.
     func load(_ calls: AgentCalls) async {
+        revision += 1
+        let asked = revision
         do {
             let listed = try await calls.list()
-            if Task.isCancelled { return }
+            if Task.isCancelled || asked != revision { return }
             phase = .loaded(listed)
             error = nil
         } catch {
-            if Task.isCancelled { return }
+            if Task.isCancelled || asked != revision { return }
             let message = Self.loadMessage(for: error)
             if case .loaded = phase {
                 self.error = message
@@ -63,7 +69,8 @@ final class AgentsModel {
     }
 
     /// Disconnects one agent, after its row's confirmation. Only it goes; one the server no longer has goes too
-    /// (decision A6). Any other failure keeps the row and says the agent still has access.
+    /// (decision A6). A cancelled request may or may not have reached the server, so the list is asked again (added
+    /// after review). Any other failure keeps the row and says the agent still has access.
     func disconnect(_ agent: ConnectedAgent, _ calls: AgentCalls) async {
         guard disconnecting == nil else { return }
         disconnecting = agent.clientId
@@ -71,15 +78,27 @@ final class AgentsModel {
         defer { disconnecting = nil }
         do {
             try await calls.disconnect(agent.clientId)
-            phase = .loaded(agents.filter { $0.clientId != agent.clientId })
+            removeRow(agent)
         } catch AgentError.unknownAgent {
-            phase = .loaded(agents.filter { $0.clientId != agent.clientId })
+            removeRow(agent)
+        } catch let error where Self.isCancellation(error) {
+            await load(calls)
         } catch {
             self.error = Self.disconnectMessage(for: error, name: agent.name)
         }
     }
 
+    private func removeRow(_ agent: ConnectedAgent) {
+        revision += 1
+        phase = .loaded(agents.filter { $0.clientId != agent.clientId })
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
+    }
+
     static func loadMessage(for error: Error) -> String {
+        if error is SyncUnavailableError { return "Sign in to GymRollins to see your agents." }
         if let api = error as? ApiError, api.status == 401 { return "Sign in to GymRollins to see your agents." }
         return ApiError.isOffline(error)
             ? "Couldn't reach GymRollins to list your agents. Check your connection and try again."

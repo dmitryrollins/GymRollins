@@ -100,9 +100,10 @@ final class AgentsUITests: XCTestCase {
         XCTAssertTrue(text("Connected agents").waitForExistence(timeout: 5))
         let status = app.staticTexts["claude.status"]
         XCTAssertTrue(status.waitForExistence(timeout: 5))
-        let none = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "No agents connected."),
-                                             object: status)
-        XCTAssertEqual(XCTWaiter().wait(for: [none], timeout: 5), .completed, status.label)
+        // Signed out, the account can't be asked: that isn't "no agents".
+        let signIn = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Sign in to GymRollins to see your agents."), object: status)
+        XCTAssertEqual(XCTWaiter().wait(for: [signIn], timeout: 5), .completed, status.label)
         XCTAssertTrue(text("Connect").exists)
 
         let proposals = text("Plan changes from your agents")

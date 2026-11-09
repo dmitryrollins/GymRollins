@@ -27,6 +27,22 @@ import Testing
         }
     }
 
+    /// A list call that answers only when told to: a load still waiting while something else happens.
+    @MainActor private final class HeldList {
+        private var waiting: CheckedContinuation<Void, Never>?
+        var isWaiting: Bool { waiting != nil }
+
+        func list(_ agents: [ConnectedAgent]) async -> [ConnectedAgent] {
+            await withCheckedContinuation { waiting = $0 }
+            return agents
+        }
+
+        func answer() {
+            waiting?.resume()
+            waiting = nil
+        }
+    }
+
     private func loaded(_ agents: [ConnectedAgent]) async -> (AgentsModel, Server) {
         let server = Server()
         server.listed = .success(agents)
@@ -62,6 +78,11 @@ import Testing
         server.listed = .failure(ApiError(status: 403, code: "forbidden", message: "No."))
         await model.load(server.calls)
         #expect(model.statusText == "Couldn't load your agents. Try again.")
+        server.listed = .failure(SyncUnavailableError()) // signed out: no session to ask with
+        await model.load(server.calls)
+        #expect(model.statusText == "Sign in to GymRollins to see your agents.")
+        server.listed = .failure(URLError(.timedOut))
+        await model.load(server.calls)
         server.listed = .failure(ApiError(status: 401, code: "signed_out", message: "Sign in."))
         await model.load(server.calls)
         #expect(model.statusText == "Sign in to GymRollins to see your agents.")
@@ -87,6 +108,45 @@ import Testing
         #expect(model.error == nil && model.disconnecting == nil)
         await model.disconnect(Self.claude, server.calls)
         #expect(model.statusText == "No agents connected.")
+    }
+
+    /// A list asked before a Disconnect, answering after it, would put the agent back (added after review).
+    @Test func aListAskedBeforeADisconnectDoesNotBringTheAgentBack() async {
+        let (model, server) = await loaded([Self.muse, Self.claude])
+        let held = HeldList()
+        let stale = AgentCalls(list: { await held.list([Self.muse, Self.claude]) }, disconnect: server.calls.disconnect)
+        let reload = Task { await model.load(stale) }
+        while !held.isWaiting { await Task.yield() }
+        await model.disconnect(Self.muse, server.calls)
+        held.answer()
+        await reload.value
+        #expect(model.agents == [Self.claude] && model.error == nil)
+    }
+
+    @Test func anOlderListAnsweringLastDoesNotReplaceANewerOne() async {
+        let (model, server) = await loaded([Self.muse, Self.claude])
+        let held = HeldList()
+        let older = Task { await model.load(AgentCalls(list: { await held.list([Self.muse, Self.claude]) },
+                                                       disconnect: server.calls.disconnect)) }
+        while !held.isWaiting { await Task.yield() }
+        server.listed = .success([Self.claude])
+        await model.load(server.calls)
+        held.answer()
+        await older.value
+        #expect(model.agents == [Self.claude])
+    }
+
+    /// A cancelled Disconnect may have reached the server, so the list is asked again instead of saying the agent
+    /// still has access.
+    @Test func aCancelledDisconnectAsksForTheListAgain() async {
+        for cancelled in [URLError(.cancelled), CancellationError()] as [any Error] {
+            let (model, server) = await loaded([Self.muse, Self.claude])
+            server.refusal = cancelled
+            server.listed = .success([Self.claude]) // the server did cut Muse off
+            await model.disconnect(Self.muse, server.calls)
+            #expect(model.agents == [Self.claude])
+            #expect(model.error == nil && model.disconnecting == nil)
+        }
     }
 
     @Test func anAgentTheServerNoLongerHasGoesToo() async {

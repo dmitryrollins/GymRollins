@@ -36,7 +36,8 @@ import Testing
 
     @Test func withoutTheFlagTheAccountIsAsked() async throws {
         let env = try makeEnv([])
-        #expect(try await env.agentCalls.list().isEmpty) // hermetic: no session, so nothing listed
+        // Hermetic: no session, so the account can't be asked.
+        await #expect(throws: SyncUnavailableError.self) { try await env.agentCalls.list() }
     }
 
     @Test func theSeededWorkoutWasAddedByMuseAndStoredAsAPull() throws {

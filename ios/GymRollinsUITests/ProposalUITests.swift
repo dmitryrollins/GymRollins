@@ -148,10 +148,11 @@ final class ProposalUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["claude.url"].label.hasSuffix("/mcp"), app.staticTexts["claude.url"].label)
         app.buttons["claude.copyURL"].tap()
         XCTAssertEqual(app.buttons["claude.copyURL"].label, "Copied")
+        // Signed out, the account can't be asked: that isn't "no agents".
         let status = app.staticTexts["claude.status"]
-        let none = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "No agents connected."),
-                                             object: status)
-        XCTAssertEqual(XCTWaiter().wait(for: [none], timeout: 5), .completed, status.label)
+        let signIn = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Sign in to GymRollins to see your agents."), object: status)
+        XCTAssertEqual(XCTWaiter().wait(for: [signIn], timeout: 5), .completed, status.label)
         let pendingRow = app.buttons["claude.proposal.C1A0DE00-0000-4000-8000-000000000001"]
         scrollTo(pendingRow)
         XCTAssertTrue(pendingRow.isHittable)
