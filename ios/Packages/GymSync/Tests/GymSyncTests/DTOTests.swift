@@ -316,6 +316,22 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(dto.status == "pending")
     }
 
+    /// Plan 32: the sender's name when the server kept one; older rows have none.
+    @Test func aProposalSaysWhoSentItWhenKnown() throws {
+        let named = #"{"id":"0f0f0f0f-0000-4000-8000-000000000004","created_at":"2026-11-09T01:20:00Z","#
+            + #""summary":"Pull day","changes":[],"status":"pending","from_agent":"Muse"}"#
+        let dto = try SyncJSON.decoder.decode(ProposalDTO.self, from: Data(named.utf8))
+        #expect(dto.fromAgent == "Muse")
+        #expect(dto.toDomain().fromAgent == "Muse")
+        #expect(try wire(dto).fromAgent == "Muse")
+
+        let older = named.replacingOccurrences(of: #","from_agent":"Muse""#, with: "")
+        let old = try SyncJSON.decoder.decode(ProposalDTO.self, from: Data(older.utf8))
+        #expect(old.fromAgent == nil && old.toDomain().fromAgent == nil)
+        let null = named.replacingOccurrences(of: #""from_agent":"Muse""#, with: #""from_agent":null"#)
+        #expect(try SyncJSON.decoder.decode(ProposalDTO.self, from: Data(null.utf8)).fromAgent == nil)
+    }
+
     /// One unreadable row (unknown change type, bad field) decodes as `.malformed` instead of failing the list.
     @Test func pendingProposalsDecodePerRow() throws {
         let json = """

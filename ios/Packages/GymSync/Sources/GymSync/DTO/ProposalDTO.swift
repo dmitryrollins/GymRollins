@@ -12,14 +12,18 @@ public struct ProposalDTO: Codable, Sendable, Equatable {
     public let status: String
     public let appliedChangeIds: [String]
     public let resolvedAt: Date?
+    /// The agent that sent it (`from_agent`, plan 32); nil for proposals from before the server kept it.
+    public let fromAgent: String?
 
     enum CodingKeys: String, CodingKey {
         case id, source, summary, changes, status
         case createdAt = "created_at", appliedChangeIds = "applied_change_ids", resolvedAt = "resolved_at"
+        case fromAgent = "from_agent"
     }
 
     public init(id: UUID, createdAt: Date, source: String = "claude", summary: String, changes: [PlanChange],
-                status: String = "pending", appliedChangeIds: [String] = [], resolvedAt: Date? = nil) {
+                status: String = "pending", appliedChangeIds: [String] = [], resolvedAt: Date? = nil,
+                fromAgent: String? = nil) {
         self.id = id
         self.createdAt = createdAt
         self.source = source
@@ -28,6 +32,7 @@ public struct ProposalDTO: Codable, Sendable, Equatable {
         self.status = status
         self.appliedChangeIds = appliedChangeIds
         self.resolvedAt = resolvedAt
+        self.fromAgent = fromAgent
     }
 
     public init(from decoder: Decoder) throws {
@@ -39,7 +44,8 @@ public struct ProposalDTO: Codable, Sendable, Equatable {
                   changes: try c.decode([PlanChange].self, forKey: .changes),
                   status: try c.decodeIfPresent(String.self, forKey: .status) ?? "pending",
                   appliedChangeIds: try c.decodeIfPresent([String].self, forKey: .appliedChangeIds) ?? [],
-                  resolvedAt: try c.decodeIfPresent(Date.self, forKey: .resolvedAt))
+                  resolvedAt: try c.decodeIfPresent(Date.self, forKey: .resolvedAt),
+                  fromAgent: try c.decodeIfPresent(String.self, forKey: .fromAgent))
     }
 
     public var proposal: PlanProposal { PlanProposal(summary: summary, changes: changes) }
@@ -48,7 +54,7 @@ public struct ProposalDTO: Codable, Sendable, Equatable {
     public func toDomain() -> Proposal {
         Proposal(id: id, createdAt: createdAt, source: source, summary: summary, changes: changes,
                  status: ProposalStatus(rawValue: status) ?? .pending, appliedChangeIds: appliedChangeIds,
-                 resolvedAt: resolvedAt)
+                 resolvedAt: resolvedAt, fromAgent: fromAgent)
     }
 }
 

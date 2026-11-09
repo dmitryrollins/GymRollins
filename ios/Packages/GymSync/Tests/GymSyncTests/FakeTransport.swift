@@ -334,7 +334,7 @@ actor FakeTransport: SyncTransport {
         guard let p = proposals[id] else { return }
         proposals[id] = ProposalDTO(id: p.id, createdAt: p.createdAt, source: p.source, summary: p.summary,
                                     changes: p.changes, status: status, appliedChangeIds: appliedChangeIds,
-                                    resolvedAt: at)
+                                    resolvedAt: at, fromAgent: p.fromAgent)
     }
 
     func revokeOAuthGrants() throws -> Int {
