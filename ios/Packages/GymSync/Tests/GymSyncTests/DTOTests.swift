@@ -86,6 +86,24 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(old.toDomain().value.mcpReadGyms)
     }
 
+    /// Plan 32: Add workouts travels as `mcp_log_workouts`, a JSON boolean like the other switches. A row from before
+    /// the column existed reads as off, its default.
+    @Test func profileAddWorkoutsFlagRoundTripsAndAnOldRowReadsAsOff() throws {
+        var p = ProfileSnapshot()
+        #expect(!p.mcpLogWorkouts)
+        p.mcpLogWorkouts = true
+        let row = SyncRow(value: p, clientUpdatedAt: t0)
+        let body = try SyncJSON.encoder.encode(ProfileDTO(row))
+        #expect(String(decoding: body, as: UTF8.self).contains(#""mcp_log_workouts":true"#))
+        #expect(try wire(ProfileDTO(row)).toDomain().value.mcpLogWorkouts)
+
+        var json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        json.removeValue(forKey: "mcp_log_workouts")
+        let old = try SyncJSON.decoder.decode(ProfileDTO.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(!old.mcpLogWorkouts)
+        #expect(!old.toDomain().value.mcpLogWorkouts)
+    }
+
     @Test func profileWithoutLimitsUntilReadsAsNone() throws {
         var p = ProfileSnapshot()
         p.limitsUntil = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))

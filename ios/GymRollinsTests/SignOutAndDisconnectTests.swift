@@ -109,6 +109,7 @@ private func makeEnv(_ transport: SwitchableTransport) async throws -> AppEnviro
         #expect(await transport.storedProfile?.mcpReadWorkouts == false)
         #expect(await transport.storedProfile?.mcpPropose == false)
         #expect(await transport.storedProfile?.mcpReadGyms == false)
+        #expect(await transport.storedProfile?.mcpLogWorkouts == false)
         #expect(await transport.revokes == 1)
         #expect(try env.syncStore.dirtyProfile() == nil)
     }
