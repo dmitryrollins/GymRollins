@@ -43,11 +43,15 @@ public struct WorkoutSnapshot: Sendable, Equatable {
     public let workout: Workout
     public let records: [PersonalRecord]
     public let volumeKg: Double
+    /// The agent that added it through `log_workout` (the server's `added_by`, plan 32); nil for the owner's own.
+    /// The server owns it: pulls carry it, pushes never do.
+    public let addedBy: String?
 
-    public init(workout: Workout, records: [PersonalRecord], volumeKg: Double) {
+    public init(workout: Workout, records: [PersonalRecord], volumeKg: Double, addedBy: String? = nil) {
         self.workout = workout
         self.records = records
         self.volumeKg = volumeKg
+        self.addedBy = addedBy
     }
 }
 

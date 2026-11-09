@@ -31,6 +31,9 @@ public final class WorkoutRecord {
     public var entriesData: Data?
     /// The local gym row it was done at. A plain id, not a relationship: deleting the gym must not touch the workout.
     public var gymId: UUID?
+    /// The agent that added it (`WorkoutSnapshot.addedBy`, plan 32). Only a pull writes it, so the owner's edits keep
+    /// it; nil for the owner's own and for rows from before it existed.
+    public var addedBy: String?
 
     public init(id: UUID, startedAt: Date, name: String, sourceRaw: String, isActive: Bool, now: Date) {
         self.id = id

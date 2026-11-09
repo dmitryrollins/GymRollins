@@ -9,6 +9,7 @@ extension SyncStore {
                                                          sortBy: [SortDescriptor(\.startedAt)]))
             .map { record in
                 let snapshot = try record.snapshot()
+                // `added_by` is the server's (plan 32): the pushed snapshot never carries it.
                 let sent = WorkoutSnapshot(workout: try sendable(snapshot.workout), records: snapshot.records,
                                            volumeKg: snapshot.volumeKg)
                 return SyncRow(value: sent, clientUpdatedAt: record.updatedAt, deletedAt: record.deletedAt,
@@ -71,6 +72,7 @@ extension SyncStore {
         r.sourceRaw = w.source.rawValue
         r.note = w.note
         r.gymId = w.gymId
+        r.addedBy = row.value.addedBy
         r.isActive = false
         r.volumeKg = row.value.volumeKg
         r.recordsData = row.value.records.isEmpty ? nil : try JSONEncoder().encode(row.value.records)
@@ -83,6 +85,6 @@ extension SyncStore {
 extension WorkoutRecord {
     func snapshot() throws -> WorkoutSnapshot {
         let records = try recordsData.map { try JSONDecoder().decode([PersonalRecord].self, from: $0) } ?? []
-        return WorkoutSnapshot(workout: value, records: records, volumeKg: volumeKg)
+        return WorkoutSnapshot(workout: value, records: records, volumeKg: volumeKg, addedBy: addedBy)
     }
 }

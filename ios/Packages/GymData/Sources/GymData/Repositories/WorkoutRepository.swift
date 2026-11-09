@@ -37,6 +37,11 @@ public final class WorkoutRepository {
         try record(id).flatMap { $0.deletedAt == nil ? $0.value : nil }
     }
 
+    /// The agent that added this workout (plan 32), or nil: the owner's own, deleted, or not on this iPhone.
+    public func addedBy(_ id: UUID) throws -> String? {
+        try record(id).flatMap { $0.deletedAt == nil ? $0.addedBy : nil }
+    }
+
     /// Progression data points for one exercise, newest first.
     ///
     /// Fetches only the `WorkoutEntryRecord`s for this exercise (rather than every finished
