@@ -188,7 +188,12 @@ async function previousListings(db: D1Database, workoutId: string): Promise<Map<
   return new Map(results.map((r) => [r.id, r.gym_equipment_id]))
 }
 
-const WORKOUT_SELECT = `${names(WORKOUT)}, updated_at`
+/**
+ * What a pull answers: the columns, the server's updated_at, and added_by (plan 32), the agent that added the workout
+ * with log_workout or null. added_by is the server's own: no save from the app sets or changes it (UPSERT leaves it
+ * out), and only addWorkout writes it.
+ */
+const WORKOUT_SELECT = `${names(WORKOUT)}, added_by, updated_at`
 
 /** One page of the caller's workouts, oldest change first, deleted ones included. `limit` counts workouts. */
 export async function pullWorkouts(db: D1Database, userId: string, query: PullQuery) {

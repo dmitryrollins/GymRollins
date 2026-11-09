@@ -40,7 +40,7 @@ describe('saving a workout', () => {
     expect(await fetchOne(token, w.id)).toEqual({
       id: w.id.toLowerCase(), started_at: w.started_at, ended_at: w.ended_at, paused_sec: 0, routine_id: null,
       name: 'Push', source: 'app', note: null, vol_kg: 960, records: w.records, gym_id: null, client_updated_at: T1,
-      deleted_at: null, updated_at: saved.updated_at,
+      deleted_at: null, added_by: null, updated_at: saved.updated_at,
       entries: [{
         id: entry.id.toLowerCase(), exercise_id: 'bench_press', position: 0, note: null, superset_group: null,
         gym_equipment_id: null,
@@ -259,7 +259,7 @@ describe('workout saves under load and in shape', () => {
     const keys = (o: Record<string, unknown>) => Object.keys(o).sort()
     expect(keys(w)).toEqual([
       'id', 'started_at', 'ended_at', 'paused_sec', 'routine_id', 'name', 'source', 'note', 'vol_kg', 'records',
-      'gym_id', 'client_updated_at', 'deleted_at', 'updated_at', 'entries',
+      'gym_id', 'client_updated_at', 'deleted_at', 'added_by', 'updated_at', 'entries',
     ].sort())
     expect(keys(w.entries[0])).toEqual(
       ['id', 'exercise_id', 'position', 'note', 'superset_group', 'gym_equipment_id', 'sets'].sort(),
