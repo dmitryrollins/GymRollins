@@ -58,7 +58,7 @@ Every other agent keeps working. `POST /v1/claude/revoke` stays as **Disconnect 
 
 ### 3.4 `log_workout`
 
-Input: `{ "workouts": [ … up to 20 … ] }`, each:
+Input: `{ "workouts": [ … up to 5 … ] }` (the Free plan allows about 50 D1 queries per request; more need Workers Paid), each:
 
 ```json
 { "started_at": "2026-10-08T17:02:00Z", "ended_at": "2026-10-08T18:05:00Z", "name": "Upper", "note": "…",
