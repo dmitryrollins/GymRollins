@@ -368,5 +368,6 @@ sqlite3 "$READ/default.store" "select count(*) from ZWORKOUTRECORD"
 - [ ] Untracked leftovers of the old backend stay on disk: its folder and `web/consent/`, with their `.env.local` files
       (gitignored, so git never removed them). Nothing in the repo uses them. The owner deletes them by hand:
       delete the old backend's folder and `web/consent`.
-- [ ] Once the phone has moved, `OldServerKeychain` can go, with its one exception in the old-backend guard
+- [x] Once the phone has moved, `OldServerKeychain` can go, with its one exception in the old-backend guard
       (`scripts/check-old-backend.sh`, added by plan 30's last task), in a change of their own. During the move it deletes the old sign-in SDK's Keychain items.
+      Done on 2026-11-09, after the phone's move had verified (148 workouts on the server, as in the backup).

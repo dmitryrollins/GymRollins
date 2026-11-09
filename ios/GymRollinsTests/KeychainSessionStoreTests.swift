@@ -50,21 +50,6 @@ import Testing
         #expect(sync == nil || (sync as? Bool) == false || (sync as? Int) == 0, "never iCloud Keychain")
     }
 
-    @Test func forgettingTheOldServersSessionDeletesItsItems() throws {
-        let account = "test-legacy-\(UUID().uuidString)"
-        let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                   kSecAttrService as String: OldServerKeychain.service,
-                                   kSecAttrAccount as String: account, kSecValueData as String: Data("refresh".utf8)]
-        defer { SecItemDelete(item.filter { $0.key != kSecValueData as String } as CFDictionary) }
-        #expect(SecItemAdd(item as CFDictionary, nil) == errSecSuccess)
-        let status = OldServerKeychain.forget()
-        #expect(status == errSecSuccess)
-        var probe = item
-        probe[kSecValueData as String] = nil
-        #expect(SecItemCopyMatching(probe as CFDictionary, nil) == errSecItemNotFound)
-        #expect(OldServerKeychain.forget() == errSecItemNotFound, "nothing left is fine")
-    }
-
     @Test func savingOverAnExistingSessionReplacesItInPlace() throws {
         defer { store.clear() }
         let first = StoredSession(token: "t1", userId: UUID(), email: nil)

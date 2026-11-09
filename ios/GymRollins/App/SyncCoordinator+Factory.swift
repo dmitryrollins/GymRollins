@@ -48,7 +48,6 @@ extension SyncCoordinator {
             }
             if try store.moveToServer(config.origin) {
                 sessions.clear() // a session the old server gave means nothing here
-                OldServerKeychain.forget() // nor does the old server's refresh token; it would travel in backups
                 log.notice("Moved this phone's data to \(config.origin, privacy: .public); it uploads after the next sign-in")
             }
             return true
