@@ -104,6 +104,11 @@ struct LaunchOptions {
     /// DEBUG/UI-test only (`-fakeGymCatalogGrows`): from its second read of a gym on, the fake catalogue also lists a
     /// row machine, so a test can tell that a refresh has run and applied.
     let fakeGymCatalogGrows: Bool
+    /// DEBUG/UI-test only (`-fakeAgents`): Settings › AI agents lists Muse and Claude from memory (`DebugAgents`), and
+    /// Disconnect removes one; nothing is sent.
+    let fakeAgents: Bool
+    /// DEBUG/UI-test only (`-seedAgentWorkout`): a past workout Muse added, stored as a pull stores it (`DebugAgents`).
+    let seedAgentWorkout: Bool
     /// DEBUG/UI-test only (`-fakeHealth`): Apple Health is an in-memory `FakeHealthStore` seeded with three Withings
     /// weigh-ins, so the Health flows can be tested on the simulator without HealthKit.
     let fakeHealth: Bool
@@ -163,6 +168,8 @@ struct LaunchOptions {
         fakeSignedIn = arguments.contains("-fakeSignedIn")
         fakeGymAdmin = arguments.contains("-fakeGymAdmin")
         fakeGymCatalogGrows = arguments.contains("-fakeGymCatalogGrows")
+        fakeAgents = arguments.contains("-fakeAgents")
+        seedAgentWorkout = arguments.contains("-seedAgentWorkout")
         seedHistory = arguments.contains("-seedHistory")
         seedBodyweight = arguments.contains("-seedBodyweight")
         seedPlank = arguments.contains("-seedPlank")
@@ -187,6 +194,8 @@ struct LaunchOptions {
         fakeSignedIn = false
         fakeGymAdmin = false
         fakeGymCatalogGrows = false
+        fakeAgents = false
+        seedAgentWorkout = false
         seedHistory = false
         seedBodyweight = false
         seedPlank = false

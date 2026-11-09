@@ -4,7 +4,7 @@ import GymCore
 import GymData
 import SwiftData
 
-/// DEBUG-only (`-seedProposal`): a pending proposal shaped like the shared fixture's "valid knee-break proposal",
+/// DEBUG-only (`-seedProposal`): a pending proposal from Claude, shaped like the shared fixture's "valid knee-break proposal",
 /// mapped onto `OwnerSeed`'s routines and exercise ids, with one visible effect per change (four cards). Inserted
 /// once (fixed id), so a relaunch on the same disk store keeps its resolution.
 enum DebugProposalSeed {
@@ -29,7 +29,7 @@ enum DebugProposalSeed {
             PlanChange(id: "c3", type: .swapExercise, routineId: pull, exerciseId: "0603", toExerciseId: "0405",
                        reason: "Stalled 3 sessions"),
             PlanChange(id: "c4", type: .removeExercise, routineId: legs, exerciseId: "0585", reason: "Knee"),
-        ])
+        ], fromAgent: "Claude")
         try proposals.upsertRemote(try proposals.pending() + [seed])
     }
 

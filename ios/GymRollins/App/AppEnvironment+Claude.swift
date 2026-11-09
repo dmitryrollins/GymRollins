@@ -78,8 +78,10 @@ extension AppEnvironment {
         }
     }
 
-    /// Settings › AI agents' calls: the account's agents through the sync coordinator.
+    /// Settings › AI agents' calls: the account's agents through the sync coordinator, or DEBUG's in-memory list under
+    /// `-fakeAgents`.
     var agentCalls: AgentCalls {
+        if let fakeAgentCalls { return fakeAgentCalls }
         let sync = sync
         return AgentCalls(list: { try await sync.connectedAgents() },
                           disconnect: { try await sync.disconnectAgent(clientId: $0) })

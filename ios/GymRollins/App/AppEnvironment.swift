@@ -41,6 +41,8 @@ final class AppEnvironment {
     let otherNames: ExerciseNamesI18n?
     /// `<API_URL>/mcp`, nil when this build has no API.
     let connectorURL: String?
+    /// DEBUG's in-memory agents under `-fakeAgents` (`DebugAgents`), one list for the launch; nil otherwise.
+    let fakeAgentCalls: AgentCalls?
     private let bundledLibrary: ExerciseLibrary
     private(set) var library: ExerciseLibrary
     private(set) var profile: Profile
@@ -108,6 +110,7 @@ final class AppEnvironment {
         #if DEBUG
         if options.seedProposal { try DebugProposalSeed.apply(context: context, now: now()) }
         if options.seedTodayProposal { try DebugProposalSeed.applyToday(context: context, now: now()) }
+        if options.seedAgentWorkout { try DebugAgents.seedWorkout(into: syncStore, now: now()) }
         if options.seedInsights { try DebugInsightsSeed.apply(context: context, now: now()) }
         if options.seedStrength { try DebugStrengthSeed.apply(context: context, now: now()) }
         if options.seedGym {
@@ -138,6 +141,11 @@ final class AppEnvironment {
         self.gymLocator = gymLocator ?? Self.makeGymLocator(options: options)
         self.gymPlaces = gymPlaces ?? Self.makeGymPlaces(options: options)
         self.connectorURL = SyncCoordinator.connectorURL(options: options)
+        #if DEBUG
+        self.fakeAgentCalls = options.fakeAgents ? DebugAgents(now: now()).calls : nil
+        #else
+        self.fakeAgentCalls = nil
+        #endif
         self.media = media ?? ExerciseMediaService.make(options: options)
         let otherNames = ExerciseNamesI18n.bundled()
         self.otherNames = otherNames
