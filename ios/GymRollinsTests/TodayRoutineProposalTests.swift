@@ -100,7 +100,7 @@ import Testing
 
     @Test func autoApplyDoesTheSame() throws {
         try env.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
-                                           autoApply: true)
+                                           autoApply: true, logWorkouts: false)
         let pull = try routine("Pull + Shoulders + Triceps")
         try propose([todayChange(ref(pull), on: today)])
         #expect(try env.sync.autoApply() == 1)

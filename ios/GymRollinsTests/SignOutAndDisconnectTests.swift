@@ -99,7 +99,8 @@ private func makeEnv(_ transport: SwitchableTransport) async throws -> AppEnviro
     @Test func successPushesTheFlagsBeforeRevoking() async throws {
         let transport = SwitchableTransport()
         let env = try await makeEnv(transport)
-        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true, autoApply: true)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true, autoApply: true,
+                                   logWorkouts: true)
         let pushesBefore = await transport.profilePushes
 
         #expect(try await env.disconnectClaude() == 1)

@@ -12,9 +12,10 @@ struct ClaudeConnectionView: View {
         var readGyms = true
         var propose = true
         var autoApply = false
+        var logWorkouts = false
 
         static let none = Permissions(readWorkouts: false, readBody: false, readPlan: false, readGyms: false,
-                                      propose: false, autoApply: false)
+                                      propose: false, autoApply: false, logWorkouts: false)
     }
 
     @Environment(AppEnvironment.self) private var env
@@ -184,14 +185,16 @@ struct ClaudeConnectionView: View {
 
     private static func permissions(_ p: Profile) -> Permissions {
         Permissions(readWorkouts: p.mcpReadWorkouts, readBody: p.mcpReadBody, readPlan: p.mcpReadPlan,
-                    readGyms: p.mcpReadGyms, propose: p.mcpPropose, autoApply: p.mcpAutoApply)
+                    readGyms: p.mcpReadGyms, propose: p.mcpPropose, autoApply: p.mcpAutoApply,
+                    logWorkouts: p.mcpLogWorkouts)
     }
 
     private func save(_ new: Permissions) {
         guard loaded, new != Self.permissions(env.profile) else { return }
         do {
             try env.saveMcpPermissions(readWorkouts: new.readWorkouts, readBody: new.readBody, readPlan: new.readPlan,
-                                       readGyms: new.readGyms, propose: new.propose, autoApply: new.autoApply)
+                                       readGyms: new.readGyms, propose: new.propose, autoApply: new.autoApply,
+                                       logWorkouts: new.logWorkouts)
             error = nil
         } catch {
             AppEnvironment.log.error("Save Claude permissions failed: \(error.localizedDescription, privacy: .public)")

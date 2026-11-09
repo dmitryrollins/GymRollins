@@ -132,11 +132,22 @@ struct ProposalFixture {
         try f.profiles.save(Profile(unit: .kg, restSec: 90))
         #expect(try f.profiles.load().mcpReadPlan) // default on
         #expect(try f.profiles.load().mcpReadGyms) // default on
+        #expect(try f.profiles.load().mcpLogWorkouts == false) // default off (plan 32)
         try f.profiles.setMcpPermissions(readWorkouts: false, readBody: true, readPlan: false, readGyms: false, propose: false,
-                                         autoApply: true)
+                                         autoApply: true, logWorkouts: true)
         let p = try f.profiles.load()
         #expect(!p.mcpReadWorkouts && p.mcpReadBody && !p.mcpReadPlan && !p.mcpReadGyms && !p.mcpPropose && p.mcpAutoApply)
+        #expect(p.mcpLogWorkouts)
         #expect(p.unit == .kg && p.restSec == 90)
+    }
+
+    /// Plan 32: a whole-profile save (Settings, onboarding, the injury note) keeps Add workouts as it was.
+    @Test func aProfileSaveKeepsAddWorkouts() throws {
+        try f.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
+                                         autoApply: false, logWorkouts: true)
+        try f.profiles.save(try f.profiles.load().withLimits("Knee", until: nil))
+        let saved = try f.profiles.load()
+        #expect(saved.mcpLogWorkouts && saved.limits == "Knee")
     }
 
     @Test func resetAllRemovesProposals() throws {

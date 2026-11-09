@@ -144,6 +144,7 @@ extension ProfileRecord {
         s.mcpReadGyms = mcpReadGyms
         s.mcpPropose = mcpPropose
         s.mcpAutoApply = mcpAutoApply
+        s.mcpLogWorkouts = mcpLogWorkouts
         s.sex = sexRaw.flatMap(ProfileSex.init(rawValue:))
         s.birthYear = birthYear
         return s
@@ -170,6 +171,7 @@ extension ProfileRecord {
         mcpReadGyms = s.mcpReadGyms
         mcpPropose = s.mcpPropose
         mcpAutoApply = s.mcpAutoApply
+        mcpLogWorkouts = s.mcpLogWorkouts
         sexRaw = s.sex?.rawValue
         birthYear = s.birthYear
     }

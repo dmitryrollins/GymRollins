@@ -27,6 +27,8 @@ public final class ProfileRecord {
     public var mcpReadGyms: Bool = true
     public var mcpPropose: Bool
     public var mcpAutoApply: Bool
+    /// Plan 32's Add workouts: agents may add past workouts. A store from before it opens with the default.
+    public var mcpLogWorkouts: Bool = false
     /// `ProfileSex` raw value; nil until the owner sets it (strength levels only).
     public var sexRaw: String?
     public var birthYear: Int?

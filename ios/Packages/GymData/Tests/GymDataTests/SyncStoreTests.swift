@@ -166,6 +166,7 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         profile.platesKg = [25, 20]
         profile.mcpReadPlan = false
         profile.mcpReadGyms = false
+        profile.mcpLogWorkouts = true
         try f.store.applyRemote(profile: SyncRow(value: profile, clientUpdatedAt: t, serverUpdatedAt: t))
         let ex = Exercise(id: "custom-x", name: "Sled", bodyPart: "legs", equipment: "sled", target: "quads",
                           isCustom: true, mode: .reps, bilateral: true)
@@ -186,6 +187,7 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         #expect(try f.profiles.load().unit == .kg)
         #expect(try f.profiles.load().mcpReadPlan == false)
         #expect(try f.profiles.load().mcpReadGyms == false)
+        #expect(try f.profiles.load().mcpLogWorkouts)
         #expect(try f.custom.all() == [ex])
         #expect(try f.routines.schedule().days == [1: r.id])
         #expect(try f.body.entries(since: nil) == [bw])
@@ -193,7 +195,7 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
 
     @Test func dirtyProfileWeekdaysAndCustomExercisesRoundTrip() throws {
         defer { f.tearDown() }
-        try f.profiles.save(Profile(unit: .kg, goalWeightKg: 85))
+        try f.profiles.save(Profile(unit: .kg, goalWeightKg: 85, mcpLogWorkouts: true))
         let r = sampleRoutine()
         try f.routines.setSchedule(weekday: 3, routineId: r.id)
         let ex = try f.custom.create(name: "Sled", bodyPart: "legs", equipment: "sled", target: "quads", mode: .reps,
@@ -202,6 +204,7 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         let profile = try #require(try f.store.dirtyProfile())
         #expect(profile.value.unit == .kg)
         #expect(profile.value.goalWeightKg == 85)
+        #expect(profile.value.mcpLogWorkouts)
         #expect(profile.clientUpdatedAt == f.clock.now)
         #expect(try f.store.dirtyWeekdays().map(\.value) == [WeekdayAssignment(weekday: 3, routineId: r.id)])
         #expect(try f.store.dirtyCustomExercises().map(\.value) == [ex])
