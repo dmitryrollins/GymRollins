@@ -1,4 +1,4 @@
-// /v1/claude: what Settings › Claude calls, behind the app's session (spec section 3, "Routes").
+// /v1/claude: what Settings › AI agents calls, behind the app's session (spec section 3, "Routes").
 import { Hono } from 'hono'
 import type { AppEnv } from '../env.ts'
 import { jsonBody } from '../http/body.ts'

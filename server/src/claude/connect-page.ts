@@ -148,7 +148,7 @@ function codePage(request: ConnectRequest): Response {
   return page(
     200,
     `<p class="code">${displayCode(request.code)}</p>` +
-      '<p>Open GymRollins › Settings › Claude › Approve a connection and type this code.</p>' +
+      '<p>Open GymRollins › Settings › AI agents › Approve a connection and type this code.</p>' +
       `<p><strong>${who}</strong> is asking, and returns to <strong>${host}</strong>.</p>` +
       `<p class="left">Expires in ${countdown}</p>`,
     String(POLL_SECONDS),

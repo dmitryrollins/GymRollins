@@ -17,7 +17,7 @@ const MAX_FIXED_WEIGHTS = 60
 async function requireGymsOn(db: Db): Promise<void> {
   if (!(await db.readPermissions()).gyms) {
     throw new ToolError(
-      'Reading gyms is turned off: the owner can switch it on under Claude in the GymRollins app.',
+      'Reading gyms is turned off: the owner can switch it on under AI agents in the GymRollins app.',
     )
   }
 }

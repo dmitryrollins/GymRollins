@@ -1,5 +1,5 @@
 // Claude's Db on D1 (spec section 4, "Permissions and Claude"). Postgres's RLS for an OAuth client becomes
-// code here: every query filters by the token's user, each read checks its Settings › Claude toggle first (as
+// code here: every query filters by the token's user, each read checks its Settings › AI agents toggle first (as
 // mcp_flag did) and answers as if the rows were hidden, and the only writes are a pending proposal, a body
 // weight, the audit row and the rate-limit slot. The old Deno server's data layer and the Postgres
 // policies were the reference.
@@ -42,7 +42,7 @@ const MAX_QUERY_WORDS = 6
 const MAX_GYM_IDS = 200
 const MAX_REQUIREMENT_ROWS = 5000
 const MAX_DATE_ROWS = 15_000
-const NOT_ALLOWED = "Not allowed: the owner's Claude permissions in the app don't allow this."
+const NOT_ALLOWED = "Not allowed: the owner's permissions for agents in the app don't allow this."
 /** Audit rows are kept this long; the app's "last use" only reads the newest one. */
 const AUDIT_DAYS = 90
 const AUDIT_CUTOFF_SQL = `(strftime('%Y-%m-%dT%H:%M:%f', 'now', '-${AUDIT_DAYS} days') || '000Z')`

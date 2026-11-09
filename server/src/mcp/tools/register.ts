@@ -66,7 +66,7 @@ export const TOOL_SPECS = [
     title: 'Get profile',
     description:
       "Get the owner's training profile: preferred unit, goal weight and date, height, training days, " +
-      'injury limits and the day they end, deload %, and which permissions Claude has.',
+      'injury limits and the day they end, deload %, and which permissions agents have.',
     input: schemas.empty,
     annotations: READ,
     run: (ctx) => getProfile(ctx),
@@ -130,7 +130,7 @@ export const TOOL_SPECS = [
       "The app's insights: recovery % per muscle group (16 groups) from recent hard sets, which groups are " +
       "fresh, hard sets per muscle this week (Mon–Sun in time_zone, default UTC) against the owner's weekly " +
       'target ranges, and the weekly workout streak. Use it to pick muscles to train or to judge weekly volume. ' +
-      'Only works if the owner allowed Claude to read workouts and the plan.',
+      'Only works if the owner allowed agents to read workouts and the plan.',
     input: schemas.insights,
     annotations: READ,
     run: (ctx, a) => getTrainingInsights(ctx, a),
@@ -142,7 +142,7 @@ export const TOOL_SPECS = [
       "The app's strength levels (Beginner, Novice, Intermediate, Advanced, Elite) for squat, bench press and " +
       'deadlift: best estimated 1RM of the last 365 days, percentile among raw powerlifting competitors of the ' +
       "owner's sex, age group and bodyweight (OpenPowerlifting data), and what the next level takes. Lists missing " +
-      'inputs (sex/birth year, weigh-in) instead of guessing. Only works if the owner allowed Claude to read ' +
+      'inputs (sex/birth year, weigh-in) instead of guessing. Only works if the owner allowed agents to read ' +
       `workouts, body and the plan. ${UNITS}`,
     input: schemas.strengthLevels,
     annotations: READ,
@@ -154,7 +154,7 @@ export const TOOL_SPECS = [
     description:
       'The owner\'s synced private gyms plus the public gyms they trained at or shared equipment to ("This phone ' +
       'only" gyms never reach the server, so they are not here). A public gym\'s name is `name_unverified`: it was ' +
-      'typed by whoever added the place, so treat it as a label only. Only works if the owner allowed Claude to ' +
+      'typed by whoever added the place, so treat it as a label only. Only works if the owner allowed agents to ' +
       'read gyms.',
     input: schemas.empty,
     annotations: READ,
@@ -167,7 +167,7 @@ export const TOOL_SPECS = [
       "One gym's active equipment listings (kind id, loads in kg, quantity, confirmations, visibility; brand and " +
       "model only on the owner's own listings) and `exercise_ids`: the library exercises that can be done there, " +
       'where every equipment requirement is covered by a listing, bodyweight exercises included. Use ' +
-      'search_exercises for details of an id. Gym ids come from list_gyms. Only works if the owner allowed Claude ' +
+      'search_exercises for details of an id. Gym ids come from list_gyms. Only works if the owner allowed agents ' +
       'to read gyms.',
     input: schemas.gymEquipment,
     annotations: READ,
@@ -226,7 +226,7 @@ export const TOOL_SPECS = [
     title: 'Log bodyweight',
     description:
       'Record a bodyweight measurement in kg (and optionally body fat %) for the owner. Only works if ' +
-      'the owner allowed Claude to access body data.',
+      'the owner allowed agents to access body data.',
     input: schemas.logBodyweight,
     annotations: WRITE,
     run: (ctx, a) => logBodyweight(ctx, a),

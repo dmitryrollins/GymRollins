@@ -28,7 +28,7 @@ describe('/connect', () => {
     const { res, html, code } = await openConnect(new Browser(), flow)
     expect(res.status).toBe(200)
     expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}$/)
-    expect(html).toContain('Open GymRollins › Settings › Claude › Approve a connection and type this code.')
+    expect(html).toContain('Open GymRollins › Settings › AI agents › Approve a connection and type this code.')
     expect(html).toContain(
       '<strong>Claude Code</strong> is asking, and returns to <strong>127.0.0.1:33418</strong>',
     )

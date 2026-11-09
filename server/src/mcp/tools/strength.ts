@@ -35,7 +35,7 @@ export async function getStrengthLevels(ctx: ToolCtx, _args: Record<string, neve
   const allowed = await db.readPermissions()
   if (!allowed.workouts || !allowed.body || !allowed.plan) {
     throw new ToolError(
-      "Not allowed: strength levels need the owner's Claude permissions to read workouts, body and the plan in " +
+      "Not allowed: strength levels need the owner's permission for agents to read workouts, body and the plan in " +
         'the app.',
     )
   }

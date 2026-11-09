@@ -50,7 +50,7 @@ export async function getTrainingInsights(
   const allowed = await db.readPermissions()
   if (!allowed.workouts || !allowed.plan) {
     throw new ToolError(
-      "Not allowed: insights need the owner's Claude permissions to read workouts and read the plan in the app.",
+      "Not allowed: insights need the owner's permission for agents to read workouts and read the plan in the app.",
     )
   }
   const profile = await db.profile()
