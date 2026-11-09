@@ -47,11 +47,11 @@ final class AgentsUITests: XCTestCase {
         let museName = app.staticTexts["agents.name.\(muse)"]
         XCTAssertTrue(museName.waitForExistence(timeout: 5))
         XCTAssertEqual(museName.label, "Muse")
-        XCTAssertEqual(app.staticTexts["agents.host.\(muse)"].label, "agent.meta.ai")
+        XCTAssertEqual(app.staticTexts["agents.host.\(muse)"].label, "Connected from agent.meta.ai")
         XCTAssertEqual(app.staticTexts["agents.lastUsed.\(muse)"].label, "Last used 2 h ago")
         let claudeName = app.staticTexts["agents.name.\(claude)"]
         XCTAssertEqual(claudeName.label, "Claude")
-        XCTAssertEqual(app.staticTexts["agents.host.\(claude)"].label, "claude.ai")
+        XCTAssertEqual(app.staticTexts["agents.host.\(claude)"].label, "Connected from claude.ai")
         XCTAssertEqual(app.staticTexts["agents.lastUsed.\(claude)"].label, "Not used yet")
         XCTAssertLessThan(museName.frame.minY, claudeName.frame.minY) // newest connection first
         XCTAssertFalse(app.staticTexts["claude.status"].exists) // the rows replace the status line

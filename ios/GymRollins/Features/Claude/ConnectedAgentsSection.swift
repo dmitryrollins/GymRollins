@@ -44,6 +44,7 @@ private struct AgentRow: View {
             Text(agent.name).font(.body.weight(.semibold)).lineLimit(2)
                 .accessibilityIdentifier("agents.name.\(agent.clientId)")
             Text(agent.host).font(.footnote).foregroundStyle(Theme.textSecondary)
+                .accessibilityLabel("Connected from \(agent.host)")
                 .accessibilityIdentifier("agents.host.\(agent.clientId)")
             Text(AgentText.lastUsed(agent.lastUsedAt, now: now)).font(.footnote).foregroundStyle(Theme.textSecondary)
                 .accessibilityIdentifier("agents.lastUsed.\(agent.clientId)")
