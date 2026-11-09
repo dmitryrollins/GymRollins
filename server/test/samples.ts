@@ -21,8 +21,8 @@ export const SAMPLES: Readonly<Record<string, () => Row>> = {
     unit: 'kg', rest_sec: 120, warmup_rest_sec: 60, height_cm: 180, goal_weight_kg: null, goal_date: '2027-06-30',
     training_days: 4, experience: 'intermediate', limits: '', limits_until: null, deload_pct: 0.05, bar_kg: 20,
     plates_kg: [20, 10, 5, 2.5, 1.25], dumbbell_step_kg: 2, mcp_read_workouts: true, mcp_read_body: false,
-    mcp_read_plan: true, mcp_read_gyms: true, mcp_propose: true, mcp_auto_apply: false, sex: null, birth_year: null,
-    client_updated_at: T1,
+    mcp_read_plan: true, mcp_read_gyms: true, mcp_propose: true, mcp_auto_apply: false, mcp_log_workouts: true,
+    sex: null, birth_year: null, client_updated_at: T1,
   }),
   'custom-exercises': () => ({
     id: `custom-${crypto.randomUUID()}`, n: 'Sled push', bp: 'legs', eq: 'machine', tg: 'quads', mode: 'reps',

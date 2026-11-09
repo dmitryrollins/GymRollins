@@ -52,6 +52,11 @@ const opt = (name: string, kind: Kind): Column => ({ name, kind, nullable: true 
 /** visibility: the app always sends 'private'. Anything else breaks the table's *_private_has_owner CHECK. */
 const privateRow: Column = { name: 'visibility', kind: 'text', fallback: 'private' }
 const edited = col('client_updated_at', 'ts')
+/**
+ * Plan 32's Add workouts switch. An app from before it sends none, and the Worker is deployed first, so a missing value
+ * is stored as off, the column's default, instead of refusing the profile.
+ */
+const logWorkouts: Column = { name: 'mcp_log_workouts', kind: 'bool', fallback: false }
 const deleted = opt('deleted_at', 'ts')
 
 /** A day's routine must be the caller's (Postgres: the foreign key plus RLS's with check). Tombstones count. */
@@ -89,7 +94,8 @@ export const ENTITIES: Readonly<Record<string, Entity>> = {
       col('limits', 'text'), opt('limits_until', 'date'), col('deload_pct', 'real'), col('bar_kg', 'real'),
       col('plates_kg', 'json'), col('dumbbell_step_kg', 'real'), col('mcp_read_workouts', 'bool'),
       col('mcp_read_body', 'bool'), col('mcp_read_plan', 'bool'), col('mcp_read_gyms', 'bool'),
-      col('mcp_propose', 'bool'), col('mcp_auto_apply', 'bool'), opt('sex', 'text'), opt('birth_year', 'int'), edited,
+      col('mcp_propose', 'bool'), col('mcp_auto_apply', 'bool'), logWorkouts, opt('sex', 'text'),
+      opt('birth_year', 'int'), edited,
     ],
   },
   'custom-exercises': {
