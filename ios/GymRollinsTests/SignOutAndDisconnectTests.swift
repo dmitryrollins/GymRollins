@@ -15,10 +15,13 @@ private actor SwitchableTransport: SyncTransport {
     private(set) var profilePushes = 0
     private(set) var revokes = 0
     private(set) var storedProfile: ProfileDTO?
+    private(set) var agents: [ConnectedAgent] = []
+    private(set) var disconnectedAgents: [String] = []
 
     func set(profile mode: ProfileMode) { profileMode = mode }
     func set(offline value: Bool) { offline = value }
     func set(revokeFails value: Bool) { revokeFails = value }
+    func set(agents list: [ConnectedAgent]) { agents = list }
 
     private func gate() throws { if offline { throw URLError(.notConnectedToInternet) } }
     private func ack(_ id: String) -> RowAck { RowAck(id: id, updatedAt: Date()) }
@@ -76,6 +79,16 @@ private actor SwitchableTransport: SyncTransport {
         if revokeFails { throw URLError(.timedOut) }
         revokes += 1
         return 1
+    }
+    func connectedAgents() async throws -> [ConnectedAgent] {
+        try gate()
+        return agents
+    }
+    func disconnectAgent(clientId: String) async throws {
+        try gate()
+        guard agents.contains(where: { $0.clientId == clientId }) else { throw AgentError.unknownAgent }
+        disconnectedAgents.append(clientId)
+        agents = agents.filter { $0.clientId != clientId }
     }
 }
 
@@ -187,5 +200,40 @@ private func makeEnv(_ transport: SwitchableTransport) async throws -> AppEnviro
         await transport.set(offline: false)
         let afterReconnect = await env.prepareSignOut()
         #expect(afterReconnect.unsynced == 0 && afterReconnect.workoutInProgress && !afterReconnect.isSafe)
+    }
+}
+
+/// Plan 32: Settings › AI agents asks the account through the sync coordinator. Without a session there's nothing to
+/// list, and nothing to disconnect with.
+@MainActor
+@Suite struct AgentCallsTests {
+    private static let muse = ConnectedAgent(clientId: "MuseClientIdAbc", name: "Muse", host: "agent.meta.ai",
+                                             knownHost: false, connectedAt: Date(timeIntervalSince1970: 1_790_326_800),
+                                             lastUsedAt: nil)
+    private static let claude = ConnectedAgent(clientId: "ClaudeClientIdXyz", name: "Claude", host: "claude.ai",
+                                               knownHost: true, connectedAt: Date(timeIntervalSince1970: 1_789_894_800),
+                                               lastUsedAt: nil)
+
+    @Test func theListAndDisconnectGoToTheAccount() async throws {
+        let transport = SwitchableTransport()
+        await transport.set(agents: [Self.muse, Self.claude])
+        let env = try await makeEnv(transport)
+        let calls = env.agentCalls
+
+        #expect(try await calls.list() == [Self.muse, Self.claude])
+        try await calls.disconnect(Self.muse.clientId)
+        #expect(await transport.disconnectedAgents == [Self.muse.clientId])
+        #expect(try await calls.list() == [Self.claude])
+        await #expect(throws: AgentError.unknownAgent) { try await calls.disconnect(Self.muse.clientId) }
+
+        await transport.set(offline: true)
+        await #expect(throws: URLError.self) { try await calls.list() }
+    }
+
+    @Test func withoutASessionNothingIsListedAndDisconnectNeedsASignIn() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "AgentCallsTests.\(UUID())"))
+        let env = try AppEnvironment(options: LaunchOptions(arguments: ["-uiTesting"]), defaults: defaults)
+        #expect(try await env.agentCalls.list().isEmpty)
+        await #expect(throws: SyncUnavailableError.self) { try await env.agentCalls.disconnect(Self.muse.clientId) }
     }
 }

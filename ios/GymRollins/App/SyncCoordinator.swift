@@ -162,12 +162,24 @@ final class SyncCoordinator {
         }
     }
 
-    /// When Claude last used the MCP server for this account; nil if never, signed out, or unreachable.
+    /// When an agent last used the MCP server for this account; nil if never, signed out, or unreachable.
     func lastMcpUse() async -> Date? {
         do { return try await engine?.lastMcpUse() } catch {
             Self.log.error("Read Claude's last use failed: \(error.localizedDescription, privacy: .public)")
             return nil
         }
+    }
+
+    /// The agents connected to this account, newest connection first (Settings › AI agents). None while signed out:
+    /// there's no session to ask with.
+    func connectedAgents() async throws -> [ConnectedAgent] {
+        try await engine?.connectedAgents() ?? []
+    }
+
+    /// Ends one agent's access; the others keep theirs. Signed out there's no session to do it with.
+    func disconnectAgent(clientId: String) async throws {
+        guard let engine else { throw SyncUnavailableError() }
+        try await engine.disconnectAgent(clientId: clientId)
     }
 
     /// Pushes the profile now (not debounced) and returns once the server stored it. Without a backend or while

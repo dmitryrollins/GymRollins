@@ -1,6 +1,7 @@
 import Foundation
 import GymCore
 import GymData
+import GymSync
 
 // Claude: proposals (review, apply, undo, dismiss, auto-apply) and the MCP permissions.
 extension AppEnvironment {
@@ -75,6 +76,13 @@ extension AppEnvironment {
             Self.log.error("Revoke Claude access failed: \(String(describing: error), privacy: .public)")
             throw ClaudeDisconnectError.accessNotRevoked
         }
+    }
+
+    /// Settings › AI agents' calls: the account's agents through the sync coordinator.
+    var agentCalls: AgentCalls {
+        let sync = sync
+        return AgentCalls(list: { try await sync.connectedAgents() },
+                          disconnect: { try await sync.disconnectAgent(clientId: $0) })
     }
 
     /// Auto-apply after a sync round's pull. The round may have pulled custom exercises the proposals refer to,
