@@ -264,8 +264,10 @@ final class DynamicTypeUITests: XCTestCase {
         for _ in 0..<12 where !gyms.isHittable { app.swipeUp() } // rows below the fold aren't built until scrolled to
         XCTAssertTrue(gyms.isHittable)
         XCTAssertGreaterThanOrEqual(gyms.frame.height, 44)
-        XCTAssertTrue(app.staticTexts["claude.gymsNote"].exists)
         screenshot("claude-gyms-ax-xl")
+        let note = app.staticTexts["claude.gymsNote"]
+        for _ in 0..<6 where !note.isHittable { app.swipeUp() }
+        XCTAssertTrue(note.exists)
     }
 
     func testUseWithClaudeAtAccessibilityXL() {
@@ -277,10 +279,34 @@ final class DynamicTypeUITests: XCTestCase {
         row.tapCenter()
         XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
         let coach = app.buttons["claude.coach.copy"]
-        for _ in 0..<12 where !coach.isHittable { app.swipeUp() }
+        for _ in 0..<20 where !coach.isHittable { app.swipeUp() } // below the switches since plan 32
         XCTAssertTrue(coach.isHittable)
         XCTAssertGreaterThanOrEqual(coach.frame.height, 44)
         screenshot("claude-coach-ax-xl")
+    }
+
+    /// Plan 32: an agent's row and Add workouts stay readable and tappable at AX-XL.
+    func testAgentsAtAccessibilityXL() {
+        let app = launch(extra: ["-seedHistory", "-fakeAgents"])
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.claude"]
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        row.tapCenter()
+        let name = app.staticTexts["agents.name.MuseFakeClientId"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        let disconnect = app.buttons["agents.disconnect.MuseFakeClientId"]
+        for _ in 0..<6 where !disconnect.isHittable { app.swipeUp() }
+        XCTAssertTrue(disconnect.isHittable)
+        XCTAssertGreaterThanOrEqual(disconnect.frame.height, 44)
+        XCTAssertTrue(app.staticTexts["agents.lastUsed.MuseFakeClientId"].exists)
+        screenshot("agents-ax-xl")
+
+        let add = app.switches["agents.perm.logWorkouts"]
+        for _ in 0..<20 where !add.isHittable { app.swipeUp() }
+        XCTAssertTrue(add.isHittable)
+        XCTAssertGreaterThanOrEqual(add.frame.height, 44)
+        screenshot("agents-add-workouts-ax-xl")
     }
 
     func testModerationAtAccessibilityXL() {

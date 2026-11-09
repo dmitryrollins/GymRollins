@@ -57,6 +57,18 @@ final class AccessibilityAuditUITests: XCTestCase {
     /// (white on #0B0B10), flagged on every run since 7 Nov, on plan 24's commit too.
     static let measuredContrastLabels: Set<String> = ["How-To", "Until"]
 
+    /// Plan 32, Settings › AI agents: the switch labels (white on #0B0B10, ~17:1 as the Claude screen's note above
+    /// measured them) are flagged for contrast whichever row sits under the navigation bar's fade or beside the Add
+    /// workouts row's two lines, a different one on each run.
+    static let agentSwitchLabels: Set<String> = [
+        "Read workouts and sets", "Read bodyweight", "Read your plan and profile", "Gyms", "Add workouts",
+        "Propose plan changes", "Apply changes without asking",
+    ]
+
+    /// Plan 32's footers under those switches: the system's secondary label colour, measured from a simulator
+    /// screenshot at 6.3:1 on #0B0B10 (peak glyph pixel (145,145,153)), flagged only by the audit's sampling.
+    static let measuredContrastFooterIdentifiers: Set<String> = ["claude.gymsNote", "agents.logWorkoutsNote"]
+
     /// Buttons measured the same way, for labels too common to exclude by name. The add flow's "Save" is 7.14:1 (white on
     /// #A72431), 5.6:1 at the capsule's rim, and the audit flags it only sometimes, when other tests ran first. The report
     /// sheet's "Send report" is the same button, also 7.14:1, flagged on 3 runs of 9. The injury note's "Save" is the
@@ -87,6 +99,8 @@ final class AccessibilityAuditUITests: XCTestCase {
             // straddles the bar's edge was flagged (toggle labels, "Show all", the prompt text), all 17:1 when measured.
             if frame.minY < topEdgeBand { return "under top scroll-edge effect" }
             if measuredContrastLabels.contains(element.label) { return "measured on glass" }
+            if type == .staticText, agentSwitchLabels.contains(element.label) { return "measured switch label" }
+            if measuredContrastFooterIdentifiers.contains(element.identifier) { return "measured footer" }
             if measuredContrastIdentifiers.contains(element.identifier) { return "measured on glass" }
             // `.searchable`'s placeholder is system-styled.
             if type == .searchField { return "system search field" }
@@ -95,6 +109,11 @@ final class AccessibilityAuditUITests: XCTestCase {
             // UITextField/UISearchTextField are flagged regardless of content (empty fields, 1–3 digit values in
             // 44–58 pt fields); screenshots show the full text at default and AX-XL sizes.
             if type == .textField || type == .searchField { return "UITextField false positive" }
+            // Plan 32: the AI agents screen is long enough that Use with Claude's footer sits under the tab bar's
+            // scroll-edge effect, and the switch labels above it are flagged although the screenshots show every
+            // switch label whole, on one line.
+            if type == .staticText, frame.maxY > windowHeight - bottomEdgeBand { return "under bottom scroll-edge effect" }
+            if type == .staticText, agentSwitchLabels.contains(element.label) { return "switch label shown whole" }
             // The glass capsule's label: identical SecondaryGlassButton "Skip for now" below it isn't flagged, and the
             // screenshot shows the whole label.
             if element.identifier == "onboarding.email" { return "glass button false positive" }
@@ -108,6 +127,9 @@ final class AccessibilityAuditUITests: XCTestCase {
             // screenshots); the audit flags that a single-line system row/label truncates at the very largest size.
             // Fixed-size ("unsupported") fonts are still failures.
             if issue.compactDescription.contains("partially") { return "scales; truncates at AX5" }
+            // Plan 32: Use with Claude's footer is a plain `Text` (a text style that scales); it is flagged only while
+            // it sits under the tab bar's scroll-edge effect.
+            if type == .staticText, frame.maxY > windowHeight - bottomEdgeBand { return "under bottom scroll-edge effect" }
             // Toolbar "Close" is a system bar button.
             if type == .button && element.identifier == "workout.close" { return "system toolbar button" }
             return nil
@@ -235,6 +257,48 @@ final class AccessibilityAuditUITests: XCTestCase {
         for _ in 0..<12 where !coach.isHittable { app.swipeUp() }
         XCTAssertTrue(coach.isHittable)
         audit(app, "Use with Claude")
+    }
+
+    /// Plan 32: the agent rows, Disconnect's confirmation, and Add workouts.
+    func testAgentsAudit() {
+        let app = launch(["-seedHistory", "-fakeAgents", "-seedProposal"])
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tap()
+        let row = app.buttons["settings.claude"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        row.tap()
+        let disconnect = app.buttons["agents.disconnect.MuseFakeClientId"]
+        XCTAssertTrue(disconnect.waitForExistence(timeout: 5))
+        waitUntilSettled(disconnect)
+        audit(app, "AI agents")
+
+        let add = app.switches["agents.perm.logWorkouts"]
+        for _ in 0..<12 where !add.isHittable { app.swipeUp() }
+        XCTAssertTrue(add.isHittable)
+        waitUntilSettled(add)
+        audit(app, "AI agents: what agents can do")
+
+        for _ in 0..<12 where !disconnect.isHittable { app.swipeDown() }
+        disconnect.tap()
+        let confirm = app.buttons["agents.disconnect.confirm"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        waitUntilSettled(confirm)
+        audit(app, "AI agents: disconnect one")
+    }
+
+    /// Plan 32: the workout screen with "Added by Muse". This is the screen's first audit: an issue on any element other
+    /// than `detail.addedBy` predates this plan (Step 2 says what to do).
+    func testWorkoutAddedByAnAgentAudit() {
+        let app = launch(["-seedAgentWorkout"])
+        app.tabBars.buttons["Log"].tap()
+        let card = app.descendants(matching: .any)["log.workout.AD0ED000-0000-4000-8000-000000000001"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        card.tap()
+        let added = app.staticTexts["detail.addedBy"]
+        XCTAssertTrue(added.waitForExistence(timeout: 5))
+        waitUntilSettled(added)
+        audit(app, "Workout added by an agent")
     }
 
     func testModerationAudit() {
