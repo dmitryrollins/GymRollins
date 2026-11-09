@@ -6,7 +6,7 @@ import { accountRoutes } from './account/routes.ts'
 import { authHandler } from './auth/routes.ts'
 import { requireUser } from './auth/session.ts'
 import { agentRoutes } from './claude/agent-routes.ts'
-import { connectPage } from './claude/connect-page.ts'
+import { connectPage, connectStatus } from './claude/connect-page.ts'
 import { mcpRoute } from './claude/mcp-route.ts'
 import { claudeRoutes } from './claude/routes.ts'
 import { wellKnownRoutes } from './claude/well-known.ts'
@@ -38,6 +38,7 @@ app.on(['GET', 'POST'], '/api/auth/*', authHandler)
 // Claude: OAuth discovery, the sign-in page and the MCP server (spec section 3). CORS only on /mcp and discovery.
 app.route('/.well-known', wellKnownRoutes)
 app.get('/connect', connectPage)
+app.get('/connect/status', connectStatus)
 // Added after review: the limit reads a chunked body (no Content-Length) before /mcp does, so the batch
 // check and the MCP handler only ever see a bounded body. The 413 keeps /mcp's CORS, for browser clients.
 app.use('/mcp', bodyLimit({

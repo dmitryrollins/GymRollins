@@ -126,7 +126,7 @@ describe('approve', () => {
     expect((await decideCode(token, code, 'approve')).status).toBe(200)
     const page = await browser.get(flow.connectUrl)
     const html = await page.text()
-    expect(html).toContain('Approved, returning to Claude…')
+    expect(html).toContain('Approved, returning to Claude Code…')
     const [seconds, url] = metaRefresh(html)!
     expect(seconds).toBe(0)
     const reentry = new URLSearchParams(url!.slice('/api/auth/oauth2/authorize?'.length))
@@ -216,7 +216,7 @@ describe('deny', () => {
     const { token, flow, browser, code } = await waiting()
     expect(await (await decideCode(token, code, 'deny')).json()).toEqual({ status: 'denied' })
     const html = await (await browser.get(flow.connectUrl)).text()
-    expect(html).toContain('Denied. Claude was not given access.')
+    expect(html).toContain('Denied. Claude Code was not given access.')
     const [seconds, url] = metaRefresh(html)!
     expect(seconds).toBe(3)
     const back = new URL(url!)

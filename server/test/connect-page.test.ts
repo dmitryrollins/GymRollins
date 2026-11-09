@@ -4,7 +4,18 @@ import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { newCode, normalizeCode, sha256Hex } from '../src/claude/connect-code.ts'
 import { SIGN_INS_PER_CLIENT } from '../src/claude/connect-requests.ts'
-import { Browser, call, metaRefresh, openConnect, registerClient, shownCode, startFlow } from './claude.ts'
+import {
+  Browser,
+  call,
+  decideCode,
+  finishInBrowser,
+  metaRefresh,
+  openConnect,
+  registerClient,
+  shownCode,
+  startFlow,
+} from './claude.ts'
+import { signUp } from './helpers.ts'
 
 describe('the approval code', () => {
   it('is 8 characters of the 32-letter alphabet', () => {
@@ -33,15 +44,26 @@ describe('/connect', () => {
       '<strong>Claude Code</strong> is asking, and returns to <strong>127.0.0.1:33418</strong>',
     )
     expect(html).toMatch(/Expires in (10:00|9:5\d)/)
+    expect(html).toContain('<title>Connect Claude Code to GymRollins</title>')
+    expect(html).toContain('<h1>Connect Claude Code to GymRollins</h1>')
+    // The page checks by script without reloading (owner, 2026-11-09: a reload every 2 seconds kept the code from
+    // being copied); a browser without script still reloads.
+    expect(html).toContain('<noscript><meta http-equiv="refresh" content="2"></noscript>')
     expect(metaRefresh(html)).toEqual([2, null])
+    expect(html).toContain(`<button id="copy" type="button" data-code="${code}">Copy code</button>`)
   })
 
   it('serves plain HTML under a strict Content-Security-Policy, never cached', async () => {
     const { res, html } = await openConnect(new Browser(), await startFlow(await registerClient()))
     const csp = res.headers.get('content-security-policy')!
-    expect(csp).toMatch(/^default-src 'none'; style-src 'nonce-[0-9a-f]{32}'; /)
-    expect(csp.endsWith("; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")).toBe(true)
-    expect(html).not.toMatch(/<script|<img|<link|https?:\/\/(?!127\.0\.0\.1)/)
+    const nonce = /style-src 'nonce-([0-9a-f]{32})'/.exec(csp)![1]!
+    expect(csp).toBe(
+      `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'self'; ` +
+        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    )
+    expect(html.match(/<script/g)).toHaveLength(1)
+    expect(html).toContain(`<script nonce="${nonce}">`)
+    expect(html).not.toMatch(/<img|<link|https?:\/\/(?!127\.0\.0\.1)/)
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(res.headers.get('x-frame-options')).toBe('DENY')
     expect(res.headers.get('referrer-policy')).toBe('no-referrer')
@@ -92,7 +114,7 @@ describe('/connect', () => {
       .bind(code.replace('-', '')).run()
     const res = await browser.get(flow.connectUrl)
     expect(res.status).toBe(410)
-    expect(await res.text()).toContain('This code has expired. Start again from Claude.')
+    expect(await res.text()).toContain('This code has expired. Start again from your agent.')
   })
 
   it("escapes the client's name", async () => {
@@ -109,5 +131,44 @@ describe('/connect', () => {
     expect(res.status).toBe(429)
     expect(await res.text()).toContain('Too many sign-ins from this client.')
     expect((await openConnect(new Browser(), await startFlow(await registerClient()))).code).toBeTruthy()
+  })
+})
+
+// The code page's check (owner, 2026-11-09): read-only, so checking never uses the approval the page itself needs.
+describe('/connect/status', () => {
+  const statusUrl = (connectUrl: string) => connectUrl.replace('/connect?', '/connect/status?')
+
+  it("answers this browser's request: waiting, then approved, and the page still finishes afterwards", async () => {
+    const { token } = await signUp()
+    const flow = await startFlow(await registerClient())
+    const browser = new Browser()
+    const { code } = await openConnect(browser, flow)
+    const first = await browser.get(statusUrl(flow.connectUrl))
+    expect(first.status).toBe(200)
+    expect(first.headers.get('cache-control')).toBe('no-store')
+    expect(await first.json()).toEqual({ status: 'waiting' })
+    expect((await decideCode(token, code, 'approve')).status).toBe(200)
+    expect(await (await browser.get(statusUrl(flow.connectUrl))).json()).toEqual({ status: 'approved' })
+    expect(await (await browser.get(statusUrl(flow.connectUrl))).json()).toEqual({ status: 'approved' })
+    expect(await finishInBrowser(browser, flow)).toBeTruthy()
+  })
+
+  it('says expired once the code has expired', async () => {
+    const flow = await startFlow(await registerClient())
+    const browser = new Browser()
+    const { code } = await openConnect(browser, flow)
+    await env.DB.prepare(
+      "UPDATE connect_requests SET expires_at = '2026-01-01T00:00:00.000000Z' WHERE code = ?1",
+    ).bind(code.replace('-', '')).run()
+    expect(await (await browser.get(statusUrl(flow.connectUrl))).json()).toEqual({ status: 'expired' })
+  })
+
+  it("knows nothing for a browser without the page's cookie, or a link that isn't signed", async () => {
+    const flow = await startFlow(await registerClient())
+    await openConnect(new Browser(), flow)
+    const stranger = await new Browser().get(statusUrl(flow.connectUrl))
+    expect(stranger.status).toBe(404)
+    expect(await stranger.json()).toEqual({ status: 'unknown' })
+    expect((await new Browser().get('/connect/status?client_id=x')).status).toBe(400)
   })
 })

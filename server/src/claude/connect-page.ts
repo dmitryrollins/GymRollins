@@ -1,6 +1,8 @@
-// GET /connect: Claude's sign-in page (spec sections 4 and 5). Better Auth's authorize step sends the browser
-// here with its signed query. The page shows an approval code and reloads itself every 2 seconds (a meta
-// refresh: the page runs no script at all). Once the owner approves the code in the app, the same browser
+// GET /connect: an agent's sign-in page (spec sections 4 and 5). Better Auth's authorize step sends the browser
+// here with its signed query. The page shows an approval code with a Copy button, and its one script asks
+// GET /connect/status every 2 seconds, reloading only once the owner has decided (owner, 2026-11-09: a reload every
+// 2 seconds kept the code from being copied); without script, a meta refresh does it. Once the owner approves the
+// code in the app, the same browser
 // (its cookie) gets a 10-minute Better Auth session for the owner, Claude's consent is recorded, and the
 // browser re-enters the authorize step, which redirects to Claude with a code. A denial sends Claude
 // `access_denied`.
@@ -29,15 +31,15 @@ const COOKIE = 'gr_connect'
 const SIGNATURE_PARAMS = ['sig', 'exp', 'ba_iat', 'ba_pl', 'ba_param']
 const POLL_SECONDS = 2
 const DENIED_SECONDS = 3
-const EXPIRED = 'This code has expired. Start again from Claude.'
+const EXPIRED = 'This code has expired. Start again from your agent.'
 
 export async function connectPage(c: Context<AppEnv>): Promise<Response> {
   const signed = new URL(c.req.url).search.slice(1)
   if (signed === '' || !(await verifyOAuthQueryParams(signed, c.env.BETTER_AUTH_SECRET))) {
-    return message(400, 'This sign-in link is invalid or has expired. Start again from Claude.')
+    return message(400, 'This sign-in link is invalid or has expired. Start again from your agent.')
   }
   const query = authorizeQuery(signed)
-  const secret = /(?:^|;\s*)gr_connect=([0-9a-f]{64})(?:;|$)/.exec(c.req.header('cookie') ?? '')?.[1]
+  const secret = browserSecret(c)
   const browserHash = secret ? await sha256Hex(secret) : null
   const existing = browserHash ? await requestForBrowser(c.env.DB, browserHash) : null
   if (existing && browserHash && existing.query === query.toString()) {
@@ -62,6 +64,38 @@ export async function connectPage(c: Context<AppEnv>): Promise<Response> {
   res.headers.append('set-cookie', browserCookie(c.env, fresh, CONNECT_MINUTES * 60))
   return res
 }
+
+/**
+ * GET /connect/status: what the code page's script asks. Read-only, so asking never uses the approval the page itself
+ * needs: `waiting`, `approved`, `denied` or `expired` for this browser's request (its cookie) on this signed query;
+ * `unknown` (404) without one, `invalid` (400) for a query that isn't signed.
+ */
+export async function connectStatus(c: Context<AppEnv>): Promise<Response> {
+  const signed = new URL(c.req.url).search.slice(1)
+  if (signed === '' || !(await verifyOAuthQueryParams(signed, c.env.BETTER_AUTH_SECRET))) {
+    return statusJson(400, 'invalid')
+  }
+  const query = authorizeQuery(signed)
+  const secret = browserSecret(c)
+  const existing = secret ? await requestForBrowser(c.env.DB, await sha256Hex(secret)) : null
+  if (existing === null || existing.query !== query.toString()) return statusJson(404, 'unknown')
+  if (existing.live !== 1 || existing.status === 'used') return statusJson(200, 'expired')
+  return statusJson(200, existing.status)
+}
+
+const statusJson = (status: number, value: string) =>
+  new Response(JSON.stringify({ status: value }), {
+    status,
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+    },
+  })
+
+/** The browser's own secret from its gr_connect cookie, or undefined. */
+const browserSecret = (c: Context<AppEnv>) =>
+  /(?:^|;\s*)gr_connect=([0-9a-f]{64})(?:;|$)/.exec(c.req.header('cookie') ?? '')?.[1]
 
 /**
  * Added after review: where this page was opened, for the app to show before Approve: the location from
@@ -115,7 +149,8 @@ async function continueToClaude(
     returnHeaders: true,
   })
   await recordSession(c.env.DB, request.code, response.sessionId)
-  const res = message(200, 'Approved, returning to Claude…', `0;url=/api/auth/oauth2/authorize?${reentry}`)
+  const back = `0;url=/api/auth/oauth2/authorize?${reentry}`
+  const res = message(200, `Approved, returning to ${request.client_name ?? 'the agent'}…`, back)
   for (const cookie of headers.getSetCookie()) res.headers.append('set-cookie', cookie)
   res.headers.append('set-cookie', browserCookie(c.env, '', 0))
   return res
@@ -135,48 +170,104 @@ async function deniedPage(
   const state = query.get('state')
   if (state !== null) back.searchParams.set('state', state)
   back.searchParams.set('iss', issuer(env))
-  const res = message(200, 'Denied. Claude was not given access.', `${DENIED_SECONDS};url=${back}`)
+  const who = request.client_name ?? 'The agent'
+  const res = message(200, `Denied. ${who} was not given access.`, `${DENIED_SECONDS};url=${back}`)
   res.headers.append('set-cookie', browserCookie(env, '', 0))
   return res
 }
 
 function codePage(request: ConnectRequest): Response {
-  const left = Math.max(0, Math.round((Date.parse(request.expires_at) - Date.now()) / 1000))
+  const expires = Date.parse(request.expires_at)
+  const left = Math.max(0, Math.round((expires - Date.now()) / 1000))
   const countdown = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
   const who = escapeHtml(request.client_name ?? 'An MCP client')
   const host = escapeHtml(request.redirect_host)
+  const code = displayCode(request.code)
   return page(
     200,
-    `<p class="code">${displayCode(request.code)}</p>` +
+    `<p class="code">${code}</p>` +
+      `<p><button id="copy" type="button" data-code="${code}">Copy code</button></p>` +
       '<p>Open GymRollins › Settings › AI agents › Approve a connection and type this code.</p>' +
       `<p><strong>${who}</strong> is asking, and returns to <strong>${host}</strong>.</p>` +
-      `<p class="left">Expires in ${countdown}</p>`,
-    String(POLL_SECONDS),
+      `<p class="left" id="left" data-expires="${expires}">Expires in ${countdown}</p>`,
+    {
+      title: `Connect ${request.client_name ?? 'an agent'} to GymRollins`,
+      refresh: String(POLL_SECONDS),
+      script: CODE_SCRIPT,
+    },
   )
 }
 
+/**
+ * The code page's only script: Copy, the countdown, and a check of /connect/status every POLL_SECONDS that reloads
+ * the page once the owner has decided or the code has expired (the page then does what the decision says). It
+ * interpolates nothing: what it needs is in the page's data- attributes.
+ */
+const CODE_SCRIPT = `(() => {
+  const copy = document.getElementById('copy')
+  copy.addEventListener('click', () => {
+    navigator.clipboard.writeText(copy.dataset.code).then(
+      () => { copy.textContent = 'Copied' },
+      () => { copy.textContent = 'Select the code to copy it' },
+    )
+  })
+  const left = document.getElementById('left')
+  const end = Number(left.dataset.expires)
+  setInterval(() => {
+    const s = Math.max(0, Math.round((end - Date.now()) / 1000))
+    left.textContent = 'Expires in ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')
+  }, 1000)
+  const status = location.pathname + '/status' + location.search
+  setInterval(async () => {
+    try {
+      const res = await fetch(status, { cache: 'no-store', credentials: 'same-origin' })
+      const { status: now } = await res.json()
+      if (now === 'approved' || now === 'denied' || now === 'expired') location.reload()
+    } catch {}
+  }, ${POLL_SECONDS * 1000})
+})()`
+
 const STYLE =
   'body{font:17px/1.5 system-ui,sans-serif;margin:0;padding:2rem 1rem;color:#111;background:#fff}' +
-  'main{max-width:32rem;margin:auto}.code{font:600 2.6rem/1.2 ui-monospace,monospace;letter-spacing:.08em}' +
+  'main{max-width:32rem;margin:auto}' +
+  '.code{font:600 2.6rem/1.2 ui-monospace,monospace;letter-spacing:.08em;-webkit-user-select:all;user-select:all}' +
+  'button{font:inherit;padding:.5rem 1rem;border-radius:.6rem;border:1px solid #888;background:none;color:inherit}' +
   '.left{color:#666}@media (prefers-color-scheme:dark){body{color:#eee;background:#111}.left{color:#aaa}}'
 
 const message = (status: number, text: string, refresh?: string) =>
-  page(status, `<p>${escapeHtml(text)}</p>`, refresh)
+  page(status, `<p>${escapeHtml(text)}</p>`, { refresh })
 
-/** Plain HTML with a strict CSP: no script, no outside resource, only this page's own nonce'd style. */
-function page(status: number, content: string, refresh?: string): Response {
+interface PageParts {
+  title?: string
+  /** A meta refresh; with a script, it only runs where script doesn't (noscript). */
+  refresh?: string
+  script?: string
+}
+
+/**
+ * Plain HTML with a strict CSP: no outside resource, only this page's own nonce'd style, and the code page's own
+ * nonce'd script, which may fetch only from this origin.
+ */
+function page(status: number, content: string, parts: PageParts = {}): Response {
   const nonce = newBrowserSecret().slice(0, 32)
+  const title = escapeHtml(parts.title ?? 'Connect to GymRollins')
+  const refresh = parts.refresh === undefined
+    ? ''
+    : `<meta http-equiv="refresh" content="${escapeHtml(parts.refresh)}">`
   const body = '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-    (refresh ? `<meta http-equiv="refresh" content="${escapeHtml(refresh)}">` : '') +
-    `<title>Connect Claude to GymRollins</title><style nonce="${nonce}">${STYLE}</style></head>` +
-    `<body><main><h1>Connect Claude to GymRollins</h1>${content}</main></body></html>`
+    (parts.script === undefined ? refresh : `<noscript>${refresh}</noscript>`) +
+    `<title>${title}</title><style nonce="${nonce}">${STYLE}</style></head>` +
+    `<body><main><h1>${title}</h1>${content}</main>` +
+    (parts.script === undefined ? '' : `<script nonce="${nonce}">${parts.script}</script>`) +
+    '</body></html>'
+  const scripts = parts.script === undefined ? '' : `script-src 'nonce-${nonce}'; connect-src 'self'; `
   return new Response(body, {
     status,
     headers: {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
-      'content-security-policy': `default-src 'none'; style-src 'nonce-${nonce}'; base-uri 'none'; ` +
+      'content-security-policy': `default-src 'none'; style-src 'nonce-${nonce}'; ${scripts}base-uri 'none'; ` +
         "form-action 'none'; frame-ancestors 'none'",
       'referrer-policy': 'no-referrer',
       'x-content-type-options': 'nosniff',
