@@ -2,6 +2,7 @@
 // (Int fields are integers), so anything accepted here decodes in the app; value ranges and plan references are
 // checked by the shared validator, not here.
 import { z } from 'zod'
+import { DomainLimits } from '../../shared/domain-limits.ts'
 import type { PlanChangeType } from '../../shared/plan-validation.ts'
 
 const ref = z.string().min(1).max(64)
@@ -66,6 +67,32 @@ export const planChangeSchema = z.object({
   reason: z.string().max(300).optional().describe('Why — shown to the owner next to the change'),
 })
 
+const range = ({ min, max }: { min: number; max: number }) => `${min}–${max}`
+
+/**
+ * One set of a past workout (log_workout), named as get_workout answers sets: reps, weight_kg, sec, dist_m, warmup
+ * (the sync stores them as r, w_kg, sec, dist_m, warmup). Ranges are checked per workout, so one bad value refuses only
+ * its workout; the types here are checked for the whole call.
+ */
+const loggedSet = z.object({
+  reps: z.number().int().describe(`${range(DomainLimits.setReps)}; 0 for a timed or distance set`),
+  weight_kg: z.number().describe(`kg, ${range(DomainLimits.setWeightKg)}; 0 for bodyweight`),
+  sec: z.number().int().optional().describe(`Seconds, for a timed set: ${range(DomainLimits.setSeconds)}`),
+  dist_m: z.number().optional().describe(`Metres, for a distance set: ${range(DomainLimits.setDistanceM)}`),
+  warmup: z.boolean().optional().describe('true for a warm-up set. Default false'),
+})
+
+const loggedWorkout = z.object({
+  started_at: isoDate.describe('When it started: an ISO 8601 timestamp with a time zone, e.g. 2026-10-08T17:02:00Z'),
+  ended_at: isoDate.describe('When it ended: after started_at, at most 24 hours later, not in the future'),
+  name: z.string().max(200).optional().describe(`1–${DomainLimits.workoutNameMax} characters. Default "Workout"`),
+  note: z.string().max(1000).optional(),
+  exercises: z.array(z.object({
+    exercise_id: ref.describe("A library id from search_exercises, or one of the owner's custom exercise ids"),
+    sets: z.array(loggedSet).describe(`1–${DomainLimits.entrySetsMax} sets, in the order done`),
+  })).describe(`1–${DomainLimits.workoutEntriesMax} exercises, in the order done`),
+})
+
 export const schemas = {
   empty: z.object({}),
   listWorkouts: z.object({
@@ -108,4 +135,5 @@ export const schemas = {
     date: isoDate.optional().describe('Default: now'),
     body_fat_pct: z.number().min(3).max(60).optional(),
   }),
+  logWorkout: z.object({ workouts: z.array(loggedWorkout).min(1).max(5) }),
 }

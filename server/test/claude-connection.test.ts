@@ -39,11 +39,11 @@ async function approvedBrowser() {
 }
 
 describe('Claude on /mcp', () => {
-  it("lists the 15 tools and calls one with the owner's data, audited", async () => {
+  it("lists the 16 tools and calls one with the owner's data, audited", async () => {
     const c = await connectClaude()
     const init = await readRpc(await initialize(c.tokens.access_token))
     expect(init.result.serverInfo.name).toBe('gymrollins')
-    expect((await readRpc(await mcp(c.tokens.access_token, 'tools/list'))).result.tools).toHaveLength(15)
+    expect((await readRpc(await mcp(c.tokens.access_token, 'tools/list'))).result.tools).toHaveLength(16)
     const msg = await readRpc(await callTool(c.tokens.access_token, 'get_profile'))
     expect(msg.result.isError).toBeFalsy()
     const audit = await env.DB.prepare('SELECT tool, ok, client_id FROM mcp_audit WHERE user_id = ?1').bind(

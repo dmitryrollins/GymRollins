@@ -53,6 +53,7 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
       read_gyms: p.mcp_read_gyms,
       propose: p.mcp_propose,
       auto_apply: p.mcp_auto_apply,
+      log_workouts: p.mcp_log_workouts ?? false,
     },
   })
 }

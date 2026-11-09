@@ -20,6 +20,7 @@ import { getTrainingInsights } from './insights.ts'
 import { getStrengthLevels } from './strength.ts'
 import { fail, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 import { CHANGE_FIELDS, schemas } from './schemas.ts'
+import { logWorkouts } from './log-workout.ts'
 import { getProposal, logBodyweight, proposePlanChanges } from './write.ts'
 type AnySchema = z.ZodObject<any>
 
@@ -229,6 +230,21 @@ export const TOOL_SPECS = [
     input: schemas.logBodyweight,
     annotations: WRITE,
     run: (ctx, a) => logBodyweight(ctx, a),
+  }),
+  spec({
+    name: 'log_workout',
+    title: 'Log past workouts',
+    description:
+      "Add past workouts the owner did to their history, straight away (they aren't reviewed first): up to 5 a " +
+      'call, each with its start and end time, its exercises in order and their sets. Use it only for sessions ' +
+      'missing from GymRollins (check list_workouts first). Weights are kg: convert from lb. exercise_id is a ' +
+      "library id from search_exercises or one of the owner's custom exercises. Each workout is checked on its " +
+      'own, and the result lists each one as added (with its workout_id) or refused with a reason: not_allowed (the ' +
+      "owner hasn't allowed agents to add workouts), unknown_exercise, invalid, or a storage cap (too_many_…). " +
+      'Only works if the owner allowed agents to add workouts.',
+    input: schemas.logWorkout,
+    annotations: WRITE,
+    run: (ctx, a) => logWorkouts(ctx, a),
   }),
 ]
 

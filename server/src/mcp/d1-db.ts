@@ -204,7 +204,7 @@ export class D1Db implements Db {
       'SELECT unit, height_cm, goal_weight_kg, goal_date, training_days, experience, limits, limits_until, ' +
         'deload_pct, rest_sec, mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, ' +
         'mcp_propose, ' +
-        'mcp_auto_apply, sex, birth_year FROM profiles WHERE user_id = ?1',
+        'mcp_auto_apply, mcp_log_workouts, sex, birth_year FROM profiles WHERE user_id = ?1',
       this.userId,
     )
     if (!p) return null
@@ -216,6 +216,7 @@ export class D1Db implements Db {
       mcp_read_gyms: bool(p.mcp_read_gyms),
       mcp_propose: bool(p.mcp_propose),
       mcp_auto_apply: bool(p.mcp_auto_apply),
+      mcp_log_workouts: bool(p.mcp_log_workouts),
     } as Profile
   }
 

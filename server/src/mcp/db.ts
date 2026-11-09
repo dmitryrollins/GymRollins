@@ -22,6 +22,8 @@ export interface Profile {
   mcp_read_gyms: boolean
   mcp_propose: boolean
   mcp_auto_apply: boolean
+  /** Add workouts (plan 32); absent counts as off, its default. */
+  mcp_log_workouts?: boolean
   /** Strength levels only; never returned by get_profile. */
   sex?: 'male' | 'female' | null
   birth_year?: number | null

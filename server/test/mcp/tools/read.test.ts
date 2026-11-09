@@ -41,6 +41,7 @@ test('get_profile: unit, goal with display, limits, permissions', async () => {
     read_gyms: true,
     propose: true,
     auto_apply: false,
+    log_workouts: false,
   })
 })
 
