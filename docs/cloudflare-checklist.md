@@ -77,9 +77,14 @@ per-IP rules below. Cloudflare's rate-limiting rules belong to a zone, which is 
 
 The rule to create now, in the dashboard (the Free plan's limit is one rule, with a 10-second window; the page shows
 it):
-- [ ] Security › WAF › Rate limiting rules on `gymrollins.com`, one rule:
-  - expression: `(http.host eq "api.gymrollins.com" and (starts_with(http.request.uri.path, "/api/auth/") or starts_with(http.request.uri.path, "/connect")))`
-  - counted per IP, 20 requests per 10 seconds, action Block.
+- [ ] Security › Security rules › Create rule › Rate limiting rules on `gymrollins.com` (the older dashboard:
+      Security › WAF › Rate limiting rules), one rule:
+  - expression: `(starts_with(http.request.uri.path, "/api/auth/") or starts_with(http.request.uri.path, "/connect"))`.
+    The Free plan's rules can match the path only, not the host, so the rule also covers those paths on
+    `gymrollins.com` itself, where the website has none. If the editor refuses `starts with`, use `wildcard` with
+    `/api/auth/*` and `/connect*`.
+  - counted per IP, 20 requests per 10 seconds, action Block, duration 10 seconds (the Free plan's only window and
+    timeout).
 - [ ] It covers registration (`/api/auth/oauth2/register`), sign-in, authorize and token, and `/connect`, which
       share its limit. `/v1/*` and `/mcp` keep only the Worker's own caps (above). Widening the rule to them is the
       owner's call.
