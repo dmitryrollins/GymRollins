@@ -74,6 +74,7 @@ test('get_profile: no profile yet → defaults, lb', async () => {
   const out = json(await getProfile(await ctx((d) => (d.profile = null))))
   assertEquals(out.unit, 'lb')
   assertEquals(out.profile_saved, false)
+  assertEquals(out.permissions, { auto_apply: false })
 })
 
 test('get_plan: routines with exercise names, weights in kg + display, week Mon…Sun', async () => {

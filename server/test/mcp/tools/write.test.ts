@@ -8,6 +8,8 @@ import { ToolError, type ToolResult } from '../../../src/mcp/tools/result.ts'
 import {
   APPLIES_AFTER_REVIEW,
   APPLIES_AUTOMATICALLY,
+  DISMISSED_NOTE,
+  PARTIAL_NOTE,
   getProposal,
   logBodyweight,
   planSnapshot,
@@ -146,6 +148,10 @@ test('get_proposal: status and applied change ids; unknown id → not found', as
   assertEquals(out.status, 'partial')
   assertEquals(out.applied_change_ids, ['c1'])
   assertEquals(out.change_count, 2)
+  assertEquals(out.note, PARTIAL_NOTE)
+  data.proposals = [{ ...data.proposals[0]!, status: 'dismissed', applied_change_ids: [] }]
+  const dismissed = json(await getProposal({ db, now: NOW }, { id: 'e0e0e0e0-0000-4000-8000-000000000001' }))
+  assertEquals(dismissed.note, DISMISSED_NOTE)
   await assertRejects(
     () => getProposal({ db, now: NOW }, { id: 'e0e0e0e0-0000-4000-8000-00000000ffff' }),
     ToolError,

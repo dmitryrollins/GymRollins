@@ -81,8 +81,14 @@ describe('a tool that still answers in part', () => {
     const out = json(await getProfile(await ctx('mcp_read_plan', 'mcp_read_body')))
     expect(out).toEqual({
       profile: withheld(['plan'], 'The profile'),
-      permissions: { read_plan: false, read_workouts: true, read_body: false, read_gyms: true },
+      permissions: { read_plan: false, read_workouts: true, read_body: false, read_gyms: true, auto_apply: false },
     })
+  })
+
+  it('get_profile with the profile withheld still says whether changes apply without a review', async () => {
+    const data = await loadOwnerData()
+    data.profile = { ...data.profile!, mcp_read_plan: false, mcp_auto_apply: true }
+    expect(json(await getProfile({ db: new FakeDb(data), now: NOW })).permissions.auto_apply).toBe(true)
   })
 
   it('get_training_summary gives the workouts and says the bodyweight is withheld', async () => {

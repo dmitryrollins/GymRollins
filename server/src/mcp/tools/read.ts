@@ -26,11 +26,18 @@ export const SEARCH_LIMIT = { min: 1, max: 25, default: 10 }
 
 export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
   // With "Read your plan and profile" off, the profile is withheld, not unsaved: say so, with the read switches.
+  // Either way the agent learns whether its changes apply without a review (the instructions tell it to check).
   if ((await switchedOff(db, 'plan')).length > 0) {
-    const { plan, workouts, body, gyms } = await db.readPermissions()
+    const [{ plan, workouts, body, gyms }, autoApply] = await Promise.all([db.readPermissions(), db.autoApply()])
     return ok({
       profile: withheld(['plan'], 'The profile'),
-      permissions: { read_plan: plan, read_workouts: workouts, read_body: body, read_gyms: gyms },
+      permissions: {
+        read_plan: plan,
+        read_workouts: workouts,
+        read_body: body,
+        read_gyms: gyms,
+        auto_apply: autoApply,
+      },
     })
   }
   const p = await db.profile()
@@ -39,6 +46,7 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
       profile_saved: false,
       unit: 'lb',
       note: 'The owner has not saved a profile yet; the app defaults apply (lb, 4 training days).',
+      permissions: { auto_apply: await db.autoApply() },
     })
   }
   return ok({

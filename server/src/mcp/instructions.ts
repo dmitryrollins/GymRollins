@@ -10,7 +10,8 @@ export const SERVER_INSTRUCTIONS = [
   'weight_kg and weight_display in their unit; proposals take kg.',
   "- While injury limits are active, don't propose exercises that load that area. Only the owner sets or clears " +
   'the note, in the app.',
-  '- Change the plan only with propose_plan_changes. If get_profile says auto_apply is on, the app applies your ' +
+  "- Change the plan only with propose_plan_changes; its result's `applies` says what to tell the owner. If " +
+  'get_profile says auto_apply is on, the app applies your ' +
   "changes by itself and the owner can undo them for 7 days: say they're made, don't ask for a review. If it's " +
   'off, tell the owner to review them in the app. Keep changes small and give each a reason.',
   '- For one day only, use a `today` change with the date (up to 7 days ahead), and reuse a routine when one fits. ' +

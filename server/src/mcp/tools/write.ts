@@ -17,13 +17,26 @@ import { fail, ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
  *  an agent's changes are made, not proposed; the app applies them when it next syncs). */
 export const APPLIES_AUTOMATICALLY =
   'Saved, and the owner turned on "Apply changes without asking": the GymRollins app applies it by itself the next ' +
-  'time it opens or syncs, without a review. Tell the owner the change is made; they can undo it in the app for 7 days.'
+  'time it opens or syncs, without a review. Tell the owner the change is made and shows in the app once it opens; ' +
+  'they can undo it there for 7 days. get_proposal shows what the app applied.'
 export const APPLIES_AFTER_REVIEW =
   'Saved for review: the owner applies it in the GymRollins app. Tell them to review it there. To let agents ' +
   'change the plan without a review, they can turn on "Apply changes without asking" in Settings › AI agents.'
 
 export function appliesNote(autoApply: boolean): string {
   return autoApply ? APPLIES_AUTOMATICALLY : APPLIES_AFTER_REVIEW
+}
+
+/** What a resolved proposal that didn't fully apply tells the agent, so it doesn't report a change that wasn't made. */
+export const PARTIAL_NOTE =
+  'Only the changes in applied_change_ids were applied: the owner kept those, or the app skipped the others ' +
+  'because they no longer fit the plan.'
+export const DISMISSED_NOTE = 'The owner turned this proposal down: nothing in it was applied.'
+
+function statusNote(status: string): string | null {
+  if (status === 'partial') return PARTIAL_NOTE
+  if (status === 'dismissed') return DISMISSED_NOTE
+  return null
 }
 
 /** Allow a day of clock/time-zone slack for "today" weigh-ins. */
@@ -147,6 +160,7 @@ export async function getProposal({ db }: ToolCtx, args: { id: string }): Promis
     applied_change_ids: p.applied_change_ids,
     resolved_at: p.resolved_at,
     ...(p.status === 'pending' ? { applies: appliesNote(await db.autoApply()) } : {}),
+    ...(statusNote(p.status) ? { note: statusNote(p.status) } : {}),
   })
 }
 
