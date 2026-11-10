@@ -32,14 +32,18 @@ struct TodayDayPreviewView: View {
                 }
             }
         }
-        .task(id: ReloadKey(day: day, plan: env.planRevision, data: env.dataRevision)) { load() }
+        .task(id: ReloadKey(day: day, plan: env.planRevision, data: env.dataRevision, gym: env.gymRevision,
+                            unit: env.profile.unit)) { load() }
     }
 
-    /// The preview reloads when the day moves, the plan changes (a sync, an agent's change) or a workout finishes.
+    /// The preview reloads when the day moves, the plan changes (a sync, an agent's change), a workout finishes, the
+    /// gym or its equipment changes, or the unit is switched in Settings.
     private struct ReloadKey: Equatable {
         let day: TodayDay
         let plan: Int
         let data: Int
+        let gym: Int
+        let unit: WeightUnit
     }
 
     private func menu(_ row: TodayModel.Row) -> some View {

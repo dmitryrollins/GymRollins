@@ -138,6 +138,7 @@ struct TodayView: View {
                 reload()
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+                day = .today // a new time zone can move which day is next
                 reload()
             }
             .onReceive(NotificationCenter.default.publisher(for: .todayPlanReplaced)) { _ in
