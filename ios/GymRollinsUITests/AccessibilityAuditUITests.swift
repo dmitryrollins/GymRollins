@@ -65,9 +65,12 @@ final class AccessibilityAuditUITests: XCTestCase {
         "Propose plan changes", "Apply changes without asking",
     ]
 
-    /// Plan 32's footers under those switches: the system's secondary label colour, measured from a simulator
-    /// screenshot at 6.3:1 on #0B0B10 (peak glyph pixel (145,145,153)), flagged only by the audit's sampling.
-    static let measuredContrastFooterIdentifiers: Set<String> = ["claude.gymsNote", "agents.logWorkoutsNote"]
+    /// Plan 32's footers under those switches (and plan 33's auto-apply note, the same footer text): the system's
+    /// secondary label colour, measured from a simulator screenshot at 6.3:1 on #0B0B10 (peak glyph pixel
+    /// (145,145,153)), flagged only by the audit's sampling.
+    static let measuredContrastFooterIdentifiers: Set<String> = [
+        "claude.gymsNote", "agents.logWorkoutsNote", "agents.autoApplyNote",
+    ]
 
     /// Use with Claude's footer (plan 32): a plain `Text` in a text style that scales, flagged for clipping and Dynamic
     /// Type only while the longer AI agents screen leaves it under the tab bar's scroll-edge effect.
