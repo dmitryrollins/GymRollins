@@ -121,7 +121,7 @@ async function seedOwner(): Promise<Owner> {
   return { userId, workoutId, privateGym, publicGym, trainedGym }
 }
 
-const toggle = (userId: string, column: Toggle, on: boolean) =>
+const toggle = (userId: string, column: Toggle | 'mcp_auto_apply', on: boolean) =>
   run(`UPDATE profiles SET ${column} = ?2 WHERE user_id = ?1`, userId, on ? 1 : 0)
 
 /** The profile without its mcp_* fields, which show the toggles themselves. */
@@ -337,6 +337,17 @@ describe('exerciseSets', () => {
 })
 
 describe("Claude's writes", () => {
+  it('autoApply is off without a profile and follows mcp_auto_apply', async () => {
+    const { userId } = await signUp()
+    expect(await new D1Db(DB, userId, 'claude').autoApply()).toBe(false)
+    const owner = await seedOwner()
+    expect(await new D1Db(DB, owner.userId, 'claude').autoApply()).toBe(false)
+    await toggle(owner.userId, 'mcp_auto_apply', true)
+    expect(await new D1Db(DB, owner.userId, 'claude').autoApply()).toBe(true)
+    await toggle(owner.userId, 'mcp_read_plan', false) // hiding the plan doesn't hide the switch
+    expect(await new D1Db(DB, owner.userId, 'claude').autoApply()).toBe(true)
+  })
+
   it('inserts a pending proposal, and refuses one while propose is off', async () => {
     const owner = await seedOwner()
     const db = new D1Db(DB, owner.userId, 'claude')

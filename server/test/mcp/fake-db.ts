@@ -136,6 +136,11 @@ export class FakeDb implements Db {
     return Promise.resolve(rows[0] ?? null)
   }
 
+  /** Like D1Db: the stored flag, off when no profile was saved. */
+  autoApply(): Promise<boolean> {
+    return Promise.resolve(this.data.profile?.mcp_auto_apply ?? false)
+  }
+
   /** Like public.mcp_flag: the stored flag, true when no profile was saved. */
   readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }> {
     const p = this.data.profile

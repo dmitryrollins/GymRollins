@@ -55,6 +55,8 @@ export interface Permissions {
   body: boolean
   gyms: boolean
   propose: boolean
+  /** "Apply changes without asking": off by default, so off without a profile too. */
+  autoApply: boolean
   /** Add workouts (plan 32): off by default, so off without a profile too. */
   logWorkouts: boolean
 }
@@ -173,7 +175,8 @@ export class D1Db implements Db {
   /** The toggles, read once per request; a missing profile allows everything, as mcp_flag's coalesce did. */
   allowed(): Promise<Permissions> {
     this.permissions ??= this.db.prepare(
-      'SELECT mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, mcp_propose, mcp_log_workouts ' +
+      'SELECT mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, mcp_propose, mcp_auto_apply, ' +
+        'mcp_log_workouts ' +
         'FROM profiles WHERE user_id = ?1',
     ).bind(this.userId).first<Raw>().then((p) => ({
       plan: p ? bool(p.mcp_read_plan) : true,
@@ -181,6 +184,7 @@ export class D1Db implements Db {
       body: p ? bool(p.mcp_read_body) : true,
       gyms: p ? bool(p.mcp_read_gyms) : true,
       propose: p ? bool(p.mcp_propose) : true,
+      autoApply: p ? bool(p.mcp_auto_apply) : false,
       logWorkouts: p ? bool(p.mcp_log_workouts) : false,
     }))
     return this.permissions
@@ -189,6 +193,11 @@ export class D1Db implements Db {
   async readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }> {
     const { plan, workouts, body, gyms } = await this.allowed()
     return { plan, workouts, body, gyms }
+  }
+
+  /** "Apply changes without asking", answered even when "Read your plan and profile" hides the profile. */
+  async autoApply(): Promise<boolean> {
+    return (await this.allowed()).autoApply
   }
 
   async profile(): Promise<Profile | null> {

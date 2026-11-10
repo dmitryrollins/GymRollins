@@ -5,7 +5,14 @@ import type { PlanChange, PlanProposal, PlanSnapshot } from '../../../src/shared
 import type { RoutineRow } from '../../../src/mcp/db.ts'
 import { FakeDb, loadOwnerData } from '../fake-db.ts'
 import { ToolError, type ToolResult } from '../../../src/mcp/tools/result.ts'
-import { getProposal, logBodyweight, planSnapshot, proposePlanChanges } from '../../../src/mcp/tools/write.ts'
+import {
+  APPLIES_AFTER_REVIEW,
+  APPLIES_AUTOMATICALLY,
+  getProposal,
+  logBodyweight,
+  planSnapshot,
+  proposePlanChanges,
+} from '../../../src/mcp/tools/write.ts'
 
 const NOW = new Date('2026-09-26T12:00:00Z')
 
@@ -70,7 +77,26 @@ test("propose_plan_changes: the fixture's valid proposal is inserted once and re
   const out = json(r)
   assertEquals(out.proposal_id, 'prop-1')
   assertEquals(out.status, 'pending')
-  assert(String(out.applies).includes('reviews it in the app'))
+  assertEquals(out.auto_apply, false)
+  assert(String(out.applies).includes('Tell them to review it there'), String(out.applies))
+})
+
+test('propose_plan_changes: with "Apply changes without asking" on, the agent is told the change is made', async () => {
+  const data = await loadOwnerData()
+  data.profile = { ...data.profile!, mcp_auto_apply: true }
+  const db = new FakeDb(data)
+  const change: PlanChange = {
+    id: 'c1',
+    type: 'weight',
+    routineId: '6f1c1e2a-4b1d-4c3e-9a51-2d7a1b0c0001',
+    exerciseId: '0025',
+    weightKg: 61.235,
+    reason: 'Hit 3×10 last week',
+  }
+  const out = json(await proposePlanChanges({ db, now: NOW }, { summary: 'Bench +5 lb', changes: [change] }))
+  assertEquals(out.auto_apply, true)
+  assertEquals(out.applies, APPLIES_AUTOMATICALLY)
+  assert(String(out.applies).includes('Tell the owner the change is made'))
 })
 
 test('propose_plan_changes: every invalid fixture case → isError with violations, nothing inserted', async () => {
@@ -125,6 +151,30 @@ test('get_proposal: status and applied change ids; unknown id → not found', as
     ToolError,
     'not found',
   )
+})
+
+test('get_proposal: a pending proposal says how it will land, a resolved one does not', async () => {
+  const id = 'e0e0e0e0-0000-4000-8000-000000000002'
+  const row = {
+    id,
+    created_at: '2026-09-25T10:00:00Z',
+    status: 'pending',
+    summary: 'Bench +5 lb',
+    changes: [{ id: 'c1' }],
+    applied_change_ids: [],
+    resolved_at: null,
+  }
+  for (const [autoApply, applies] of [[false, APPLIES_AFTER_REVIEW], [true, APPLIES_AUTOMATICALLY]] as const) {
+    const data = await loadOwnerData()
+    data.profile = { ...data.profile!, mcp_auto_apply: autoApply }
+    data.proposals = [row]
+    const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
+    assertEquals(out.applies, applies)
+  }
+  const data = await loadOwnerData()
+  data.proposals = [{ ...row, status: 'applied', applied_change_ids: ['c1'], resolved_at: '2026-09-25T11:00:00Z' }]
+  const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
+  assertEquals(out.applies, undefined)
 })
 
 test('log_bodyweight: inserts with a new id; a date-only value is noon UTC; defaults to now', async () => {

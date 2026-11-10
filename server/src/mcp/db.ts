@@ -232,6 +232,8 @@ export interface Db {
   latestBodyweight(until: string): Promise<BodyweightRow | null>
   /** The owner's MCP read flags (public.mcp_flag), readable even while RLS hides the profile. */
   readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }>
+  /** "Apply changes without asking", answered even when "Read your plan and profile" hides the profile. */
+  autoApply(): Promise<boolean>
   /** `started_at` of every non-deleted workout, newest first (all of them, paged). */
   workoutDates(): Promise<string[]>
   /** The owner's stored weekly targets (groups without a row use the defaults). */

@@ -22,6 +22,12 @@ test('instructions name only real change types', () => {
   }
 })
 
+test('instructions say how auto_apply changes what the agent tells the owner', () => {
+  assert(SERVER_INSTRUCTIONS.includes('auto_apply'), 'names the permission')
+  assert(SERVER_INSTRUCTIONS.includes("say they're made"), 'switch on: changes are made')
+  assert(!SERVER_INSTRUCTIONS.includes('the owner reviews them in the app.'), 'no longer review-only')
+})
+
 test('instructions start with the profile and end with the data rule', () => {
   const lines = SERVER_INSTRUCTIONS.split('\n')
   assertEquals(lines.length, 9)

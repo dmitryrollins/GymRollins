@@ -1,4 +1,5 @@
-// Write tools. Nothing here changes the plan: proposals are stored as `pending` and only the app applies them.
+// Write tools. Nothing here changes the plan: proposals are stored as `pending` and only the app applies them, after
+// the owner's review or by itself when the owner turned on auto-apply.
 import {
   type PlanChange,
   type PlanSnapshot,
@@ -12,7 +13,19 @@ import { ownerUnit } from './common.ts'
 import { parseBound, weight } from './format.ts'
 import { fail, ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
-export const APPLIES_NOTE = 'when the owner reviews it in the app (or automatically if auto-apply is on)'
+/** What a saved proposal's result tells the agent to say (owner, 2026-11-09: with "Apply changes without asking" on,
+ *  an agent's changes are made, not proposed; the app applies them when it next syncs). */
+export const APPLIES_AUTOMATICALLY =
+  'Saved, and the owner turned on "Apply changes without asking": the GymRollins app applies it by itself the next ' +
+  'time it opens or syncs, without a review. Tell the owner the change is made; they can undo it in the app for 7 days.'
+export const APPLIES_AFTER_REVIEW =
+  'Saved for review: the owner applies it in the GymRollins app. Tell them to review it there. To let agents ' +
+  'change the plan without a review, they can turn on "Apply changes without asking" in Settings › AI agents.'
+
+export function appliesNote(autoApply: boolean): string {
+  return autoApply ? APPLIES_AUTOMATICALLY : APPLIES_AFTER_REVIEW
+}
+
 /** Allow a day of clock/time-zone slack for "today" weigh-ins. */
 /** How far ahead a weigh-in may be dated (a date-only entry is stored at 12:00 UTC). */
 export const FUTURE_SLACK_MS = 86_400_000
@@ -90,11 +103,13 @@ export async function proposePlanChanges(
   }
   const row = await db.insertProposal({ summary: args.summary, changes: args.changes })
   const warnings = swapWeightWarnings(args.changes, routines)
+  const autoApply = await db.autoApply()
   return ok({
     proposal_id: row.id,
     status: 'pending',
+    auto_apply: autoApply,
     changes: args.changes.length,
-    applies: APPLIES_NOTE,
+    applies: appliesNote(autoApply),
     ...(warnings.length ? { warnings } : {}),
   })
 }
@@ -131,6 +146,7 @@ export async function getProposal({ db }: ToolCtx, args: { id: string }): Promis
     change_count: Array.isArray(p.changes) ? p.changes.length : 0,
     applied_change_ids: p.applied_change_ids,
     resolved_at: p.resolved_at,
+    ...(p.status === 'pending' ? { applies: appliesNote(await db.autoApply()) } : {}),
   })
 }
 

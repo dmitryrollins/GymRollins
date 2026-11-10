@@ -197,8 +197,11 @@ export const TOOL_SPECS = [
     name: 'propose_plan_changes',
     title: 'Propose plan changes',
     description:
-      "Propose changes to the owner's plan. Proposals never change anything by themselves: the owner " +
-      'reviews them in the app and applies them change by change (or they auto-apply if the owner enabled that). ' +
+      "Change the owner's plan. How a proposal lands depends on the owner's \"Apply changes without asking\" " +
+      'setting (get_profile → permissions.auto_apply): when it is on, the app applies the changes by itself the ' +
+      'next time it opens, with no review, and the owner can undo them for 7 days; when it is off, the owner ' +
+      "reviews them in the app and applies them change by change. The result's `applies` says which to tell the " +
+      'owner. ' +
       'The whole proposal is validated against the current plan (call get_plan first); if anything is invalid ' +
       'nothing is saved and the problems are listed. Use routine ids and exercise ids from get_plan / ' +
       'search_exercises; weights are kg. Never add or swap to an exercise the owner marked "never" ' +
