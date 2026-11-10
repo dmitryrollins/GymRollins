@@ -7,9 +7,9 @@ This list is the owner's. **Every step below touches the Cloudflare account, the
 one runs only with the owner's approval, given for that step** (spec `docs/specs/2026-11-07-cloudflare-backend-design.md`,
 section 9). Work through it in order: the rate limits come before anything else.
 
-**The account.** GymRollins lives on the **VIPPIE LLC** Cloudflare account. Wrangler sees five accounts on this Mac,
+**The account.** GymRollins lives on the **VIPPIE LLC** Cloudflare account. Wrangler sees several accounts on this Mac,
 so every `wrangler` command against it, the scripts' included, runs with
-`CLOUDFLARE_ACCOUNT_ID=<account-id>` (an account id, not a secret): `export` it in the shell first,
+`CLOUDFLARE_ACCOUNT_ID=<account-id>`, with VIPPIE LLC's id from `npx wrangler whoami` (kept out of the repo): `export` it first,
 as section 2 does.
 
 `<origin>` below is the Worker's https address: `https://api.gymrollins.com`, the custom domain the owner chose
@@ -100,7 +100,7 @@ it):
 
 ```bash
 cd server
-export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC (the top of this list)
+export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC's id, from npx wrangler whoami
 npx wrangler whoami                                             # lists VIPPIE LLC; if not, npx wrangler login
 npx wrangler d1 create gymrollins --no-update-config            # prints the database_id
 npx wrangler r2 bucket create gym-photos --no-update-config
@@ -160,7 +160,7 @@ The first deploy, from the commit that holds the `database_id` (step 2):
 
 ```bash
 cd server
-export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC (the top of this list)
+export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC's id, from npx wrangler whoami
 git status --short wrangler.jsonc                               # prints nothing: the committed config
 npx wrangler deploy --dry-run --outdir "$(mktemp -d)"           # local build only; the bindings list shows
                                                                 #   PUBLIC_BASE_URL ("https://api.gymrollins.com")
@@ -279,7 +279,7 @@ So far only the local bucket has them. Right after section 4's checks:
 
 ```bash
 cd server
-export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC (the top of this list)
+export CLOUDFLARE_ACCOUNT_ID=<account-id>   # VIPPIE LLC's id, from npx wrangler whoami
 GYM_CLOUD_APPROVED=1 WORKER_URL=https://api.gymrollins.com node ../scripts/upload-photos.mjs --target cloud --dry-run
 GYM_CLOUD_APPROVED=1 WORKER_URL=https://api.gymrollins.com node ../scripts/upload-photos.mjs --target cloud
 curl -s "https://api.gymrollins.com/photos/exercises/manifest.json" | head -c 300
