@@ -133,6 +133,7 @@ extension ProfileRecord {
         s.trainingDays = trainingDays
         s.experience = experience
         s.limits = limits
+        s.limitsUntil = limitsUntil
         s.deloadPct = deloadPct
         s.barKg = barKg
         s.platesKg = platesKg
@@ -140,8 +141,10 @@ extension ProfileRecord {
         s.mcpReadWorkouts = mcpReadWorkouts
         s.mcpReadBody = mcpReadBody
         s.mcpReadPlan = mcpReadPlan
+        s.mcpReadGyms = mcpReadGyms
         s.mcpPropose = mcpPropose
         s.mcpAutoApply = mcpAutoApply
+        s.mcpLogWorkouts = mcpLogWorkouts
         s.sex = sexRaw.flatMap(ProfileSex.init(rawValue:))
         s.birthYear = birthYear
         return s
@@ -157,6 +160,7 @@ extension ProfileRecord {
         trainingDays = s.trainingDays
         experience = s.experience
         limits = s.limits
+        limitsUntil = s.limitsUntil
         deloadPct = s.deloadPct
         barKg = s.barKg
         platesKg = s.platesKg
@@ -164,8 +168,10 @@ extension ProfileRecord {
         mcpReadWorkouts = s.mcpReadWorkouts
         mcpReadBody = s.mcpReadBody
         mcpReadPlan = s.mcpReadPlan
+        mcpReadGyms = s.mcpReadGyms
         mcpPropose = s.mcpPropose
         mcpAutoApply = s.mcpAutoApply
+        mcpLogWorkouts = s.mcpLogWorkouts
         sexRaw = s.sex?.rawValue
         birthYear = s.birthYear
     }

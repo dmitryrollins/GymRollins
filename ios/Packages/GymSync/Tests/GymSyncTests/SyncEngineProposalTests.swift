@@ -51,6 +51,25 @@ import Testing
         #expect(try proposals.proposal(id)?.status == .dismissed)
     }
 
+    /// Plan 32: a pulled proposal keeps its sender's name, and resolving it changes nothing about who sent it.
+    @Test func aPulledProposalKeepsItsSendersName() async throws {
+        defer { f.tearDown() }
+        let id = UUID()
+        await f.server.seed(proposal: ProposalDTO(id: id, createdAt: f.clock.now.addingTimeInterval(-60),
+                                                  summary: "Heavier bench", changes: [
+            PlanChange(id: "c1", type: .weight, routineId: push.id.uuidString.lowercased(), exerciseId: "bench",
+                       weightKg: 65),
+        ], fromAgent: "Muse"))
+        await engine.sync()
+        #expect(try proposals.proposal(id)?.fromAgent == "Muse")
+
+        try proposals.dismiss(id)
+        await engine.sync()
+        #expect(await f.server.proposals[id]?.status == "dismissed")
+        #expect(await f.server.proposals[id]?.fromAgent == "Muse")
+        #expect(try proposals.proposal(id)?.fromAgent == "Muse")
+    }
+
     @Test func manualApplyPushesRoutinesAndAppliedIds() async throws {
         defer { f.tearDown() }
         let id = await seedProposal()

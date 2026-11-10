@@ -29,9 +29,11 @@ public struct ProgressionTarget: Sendable, Equatable {
     public let incKg: Double
     /// When the plan's `weightKg` was last set by the user or Claude; used to gate the `.planned` override.
     public let weightSetAt: Date?
+    /// A weight decided up front (a shared workout's, from this person's own plan): no history changes it.
+    public let fixedWeightKg: Double?
 
     public init(sets: Int, reps: Int, repsMin: Int? = nil, sec: Int? = nil, weightKg: Double, incKg: Double,
-                weightSetAt: Date? = nil) {
+                weightSetAt: Date? = nil, fixedWeightKg: Double? = nil) {
         self.sets = sets
         self.reps = reps
         self.repsMin = repsMin
@@ -39,6 +41,7 @@ public struct ProgressionTarget: Sendable, Equatable {
         self.weightKg = weightKg
         self.incKg = incKg
         self.weightSetAt = weightSetAt
+        self.fixedWeightKg = fixedWeightKg
     }
 
     var low: Int { repsMin ?? reps }
@@ -74,9 +77,14 @@ public struct ProgressionEngine: Sendable {
     ///   - history: past sessions of this exercise, newest first.
     public func suggest(policy requested: ProgressionPolicy, mode: ExerciseMode = .reps, target: ProgressionTarget,
                         history: [SessionResult]) -> Suggestion {
+        if let fixed = target.fixedWeightKg {
+            return Suggestion(weightKg: fixed, reps: target.low, sec: target.sec, reason: .noChange)
+        }
         let policy = requested.effective(for: mode)
         guard let last = history.first else {
-            return Suggestion(weightKg: rounder.nearest(target.weightKg), reps: target.low, sec: target.sec,
+            // Nothing planned stays 0: the grid's nearest to 0 can be negative (offset) or a whole bar.
+            let planned = target.weightKg > 0 ? rounder.nearest(target.weightKg) : 0
+            return Suggestion(weightKg: planned, reps: target.low, sec: target.sec,
                               reason: .firstSession)
         }
         // A weight planned (by the owner or an applied Claude proposal) after the last session wins in either

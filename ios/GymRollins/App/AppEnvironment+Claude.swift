@@ -1,6 +1,7 @@
 import Foundation
 import GymCore
 import GymData
+import GymSync
 
 // Claude: proposals (review, apply, undo, dismiss, auto-apply) and the MCP permissions.
 extension AppEnvironment {
@@ -47,25 +48,26 @@ extension AppEnvironment {
 
     func clearLastApplied() { setLastApplied(nil) }
 
-    /// Saves Claude's permissions (synced with the profile); turning auto-apply on applies what's pending now.
-    func saveMcpPermissions(readWorkouts: Bool, readBody: Bool, readPlan: Bool, propose: Bool,
-                            autoApply: Bool) throws {
+    /// Saves what agents may do (synced with the profile); turning auto-apply on applies what's pending now.
+    func saveMcpPermissions(readWorkouts: Bool, readBody: Bool, readPlan: Bool, readGyms: Bool, propose: Bool,
+                            autoApply: Bool, logWorkouts: Bool) throws {
         try profiles.setMcpPermissions(readWorkouts: readWorkouts, readBody: readBody, readPlan: readPlan,
-                                       propose: propose, autoApply: autoApply)
+                                       readGyms: readGyms, propose: propose, autoApply: autoApply,
+                                       logWorkouts: logWorkouts)
         reloadProfile()
         sync.localDataChanged()
         if autoApply { autoApplyProposals() }
     }
 
-    /// "Disconnect Claude": every permission goes off first and the profile is pushed at once (RLS enforces the
-    /// flags for any token Claude still holds), then the connector's OAuth grant is revoked. Revoking deletes its
-    /// sessions and refresh tokens, so it can't refresh and the MCP endpoint refuses its access token at once; only
-    /// direct PostgREST use of that stateless JWT stays possible until it expires, which the flags-off guard covers.
-    /// Returns the grants revoked; succeeds only when the server stored the flags AND the grant was revoked
+    /// "Disconnect Claude": every permission goes off first and the profile is pushed at once (the server checks the
+    /// toggles on each call Claude makes), then `POST /v1/claude/revoke` removes every grant and token of the account,
+    /// so Claude's next call is refused and its refresh token is dead.
+    /// Returns the connections revoked; succeeds only when the server stored the flags AND the revoke worked
     /// (`ClaudeDisconnectError` says which step failed; the revoke is not attempted if the flags weren't stored).
     @discardableResult
     func disconnectClaude() async throws -> Int {
-        try saveMcpPermissions(readWorkouts: false, readBody: false, readPlan: false, propose: false, autoApply: false)
+        try saveMcpPermissions(readWorkouts: false, readBody: false, readPlan: false, readGyms: false, propose: false,
+                               autoApply: false, logWorkouts: false)
         do { try await sync.pushProfileNow() } catch {
             Self.log.error("Push Claude permissions failed: \(String(describing: error), privacy: .public)")
             throw ClaudeDisconnectError.permissionsNotSaved
@@ -74,6 +76,15 @@ extension AppEnvironment {
             Self.log.error("Revoke Claude access failed: \(String(describing: error), privacy: .public)")
             throw ClaudeDisconnectError.accessNotRevoked
         }
+    }
+
+    /// Settings › AI agents' calls: the account's agents through the sync coordinator, or DEBUG's in-memory list under
+    /// `-fakeAgents`.
+    var agentCalls: AgentCalls {
+        if let fakeAgentCalls { return fakeAgentCalls }
+        let sync = sync
+        return AgentCalls(list: { try await sync.connectedAgents() },
+                          disconnect: { try await sync.disconnectAgent(clientId: $0) })
     }
 
     /// Auto-apply after a sync round's pull. The round may have pulled custom exercises the proposals refer to,
@@ -95,21 +106,21 @@ extension AppEnvironment {
     }
 }
 
-/// Which step of "Disconnect Claude" failed (the permissions are off on this iPhone either way).
+/// Which step of "Disconnect all" failed (what agents can do is off on this iPhone either way).
 enum ClaudeDisconnectError: Error, Equatable {
     /// The server didn't store the permissions-off profile (offline, refused, or kept a newer edit).
     case permissionsNotSaved
-    /// The permissions are off in the account, but the OAuth grant couldn't be revoked.
+    /// The permissions are off in the account, but the OAuth grants couldn't be revoked.
     case accessNotRevoked
 
     var message: String {
         switch self {
         case .permissionsNotSaved:
-            "Claude's permissions are off on this iPhone but couldn't be saved to your account, so Claude may still "
-                + "have access. Check your connection and tap Disconnect Claude again."
+            "What agents can do is off on this iPhone but couldn't be saved to your account, so agents may still have "
+                + "access. Check your connection and tap Disconnect all again."
         case .accessNotRevoked:
-            "Claude's permissions are off, but its access couldn't be revoked. Check your connection and tap "
-                + "Disconnect Claude again."
+            "What agents can do is off, but their access couldn't be revoked. Check your connection and tap "
+                + "Disconnect all again."
         }
     }
 }

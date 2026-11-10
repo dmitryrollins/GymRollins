@@ -21,7 +21,7 @@ public struct Streak: Equatable, Sendable {
 
 /// Weekly streaks: a week (Monday–Sunday in the calendar's time zone) meets the goal when it has at least `goal`
 /// distinct days with a finished workout. The current week is in progress and never breaks the streak; any
-/// earlier week below the goal (a rest week included) does. Keep in sync with `_shared/insights.ts`.
+/// earlier week below the goal (a rest week included) does. Keep in sync with `server/src/shared/insights.ts`.
 public enum StreakCalculator {
     public static func compute(workoutDates: [Date], goal rawGoal: Int, now: Date, calendar: Calendar) -> Streak {
         let goal = min(max(rawGoal, 1), 7)

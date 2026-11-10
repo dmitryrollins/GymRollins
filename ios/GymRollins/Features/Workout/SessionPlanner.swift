@@ -4,21 +4,27 @@ import GymData
 
 /// Builds a new in-progress Workout from a routine: suggested weights, warm-ups for barbell lifts, dumbbell multiplier.
 enum SessionPlanner {
-    static let barbellEquipment: Set<String> = ["barbell", "olympic barbell", "ez barbell", "smith machine", "trap bar"]
-
-    /// `setOverrides` (by routine item id) are sets edited on Today: those exercises start with exactly them.
+    /// `setOverrides` (by routine item id) are sets edited on Today: those exercises start with exactly them. `loads`
+    /// gives the current gym's listing loads for an exercise (nil: no gym, or nothing to fit to), and `loadListing` the
+    /// listing those loads come from; both are stored on the workout so history knows where it was done.
     static func start(routine: Routine, profile: Profile, library: ExerciseLibrary, now: Date,
                       history: (String) -> [SessionResult], autoWarmups: Bool = true,
-                      setOverrides: [UUID: [WorkoutSet]] = [:]) -> Workout {
+                      setOverrides: [UUID: [WorkoutSet]] = [:],
+                      loads: (String) -> ListingLoads? = { _ in nil }, gymId: UUID? = nil,
+                      loadListing: (String) -> UUID? = { _ in nil }) -> Workout {
         let entries = routine.exercises.map { item in
             let exercise = library.exercise(item.exerciseId)
+            let built: WorkoutEntry
             if let sets = setOverrides[item.id], !sets.isEmpty {
-                return planned(item: item, sets: sets, exercise: exercise)
+                built = planned(item: item, sets: sets, exercise: exercise)
+            } else {
+                built = entry(for: item, policy: item.policy ?? routine.policy, profile: profile,
+                              exercise: exercise, history: history(item.exerciseId), autoWarmups: autoWarmups,
+                              loads: loads(item.exerciseId))
             }
-            return entry(for: item, policy: item.policy ?? routine.policy, profile: profile,
-                         exercise: exercise, history: history(item.exerciseId), autoWarmups: autoWarmups)
+            return gymId == nil ? built : built.with(gymListingId: loadListing(item.exerciseId))
         }
-        return Workout(startedAt: now, routineId: routine.id, name: routine.name, entries: entries)
+        return Workout(startedAt: now, routineId: routine.id, name: routine.name, entries: entries, gymId: gymId)
     }
 
     /// An entry with sets edited on Today: fresh, not-done copies with the exercise's volume multiplier.
@@ -31,29 +37,31 @@ enum SessionPlanner {
         return WorkoutEntry(exerciseId: item.exerciseId, sets: fresh, supersetGroup: item.supersetGroup)
     }
 
-    static func empty(now: Date) -> Workout { Workout(startedAt: now, name: "Workout") }
+    static func empty(now: Date, gymId: UUID? = nil) -> Workout { Workout(startedAt: now, name: "Workout", gymId: gymId) }
 
     /// Picks the barbell/dumbbell rounder and increment and returns the suggested weight/reps/time for an
     /// exercise's next session. Shared by `SessionPlanner.entry` (starting a workout) and `TodayModel` (showing
-    /// today's plan) so both agree on the same weight.
+    /// today's plan) so both agree on the same weight. With `loads`, the weight is fitted to what the gym offers.
     static func suggestion(for item: RoutineExercise, policy: ProgressionPolicy, profile: Profile, exercise: Exercise?,
-                           history: [SessionResult]) -> Suggestion {
-        let isBarbell = exercise.map { barbellEquipment.contains($0.equipment) } ?? false
+                           history: [SessionResult], loads: ListingLoads? = nil) -> Suggestion {
+        let isBarbell = exercise?.isBarbellLoaded ?? false
         let rounder = LoadRounding.rounder(for: exercise, profile: profile)
         let engine = ProgressionEngine(rounder: rounder, deloadPct: profile.deloadPct)
         let target = ProgressionTarget(sets: item.sets, reps: item.reps, repsMin: item.repsMin, sec: item.sec,
                                        weightKg: item.weightKg ?? 0,
                                        incKg: item.incKg ?? UnitConverter.toKg(isBarbell ? 5 : 2.5, from: .lb),
-                                       weightSetAt: item.weightSetAt)
-        return engine.suggest(policy: policy, mode: item.mode, target: target, history: history)
+                                       weightSetAt: item.weightSetAt, fixedWeightKg: item.fixedWeightKg)
+        let suggestion = engine.suggest(policy: policy, mode: item.mode, target: target, history: history)
+        return loads.map(suggestion.fitted(to:)) ?? suggestion
     }
 
     static func entry(for item: RoutineExercise, policy: ProgressionPolicy, profile: Profile, exercise: Exercise?,
-                      history: [SessionResult], autoWarmups: Bool = true) -> WorkoutEntry {
-        let isBarbell = exercise.map { barbellEquipment.contains($0.equipment) } ?? false
+                      history: [SessionResult], autoWarmups: Bool = true, loads: ListingLoads? = nil) -> WorkoutEntry {
+        let isBarbell = exercise?.isBarbellLoaded ?? false
         let multiplier = multiplier(for: exercise)
         let rounder = LoadRounding.rounder(for: exercise, profile: profile)
-        let suggestion = suggestion(for: item, policy: policy, profile: profile, exercise: exercise, history: history)
+        let suggestion = suggestion(for: item, policy: policy, profile: profile, exercise: exercise, history: history,
+                                    loads: loads)
         let working = (0..<item.sets).map { _ in
             WorkoutSet(weightKg: suggestion.weightKg, reps: suggestion.reps, sec: suggestion.sec,
                        multiplier: multiplier)
@@ -86,19 +94,58 @@ enum SessionPlanner {
     /// Entry for an exercise added mid-workout, with the same mode-aware targets (reps, time or
     /// cardio) as adding it to a routine.
     static func adHocEntry(exerciseId: String, exercise: Exercise?, profile: Profile,
-                           history: [SessionResult], autoWarmups: Bool) -> WorkoutEntry {
+                           history: [SessionResult], autoWarmups: Bool, loads: ListingLoads? = nil) -> WorkoutEntry {
         let item = exercise.map { RoutineDefaults.item(for: $0, profile: profile) }
             ?? RoutineExercise(exerciseId: exerciseId, sets: 3, reps: 10, repsMin: 8)
         return entry(for: item, policy: item.policy ?? .double, profile: profile, exercise: exercise,
-                     history: history, autoWarmups: autoWarmups)
+                     history: history, autoWarmups: autoWarmups, loads: loads)
     }
 
-    /// Working weight for a swapped-in exercise: its own progression suggestion when it has
-    /// history, otherwise nil (keep the weights already on the entry).
-    static func swapWeightKg(exercise: Exercise?, profile: Profile, history: [SessionResult]) -> Double? {
-        guard let exercise, !history.isEmpty else { return nil }
-        let item = RoutineDefaults.item(for: exercise, profile: profile)
-        return suggestion(for: item, policy: item.policy ?? .double, profile: profile, exercise: exercise,
-                          history: history).weightKg
+    /// What a swapped-in exercise's undone working sets move to. With history it's the exercise's own progression
+    /// weight, which the gym's loads (if any) fit one set at a time; each set keeps its own reps (only the gym's
+    /// "past the heaviest" rule adds some). Without history, each set's current weight is fitted to the gym's loads and
+    /// the reps stay (a never-logged exercise has no progression to reward); with neither, the sets are left alone.
+    static func swapTarget(exercise: Exercise?, profile: Profile, history: [SessionResult],
+                           loads: ListingLoads? = nil) -> SwapTarget {
+        if let exercise, !history.isEmpty {
+            let item = RoutineDefaults.item(for: exercise, profile: profile)
+            let next = suggestion(for: item, policy: item.policy ?? .double, profile: profile, exercise: exercise,
+                                  history: history)
+            return .suggested(weightKg: next.weightKg, loads: loads, timed: next.sec != nil)
+        }
+        return loads.map(SwapTarget.fit) ?? .keep
+    }
+}
+
+/// A set's weight and reps after a swap.
+struct ResolvedSet: Equatable {
+    let weightKg: Double
+    let reps: Int
+}
+
+/// How `WorkoutSession.swap` retargets the undone working sets.
+enum SwapTarget: Equatable {
+    case keep
+    /// The new exercise's progression weight, fitted per set to `loads` when the gym has them. A timed exercise's
+    /// sets keep their reps.
+    case suggested(weightKg: Double, loads: ListingLoads?, timed: Bool)
+    /// No history: each set's own weight fitted to the gym's loads, reps unchanged.
+    case fit(ListingLoads)
+
+    func resolved(for set: WorkoutSet) -> ResolvedSet {
+        switch self {
+        case .keep: ResolvedSet(weightKg: set.weightKg, reps: set.reps)
+        case let .suggested(weightKg, loads, timed):
+            Self.suggested(weightKg: weightKg, loads: loads, timed: timed, set: set)
+        case let .fit(loads):
+            ResolvedSet(weightKg: AvailableLoads.fit(weightKg: set.weightKg, reps: set.reps, to: loads).weightKg,
+                        reps: set.reps)
+        }
+    }
+
+    private static func suggested(weightKg: Double, loads: ListingLoads?, timed: Bool, set: WorkoutSet) -> ResolvedSet {
+        guard let loads else { return ResolvedSet(weightKg: weightKg, reps: set.reps) }
+        let fitted = AvailableLoads.fit(weightKg: weightKg, reps: set.reps, to: loads)
+        return ResolvedSet(weightKg: fitted.weightKg, reps: timed ? set.reps : fitted.reps)
     }
 }

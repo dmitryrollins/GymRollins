@@ -1,0 +1,29 @@
+{
+  "name": "gymrollins-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --var PUBLIC_BASE_URL:http://127.0.0.1:8787 --infer-origin-from-routes=false",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "gen:auth-schema": "node scripts/gen-auth-schema.mjs > migrations/0001_better_auth.sql",
+    "gen:oauth-schema": "node scripts/gen-oauth-schema.mjs > migrations/0006_oauth_provider.sql"
+  },
+  "dependencies": {
+    "@better-auth/mcp": "1.7.18",
+    "@better-auth/oauth-provider": "1.7.18",
+    "@modelcontextprotocol/server": "2.4.0",
+    "better-auth": "1.7.18",
+    "hono": "4.13.17",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.6.0",
+    "@cloudflare/workers-types": "5.20261107.1",
+    "@types/node": "22.15.17",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.158.0"
+  }
+}

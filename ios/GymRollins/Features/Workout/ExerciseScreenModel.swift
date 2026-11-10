@@ -88,6 +88,14 @@ enum ExerciseScreenModel {
         }
     }
 
+    /// Add Set stops at the server's cap on sets an exercise holds in a workout; Today's plan editor has its own.
+    var canAddSet: Bool {
+        switch self {
+        case .workout(let session, let entryId): session.workout.canAddSet(entryId: entryId)
+        case .plan: true
+        }
+    }
+
     /// A logged set stays; the last remaining (working) set can't go.
     func canRemoveSet(_ set: WorkoutSet) -> Bool {
         switch self {
@@ -126,20 +134,21 @@ enum ExerciseScreenModel {
         if case .plan(let editor, let itemId) = self { editor.toggleWarmup(itemId, setId: set.id) }
     }
 
-    /// Exercises Swap must not offer besides the current one: the plan's others (a plan holds each exercise once).
+    /// Exercises Swap must not offer besides the current one: the plan's others (a plan holds each exercise once),
+    /// including the planned ones a gym swap will return to.
     var swapExcluded: Set<String> {
-        guard case .plan(let editor, let itemId) = self else { return [] }
-        return Set(editor.plan?.exercises.filter { $0.id != itemId }.map(\.exerciseId) ?? [])
+        guard case .plan(let editor, let itemId) = self, let plan = editor.plan else { return [] }
+        return Set((plan.exercises + plan.plannedExercises).filter { $0.id != itemId }.map(\.exerciseId))
     }
 
     /// Swaps the exercise. The workout's entry takes the new exercise's multiplier and suggested weight (`history` is
     /// the candidate's); today's plan takes its routine defaults, keeping the item's place and id.
-    func swap(to candidate: Exercise, profile: Profile, history: [SessionResult]) {
+    func swap(to candidate: Exercise, profile: Profile, history: [SessionResult], loads: ListingLoads? = nil) {
         switch self {
         case .workout(let session, let entryId):
             session.swap(entryId: entryId, to: candidate.id, multiplier: SessionPlanner.multiplier(for: candidate),
-                         workingWeightKg: SessionPlanner.swapWeightKg(exercise: candidate, profile: profile,
-                                                                      history: history))
+                         target: SessionPlanner.swapTarget(exercise: candidate, profile: profile,
+                                                           history: history, loads: loads))
         case .plan(let editor, let itemId):
             editor.replace(itemId, with: RoutineDefaults.item(for: candidate, profile: profile))
         }

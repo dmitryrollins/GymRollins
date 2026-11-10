@@ -185,8 +185,8 @@ func workout(id: UUID = UUID(), name: String, at date: Date) -> Workout {
     /// Disconnect Claude pushes the profile at once and learns whether the server stored it.
     @Test func pushProfileNowStoresTheProfileOrThrows() async throws {
         defer { f.tearDown() }
-        try f.profiles.setMcpPermissions(readWorkouts: false, readBody: false, readPlan: false, propose: false,
-                                         autoApply: false)
+        try f.profiles.setMcpPermissions(readWorkouts: false, readBody: false, readPlan: false, readGyms: false, propose: false,
+                                         autoApply: false, logWorkouts: false)
         await f.server.fail(with: URLError(.notConnectedToInternet))
         await #expect(throws: URLError.self) { try await f.engine.pushProfileNow() }
         #expect(try f.store.dirtyProfile() != nil)
@@ -201,8 +201,8 @@ func workout(id: UUID = UUID(), name: String, at date: Date) -> Workout {
 
     @Test func pushProfileNowThrowsWhenTheServerKeptANewerEdit() async throws {
         defer { f.tearDown() }
-        try f.profiles.setMcpPermissions(readWorkouts: false, readBody: false, readPlan: false, propose: false,
-                                         autoApply: false)
+        try f.profiles.setMcpPermissions(readWorkouts: false, readBody: false, readPlan: false, readGyms: false, propose: false,
+                                         autoApply: false, logWorkouts: false)
         var newer = ProfileSnapshot()
         newer.mcpReadWorkouts = true
         try await f.server.seed(profile: ProfileDTO(SyncRow(value: newer, clientUpdatedAt: f.clock.now.addingTimeInterval(60))))

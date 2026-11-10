@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import Supabase
+import os
 
 public enum AuthState: Equatable, Sendable {
     case signedOut
@@ -12,31 +12,47 @@ public enum AuthState: Equatable, Sendable {
     }
 }
 
-/// An auth change reported by the SDK outside our own calls (e.g. its background token refresh found the session
-/// revoked and signed out, or it refreshed the token of the current user).
+/// An auth change from outside the service's own calls: the API answered 401 to the stored session (signed out
+/// elsewhere, expired, the account deleted). Tests drive their own.
 public enum AuthEvent: Sendable, Equatable {
     case signedIn(userId: UUID, email: String?)
     case signedOut
 }
 
-/// Supabase Auth for the app: Sign in with Apple (plus email/password in DEBUG builds for tests), sign-out,
-/// account deletion and session restore. Every failure is thrown as an `AuthFailure` with a user-facing message.
-/// The session lives in the client's storage (the Keychain on device), so `restore()` works offline. The SDK's auth
-/// events are observed for the service's lifetime: a session invalidated in the background updates `state` and is
-/// reported through `onExternalChange`.
+/// The photo steps of account deletion, kept apart so a failure can say which one broke. `detach` clears the photo
+/// names on the server and on the phone, and changes nothing else; once it has succeeded the photos are as good as gone
+/// for the user, so `remove` (deleting the objects) and the server step that follows say so when they fail.
+public struct AccountPhotoSteps: Sendable {
+    public let detach: @Sendable () async throws -> Void
+    public let remove: @Sendable () async throws -> Void
+
+    public init(detach: @escaping @Sendable () async throws -> Void, remove: @escaping @Sendable () async throws -> Void) {
+        self.detach = detach
+        self.remove = remove
+    }
+}
+
+/// Sign-in on the API's Better Auth: Sign in with Apple with the id token the app gets (plus email and password in
+/// DEBUG builds, for tests), sign-out, account deletion and session restore. Every failure is thrown as an
+/// `AuthFailure` with a user-facing message. The session (Better Auth's bearer token, and whose it is) lives in
+/// `api.sessions`, the Keychain on the phone, so `restore()` works offline. A 401 that ends it (to a call that carried
+/// it, while it is still the stored one) signs the service out and is reported through `onExternalChange`; the local
+/// data stays.
 @MainActor @Observable
 public final class AuthService {
     public private(set) var state: AuthState = .signedOut
 
-    @ObservationIgnored public let client: SupabaseClient
+    @ObservationIgnored public let api: ApiClient
     /// Called when an auth event (not one of this service's own calls) changed `state`.
     @ObservationIgnored public var onExternalChange: (@MainActor (AuthState) -> Void)?
     @ObservationIgnored private var observer: Task<Void, Never>?
 
-    /// `events` replaces the SDK's auth-state stream (tests inject their own).
-    public init(client: SupabaseClient, events: AsyncStream<AuthEvent>? = nil) {
-        self.client = client
-        let stream = events ?? Self.events(from: client)
+    private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "auth")
+
+    /// `events` replaces the API's 401 signal (tests inject their own).
+    public init(api: ApiClient, events: AsyncStream<AuthEvent>? = nil) {
+        self.api = api
+        let stream = events ?? Self.events(from: api)
         observer = Task { [weak self] in
             for await event in stream {
                 guard let self else { return }
@@ -47,10 +63,14 @@ public final class AuthService {
 
     isolated deinit { observer?.cancel() }
 
+    /// Added after review: a sign-out applies only while the store is empty. A sign-in that saved a newer session after
+    /// a 401 cleared the old one, and before its signal got here, stays signed in.
     func handle(_ event: AuthEvent) {
         let next: AuthState
         switch event {
-        case .signedOut: next = .signedOut
+        case .signedOut:
+            guard api.sessions.load() == nil else { return }
+            next = .signedOut
         case let .signedIn(userId, email): next = .signedIn(userId: userId, email: email)
         }
         guard next != state else { return }
@@ -58,107 +78,142 @@ public final class AuthService {
         onExternalChange?(next)
     }
 
-    /// The SDK's auth events that change who is signed in. `initialSession` is left to `restore()`, which also
-    /// handles the offline case.
-    private static func events(from client: SupabaseClient) -> AsyncStream<AuthEvent> {
+    /// Every 401 that ended the stored session; the client has already forgotten the token.
+    private static func events(from api: ApiClient) -> AsyncStream<AuthEvent> {
         AsyncStream { continuation in
             let task = Task {
-                for await (event, session) in client.auth.authStateChanges {
-                    switch event {
-                    case .signedOut, .userDeleted:
-                        continuation.yield(.signedOut)
-                    case .signedIn, .tokenRefreshed, .userUpdated:
-                        if let session { continuation.yield(.signedIn(userId: session.user.id, email: session.user.email)) }
-                    default:
-                        break
-                    }
-                }
+                for await _ in api.unauthorized { continuation.yield(.signedOut) }
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    /// Restores the stored session on launch. Offline, an expired stored session still counts as signed in
-    /// (sync reports `.offline`, and the SDK refreshes the token once the network is back).
+    /// Restores the stored session on launch. Only the server's word signs out: `get-session` answers `null` when it no
+    /// longer holds the session, and a 401 to the stored token is forgotten and signalled by the client. Anything else
+    /// (offline, the server busy, a redirect the client refuses such as a captive portal's, an answer the app can't
+    /// read) keeps the stored account signed in, and sync reports what it meets until the server answers.
+    ///
+    /// Added after review: once the answer is in, it sets nothing unless the store still holds the token it was about.
+    /// A sign-in that finished meanwhile owns the state, and a 401's own signal does the signing out.
     public func restore() async {
-        do {
-            state = Self.signedIn(try await client.auth.session)
-        } catch {
-            if AuthFailure.isNetwork(error), let stored = client.auth.currentSession {
-                state = Self.signedIn(stored)
-            } else {
-                state = .signedOut
-            }
+        guard let stored = api.sessions.load() else {
+            state = .signedOut
+            return
         }
+        let answer: Result<AuthUser?, any Error>
+        do { answer = .success(try await api.currentUser()) } catch { answer = .failure(error) }
+        guard api.sessions.load()?.token == stored.token else { return }
+        switch answer {
+        case .success(let user?):
+            state = .signedIn(userId: user.id, email: user.email)
+        case .success(nil):
+            endSession(checked: stored.token)
+        case .failure(let refused as ApiError) where refused.status == 401:
+            // Still stored only if the client couldn't forget it.
+            endSession(checked: stored.token)
+        case .failure:
+            state = .signedIn(userId: stored.userId, email: stored.email)
+        }
+    }
+
+    /// Added after review. `get-session` answered `null` (or 401) about `token`. Signs out only if that is still the
+    /// stored token: a sign-in that finished while the request was on the wire stays signed in. Reports the change
+    /// like any external one.
+    private func endSession(checked token: String) {
+        guard api.sessions.clear(ifToken: token) else { return }
+        state = .signedOut
+        onExternalChange?(.signedOut)
     }
 
     public func signInWithApple(idToken: String, nonce: String) async throws {
-        try await authenticate(.signIn) {
-            try await self.client.auth.signInWithIdToken(
-                credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce))
-        }
+        try await authenticate(.signIn) { try await self.api.signInWithApple(idToken: idToken, nonce: nonce) }
     }
 
     #if DEBUG
-    /// Email/password sign-in, for tests and the local stack only.
+    /// Email/password sign-in, for tests and the local Worker only (the server takes it with ALLOW_PASSWORD_AUTH=1).
     public func signIn(email: String, password: String) async throws {
-        try await authenticate(.signIn) {
-            try await self.client.auth.signIn(email: email, password: password)
-        }
+        try await authenticate(.signIn) { try await self.api.signIn(email: email, password: password) }
     }
 
-    /// Email/password sign-up (the local stack auto-confirms), for tests only.
+    /// Email/password sign-up, for tests only.
     public func signUp(email: String, password: String) async throws {
-        try await authenticate(.signUp) {
-            let response = try await self.client.auth.signUp(email: email, password: password)
-            guard let session = response.session else { throw AuthError.sessionMissing }
-            return session
-        }
+        try await authenticate(.signUp) { try await self.api.signUp(email: email, password: password) }
     }
     #endif
 
-    /// Signs out. The SDK drops the local session before telling the server, so the device is signed out even
-    /// when that request fails (e.g. offline); the failure is not surfaced.
-    public func signOut() async throws {
-        do {
-            try await client.auth.signOut()
-        } catch where AuthFailure.isNetwork(error) {
-            // Local session already removed; the server-side refresh token simply expires.
-        } catch {
-            state = .signedOut
-            throw AuthFailure(error, during: .signOut)
-        }
+    /// Signs out. The phone forgets the session before telling the server, so it is signed out even when that request
+    /// fails; the server's copy then just expires. Better Auth answers 200 even for a session already gone.
+    ///
+    /// Added after review: it never throws. Once the token is forgotten there is nothing to retry, and the caller must
+    /// go on (`signOutAndRemoveLocalData` wipes the phone next), so a server error is only logged.
+    public func signOut() async {
+        let stored = api.sessions.load()
+        api.sessions.clear()
         state = .signedOut
+        guard let stored else { return }
+        do {
+            try await api.signOut(token: stored.token)
+        } catch where ApiError.isOffline(error) {
+            // Forgotten here; the server's copy expires on its own.
+        } catch {
+            Self.log.error("Sign-out on the server failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
-    /// Deletes the account and all its data on the server (`delete_my_account`), then signs out locally.
-    public func deleteAccount() async throws {
-        guard client.auth.currentSession != nil else { throw AuthFailure(AuthError.sessionMissing, during: .deleteAccount) }
+    /// Detaches and removes the user's photos through `photos`, then deletes the account and all its data on the
+    /// server (`DELETE /v1/account`, which refuses with `photos_remain` while a photo is left), then forgets the
+    /// session. A failure leaves the account and the session, so the user can try again; the message says whether the
+    /// photos are already gone.
+    public func deleteAccount(photos: AccountPhotoSteps? = nil) async throws {
+        try await deleteAccount(photos: photos) { try await self.api.deleteAccountOnServer() }
+    }
+
+    func deleteAccount(photos: AccountPhotoSteps?, onServer: () async throws -> Void) async throws {
+        guard api.sessions.load() != nil else { throw AuthFailure.sessionExpired }
+        // A session the server no longer holds would fail only after the photos are gone.
+        let holds: Bool
         do {
-            _ = try await client.auth.session // refreshes an expired access token first
-            try await client.rpc("delete_my_account").execute()
+            holds = try await api.currentUser() != nil
         } catch {
             throw AuthFailure(error, during: .deleteAccount)
         }
-        // The user no longer exists, so only the local session needs clearing (the SDK ignores the server's 404/403).
+        guard holds else { throw AuthFailure.sessionExpired }
+        if let photos { try await removePhotos(photos) }
         do {
-            try await client.auth.signOut(scope: .local)
+            try await onServer()
+        } catch let cancelled as CancellationError {
+            throw cancelled
         } catch {
-            // Local session was removed before the request; nothing left to undo.
+            throw photos == nil ? AuthFailure(error, during: .deleteAccount) : AuthFailure.afterPhotos(error)
         }
+        // The account is gone, and its sessions with it.
+        api.sessions.clear()
         state = .signedOut
     }
 
-    private func authenticate(_ action: AuthAction, _ call: @escaping () async throws -> Session) async throws {
-        do {
-            state = Self.signedIn(try await call())
+    /// Detach, then remove. A failed detach changed nothing; a failed remove has already detached, which the message
+    /// owns up to.
+    private func removePhotos(_ photos: AccountPhotoSteps) async throws {
+        do { try await photos.detach() } catch let cancelled as CancellationError {
+            throw cancelled
         } catch {
-            throw AuthFailure(error, during: action)
+            throw AuthFailure.detachFailed
+        }
+        do { try await photos.remove() } catch let cancelled as CancellationError {
+            throw cancelled
+        } catch {
+            throw AuthFailure.afterPhotos(error)
         }
     }
 
-    private static func signedIn(_ session: Session) -> AuthState {
-        .signedIn(userId: session.user.id, email: session.user.email)
+    private func authenticate(_ action: AuthAction, _ call: () async throws -> StoredSession) async throws {
+        do {
+            let session = try await call()
+            try api.sessions.save(session)
+            state = .signedIn(userId: session.userId, email: session.email)
+        } catch {
+            throw AuthFailure(error, during: action)
+        }
     }
 }

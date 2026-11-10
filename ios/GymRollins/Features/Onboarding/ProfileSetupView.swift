@@ -21,6 +21,8 @@ struct ProfileSetupView: View {
     @State private var trainingDays = 4
     @State private var experience = "intermediate"
     @State private var limits = ""
+    @State private var hasLimitsDate = false
+    @State private var limitsUntil = Date()
     @State private var error: String?
     @State private var loaded = false
 
@@ -94,14 +96,9 @@ struct ProfileSetupView: View {
                 GlassSegmentedControl(options: Self.experiences, selection: $experience,
                                       identifierPrefix: "setup.experience")
             }
-            VStack(alignment: .leading, spacing: 6) {
-                FieldLabel(text: "Injuries / limits")
-                TextField("e.g. knee — no leg loading until \u{2026}", text: $limits, axis: .vertical)
-                    .lineLimit(2...4)
-                    .padding(10)
-                    .background(Theme.card, in: .rect(cornerRadius: 12))
-                    .accessibilityIdentifier("setup.limits")
-            }
+            LimitsEditor(note: $limits, hasDate: $hasLimitsDate, until: $limitsUntil,
+                         dates: LimitsCheckIn.allowedDates(now: env.now(), calendar: .current), now: env.now(),
+                         identifier: "setup.limits")
         }
     }
 
@@ -131,6 +128,8 @@ struct ProfileSetupView: View {
         trainingDays = p.trainingDays
         experience = p.experience
         limits = p.limits
+        hasLimitsDate = p.limitsUntil != nil
+        limitsUntil = p.limitsUntil ?? LimitsCheckIn.laterDate(now: env.now(), calendar: .current)
         loaded = true
     }
 
@@ -162,7 +161,9 @@ struct ProfileSetupView: View {
                               deloadPct: current.deloadPct, barKg: current.barKg, plateInventory: current.plateInventory,
                               dumbbellStepKg: current.dumbbellStepKg, mcpReadWorkouts: current.mcpReadWorkouts,
                               mcpReadBody: current.mcpReadBody, mcpReadPlan: current.mcpReadPlan,
-                              mcpPropose: current.mcpPropose, mcpAutoApply: current.mcpAutoApply)
+                              mcpReadGyms: current.mcpReadGyms, mcpPropose: current.mcpPropose, mcpAutoApply: current.mcpAutoApply,
+                              mcpLogWorkouts: current.mcpLogWorkouts)
+            .withLimits(limits, until: hasLimitsDate ? GoalDate.normalized(limitsUntil) : nil)
         do {
             try env.profiles.save(profile)
             weighInId = try OnboardingWeighIn.save(weightKg: input.bodyweightKg, date: env.now(), reusing: weighInId,

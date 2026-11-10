@@ -115,7 +115,7 @@ import Testing
         let bench = s.workout.entries[0].id
         s.addSet(entryId: bench)
         s.addWarmup(entryId: bench, barKg: 20.41)
-        s.swap(entryId: bench, to: "0314", multiplier: 1, workingWeightKg: nil)
+        s.swap(entryId: bench, to: "0314", multiplier: 1, target: .keep)
         s.setNote(entryId: bench, note: "slow eccentric")
         s.addExercises(["0251"], makeEntry: { WorkoutEntry(exerciseId: $0, sets: [WorkoutSet(weightKg: 0, reps: 10)]) })
         s.removeEntry(s.workout.entries[1].id)
@@ -168,16 +168,35 @@ import Testing
         let s = make(spy, now: { Date(timeIntervalSince1970: 1_100) })
         let bench = s.workout.entries[0].id
         s.logNextSet(entryId: bench, weightKg: 20.41, reps: 10) // warm-up done
-        s.swap(entryId: bench, to: "0289", multiplier: 2, workingWeightKg: 22)
+        s.swap(entryId: bench, to: "0289", multiplier: 2, target: .suggested(weightKg: 22, loads: nil, timed: false))
         let swapped = s.workout.entries[0]
         #expect(swapped.exerciseId == "0289")
         #expect(swapped.sets.allSatisfy { $0.multiplier == 2 })
         #expect(swapped.sets[0].weightKg == 20.41)                       // done set keeps its load
         #expect(swapped.sets[1...].allSatisfy { $0.weightKg == 22 })    // undone working sets follow history
-        s.swap(entryId: bench, to: "0025", multiplier: 1, workingWeightKg: nil)
+        s.swap(entryId: bench, to: "0025", multiplier: 1, target: .keep)
         let back = s.workout.entries[0]
         #expect(back.sets.allSatisfy { $0.multiplier == 1 })
         #expect(back.sets[1...].allSatisfy { $0.weightKg == 22 })       // no history: keep
+    }
+
+    /// A logged working set is history: a swap moves the undone sets only, whatever the new target says.
+    @Test func swapNeverChangesALoggedWorkingSet() {
+        let spy = Spy()
+        let s = make(spy, now: { Date(timeIntervalSince1970: 1_100) })
+        let bench = s.workout.entries[0].id
+        s.logNextSet(entryId: bench, weightKg: 20.41, reps: 10) // warm-up
+        s.logNextSet(entryId: bench, weightKg: 63.5, reps: 7)   // first working set
+        let logged = s.workout.entries[0].sets[1]
+        #expect(logged.done && !logged.warmup, "this is a working set, not the warm-up")
+        s.swap(entryId: bench, to: "0289", multiplier: 2, target: .suggested(weightKg: 22, loads: nil, timed: false))
+        let swapped = s.workout.entries[0].sets
+        #expect(swapped[1].weightKg == 63.5 && swapped[1].reps == 7, "the logged working set keeps its load and reps")
+        #expect(swapped[2].weightKg == 22, "the undone one moves")
+        s.swap(entryId: bench, to: "0025", multiplier: 1, target: .fit(.fixed(kg: [10])))
+        let back = s.workout.entries[0].sets
+        #expect(back[0].weightKg == 20.41 && back[1].weightKg == 63.5 && back[1].reps == 7)
+        #expect(back[2].weightKg == 10)
     }
 
     /// A 20 s hold logged against a 30 s target stores 20 s.
@@ -258,5 +277,42 @@ extension WorkoutSessionTests {
         #expect(session.entry(entry.id)?.sets.count == 3, "the logged set stays")
         model.removeSet(entry.sets[2])
         #expect(session.entry(entry.id)?.sets.count == 2)
+    }
+
+    /// Add Set stops at 50 sets an exercise, the server's cap (DomainLimits.entrySetsMax).
+    @Test func addSetStopsAtTheCap() {
+        let session = make(Spy(), now: { Date(timeIntervalSince1970: 1_100) })
+        let entry = session.workout.entries[0]
+        let model = ExerciseScreenModel.workout(session, entryId: entry.id)
+        #expect(model.canAddSet)
+        for _ in 0..<60 { model.addSet() }
+        #expect(session.entry(entry.id)?.sets.count == DomainLimits.entrySetsMax)
+        #expect(!model.canAddSet)
+    }
+
+    /// At 45 exercises the picker takes at most 5 more, so Add exercise keeps every one picked (cap 50).
+    @Test func addExercisePicksAtMostTheRoomLeft() {
+        let session = make(Spy(), now: { Date(timeIntervalSince1970: 1_100) })
+        session.addExercises((2..<45).map { "e\($0)" }) { WorkoutEntry(exerciseId: $0) }
+        #expect(session.workout.entries.count == 45)
+        let room = session.workout.entriesLeft
+        #expect(room == 5)
+        let picked = (0..<10).reduce([String]()) { ExercisePickerView.toggling("p\($1)", in: $0, limit: room) }
+        #expect(picked == (0..<5).map { "p\($0)" })
+        #expect(ExercisePickerView.toggling("p0", in: picked, limit: room) == (1..<5).map { "p\($0)" })
+        session.addExercises(picked) { WorkoutEntry(exerciseId: $0) }
+        #expect(session.workout.entries.suffix(5).map(\.exerciseId) == picked)
+        #expect(session.workout.entriesLeft == 0)
+    }
+
+    /// Add warm-up set at 50 sets leaves the workout as it is; the sheet's button is disabled there.
+    @Test func addWarmupAtTheCapChangesNothing() {
+        let session = make(Spy(), now: { Date(timeIntervalSince1970: 1_100) })
+        let entry = session.workout.entries[0]
+        for _ in 0..<60 { session.addSet(entryId: entry.id) }
+        let full = session.workout
+        #expect(full.entries[0].sets.count == DomainLimits.entrySetsMax)
+        session.addWarmup(entryId: entry.id, barKg: 20)
+        #expect(session.workout == full)
     }
 }

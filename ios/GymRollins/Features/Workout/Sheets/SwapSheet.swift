@@ -66,14 +66,7 @@ struct SwapSheet: View {
         }
     }
 
-    private var loggedCounts: [String: Int] {
-        let recent = (try? env.workouts.recent(limit: 200)) ?? []
-        var result: [String: Int] = [:]
-        for workout in recent {
-            for workoutEntry in workout.entries { result[workoutEntry.exerciseId, default: 0] += 1 }
-        }
-        return result
-    }
+    private var loggedCounts: [String: Int] { env.gymLoggedCounts() }
 
     private var filteredCandidates: [Exercise] {
         guard let currentExercise else { return [] }

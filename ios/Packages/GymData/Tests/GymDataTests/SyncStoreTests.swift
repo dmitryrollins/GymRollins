@@ -165,6 +165,8 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         profile.unit = .kg
         profile.platesKg = [25, 20]
         profile.mcpReadPlan = false
+        profile.mcpReadGyms = false
+        profile.mcpLogWorkouts = true
         try f.store.applyRemote(profile: SyncRow(value: profile, clientUpdatedAt: t, serverUpdatedAt: t))
         let ex = Exercise(id: "custom-x", name: "Sled", bodyPart: "legs", equipment: "sled", target: "quads",
                           isCustom: true, mode: .reps, bilateral: true)
@@ -184,6 +186,8 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         #expect(try f.store.dirtyBodyweight().isEmpty)
         #expect(try f.profiles.load().unit == .kg)
         #expect(try f.profiles.load().mcpReadPlan == false)
+        #expect(try f.profiles.load().mcpReadGyms == false)
+        #expect(try f.profiles.load().mcpLogWorkouts)
         #expect(try f.custom.all() == [ex])
         #expect(try f.routines.schedule().days == [1: r.id])
         #expect(try f.body.entries(since: nil) == [bw])
@@ -191,7 +195,7 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
 
     @Test func dirtyProfileWeekdaysAndCustomExercisesRoundTrip() throws {
         defer { f.tearDown() }
-        try f.profiles.save(Profile(unit: .kg, goalWeightKg: 85))
+        try f.profiles.save(Profile(unit: .kg, goalWeightKg: 85, mcpLogWorkouts: true))
         let r = sampleRoutine()
         try f.routines.setSchedule(weekday: 3, routineId: r.id)
         let ex = try f.custom.create(name: "Sled", bodyPart: "legs", equipment: "sled", target: "quads", mode: .reps,
@@ -200,6 +204,7 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         let profile = try #require(try f.store.dirtyProfile())
         #expect(profile.value.unit == .kg)
         #expect(profile.value.goalWeightKg == 85)
+        #expect(profile.value.mcpLogWorkouts)
         #expect(profile.clientUpdatedAt == f.clock.now)
         #expect(try f.store.dirtyWeekdays().map(\.value) == [WeekdayAssignment(weekday: 3, routineId: r.id)])
         #expect(try f.store.dirtyCustomExercises().map(\.value) == [ex])
@@ -231,6 +236,21 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         #expect(loaded.birthYear == nil)
     }
 
+    @Test func theNotesEndDateMarksDirtyAndAppliesFromRemote() throws {
+        defer { f.tearDown() }
+        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
+        try f.profiles.save(Profile(limits: "Knee", limitsUntil: until))
+        let row = try #require(try f.store.dirtyProfile())
+        #expect(row.value.limitsUntil == until)
+
+        var remote = row.value
+        remote.limitsUntil = nil
+        f.clock.advance(60)
+        try f.store.applyRemote(profile: SyncRow(value: remote, clientUpdatedAt: f.clock.now,
+                                                 serverUpdatedAt: f.clock.now))
+        #expect(try f.profiles.load().limitsUntil == nil)
+    }
+
     // Rule 6 + cursors
     @Test func cursorsPersistAndResetAllWipesEverything() throws {
         defer { f.tearDown() }
@@ -252,5 +272,38 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
         #expect(try f.context.fetchCount(FetchDescriptor<ProfileRecord>()) == 0)
         #expect(try f.context.fetchCount(FetchDescriptor<WorkoutRecord>()) == 0)
         #expect(try f.context.fetchCount(FetchDescriptor<SetRecord>()) == 0)
+    }
+
+    @Test func resetAllRemovesGymRows() throws {
+        defer { f.tearDown() }
+        let gyms = GymRepository(context: f.context, now: { [clock = f.clock] in clock.now })
+        let gym = try gyms.addPrivateGym(name: "Home", address: nil)
+        _ = try gyms.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        try f.store.resetAll()
+        #expect(try f.context.fetchCount(FetchDescriptor<GymRecord>()) == 0)
+        #expect(try f.context.fetchCount(FetchDescriptor<EquipmentItemRecord>()) == 0)
+        #expect(try f.context.fetchCount(FetchDescriptor<GymListingRecord>()) == 0)
+    }
+
+    @Test func resetAccountDataKeepsGymRowsButDropsTheRest() throws {
+        defer { f.tearDown() }
+        let gyms = GymRepository(context: f.context, now: { [clock = f.clock] in clock.now })
+        let gym = try gyms.addPrivateGym(name: "Home", address: nil)
+        _ = try gyms.addListing(NewListing(gymId: gym.id, kindId: "cable-stack"))
+        try f.routines.upsert(sampleRoutine())
+        try f.workouts.save(Workout(startedAt: f.clock.now, name: "W"))
+        f.store.setCursor(f.clock.now, for: .workouts)
+        f.store.ownerUserId = UUID()
+
+        try f.store.resetAccountData()
+
+        #expect(try f.context.fetchCount(FetchDescriptor<GymRecord>()) == 1)
+        #expect(try f.context.fetchCount(FetchDescriptor<EquipmentItemRecord>()) == 1)
+        #expect(try f.context.fetchCount(FetchDescriptor<GymListingRecord>()) == 1)
+        #expect(try f.context.fetchCount(FetchDescriptor<WorkoutRecord>()) == 0)
+        #expect(try f.context.fetchCount(FetchDescriptor<RoutineRecord>()) == 0)
+        #expect(f.store.cursor(for: .workouts) == nil)
+        #expect(f.store.ownerUserId == nil)
+        #expect(try f.store.hasLocalData() == false, "gyms are device data, not account data")
     }
 }

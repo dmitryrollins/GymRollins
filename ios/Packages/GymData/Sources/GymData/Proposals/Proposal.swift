@@ -22,10 +22,13 @@ public struct Proposal: Codable, Sendable, Equatable, Identifiable {
     public let resolvedAt: Date?
     public let autoApplied: Bool
     public let hasSnapshot: Bool
+    /// The agent that sent it (the server's `from_agent`, plan 32); nil for proposals from before the server kept it.
+    public let fromAgent: String?
 
     public init(id: UUID, createdAt: Date, source: String = "claude", summary: String, changes: [PlanChange],
                 status: ProposalStatus = .pending, appliedChangeIds: [String] = [], skipped: [PlanViolation] = [],
-                resolvedAt: Date? = nil, autoApplied: Bool = false, hasSnapshot: Bool = false) {
+                resolvedAt: Date? = nil, autoApplied: Bool = false, hasSnapshot: Bool = false,
+                fromAgent: String? = nil) {
         self.id = id
         self.createdAt = createdAt
         self.source = source
@@ -37,6 +40,7 @@ public struct Proposal: Codable, Sendable, Equatable, Identifiable {
         self.resolvedAt = resolvedAt
         self.autoApplied = autoApplied
         self.hasSnapshot = hasSnapshot
+        self.fromAgent = fromAgent
     }
 
     public var proposal: PlanProposal { PlanProposal(summary: summary, changes: changes) }

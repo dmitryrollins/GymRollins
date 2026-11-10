@@ -73,18 +73,21 @@ public struct WorkoutEntry: Codable, Sendable, Identifiable, Hashable {
     public let sets: [WorkoutSet]
     public let note: String?
     public let supersetGroup: String?
+    /// The listing whose loads this entry's weights were fitted to (a local row id); nil with no gym or no listing.
+    public let gymListingId: UUID?
 
     public init(id: UUID = UUID(), exerciseId: String, sets: [WorkoutSet] = [], note: String? = nil,
-                supersetGroup: String? = nil) {
+                supersetGroup: String? = nil, gymListingId: UUID? = nil) {
         self.id = id
         self.exerciseId = exerciseId
         self.sets = sets
         self.note = note
         self.supersetGroup = supersetGroup
+        self.gymListingId = gymListingId
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, exerciseId, sets, note, supersetGroup
+        case id, exerciseId, sets, note, supersetGroup, gymListingId
     }
 
     public init(from decoder: Decoder) throws {
@@ -94,7 +97,8 @@ public struct WorkoutEntry: Codable, Sendable, Identifiable, Hashable {
             exerciseId: try c.decode(String.self, forKey: .exerciseId),
             sets: try c.decodeIfPresent([WorkoutSet].self, forKey: .sets) ?? [],
             note: try c.decodeIfPresent(String.self, forKey: .note),
-            supersetGroup: try c.decodeIfPresent(String.self, forKey: .supersetGroup)
+            supersetGroup: try c.decodeIfPresent(String.self, forKey: .supersetGroup),
+            gymListingId: try c.decodeIfPresent(UUID.self, forKey: .gymListingId)
         )
     }
 }
@@ -109,10 +113,12 @@ public struct Workout: Codable, Sendable, Identifiable, Hashable {
     public let entries: [WorkoutEntry]
     public let source: WorkoutSource
     public let note: String?
+    /// The gym it was done at (a local row id); nil with no gym. The row may be gone: readers must cope.
+    public let gymId: UUID?
 
     public init(id: UUID = UUID(), startedAt: Date, endedAt: Date? = nil, pausedSeconds: TimeInterval = 0,
                 routineId: UUID? = nil, name: String, entries: [WorkoutEntry] = [], source: WorkoutSource = .app,
-                note: String? = nil) {
+                note: String? = nil, gymId: UUID? = nil) {
         self.id = id
         self.startedAt = startedAt
         self.endedAt = endedAt
@@ -122,10 +128,11 @@ public struct Workout: Codable, Sendable, Identifiable, Hashable {
         self.entries = entries
         self.source = source
         self.note = note
+        self.gymId = gymId
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, startedAt, endedAt, pausedSeconds, routineId, name, entries, source, note
+        case id, startedAt, endedAt, pausedSeconds, routineId, name, entries, source, note, gymId
     }
 
     public init(from decoder: Decoder) throws {
@@ -139,7 +146,8 @@ public struct Workout: Codable, Sendable, Identifiable, Hashable {
             name: try c.decode(String.self, forKey: .name),
             entries: try c.decodeIfPresent([WorkoutEntry].self, forKey: .entries) ?? [],
             source: try c.decodeIfPresent(WorkoutSource.self, forKey: .source) ?? .app,
-            note: try c.decodeIfPresent(String.self, forKey: .note)
+            note: try c.decodeIfPresent(String.self, forKey: .note),
+            gymId: try c.decodeIfPresent(UUID.self, forKey: .gymId)
         )
     }
 }

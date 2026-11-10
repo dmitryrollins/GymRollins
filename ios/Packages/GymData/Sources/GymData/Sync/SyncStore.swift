@@ -15,6 +15,8 @@ extension WeekdayRecord: SyncTracked {}
 extension MuscleTargetRecord: SyncTracked {}
 extension BodyweightRecord: SyncTracked {}
 extension WorkoutRecord: SyncTracked {}
+extension GymRecord: SyncTracked {}
+extension GymListingRecord: SyncTracked {}
 
 /// The only sync-facing API over SwiftData: dirty rows out, remote rows in, and pull cursors.
 ///
@@ -46,6 +48,7 @@ public final class SyncStore {
         guard let record = try trackedRecord(entity, id: id) else { return }
         record.serverUpdatedAt = serverUpdatedAt
         if record.updatedAt == clientUpdatedAt { record.dirty = false }
+        dropAcknowledgedTombstone(record)
         try context.save()
         clearSyncFailure(entity, id: id)
     }
@@ -60,6 +63,8 @@ public final class SyncStore {
         case .routines: return try UUID(uuidString: id).flatMap { try routineRecord($0) }
         case .bodyweight: return try UUID(uuidString: id).flatMap { try bodyweightRecord($0) }
         case .workouts: return try UUID(uuidString: id).flatMap { try workoutRecord($0) }
+        case .gyms: return try UUID(uuidString: id).flatMap { try anyGymRecord($0) }
+        case .gymListings: return try UUID(uuidString: id).flatMap { try anyListingRecord($0) }
         case .proposals: return nil // resolutions are marked synced by markProposalSynced
         }
     }
@@ -74,13 +79,22 @@ public final class SyncStore {
         defaults.set(date, forKey: Self.cursorKey(entity))
     }
 
+    /// Forgets the cursor, so the next pull reads the entity from the start.
+    public func clearCursor(for entity: SyncEntity) {
+        defaults.removeObject(forKey: Self.cursorKey(entity))
+    }
+
     private static func cursorKey(_ entity: SyncEntity) -> String { "gymrollins.sync.cursor.\(entity.rawValue)" }
 
     // MARK: - Reset
 
-    /// Sign-out / account deletion / account switch: deletes every local record and forgets the cursors, the
-    /// owning account and any recorded sync failures.
-    public func resetAll() throws {
+    /// Sign-out / account switch: deletes the account's records and forgets the cursors, the owning account and any
+    /// recorded sync failures. What exists only on this phone stays: "This phone only" gyms and listings with their
+    /// photos, and anything not yet on the server (see `resetGymData`). Returns the photo files of the gym rows it
+    /// removed, for the app to delete.
+    @discardableResult
+    public func resetAccountData() throws -> [String] {
+        let files = try resetGymData()
         // Roots first (their relationships cascade), then any orphaned children. Batch deletes are avoided:
         // they fail on the non-optional inverse relationships.
         try deleteAll(WorkoutRecord.self)
@@ -98,6 +112,16 @@ public final class SyncStore {
         try context.save()
         SyncEntity.allCases.forEach { defaults.removeObject(forKey: Self.cursorKey($0)) }
         forgetOwnershipAndFailures()
+        return files
+    }
+
+    /// Erase all data / account deletion / a fresh store: `resetAccountData()` plus the gym models.
+    public func resetAll() throws {
+        try deleteAll(ShareOutboxRecord.self)
+        try deleteAll(GymListingRecord.self)
+        try deleteAll(EquipmentItemRecord.self)
+        try deleteAll(GymRecord.self)
+        try resetAccountData()
     }
 
     private func deleteAll<T: PersistentModel>(_ type: T.Type) throws {

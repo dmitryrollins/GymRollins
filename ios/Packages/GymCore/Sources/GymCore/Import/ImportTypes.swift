@@ -107,15 +107,21 @@ public struct ImportedWorkout: Sendable, Equatable, Identifiable {
     public let endedAt: Date?
     /// Workout-level note (Strong "Workout Notes", Hevy `description`).
     public let note: String?
+    /// 1, or the piece's number when a workout past the server's caps was split (`ImportSplit`).
+    public let part: Int
+    /// The source workout's id (piece 1's), on pieces 2 and later.
+    public let splitFrom: UUID?
 
     public init(id: UUID, startedAt: Date, entries: [ImportedEntry], name: String? = nil, endedAt: Date? = nil,
-                note: String? = nil) {
+                note: String? = nil, part: Int = 1, splitFrom: UUID? = nil) {
         self.id = id
         self.startedAt = startedAt
         self.entries = entries
         self.name = name
         self.endedAt = endedAt
         self.note = note
+        self.part = part
+        self.splitFrom = splitFrom
     }
 }
 

@@ -50,7 +50,7 @@ struct RoutineEditView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: save).buttonStyle(.glassProminent).tint(Theme.primaryFill)
+                    Button("Done", action: save).buttonStyle(.glassProminent).tint(Theme.primaryButtonFill)
                         .accessibilityIdentifier("edit.done")
                 }
             }

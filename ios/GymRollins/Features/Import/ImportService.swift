@@ -8,15 +8,16 @@ enum ImportServiceError: Error, Equatable {
 }
 
 struct ImportSummary: Equatable, Sendable {
-    /// Workouts written (new or overwritten by a re-import); excludes `duplicatesSkipped`.
+    /// The export's workouts written (new or overwritten by a re-import); excludes `duplicatesSkipped`. A workout split
+    /// into pieces (`ImportSplit`) counts once.
     let workouts: Int
     let sets: Int
     let warmupSets: Int
     let rowErrors: [ImportRowError]
     /// Custom exercises created by this run (empty on a re-import: existing ones are reused by name).
     let createdExercises: [Exercise]
-    /// Workouts not imported because a different workout already in the log starts within
-    /// `ImportService.duplicateWindow` (e.g. the same session exported from two apps).
+    /// The export's workouts not imported because a different workout already in the log starts within
+    /// `ImportService.duplicateWindow` (e.g. the same session exported from two apps); a split one counts once.
     var duplicatesSkipped = 0
 }
 
@@ -75,7 +76,7 @@ final class ImportService {
         }
         progress(1)
         let importedSets = imported.flatMap(\.entries).flatMap(\.sets)
-        return ImportSummary(workouts: imported.count, sets: importedSets.count,
+        return ImportSummary(workouts: Self.sourceCount(imported), sets: importedSets.count,
                              warmupSets: importedSets.filter(\.warmup).count, rowErrors: plan.stats.rowErrors,
                              createdExercises: created, duplicatesSkipped: duplicates)
     }
@@ -84,6 +85,9 @@ final class ImportService {
     /// A workout with the same id is kept: saving it overwrites the earlier import of the same export.
     /// Date-only exports (FitNotes: every day starts at a made-up noon) are never matched by time, in either
     /// direction, since their start says nothing about when the session happened.
+    /// The pieces of a split workout (`ImportSplit`) stay or go with their first piece. They can start within
+    /// `duplicateWindow` of each other, so on their own a re-import would keep the first (its id is known) and drop the
+    /// rest as its duplicates, and another app's copy of the session would drop only the pieces near its start.
     static func withoutDuplicates(_ imported: [ImportedWorkout], source: ImportSource = .fitbod,
                                   existing: [Workout]) throws -> ([ImportedWorkout], Int) {
         guard !isDateOnly(source) else { return (imported, 0) }
@@ -91,10 +95,18 @@ final class ImportService {
         let dateOnlyNote = workoutNote(for: .fitNotes)
         let starts = existing.filter { !($0.source == .import && ($0.note ?? "").hasPrefix(dateOnlyNote)) }
             .map(\.startedAt.timeIntervalSinceReferenceDate).sorted()
-        let kept = imported.filter { workout in
-            existingIds.contains(workout.id) || !hasStart(near: workout.startedAt, in: starts)
+        let firsts = imported.filter { workout in
+            workout.splitFrom == nil
+                && (existingIds.contains(workout.id) || !hasStart(near: workout.startedAt, in: starts))
         }
-        return (kept, imported.count - kept.count)
+        let keptIds = Set(firsts.map(\.id))
+        let kept = imported.filter { keptIds.contains($0.splitFrom ?? $0.id) }
+        return (kept, sourceCount(imported) - firsts.count)
+    }
+
+    /// The export's workouts among `workouts`: a split one's pieces after the first don't count.
+    nonisolated static func sourceCount(_ workouts: [ImportedWorkout]) -> Int {
+        workouts.filter { $0.splitFrom == nil }.count
     }
 
     static func isDateOnly(_ source: ImportSource) -> Bool { source == .fitNotes }
@@ -189,7 +201,7 @@ final class ImportService {
             return WorkoutEntry(exerciseId: id, sets: sets, note: notes.isEmpty ? nil : notes.joined(separator: "\n"),
                                 supersetGroup: entry.supersetGroup)
         }
-        let name = imported.name.map { String($0.prefix(DomainLimits.workoutNameMax)) } ?? workoutName(for: source)
+        let name = ImportSplit.name(imported.name ?? workoutName(for: source), part: imported.part)
         let note = [workoutNote(for: source), imported.note].compactMap { $0 }.joined(separator: "\n")
         return Workout(id: imported.id, startedAt: imported.startedAt, endedAt: endedAt(of: imported), name: name,
                        entries: entries, source: .import, note: note)

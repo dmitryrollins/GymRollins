@@ -34,7 +34,8 @@ struct AccountSection: View {
             }
         }
         .disabled(busy)
-        .confirmationDialog("Remove this iPhone's copy of your data? It stays in your account.",
+        .confirmationDialog("Remove this iPhone's copy of your account's data? It stays in your account. "
+                            + "Gyms kept on this phone stay here.",
                             isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign Out and Remove", role: .destructive) { run { try await env.sync.signOutAndRemoveLocalData() } }
                 .accessibilityIdentifier("account.signOut.confirm")
@@ -64,7 +65,7 @@ struct AccountSection: View {
     /// warning comes back with what's still not uploaded.
     private func syncThenSignOut() async throws {
         let report = await env.prepareSignOut()
-        if report.unsynced == 0 && report.failed == 0 {
+        if report.unsynced == 0 && report.failed == 0 && report.unsentReports == 0 {
             try await env.sync.signOutAndRemoveLocalData()
         } else {
             signOutRisk = report
@@ -105,17 +106,20 @@ struct AccountSection: View {
         }
     }
 
-    /// Rows the server refused: a count plus what each one is and why.
+    /// Rows the server refused: a count, then one line per kind of row and reason.
     private var failures: some View {
         Section {
             DisclosureGroup {
-                ForEach(env.sync.syncFailures, id: \.id) { failure in
+                ForEach(SyncStatusText.failureLines(env.sync.syncFailures)) { line in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(SyncStatusText.entityName(failure.entity)).font(.subheadline.weight(.semibold))
-                        Text(failure.message).font(.caption).foregroundStyle(Theme.textSecondary)
+                        Text(line.title).font(.subheadline.weight(.semibold))
+                        Text(line.message).font(.caption).foregroundStyle(Theme.textSecondary)
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(line.spokenLabel)
                 }
-                Text("Edit the item to try again.").font(.caption).foregroundStyle(Theme.textTertiary)
+                Text(SyncStatusText.failuresFooter(env.sync.syncFailures)).font(.caption)
+                    .foregroundStyle(Theme.textTertiary)
             } label: {
                 Text(SyncStatusText.failures(env.sync.syncFailures.count))
                     .foregroundStyle(Theme.destructive)
@@ -139,7 +143,8 @@ struct AccountSection: View {
             Button("Cancel") { run { try await env.sync.cancelAccountSwitch() } }
                 .accessibilityIdentifier("account.switch.cancel")
         } footer: {
-            Text("The other account's data stays in that account. Only unsynced changes on this iPhone are lost.")
+            Text("The other account's data stays in that account. Only unsynced changes on this iPhone are lost. "
+                + "Gyms kept on this phone stay here.")
         }
     }
 

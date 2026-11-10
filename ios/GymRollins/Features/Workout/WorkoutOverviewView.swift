@@ -22,6 +22,11 @@ struct WorkoutOverviewView: View {
                     entryRow(entry)
                 }
                 addExerciseButton
+                if !session.workout.entries.isEmpty {
+                    ShareWorkoutButton(identifier: "workout.share") {
+                        session.workout.entries.compactMap(SharedWorkout.Source.init(entry:))
+                    }
+                }
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.top, 8)
@@ -36,7 +41,9 @@ struct WorkoutOverviewView: View {
             }
         }
         .sheet(isPresented: $showAddExercise) {
-            ExercisePickerView(excluded: Set(session.workout.entries.map(\.exerciseId))) { ids in
+            ExercisePickerView(excluded: Set(session.workout.entries.map(\.exerciseId)),
+                               maxSelected: session.workout.entriesLeft,
+                               limitNote: "A workout holds up to \(DomainLimits.workoutEntriesMax) exercises.") { ids in
                 session.addExercises(ids) { env.adHocEntry(exerciseId: $0) }
             }
         }
@@ -71,7 +78,7 @@ struct WorkoutOverviewView: View {
 
             Button(action: finish) { Text("Finish").fixedSize() }
                 .buttonStyle(.glassProminent)
-                .tint(Theme.primaryFill)
+                .tint(Theme.primaryButtonFill)
                 .accessibilityIdentifier("workout.finish")
         }
         .padding(.horizontal, 8)
@@ -167,6 +174,7 @@ struct WorkoutOverviewView: View {
         HStack {
             Spacer()
             GlassPillButton(title: "+ Add exercise", identifier: "workout.addExercise") { showAddExercise = true }
+                .disabled(!session.workout.canAddEntries)
             Spacer()
         }
         .padding(.top, 4)

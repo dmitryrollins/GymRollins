@@ -37,6 +37,11 @@ public final class WorkoutRepository {
         try record(id).flatMap { $0.deletedAt == nil ? $0.value : nil }
     }
 
+    /// The agent that added this workout (plan 32), or nil: the owner's own, deleted, or not on this iPhone.
+    public func addedBy(_ id: UUID) throws -> String? {
+        try record(id).flatMap { $0.deletedAt == nil ? $0.addedBy : nil }
+    }
+
     /// Progression data points for one exercise, newest first.
     ///
     /// Fetches only the `WorkoutEntryRecord`s for this exercise (rather than every finished
@@ -149,7 +154,7 @@ public final class WorkoutRepository {
             guard let first = entries.first else { return nil }
             let merged = entries.count == 1 ? first
                 : WorkoutEntry(id: first.id, exerciseId: exerciseId, sets: entries.flatMap(\.sets), note: first.note,
-                               supersetGroup: first.supersetGroup)
+                               supersetGroup: first.supersetGroup, gymListingId: first.gymListingId)
             return (date: workout.startedAt, entry: merged)
         }
     }
@@ -176,6 +181,7 @@ public final class WorkoutRepository {
         r.name = w.name
         r.sourceRaw = w.source.rawValue
         r.note = w.note
+        r.gymId = w.gymId
         r.isActive = isActive
         r.deletedAt = nil
         try r.setEntries(w.entries, in: context)

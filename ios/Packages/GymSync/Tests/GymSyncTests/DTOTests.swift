@@ -23,7 +23,7 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         ("2026-09-26T13:00:00-05:00", 1_790_445_600.0),
         ("1969-12-31T23:59:59.5Z", -0.5),
     ])
-    func parsesPostgresTimestamps(raw: String, epoch: Double) throws {
+    func parsesServerTimestamps(raw: String, epoch: Double) throws {
         let date = try #require(SyncDate.parse(raw))
         #expect(abs(date.timeIntervalSince1970 - epoch) < 0.000_000_5)
     }
@@ -63,9 +63,57 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         p.mcpReadPlan = false
         p.sex = .female
         p.birthYear = 1988
+        p.limitsUntil = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
         let row = SyncRow(value: p, clientUpdatedAt: t0)
         let dto = try wire(ProfileDTO(row))
+        #expect(dto.limitsUntil == "2026-10-26")
         #expect(dto.toDomain() == row)
+    }
+
+    @Test func profileGymsFlagRoundTripsAndAnOldRowReadsAsOn() throws {
+        var p = ProfileSnapshot()
+        p.mcpReadGyms = false
+        let row = SyncRow(value: p, clientUpdatedAt: t0)
+        #expect(try wire(ProfileDTO(row)).toDomain().value.mcpReadGyms == false)
+
+        // A row written before the flag existed has no key: Claude's gym access reads as on, like the column's default.
+        var json = try #require(JSONSerialization.jsonObject(
+            with: SyncJSON.encoder.encode(ProfileDTO(SyncRow(value: ProfileSnapshot(), clientUpdatedAt: t0)))
+        ) as? [String: Any])
+        json.removeValue(forKey: "mcp_read_gyms")
+        let old = try SyncJSON.decoder.decode(ProfileDTO.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(old.mcpReadGyms)
+        #expect(old.toDomain().value.mcpReadGyms)
+    }
+
+    /// Plan 32: Add workouts travels as `mcp_log_workouts`, a JSON boolean like the other switches. A row from before
+    /// the column existed reads as off, its default.
+    @Test func profileAddWorkoutsFlagRoundTripsAndAnOldRowReadsAsOff() throws {
+        var p = ProfileSnapshot()
+        #expect(!p.mcpLogWorkouts)
+        p.mcpLogWorkouts = true
+        let row = SyncRow(value: p, clientUpdatedAt: t0)
+        let body = try SyncJSON.encoder.encode(ProfileDTO(row))
+        #expect(String(decoding: body, as: UTF8.self).contains(#""mcp_log_workouts":true"#))
+        #expect(try wire(ProfileDTO(row)).toDomain().value.mcpLogWorkouts)
+
+        var json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        json.removeValue(forKey: "mcp_log_workouts")
+        let old = try SyncJSON.decoder.decode(ProfileDTO.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(!old.mcpLogWorkouts)
+        #expect(!old.toDomain().value.mcpLogWorkouts)
+    }
+
+    @Test func profileWithoutLimitsUntilReadsAsNone() throws {
+        var p = ProfileSnapshot()
+        p.limitsUntil = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
+        var json = try #require(JSONSerialization.jsonObject(
+            with: SyncJSON.encoder.encode(ProfileDTO(SyncRow(value: p, clientUpdatedAt: t0)))
+        ) as? [String: Any])
+        #expect(json["limits_until"] as? String == "2026-10-26")
+        json.removeValue(forKey: "limits_until")
+        let old = try SyncJSON.decoder.decode(ProfileDTO.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(old.toDomain().value.limitsUntil == nil)
     }
 
     @Test func profileEncodesSnakeCaseAndExplicitNulls() throws {
@@ -76,8 +124,10 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(keys.contains("warmup_rest_sec"))
         #expect(keys.contains("plates_kg"))
         #expect(keys.contains("goal_date"))
+        #expect(keys.contains("limits_until"))
         #expect(json?["mcp_read_plan"] as? Bool == true)
         #expect(json?["goal_date"] is NSNull)
+        #expect(json?["limits_until"] is NSNull)
         #expect(json?["sex"] is NSNull) // cleared on the device -> cleared on the server
         #expect(json?["birth_year"] is NSNull)
         #expect(json?["client_updated_at"] as? String == "2026-09-26T18:00:00.123456Z")
@@ -149,8 +199,61 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(try wire(WorkoutDTO(row)).toDomain() == row)
     }
 
-    /// A PostgREST response for `workouts?select=*,workout_entries(*,workout_sets(*))` (embeds unordered).
-    @Test func decodesCapturedPostgRESTWorkout() throws {
+    @Test func workoutLinksAreEncodedOnlyWhenPresentAndRoundTrip() throws {
+        let gym = UUID(), listing = UUID()
+        let bare = Workout(startedAt: t0, name: "Push", entries: [WorkoutEntry(exerciseId: "bench")])
+        let plain = String(decoding: try SyncJSON.encoder.encode(WorkoutDTO(
+            SyncRow(value: WorkoutSnapshot(workout: bare, records: [], volumeKg: 0), clientUpdatedAt: t0))), as: UTF8.self)
+        #expect(!plain.contains("gym_id") && !plain.contains("gym_equipment_id"))
+
+        let linked = Workout(startedAt: t0, name: "Push", entries: [WorkoutEntry(exerciseId: "bench", gymListingId: listing)],
+                             gymId: gym)
+        let row = SyncRow(value: WorkoutSnapshot(workout: linked, records: [], volumeKg: 0), clientUpdatedAt: t0)
+        let json = String(decoding: try SyncJSON.encoder.encode(WorkoutDTO(row)), as: UTF8.self)
+        #expect(json.contains(#""gym_id":"\#(gym.uuidString)""#) && json.contains(#""gym_equipment_id":"\#(listing.uuidString)""#))
+        #expect(try wire(WorkoutDTO(row)).toDomain() == row)
+    }
+
+    @Test func decodesTheLinksAServerRowCarriesAndToleratesNulls() throws {
+        let json = """
+        [{"id":"8f7c0a2e-3b1d-4c55-9a51-2f7e0b8c9d10","started_at":"2026-09-26T17:00:00+00:00","paused_sec":0,
+          "name":"Push A","client_updated_at":"2026-09-26T18:05:13+00:00","gym_id":"9a9a9a9a-0000-4000-8000-000000000001",
+          "workout_entries":[
+            {"id":"a1a1a1a1-0000-4000-8000-000000000001","exercise_id":"bench","position":0,
+             "gym_equipment_id":"9b9b9b9b-0000-4000-8000-000000000002","workout_sets":[]},
+            {"id":"b2b2b2b2-0000-4000-8000-000000000002","exercise_id":"row","position":1,
+             "gym_equipment_id":null,"workout_sets":[]}]}]
+        """
+        let w = try #require(try SyncJSON.decoder.decode([WorkoutDTO].self, from: Data(json.utf8)).first).toDomain().value.workout
+        #expect(w.gymId == UUID(uuidString: "9a9a9a9a-0000-4000-8000-000000000001"))
+        #expect(w.entries[0].gymListingId == UUID(uuidString: "9b9b9b9b-0000-4000-8000-000000000002"))
+        #expect(w.entries[1].gymListingId == nil)
+    }
+
+    /// Plan 32: a pulled workout says which agent added it (null or absent: nobody); a push never names one, whatever
+    /// the phone holds, because the server owns it.
+    @Test func addedByIsReadFromPullsAndNeverSent() throws {
+        let json = #"{"id":"8f7c0a2e-3b1d-4c55-9a51-2f7e0b8c9d10","started_at":"2026-10-08T17:02:00Z","#
+            + #""ended_at":"2026-10-08T18:05:00Z","name":"Upper","source":"import","#
+            + #""client_updated_at":"2026-11-09T01:31:12Z","updated_at":"2026-11-09T01:31:12Z","#
+            + #""added_by":"Muse","entries":[]}"#
+        let pulled = try SyncJSON.decoder.decode(WorkoutDTO.self, from: Data(json.utf8))
+        #expect(pulled.addedBy == "Muse")
+        #expect(pulled.toDomain().value.addedBy == "Muse")
+        #expect(pulled.toDomain().value.workout.source == .import)
+
+        let unnamed = json.replacingOccurrences(of: #""added_by":"Muse","#, with: #""added_by":null,"#)
+        #expect(try SyncJSON.decoder.decode(WorkoutDTO.self, from: Data(unnamed.utf8)).addedBy == nil)
+        let older = json.replacingOccurrences(of: #""added_by":"Muse","#, with: "")
+        #expect(try SyncJSON.decoder.decode(WorkoutDTO.self, from: Data(older.utf8)).addedBy == nil)
+
+        let sent = String(decoding: try SyncJSON.encoder.encode(WorkoutDTO(pulled.toDomain())), as: UTF8.self)
+        #expect(!sent.contains("added_by"))
+        #expect(!sent.contains("Muse"))
+    }
+
+    /// A workout with its entries and sets nested (unordered), the shape `GET /v1/sync/workouts` answers.
+    @Test func decodesANestedWorkout() throws {
         let json = """
         [{"id":"8f7c0a2e-3b1d-4c55-9a51-2f7e0b8c9d10","user_id":"11111111-2222-3333-4444-555555555555",
           "started_at":"2026-09-26T17:00:00+00:00","ended_at":"2026-09-26T18:05:12.5+00:00","paused_sec":30.5,
@@ -211,6 +314,22 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(dto.proposal.changes.first?.type == .weight)
         #expect(dto.proposal.changes.first?.weightKg == 62.5)
         #expect(dto.status == "pending")
+    }
+
+    /// Plan 32: the sender's name when the server kept one; older rows have none.
+    @Test func aProposalSaysWhoSentItWhenKnown() throws {
+        let named = #"{"id":"0f0f0f0f-0000-4000-8000-000000000004","created_at":"2026-11-09T01:20:00Z","#
+            + #""summary":"Pull day","changes":[],"status":"pending","from_agent":"Muse"}"#
+        let dto = try SyncJSON.decoder.decode(ProposalDTO.self, from: Data(named.utf8))
+        #expect(dto.fromAgent == "Muse")
+        #expect(dto.toDomain().fromAgent == "Muse")
+        #expect(try wire(dto).fromAgent == "Muse")
+
+        let older = named.replacingOccurrences(of: #","from_agent":"Muse""#, with: "")
+        let old = try SyncJSON.decoder.decode(ProposalDTO.self, from: Data(older.utf8))
+        #expect(old.fromAgent == nil && old.toDomain().fromAgent == nil)
+        let null = named.replacingOccurrences(of: #""from_agent":"Muse""#, with: #""from_agent":null"#)
+        #expect(try SyncJSON.decoder.decode(ProposalDTO.self, from: Data(null.utf8)).fromAgent == nil)
     }
 
     /// One unreadable row (unknown change type, bad field) decodes as `.malformed` instead of failing the list.

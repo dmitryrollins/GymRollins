@@ -1,5 +1,5 @@
 /// Validates Claude's proposals against the closed change list, value ranges and the current plan.
-/// Mirrored in TypeScript (supabase/functions/_shared/validate.ts) using app/fixtures/plan-changes.json.
+/// Mirrored in TypeScript (server/src/shared/plan-validation.ts) using fixtures/plan-changes.json.
 public struct PlanChangeValidator: Sendable {
     public static let maxChanges = 25
     public static let maxRoutines = 7

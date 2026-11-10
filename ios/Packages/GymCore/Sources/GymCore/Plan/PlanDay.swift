@@ -1,7 +1,7 @@
 import Foundation
 
 /// Calendar days written yyyy-MM-dd (the `today` change's `date`, Today's plan day). Mirrored in
-/// supabase/functions/_shared/plan-validation.ts (`dayNumber`).
+/// server/src/shared/plan-validation.ts (`dayNumber`).
 public enum PlanDay {
     /// The day `date` falls on in `calendar` (the owner's local day by default).
     public static func key(_ date: Date, calendar: Calendar = .current) -> String {

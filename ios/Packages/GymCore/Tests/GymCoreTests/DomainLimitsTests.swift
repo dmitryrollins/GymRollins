@@ -18,6 +18,24 @@ import Testing
             == "A routine can have up to 20 exercises.")
     }
 
+    /// The server's storage caps read these numbers (server/test/domain-limits-drift.test.ts checks its copy and its
+    /// triggers). Deleted rows count toward the account caps.
+    @Test func storageCaps() {
+        #expect(DomainLimits.workoutsMax == 10_000)
+        #expect(DomainLimits.bodyweightsMax == 20_000)
+        #expect(DomainLimits.routinesMax == 200)
+        #expect(DomainLimits.customExercisesMax == 1_000)
+        #expect(DomainLimits.pendingProposalsMax == 100)
+        #expect(DomainLimits.proposalsMax == 5_000)
+        #expect(DomainLimits.exercisePrefsMax == 2_000)
+        #expect(DomainLimits.privateGymsTotalMax == 500)
+        #expect(DomainLimits.privateListingsTotalMax == 5_000)
+        #expect(DomainLimits.accountEntriesMax == 50_000)
+        #expect(DomainLimits.accountSetsMax == 250_000)
+        #expect(DomainLimits.workoutEntriesMax == 50)
+        #expect(DomainLimits.entrySetsMax == 50)
+    }
+
     @Test func customExerciseName() {
         #expect(DomainLimits.customExerciseNameViolation("Sled push") == nil)
         #expect(DomainLimits.customExerciseNameViolation(String(repeating: "x", count: 80)) == nil)

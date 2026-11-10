@@ -3,7 +3,7 @@ import Foundation
 /// Wire timestamps: ISO 8601 with up to microsecond precision, as Postgres stores `timestamptz`.
 ///
 /// Parsing accepts 0–6 (or more, truncated) fractional digits and `Z`, `+00:00`, `+0000` or `+00` offsets, e.g.
-/// PostgREST's `2026-09-26T18:00:00.123456+00:00`. Formatting always writes UTC with exactly six digits, rounded to
+/// `2026-09-26T18:00:00.123456+00:00`. Formatting always writes UTC with exactly six digits, rounded to
 /// the nearest microsecond, so a parsed server timestamp formats back to the identical instant (cursor filters
 /// like `updated_at > cursor` must not re-match the row the cursor came from).
 public enum SyncDate {

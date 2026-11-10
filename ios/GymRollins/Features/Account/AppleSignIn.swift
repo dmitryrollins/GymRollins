@@ -4,8 +4,8 @@ import Foundation
 import Security
 import SwiftUI
 
-/// Nonce for Sign in with Apple via Supabase: Apple gets the SHA-256 hash in the request, Supabase gets the raw
-/// value with the identity token and checks that they match (replay protection).
+/// Nonce for Sign in with Apple: Apple gets the SHA-256 hash in the request, the API's Better Auth gets the raw value
+/// with the identity token and checks that they match (replay protection).
 enum AppleNonce {
     static let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
 
@@ -27,7 +27,7 @@ enum AppleNonce {
     }
 }
 
-/// "Sign in with Apple" wired to Supabase: generates a fresh nonce per attempt and hands the identity token plus
+/// "Sign in with Apple" for the API's Better Auth: generates a fresh nonce per attempt and hands the identity token plus
 /// the raw nonce to `onToken`. Failures (other than the user cancelling) go to `onError` with a readable message.
 struct AppleSignInButton: View {
     let onToken: (_ idToken: String, _ rawNonce: String) -> Void

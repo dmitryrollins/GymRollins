@@ -1,0 +1,5 @@
+# Copy to server/.dev.vars (gitignored) for scripts/server-up.sh. Local only: the deployed Worker gets its secret from
+# `wrangler secret put BETTER_AUTH_SECRET`, and never turns on password sign-in.
+BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
+# Email and password sign-in, for the integration and UI tests against the local Worker.
+ALLOW_PASSWORD_AUTH=1

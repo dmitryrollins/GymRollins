@@ -5,10 +5,10 @@ import GymCore
 enum SyncBackend: Equatable {
     /// No auth, no network: the default for `-uiTesting`, so UI tests stay hermetic.
     case disabled
-    /// The Supabase project from Info.plist (in DEBUG, `SUPABASE_URL`/`SUPABASE_ANON_KEY` env vars win).
+    /// The API from Info.plist's `API_URL` (in DEBUG, an `API_URL` environment variable wins).
     case configured
-    /// DEBUG/UI-test only (`-uiTesting -uiTestingBackend local`): like `configured`, but the auth session is kept
-    /// in a test-only store that `-resetStore` wipes, so a relaunch can simulate a fresh install.
+    /// DEBUG/UI-test only (`-uiTesting -uiTestingBackend local`): like `configured`, but the session is kept in a
+    /// test-only store that `-resetStore` wipes, so a relaunch can simulate a fresh install.
     case uiTestLocal
     /// DEBUG/UI-test only (`-seedConflict`): an in-process fake server that reports the first pushed workout as
     /// edited on another device, for the conflict UI (no auth, no network).
@@ -52,6 +52,8 @@ struct LaunchOptions {
     /// DEBUG/UI-test only (`-seedStrength`): sex/birth year on the profile, a weigh-in and squat/bench/deadlift
     /// sessions, for the strength-level screens (`DebugStrengthSeed`).
     let seedStrength: Bool
+    /// DEBUG/UI-test only (`-seedLimitsDue`): the seeded injury note ended yesterday, so Today shows the check-in card.
+    let seedLimitsDue: Bool
     /// DEBUG/UI-test only (`-forgetSession`): drops the stored auth session but keeps the local data, like a
     /// session revoked elsewhere.
     let forgetSession: Bool
@@ -59,7 +61,7 @@ struct LaunchOptions {
     let syncBackend: SyncBackend
     /// DEBUG only: `GYM_SIMULATE_OFFLINE=1` in the environment makes every sync request fail as offline.
     let simulateOffline: Bool
-    /// The process environment (DEBUG builds read the Supabase URL/key overrides from it).
+    /// The process environment (DEBUG builds read `API_URL` and `PHOTO_HOSTING` from it).
     let environment: [String: String]
     /// `-uiTesting`: also used to default onboarding to already-complete, so the existing app UI test suite
     /// (which doesn't expect the onboarding flow) keeps working.
@@ -80,6 +82,33 @@ struct LaunchOptions {
     /// no (or an unknown) value follows.
     let importFixtureSource: ImportSource
     #endif
+    /// DEBUG/UI-test only (`-seedGym`): a private "Home" gym with kettlebells (20 and 24 kg) and a flat bench, set as the
+    /// current gym, no photos (`DebugGymSeed`).
+    let seedGym: Bool
+    /// DEBUG/UI-test only (`-gymPhotoFixture`): the gym photo screen's Library button uses a generated image instead of
+    /// presenting the photo picker, which XCUITest can't drive.
+    let gymPhotoFixture: Bool
+    /// DEBUG/UI-test only (`-fakeLocation <lat>,<lng>`): where the phone is, with location permission treated as granted.
+    let fakeLocation: (latitude: Double, longitude: Double)?
+    /// DEBUG/UI-test only (`-fakeGymPlaces`): Maps search returns "Iron Works Gym" and "Test Fitness" (ids
+    /// `fake-iron-works`, `fake-test-fitness`), 50 m and 2 km from the fake location.
+    let fakeGymPlaces: Bool
+    /// DEBUG/UI-test only (`-fakeGymCatalog`): the shared gym catalogue is an in-memory fake with fixed listings for
+    /// "Iron Works Gym", and that gym is seeded as the current gym (`DebugSharedGymSeed`).
+    let fakeGymCatalog: Bool
+    /// DEBUG/UI-test only (`-fakeSignedIn`): the sharing screens treat the phone as signed in, so a report or a
+    /// confirmation is queued and sent to the fake catalogue. Nothing else about the session changes.
+    let fakeSignedIn: Bool
+    /// DEBUG/UI-test only (`-fakeGymAdmin`): the fake catalogue says the user moderates, and holds two flagged listings.
+    let fakeGymAdmin: Bool
+    /// DEBUG/UI-test only (`-fakeGymCatalogGrows`): from its second read of a gym on, the fake catalogue also lists a
+    /// row machine, so a test can tell that a refresh has run and applied.
+    let fakeGymCatalogGrows: Bool
+    /// DEBUG/UI-test only (`-fakeAgents`): Settings › AI agents lists Muse and Claude from memory (`DebugAgents`), and
+    /// Disconnect removes one; nothing is sent.
+    let fakeAgents: Bool
+    /// DEBUG/UI-test only (`-seedAgentWorkout`): a past workout Muse added, stored as a pull stores it (`DebugAgents`).
+    let seedAgentWorkout: Bool
     /// DEBUG/UI-test only (`-fakeHealth`): Apple Health is an in-memory `FakeHealthStore` seeded with three Withings
     /// weigh-ins, so the Health flows can be tested on the simulator without HealthKit.
     let fakeHealth: Bool
@@ -130,6 +159,17 @@ struct LaunchOptions {
         seedTodayProposal = arguments.contains("-seedTodayProposal")
         seedInsights = arguments.contains("-seedInsights")
         seedStrength = arguments.contains("-seedStrength")
+        seedLimitsDue = arguments.contains("-seedLimitsDue")
+        seedGym = arguments.contains("-seedGym")
+        gymPhotoFixture = arguments.contains("-gymPhotoFixture")
+        fakeLocation = Self.coordinate(after: "-fakeLocation", in: arguments)
+        fakeGymPlaces = arguments.contains("-fakeGymPlaces")
+        fakeGymCatalog = arguments.contains("-fakeGymCatalog")
+        fakeSignedIn = arguments.contains("-fakeSignedIn")
+        fakeGymAdmin = arguments.contains("-fakeGymAdmin")
+        fakeGymCatalogGrows = arguments.contains("-fakeGymCatalogGrows")
+        fakeAgents = arguments.contains("-fakeAgents")
+        seedAgentWorkout = arguments.contains("-seedAgentWorkout")
         seedHistory = arguments.contains("-seedHistory")
         seedBodyweight = arguments.contains("-seedBodyweight")
         seedPlank = arguments.contains("-seedPlank")
@@ -145,6 +185,17 @@ struct LaunchOptions {
         seedTodayProposal = false
         seedInsights = false
         seedStrength = false
+        seedLimitsDue = false
+        seedGym = false
+        gymPhotoFixture = false
+        fakeLocation = nil
+        fakeGymPlaces = false
+        fakeGymCatalog = false
+        fakeSignedIn = false
+        fakeGymAdmin = false
+        fakeGymCatalogGrows = false
+        fakeAgents = false
+        seedAgentWorkout = false
         seedHistory = false
         seedBodyweight = false
         seedPlank = false
@@ -154,6 +205,14 @@ struct LaunchOptions {
     }
 
     #if DEBUG
+    /// "<lat>,<lng>" after `flag`; nil when missing or out of range.
+    private static func coordinate(after flag: String, in arguments: [String]) -> (latitude: Double, longitude: Double)? {
+        guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else { return nil }
+        let parts = arguments[index + 1].split(separator: ",").compactMap { Double($0) }
+        guard parts.count == 2, abs(parts[0]) <= 90, abs(parts[1]) <= 180 else { return nil }
+        return (parts[0], parts[1])
+    }
+
     private static func backend(_ arguments: [String]) -> SyncBackend {
         if arguments.contains("-seedConflict") { return .seededConflict }
         guard arguments.contains("-uiTesting") else { return .configured }

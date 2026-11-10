@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Generates the missing exercise photos listed in docs/media/photo-prompts.csv with Google's Gemini image model
 // ("Nano Banana Pro") and saves them as media/photos/own-<id>-<frame>.jpg (gitignored, 1536x1024 JPEG), from where
-// scripts/upload-photos.mjs puts them in Supabase Storage. Resumable: files that already exist (in media/photos or
+// scripts/upload-photos.mjs puts them in the Worker's R2 bucket. Resumable: files that already exist (in media/photos or
 // bundled in ios/GymRollins/Resources/OwnPhotos) are skipped, so re-running after a failure or a quota stop picks up where it
 // left off. Frame 0 (start) of each exercise is generated first with own-0453-0.jpg attached as the identity/style
 // reference; frame 1 (end) then gets the new frame 0 attached. See docs/media/README.md for how to run it.
@@ -38,7 +38,7 @@ const USD_PER_IMAGE = { '1K': 0.134, '2K': 0.134, '4K': 0.24 }
 
 export const PATHS = {
   csvPath: resolve(ROOT, 'docs/media/photo-prompts.csv'),
-  // New photos go outside the app bundle (gitignored); scripts/upload-photos.mjs puts them in Supabase Storage.
+  // New photos go outside the app bundle (gitignored); scripts/upload-photos.mjs puts them in the Worker's R2 bucket.
   outDir: resolve(ROOT, 'media/photos'),
   // Photos already here (the app's bundled own photos) count as done too, so nothing is generated twice.
   alsoCheckDirs: [resolve(ROOT, 'ios/GymRollins/Resources/OwnPhotos')],

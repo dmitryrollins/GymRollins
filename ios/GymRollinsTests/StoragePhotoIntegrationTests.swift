@@ -4,25 +4,25 @@ import Testing
 import UIKit
 @testable import GymRollins
 
-/// End-to-end against the LOCAL Supabase stack (never a cloud project): `scripts/test-photo-hosting.sh` uploads two
+/// End-to-end against a throwaway LOCAL Worker: `scripts/test-photo-hosting.sh` uploads two
 /// generated photos (`own-<id>-0.jpg` 30×20, `own-<id>-1.jpg` 20×30) with `scripts/upload-photos.mjs`, then runs this
-/// with `PHOTO_E2E=1`, `SUPABASE_URL` and `PHOTO_E2E_ID`. Skipped in the normal test run (no network).
+/// with `PHOTO_E2E=1`, `API_URL` and `PHOTO_E2E_ID`. Skipped in the normal test run (no network).
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["PHOTO_E2E"] == "1", "needs scripts/test-photo-hosting.sh"))
 struct StoragePhotoIntegrationTests {
     private let environment = ProcessInfo.processInfo.environment
 
     @Test func uploadedPhotosLoadThroughTheManifestAndProvider() async throws {
-        let supabaseURL = try #require(environment["SUPABASE_URL"].flatMap(URL.init(string:)))
+        let apiURL = try #require(environment["API_URL"].flatMap(URL.init(string:)))
         let id = try #require(environment["PHOTO_E2E_ID"])
-        #expect(PhotoURLPolicy.isLocalDevHost(supabaseURL.host() ?? ""), "the E2E only ever runs against the local stack")
+        #expect(PhotoURLPolicy.isLocalDevHost(apiURL.host() ?? ""), "the E2E only ever runs against a local Worker")
 
-        let policy = PhotoURLPolicy.forBuild(supabaseURL: supabaseURL)
+        let policy = PhotoURLPolicy.forBuild(apiURL: apiURL)
         let session = URLSession(configuration: .ephemeral)
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("photo-e2e-\(UUID().uuidString)")
         let loader = StoragePhotoManifestLoader(
-            manifestURL: SupabaseStoragePhotoProvider.manifestURL(supabaseURL: supabaseURL),
+            manifestURL: HostedPhotoProvider.manifestURL(apiURL: apiURL),
             cacheDirectory: temp.appendingPathComponent("manifest"), policy: policy, session: session)
-        let (provider, refresh) = SupabaseStoragePhotoProvider.start(supabaseURL: supabaseURL, loader: loader)
+        let (provider, refresh) = HostedPhotoProvider.start(apiURL: apiURL, loader: loader)
         await refresh.value
 
         let exercise = Exercise(id: id, name: "e2e", bodyPart: "chest", equipment: "barbell", target: "pectorals")

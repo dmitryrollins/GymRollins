@@ -1,36 +1,25 @@
 #!/usr/bin/env bash
-# Storage photo hosting end-to-end against the LOCAL Supabase stack (never a cloud project):
-# 1. uploads two generated test photos (own-9990-0.jpg 30x20, own-9990-1.jpg 20x30) with scripts/upload-photos.mjs,
-# 2. checks a second upload is a no-op (idempotent),
-# 3. runs GymRollinsTests/StoragePhotoIntegrationTests (manifest -> provider -> ExercisePhotoStore over local http),
-# 4. deletes the test photos and rebuilds the bucket manifest without them.
-# Only the local API URL reaches the app tests (as TEST_RUNNER_* env vars, passed on without the prefix).
+# Exercise photo hosting end to end against a throwaway LOCAL Worker (scripts/test-server.sh: port 8788 and a state
+# folder of its own, removed afterwards; never the development data or a deployed Worker):
+# 1. uploads two generated test photos into that Worker's R2 with scripts/upload-photos.mjs --target worker,
+# 2. checks a second upload is a no-op,
+# 3. runs GymRollinsTests/StoragePhotoIntegrationTests (manifest -> provider -> ExercisePhotoStore over local http).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="$ROOT/supabase/.env.local"
 DEST="${DEST:-platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2}"
 TEST_ID="9990"
-
-"$ROOT/scripts/supabase-up.sh"
-API_URL="$(grep -E '^API_URL=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')"
-SERVICE_ROLE_KEY="$(grep -E '^SERVICE_ROLE_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')"
-case "$API_URL" in
-  http://127.0.0.1:*|http://localhost:*) ;;
-  *) echo "Refusing to run: API_URL ($API_URL) is not a local stack" >&2; exit 1 ;;
-esac
+# shellcheck source=scripts/test-server.sh
+source "$ROOT/scripts/test-server.sh"
 
 WORK="$(mktemp -d -t photo-hosting-e2e)"
 cleanup() {
-  curl -sf -X DELETE "$API_URL/storage/v1/object/exercise-photos" \
-    -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -H "content-type: application/json" \
-    -d "{\"prefixes\":[\"own-$TEST_ID-0.jpg\",\"own-$TEST_ID-1.jpg\"]}" >/dev/null \
-    || echo "warning: couldn't delete the test photos" >&2
-  mkdir -p "$WORK/empty"
-  node "$ROOT/scripts/upload-photos.mjs" --dir "$WORK/empty" >/dev/null \
-    || echo "warning: couldn't rebuild the manifest" >&2
+  local status=$?
   rm -rf "$WORK"
+  stop_test_server
+  exit "$status"
 }
 trap cleanup EXIT
+start_test_server
 
 mkdir -p "$WORK/photos"
 python3 - "$WORK/photos" "$TEST_ID" <<'PY'
@@ -41,8 +30,12 @@ Image.new("RGB", (30, 20), (230, 120, 40)).save(f"{out}/own-{test_id}-0.jpg", qu
 Image.new("RGB", (20, 30), (40, 120, 230)).save(f"{out}/own-{test_id}-1.jpg", quality=80)
 PY
 
-node "$ROOT/scripts/upload-photos.mjs" --dir "$WORK/photos"
-second="$(node "$ROOT/scripts/upload-photos.mjs" --dir "$WORK/photos")"
+upload() {
+  WORKER_URL="$TEST_API_URL" WORKER_STATE="$TEST_API_STATE" \
+    node "$ROOT/scripts/upload-photos.mjs" --target worker --dir "$WORK/photos"
+}
+upload
+second="$(upload)"
 echo "$second"
 grep -q "done: 0 uploaded, 2 skipped, 0 failed; manifest unchanged" <<<"$second" \
   || { echo "second upload was not a no-op" >&2; exit 1; }
@@ -50,7 +43,7 @@ grep -q "done: 0 uploaded, 2 skipped, 0 failed; manifest unchanged" <<<"$second"
 cd "$ROOT/ios"
 xcodegen generate --quiet
 LOG="$WORK/xcodebuild.log"
-TEST_RUNNER_PHOTO_E2E=1 TEST_RUNNER_SUPABASE_URL="$API_URL" TEST_RUNNER_PHOTO_E2E_ID="$TEST_ID" \
+TEST_RUNNER_PHOTO_E2E=1 TEST_RUNNER_API_URL="$TEST_API_URL" TEST_RUNNER_PHOTO_E2E_ID="$TEST_ID" \
   xcodebuild test -project GymRollins.xcodeproj -scheme GymRollins -destination "$DEST" \
   -only-testing:GymRollinsTests/StoragePhotoIntegrationTests \
   -resultBundlePath "$ROOT/ios/build/TestResults-photos-$(date +%s).xcresult" "$@" >"$LOG" 2>&1 \

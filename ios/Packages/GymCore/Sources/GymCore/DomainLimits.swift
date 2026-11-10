@@ -1,8 +1,8 @@
 import Foundation
 
-/// Value limits shared by local validation and the database CHECK constraints
-/// (supabase/migrations/*_schema.sql, *_security_fixes.sql). Anything saved locally must fit these, or the row
-/// would be rejected when it syncs.
+/// Value limits shared by local validation and the database CHECK constraints and caps
+/// (server/migrations/0002_app_schema.sql, 0005_gyms_photos.sql, 0010_account_caps.sql). Anything saved locally must
+/// fit these, or the row would be rejected when it syncs.
 public enum DomainLimits {
     // Routines
     public static let routineNameMax = 40
@@ -30,6 +30,45 @@ public enum DomainLimits {
     public static let birthYear: ClosedRange<Int> = 1900...2100
     // Weekly hard-set targets per muscle group (muscle_targets.min_sets / max_sets)
     public static let weeklySetTarget: ClosedRange<Int> = 0...50
+    // Gyms and equipment
+    public static let gymNameMax = 120
+    public static let gymAddressMax = 300
+    public static let listingQuantity: ClosedRange<Int> = 1...50
+    public static let listingNotesMax = 280
+    public static let itemBrandMax = 60
+    public static let itemModelMax = 80
+    public static let listingStackKg: ClosedRange<Double> = 0.25...1_000
+    public static let listingStepKg: ClosedRange<Double> = 0.25...50
+    public static let listingFixedWeightsMax = 60
+    public static let listingFixedKg: ClosedRange<Double> = 0.25...500
+    public static let privateGymsMax = 100
+    public static let privateListingsMax = 1_000
+    public static let gymActiveListingsMax = 300
+    // Storage per account, deleted rows included (server/migrations/0010_account_caps.sql)
+    public static let workoutsMax = 10_000
+    public static let bodyweightsMax = 20_000
+    public static let routinesMax = 200
+    public static let customExercisesMax = 1_000
+    public static let pendingProposalsMax = 100
+    public static let proposalsMax = 5_000
+    public static let exercisePrefsMax = 2_000
+    public static let privateGymsTotalMax = 500
+    public static let privateListingsTotalMax = 5_000
+    // Exercises and sets logged per account, deleted workouts included (server/src/sync/workouts.ts keeps the counts)
+    public static let accountEntriesMax = 50_000
+    public static let accountSetsMax = 250_000
+    // One workout, as each save stores it (server/src/sync/workouts.ts)
+    public static let workoutEntriesMax = 50
+    public static let entrySetsMax = 50
+    // Daily limits per user, enforced by the server functions
+    public static let dailyGymCreations = 10
+    public static let dailyShares = 30
+    public static let dailyConfirmations = 100
+    public static let dailyPhotoUploads = 60
+    public static let dailyReports = 20
+    public static let dailyBlocks = 20
+    public static let dailyUnblocks = 3
+    public static let reportNoteMax = 280
 
     /// User-facing reason the routine can't be saved, or nil when it fits.
     public static func routineViolation(_ routine: Routine) -> String? {

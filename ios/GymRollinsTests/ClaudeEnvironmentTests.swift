@@ -15,8 +15,8 @@ import Testing
     /// before `onRemoteChanges` reloads the library, so it must reload it itself.
     @Test func autoApplyAfterPullSeesCustomExercisesPulledInTheSameRound() throws {
         let env = try makeEnv()
-        try env.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, propose: true,
-                                           autoApply: true)
+        try env.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
+                                           autoApply: true, logWorkouts: false)
         let routine = try #require(try env.routines.all().first)
         // Written straight to the store, as a pull does: the cached library doesn't know it yet.
         let sled = try env.customExercises.create(name: "Sled push", bodyPart: "upper legs", equipment: "sled",
@@ -34,16 +34,41 @@ import Testing
 
     @Test func disconnectTurnsEveryPermissionOffEvenWithoutASession() async throws {
         let env = try makeEnv()
-        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, propose: true, autoApply: true)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true, autoApply: true,
+                                   logWorkouts: true)
         #expect(try await env.disconnectClaude() == 0) // hermetic build: no session, nothing to revoke
         let p = env.profile
-        #expect(!p.mcpReadWorkouts && !p.mcpReadBody && !p.mcpReadPlan && !p.mcpPropose && !p.mcpAutoApply)
+        #expect(!p.mcpReadWorkouts && !p.mcpReadBody && !p.mcpReadPlan && !p.mcpReadGyms && !p.mcpPropose && !p.mcpAutoApply)
+        #expect(!p.mcpLogWorkouts)
     }
 
     @Test func readPlanPermissionIsSavedAndReloaded() throws {
         let env = try makeEnv()
         #expect(env.profile.mcpReadPlan)
-        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: false, propose: true, autoApply: false)
-        #expect(!env.profile.mcpReadPlan && env.profile.mcpReadWorkouts)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: false, readGyms: true, propose: true, autoApply: false,
+                                   logWorkouts: false)
+        #expect(!env.profile.mcpReadPlan && env.profile.mcpReadWorkouts && env.profile.mcpReadGyms)
+    }
+
+    @Test func gymsPermissionDefaultsOnIsSavedAndReloaded() throws {
+        let env = try makeEnv()
+        #expect(env.profile.mcpReadGyms)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: false, propose: true,
+                                   autoApply: false, logWorkouts: false)
+        #expect(!env.profile.mcpReadGyms && env.profile.mcpReadPlan)
+        env.reloadProfile()
+        #expect(!env.profile.mcpReadGyms)
+    }
+
+    /// Plan 32: Add workouts is off until the owner turns it on, survives a reload, and Disconnect all turns it off.
+    @Test func addWorkoutsIsOffUntilTurnedOnAndDisconnectTurnsItOff() async throws {
+        let env = try makeEnv()
+        #expect(!env.profile.mcpLogWorkouts)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
+                                   autoApply: false, logWorkouts: true)
+        env.reloadProfile()
+        #expect(env.profile.mcpLogWorkouts && env.profile.mcpReadGyms)
+        #expect(try await env.disconnectClaude() == 0)
+        #expect(!env.profile.mcpLogWorkouts)
     }
 }

@@ -20,14 +20,29 @@ final class AppEnvironment {
     let customExercises: CustomExerciseRepository
     let proposals: ProposalRepository
     let exercisePrefs: ExercisePreferenceRepository
+    /// Gyms, their equipment items and listings (all on this iPhone until plan 21).
+    let gyms: GymRepository
+    /// The bundled equipment kinds and exercise requirements; unusable (no adaptation) when it failed to load.
+    let gymCatalog: GymEquipmentCatalog
+    /// Cleaned gym photos in Application Support (tests give it a folder of their own).
+    let gymPhotos: GymPhotoStore
+    /// Where the phone is, and Apple Maps' fitness centers (both fake or empty under `-uiTesting`).
+    let gymLocator: any GymLocator
+    let gymPlaces: any GymPlaceSearch
+    /// The shared catalogue: server, cache of other people's listings, share queue (tests replace it).
+    @ObservationIgnored var gymSharing: GymSharing
+    /// Whether the signed-in user moderates the shared catalogue, for Settings' Moderation row.
+    let gymAdmin = GymAdminStatus()
     /// The owner's "recommend more / less / never" choices (normal ones left out); change them with `setPreference`.
     var exercisePreferences: [String: ExercisePreference] = [:]
     /// Exercise photos (own media -> free-exercise-db -> wger -> illustration) and their on-demand loader.
     let media: ExerciseMediaService
     /// Exercise names in other languages (wger) with their credits; search and import matching use them too.
     let otherNames: ExerciseNamesI18n?
-    /// `<SUPABASE_URL>/functions/v1/mcp`, nil when this build has no Supabase config.
+    /// `<API_URL>/mcp`, nil when this build has no API.
     let connectorURL: String?
+    /// DEBUG's in-memory agents under `-fakeAgents` (`DebugAgents`), one list for the launch; nil otherwise.
+    let fakeAgentCalls: AgentCalls?
     private let bundledLibrary: ExerciseLibrary
     private(set) var library: ExerciseLibrary
     private(set) var profile: Profile
@@ -38,6 +53,10 @@ final class AppEnvironment {
     private(set) var todayPlanRevision = 0
     /// Bumps whenever workouts or weigh-ins are written so Log/Body screens reload.
     private(set) var dataRevision = 0
+    /// Bumps whenever the current gym or its equipment changes, for screens that show them.
+    private(set) var gymRevision = 0
+    /// Why the server refused a report or a block the user made, until the gym screen has shown it.
+    var gymReportNotice: String?
     private(set) var session: WorkoutSession?
     /// The proposal just applied from the review, for Today's "Undo" toast (cleared by undo or closing it).
     private(set) var lastApplied: (id: UUID, count: Int)?
@@ -59,7 +78,8 @@ final class AppEnvironment {
 
     /// `makeSync` replaces the launch's sync backend (tests inject a coordinator over a fake transport).
     init(options: LaunchOptions = LaunchOptions(), defaults: UserDefaults = .standard,
-         media: ExerciseMediaService? = nil,
+         media: ExerciseMediaService? = nil, gymPhotos: GymPhotoStore? = nil,
+         gymLocator: (any GymLocator)? = nil, gymPlaces: (any GymPlaceSearch)? = nil,
          makeSync: (@MainActor (SyncStore, @escaping () -> Date) -> SyncCoordinator)? = nil) throws {
         if options.resetStore, let storeURL = options.diskStoreURL {
             Self.removeStoreFiles(at: storeURL)
@@ -73,12 +93,16 @@ final class AppEnvironment {
         if options.resetStore { try syncStore.resetAll() } // a fresh store must not reuse old pull cursors
         // Today's switched/edited plan (UserDefaults) was made from the previous store's data: an in-memory or reset
         // store starts without it (UI tests share one day via -fixedNow, so a leftover plan leaked between tests).
-        if Self.startsWithFreshStore(options) { Self.clearTodaySwitches(in: defaults) }
+        if Self.startsWithFreshStore(options) {
+            Self.clearTodaySwitches(in: defaults)
+            defaults.removeObject(forKey: Self.gymLocationCheckedKey)
+        }
         if options.seedOwner {
             try OwnerSeed.apply(to: context, now: now())
             if options.seedHistory { try OwnerSeed.applyHistory(to: context, now: now()) }
             if options.seedBodyweight { try OwnerSeed.applyBodyweight(to: context, now: now()) }
             if options.seedPlank { try OwnerSeed.applyPlank(to: context, now: now()) }
+            if options.seedLimitsDue { try OwnerSeed.applyLimitsDue(to: context, now: now()) }
             if options.seedLargeHistory {
                 try OwnerSeed.applyLargeHistory(to: context, now: now(), count: options.largeHistoryCount)
             }
@@ -86,8 +110,16 @@ final class AppEnvironment {
         #if DEBUG
         if options.seedProposal { try DebugProposalSeed.apply(context: context, now: now()) }
         if options.seedTodayProposal { try DebugProposalSeed.applyToday(context: context, now: now()) }
+        if options.seedAgentWorkout { try DebugAgents.seedWorkout(into: syncStore, now: now()) }
         if options.seedInsights { try DebugInsightsSeed.apply(context: context, now: now()) }
         if options.seedStrength { try DebugStrengthSeed.apply(context: context, now: now()) }
+        if options.seedGym {
+            let gym = try DebugGymSeed.apply(context: context, now: now())
+            defaults.set(gym.id.uuidString, forKey: Self.currentGymKey)
+        }
+        if options.fakeGymCatalog {
+            defaults.set(try DebugSharedGymSeed.apply(context: context, now: now()).id.uuidString, forKey: Self.currentGymKey)
+        }
         #endif
         guard let url = Bundle.main.url(forResource: "exercises", withExtension: "json") else {
             throw CocoaError(.fileNoSuchFile)
@@ -103,7 +135,17 @@ final class AppEnvironment {
         self.customExercises = CustomExerciseRepository(context: context, now: now)
         self.proposals = ProposalRepository(context: context, now: now)
         self.exercisePrefs = ExercisePreferenceRepository(context: context, now: now)
+        self.gyms = GymRepository(context: context, now: now)
+        self.gymCatalog = Self.loadGymCatalog()
+        self.gymPhotos = gymPhotos ?? Self.makeGymPhotos(options: options)
+        self.gymLocator = gymLocator ?? Self.makeGymLocator(options: options)
+        self.gymPlaces = gymPlaces ?? Self.makeGymPlaces(options: options)
         self.connectorURL = SyncCoordinator.connectorURL(options: options)
+        #if DEBUG
+        self.fakeAgentCalls = options.fakeAgents ? DebugAgents(now: now()).calls : nil
+        #else
+        self.fakeAgentCalls = nil
+        #endif
         self.media = media ?? ExerciseMediaService.make(options: options)
         let otherNames = ExerciseNamesI18n.bundled()
         self.otherNames = otherNames
@@ -116,7 +158,10 @@ final class AppEnvironment {
         self.onboardingComplete = Self.resolveOnboardingComplete(options: options, defaults: defaults,
                                                                   hasExistingData: hasExistingData)
         self.syncStore = syncStore
-        self.sync = makeSync?(syncStore, now) ?? SyncCoordinator.make(options: options, store: syncStore, now: now)
+        let sync = makeSync?(syncStore, now) ?? SyncCoordinator.make(options: options, store: syncStore, now: now)
+        self.sync = sync
+        self.gymSharing = Self.makeGymSharing(options: options, sync: sync, gyms: gyms, catalog: gymCatalog,
+                                              photoStore: self.gymPhotos, now: now)
         let calories = CalorieService(library: { [bundledLibrary] in bundledLibrary }, body: body)
         self.calories = calories
         self.health = Self.makeHealth(options: options, defaults: defaults, workouts: workouts, body: body,
@@ -135,7 +180,10 @@ final class AppEnvironment {
             self?.abandonSession()
             self?.reloadAll()
         }
+        sync.onGymDataErased = { [weak self] in self?.removeGymLocalState() }
+        sync.gymPhotoFiles = self.gymPhotos
         wireHealth()
+        wireGymSharing()
     }
 
     func setLastApplied(_ value: (id: UUID, count: Int)?) { lastApplied = value }
@@ -185,14 +233,24 @@ final class AppEnvironment {
     /// `SyncCoordinator.deleteAccount()` instead, which also deletes the account's data on the server.
     func eraseAllLocalData() throws {
         ExportService.removeExportFiles()
-        abandonSession()
+        abandonSession(); gymSharing.invalidate() // before the wipe: requests still out must not write back
         try syncStore.resetAll()
         health.reset()
         todayPlanStore.clear()
         PlannedSwitchStore(defaults: defaults).clear()
+        removeGymLocalState()
         onboardingComplete = false
         defaults.set(false, forKey: Self.onboardingCompleteKey)
         reloadAll()
+    }
+
+    /// A catalog that fails to load is logged and leaves the app without gym adaptation, not without a launch.
+    private static func loadGymCatalog() -> GymEquipmentCatalog {
+        do { return try GymEquipmentCatalog.load() }
+        catch {
+            log.error("Load gym equipment catalog failed: \(error.localizedDescription, privacy: .public)")
+            return .unavailable
+        }
     }
 
     func reloadLibrary() {
@@ -219,6 +277,23 @@ final class AppEnvironment {
         exportToHealth()
     }
 
+    /// The current gym or a gym's equipment changed: Today reloads, the watch is re-sent today's plan, and a synced
+    /// gym's edit is pushed (a sync round does nothing for rows that aren't synced).
+    func gymsChanged() {
+        gymRevision += 1
+        planRevision += 1
+        todayPlanChanged()
+        sync.localDataChanged()
+    }
+
+    /// The local copy was wiped: gyms and their photos go with it, and no gym is current any more.
+    func removeGymLocalState() {
+        defaults.removeObject(forKey: Self.currentGymKey)
+        defaults.removeObject(forKey: Self.gymLocationCheckedKey)
+        do { try gymPhotos.removeAll() }
+        catch { Self.log.error("Remove gym photos failed: \(error.localizedDescription, privacy: .public)") }
+    }
+
     /// Today's plan was saved or cleared for today (`todayPlanStore`).
     func todayPlanChanged() { todayPlanRevision += 1 }
 
@@ -238,6 +313,7 @@ final class AppEnvironment {
         reloadProfile()
         reloadLibrary()
         reloadExercisePreferences()
+        gymRevision += 1
         planRevision += 1
         dataRevision += 1
     }
@@ -255,16 +331,20 @@ final class AppEnvironment {
     /// Starts a workout, or keeps the one already in progress: `saveActive` replaces the stored active
     /// workout, so starting over an existing session would silently delete its logged sets. Callers show
     /// "Resume" when `session` is set; this guard makes that the only outcome.
-    func startSession(routine: Routine?, setOverrides: [UUID: [WorkoutSet]] = [:], restSec: Int? = nil) {
+    func startSession(routine: Routine?, setOverrides: [UUID: [WorkoutSet]] = [:], restSec: Int? = nil,
+                      loadListings: [String: UUID] = [:]) {
         guard session == nil else {
             Self.log.notice("Start session ignored: a workout is already in progress")
             return
         }
+        let gymContext = gymLoadsContext(preferring: loadListings)
         let planned = routine.map {
             SessionPlanner.start(routine: $0, profile: profile, library: library, now: now(),
                                  history: { [workouts] in (try? workouts.history(exerciseId: $0, limit: 5)) ?? [] },
-                                 autoWarmups: WarmupPreferences.autoWarmupsEnabled(defaults), setOverrides: setOverrides)
-        } ?? SessionPlanner.empty(now: now())
+                                 autoWarmups: WarmupPreferences.autoWarmupsEnabled(defaults), setOverrides: setOverrides,
+                                 loads: { gymContext?.loads(for: $0) }, gymId: currentGym?.id,
+                                 loadListing: { gymContext?.loadListingId(for: $0) })
+        } ?? SessionPlanner.empty(now: now(), gymId: currentGym?.id)
         let workout = debugStartOffset(planned)
         // Today's rest (if set) goes with this workout, so a relaunch restores it too (`makeSession`).
         ActiveRestDurationStore(defaults: defaults).save(restSec, workoutId: workout.id)

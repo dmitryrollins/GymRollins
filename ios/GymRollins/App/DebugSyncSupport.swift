@@ -3,7 +3,6 @@ import Foundation
 import GymCore
 import GymData
 import GymSync
-import Supabase
 
 /// DEBUG-only: wraps a transport and fails every call as offline (`GYM_SIMULATE_OFFLINE=1`), for UI tests of
 /// offline logging. Auth calls are not affected, so a stored session still restores.
@@ -78,16 +77,34 @@ actor SeededConflictTransport: SyncTransport {
     }
 }
 
-/// DEBUG-only auth session store for UI tests against the local stack: survives relaunches like the Keychain,
-/// but `-resetStore` wipes it so a relaunch behaves like a fresh install.
-final class UITestAuthStorage: AuthLocalStorage, @unchecked Sendable {
+/// DEBUG-only session store for UI tests against the local Worker: it survives relaunches like the Keychain, but
+/// `-resetStore` and `-forgetSession` wipe it, so a relaunch can act as a fresh install or a revoked session.
+final class UITestSessionStore: SessionStore, @unchecked Sendable {
     static let suiteName = "com.rollins.gymrollins.uitest-auth"
-    private let defaults = UserDefaults(suiteName: UITestAuthStorage.suiteName) ?? .standard
+    private static let key = "session"
+    private let defaults = UserDefaults(suiteName: UITestSessionStore.suiteName) ?? .standard
+    private let lock = NSLock()
 
     static func wipe() { UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName) }
 
-    func store(key: String, value: Data) throws { defaults.set(value, forKey: key) }
-    func retrieve(key: String) throws -> Data? { defaults.data(forKey: key) }
-    func remove(key: String) throws { defaults.removeObject(forKey: key) }
+    func load() -> StoredSession? { lock.withLock { read() } }
+
+    func save(_ session: StoredSession) throws {
+        let data = try JSONEncoder().encode(session)
+        lock.withLock { defaults.set(data, forKey: Self.key) }
+    }
+
+    @discardableResult func clear(ifToken token: String?) -> Bool {
+        lock.withLock {
+            if let token, read()?.token != token { return false }
+            let held = defaults.data(forKey: Self.key) != nil
+            defaults.removeObject(forKey: Self.key)
+            return held
+        }
+    }
+
+    private func read() -> StoredSession? {
+        defaults.data(forKey: Self.key).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
+    }
 }
 #endif

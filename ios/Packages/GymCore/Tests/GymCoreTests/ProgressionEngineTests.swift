@@ -230,4 +230,30 @@ import Testing
         #expect(inLb(s.weightKg) == 140)
         #expect(s.reason == .success)
     }
+
+    // MARK: Fixed weight and a first session with nothing planned (plan 23 review)
+
+    @Test func aFixedWeightWinsOverHistoryAndPolicy() {
+        let fixed = ProgressionTarget(sets: 3, reps: 12, repsMin: 12, weightKg: lb(200), incKg: lb(5),
+                                      weightSetAt: day(9), fixedWeightKg: lb(95))
+        let misses = [session(2, 100, [8, 8, 8]), session(1, 100, [8, 8, 8])]
+        for policy in [ProgressionPolicy.double, .linear, .greyskull, .off] {
+            let s = engine.suggest(policy: policy, target: fixed, history: misses)
+            #expect(s.weightKg == lb(95) && s.reps == 12 && s.reason == .noChange)
+        }
+        #expect(engine.suggest(policy: .double, target: fixed, history: []).weightKg == lb(95))
+    }
+
+    @Test func aFixedZeroStaysZero() {
+        let fixed = ProgressionTarget(sets: 3, reps: 10, weightKg: 0, incKg: lb(5), fixedWeightKg: 0)
+        let s = engine.suggest(policy: .double, target: fixed, history: [session(1, 50, [10, 10, 10])])
+        #expect(s.weightKg == 0)
+    }
+
+    @Test func aFirstSessionWithNoPlannedWeightStaysZeroOnAnyPlateGrid() {
+        let odd = ProgressionEngine(rounder: LoadRounder(unit: .lb, step: 10, offset: 5))
+        let none = ProgressionTarget(sets: 3, reps: 10, weightKg: 0, incKg: lb(5))
+        #expect(odd.suggest(policy: .double, target: none, history: []).weightKg == 0)
+        #expect(engine.suggest(policy: .double, target: none, history: []).weightKg == 0)
+    }
 }

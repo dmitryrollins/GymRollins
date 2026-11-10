@@ -159,7 +159,7 @@ enum ImportAssembler {
             case .failure(let error): errors.append(error)
             }
         }
-        return WorkoutImportResult(workouts: group(rows, id: id), rowErrors: errors,
+        return WorkoutImportResult(workouts: group(rows, id: id).flatMap(ImportSplit.pieces), rowErrors: errors,
                                    warmupSetCount: rows.filter(\.set.warmup).count, rowCount: outcomes.count,
                                    source: source, ignoredRowCount: ignored)
     }

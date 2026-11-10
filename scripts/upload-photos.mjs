@@ -1,29 +1,33 @@
 #!/usr/bin/env node
 // Uploads GymRollins' own exercise photos (own-<id>-<frame>.jpg from the gitignored media/photos/, where the generator
-// writes, and from ios/GymRollins/Resources/OwnPhotos/, the bundled ones) to the public `exercise-photos` Supabase
-// Storage bucket, then writes `manifest.json` into the bucket so the app knows which exercises have hosted photos
-// without listing the bucket. See docs/media/README.md ("Hosting"). Nothing is moved or deleted locally.
+// writes, and from ios/GymRollins/Resources/OwnPhotos/, the bundled ones) to the `exercise-photos` R2 bucket behind the
+// Worker, then writes `manifest.json` into the bucket so the app knows which exercises have hosted photos without
+// listing the bucket. Equipment kind photos (kind-<kindId>.jpg, shown for a gym listing that has no photo of its own)
+// travel the same way: drop one into either folder and run this, no app release needed. See docs/media/README.md
+// ("Hosting"). Nothing is moved or deleted locally, and nothing in the bucket is deleted.
 //
-// Usage: node scripts/upload-photos.mjs [--dry-run] [--target local|remote] [--dir <photo folder>]...
+// Usage: node scripts/upload-photos.mjs [--dry-run] [--target worker|cloud] [--dir <photo folder>]...
 //   --dir (repeatable) replaces the two default folders. A name present in several folders uses the first folder
 //   (media/photos before the bundle); differing copies are reported.
-//   --target local (default): the local stack (scripts/supabase-up.sh), URL + service-role key from
-//                             supabase/.env.local; refuses anything that isn't a loopback URL.
-//   --target remote:          SUPABASE_URL (https) + SUPABASE_SERVICE_ROLE_KEY from the environment or the gitignored
-//                             app/.env. The key is never logged.
+//   --target worker (default): the local Worker (scripts/server-up.sh) at WORKER_URL or http://127.0.0.1:8787. Writes
+//                             go through `wrangler r2 object put --local` into server/.wrangler/state (WORKER_STATE
+//                             names another local state folder), the folder `wrangler dev` reads. Loopback only.
+//   --target cloud:           the deployed Worker at WORKER_URL (https only). Writes go through
+//                             `wrangler r2 object put --remote` with the owner's Cloudflare login. It runs only with
+//                             GYM_CLOUD_APPROVED=1, which says the owner approved this upload (docs/cloudflare-checklist.md).
+// Reads always go through the Worker's public route, /photos/exercises/<name>: HEAD gives an object's size and ETag
+// (its MD5), GET the stored manifest.
 //
-// Idempotent: an object is skipped when the bucket already holds one with the same size and MD5 (Storage's eTag for
-// single-part uploads). Photos get `cache-control: max-age=31536000`; the manifest `max-age=60`. The manifest is built
-// from the bucket listing after the uploads (so it only lists objects that really landed), and is only rewritten when
-// its content changed:
-//   { "version": 1, "updatedAt": "<ISO>", "photos": { "<id>": <frame count> }, "rev": { "<id>": "<12 hex>" } }
+// Idempotent: an object is skipped when the bucket already holds one with the same size and MD5. Photos get
+// `cache-control: max-age=31536000`; the manifest `max-age=60`. The manifest is built after the uploads from what the
+// bucket holds (so it lists only objects that really landed): the local photos, and every photo the stored manifest
+// already listed, so photos uploaded earlier from another checkout stay listed. It is only rewritten when its content
+// changed:
+//   { "version": 1, "updatedAt": "<ISO>", "photos": { "<id>": <frame count> }, "rev": { "<id>": "<12 hex>" },
+//     "kinds": { "<kindId>": "<12 hex>" } }
 // `rev` changes whenever any frame of that exercise changes; the app appends it as `?v=<rev>` so a regenerated photo
-// isn't served from the long-lived caches.
-//
-// Storage API (checked 2026-09-29 against the local stack, supabase CLI 2.118.0):
-//   POST /storage/v1/object/<bucket>/<name>       upload (x-upsert: true overwrites; cache-control stored as sent)
-//   POST /storage/v1/object/list/<bucket>         { prefix, limit, offset, sortBy } -> [{ name, metadata: { size, eTag } }]
-//   GET  /storage/v1/object/authenticated/<bucket>/<name>  read with the service key (bypasses the public CDN copy)
+// isn't served from the long-lived caches. `kinds` does the same for kind photos (an older app ignores the key).
+import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -33,23 +37,31 @@ const ROOT = resolve(import.meta.dirname, '..')
 export const BUCKET = 'exercise-photos'
 export const MANIFEST_NAME = 'manifest.json'
 const PHOTO_NAME = /^own-(\d+)-(\d+)\.jpg$/
+const KIND_PHOTO_NAME = /^kind-([a-z0-9-]{1,40})\.jpg$/
+const isPhotoName = name => PHOTO_NAME.test(name) || KIND_PHOTO_NAME.test(name)
+const shortHash = text => createHash('sha256').update(text).digest('hex').slice(0, 12)
 const PHOTO_CACHE = 'max-age=31536000'
 const MANIFEST_CACHE = 'max-age=60'
-const LIST_PAGE = 1000
 const MAX_ATTEMPTS = 3
-const CONCURRENCY = 4
+/** Remote puts run side by side; local ones one at a time, because each starts its own local R2 on the same folder. */
+const REMOTE_CONCURRENCY = 4
+const DEFAULT_WORKER_URL = 'http://127.0.0.1:8787'
+/** The owner's approval for one cloud upload, given in the environment of that run only. */
+export const APPROVAL = 'GYM_CLOUD_APPROVED'
 
 export const PATHS = {
   /** Upload sources, in precedence order: generated (gitignored) first, then the photos bundled in the app. */
   photoDirs: [resolve(ROOT, 'media/photos'), resolve(ROOT, 'ios/GymRollins/Resources/OwnPhotos')],
-  envFile: resolve(ROOT, '.env'),
-  localEnvFile: resolve(ROOT, 'supabase/.env.local'),
+  /** The local Worker's project and state folder (wrangler dev's default, named in scripts/server-up.sh). */
+  serverDir: resolve(ROOT, 'server'),
+  // WORKER_STATE names another local state folder: the photo E2E's throwaway Worker (scripts/test-photo-hosting.sh).
+  workerState: process.env.WORKER_STATE ? resolve(process.env.WORKER_STATE) : resolve(ROOT, 'server/.wrangler/state'),
 }
 
 // ---------- args / config ----------
 
 export function parseArgs(argv) {
-  const args = { dryRun: false, target: 'local', dirs: [] }
+  const args = { dryRun: false, target: 'worker', dirs: [] }
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]
     const value = () => {
@@ -59,14 +71,16 @@ export function parseArgs(argv) {
     if (flag === '--dry-run') args.dryRun = true
     else if (flag === '--target') {
       args.target = value()
-      if (!['local', 'remote'].includes(args.target)) throw new Error(`--target must be local or remote, got "${args.target}"`)
+      if (!['worker', 'cloud'].includes(args.target)) {
+        throw new Error(`--target must be worker or cloud, got "${args.target}"`)
+      }
     } else if (flag === '--dir') args.dirs.push(value())
     else throw new Error(`Unknown flag ${flag}`)
   }
   return args
 }
 
-/** True only for loopback URLs (the local Supabase stack). */
+/** True only for loopback URLs (the local Worker). */
 export function isLocalUrl(value) {
   try {
     const { hostname } = new URL(value)
@@ -76,46 +90,39 @@ export function isLocalUrl(value) {
   }
 }
 
-function readEnvFile(file) {
-  if (!file || !existsSync(file)) return {}
-  const values = {}
-  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*?)\s*$/)
-    if (match) values[match[1]] = match[2].replace(/^(['"])(.*)\1$/, '$2')
-  }
-  return values
-}
-
 const trimSlash = url => url.replace(/\/+$/, '')
 
-/** Where to upload and with which key. Local: supabase/.env.local only (never a cloud URL). Remote: env, then .env. */
-export function resolveTarget({ target, env = process.env, envFile = PATHS.envFile, localEnvFile = PATHS.localEnvFile }) {
-  if (target === 'local') {
-    if (!existsSync(localEnvFile)) throw new Error(`Missing ${localEnvFile} — run scripts/supabase-up.sh first`)
-    const local = readEnvFile(localEnvFile)
-    const url = trimSlash(local.API_URL ?? '')
-    if (!isLocalUrl(url)) throw new Error(`API_URL in ${localEnvFile} is not the local stack; use --target remote for a cloud project`)
-    if (!local.SERVICE_ROLE_KEY) throw new Error(`SERVICE_ROLE_KEY missing from ${localEnvFile}`)
-    return { url, key: local.SERVICE_ROLE_KEY }
+/**
+ * Where to upload. worker: the local Worker only. cloud: the deployed Worker over https, and only with the owner's
+ * approval in the environment.
+ */
+export function resolveTarget({ target, env = process.env }) {
+  if (target === 'worker') {
+    const url = trimSlash(env.WORKER_URL?.trim() || DEFAULT_WORKER_URL)
+    if (!isLocalUrl(url)) throw new Error(`WORKER_URL (${url}) is not the local Worker; the deployed one is --target cloud`)
+    return { url, remote: false }
   }
-  const file = readEnvFile(envFile)
-  const url = trimSlash(env.SUPABASE_URL?.trim() || file.SUPABASE_URL || '')
-  const key = env.SUPABASE_SERVICE_ROLE_KEY?.trim() || file.SUPABASE_SERVICE_ROLE_KEY
-  if (!url.startsWith('https://')) throw new Error('--target remote needs SUPABASE_URL=https://<project>.supabase.co')
-  if (!key) throw new Error('--target remote needs SUPABASE_SERVICE_ROLE_KEY (environment or app/.env, gitignored)')
-  return { url, key }
+  if (env[APPROVAL] !== '1') {
+    throw new Error(`--target cloud writes to the deployed bucket: set ${APPROVAL}=1 only with the owner's approval`)
+  }
+  const url = trimSlash(env.WORKER_URL?.trim() || '')
+  if (!url.startsWith('https://') || isLocalUrl(url)) {
+    throw new Error('--target cloud needs WORKER_URL=https://<the deployed Worker>')
+  }
+  return { url, remote: true }
 }
 
 // ---------- pure planning ----------
 
 /**
- * Local photos named own-<digits>-<digits>.jpg from `dirs` (missing folders are skipped), sorted by name, with size
- * and MD5. A name found in several folders comes from the first one; a differing copy is reported via `log`.
+ * Local photos named own-<digits>-<digits>.jpg or kind-<kindId>.jpg from `dirs` (missing folders are skipped), sorted by
+ * name, with size and MD5. A name found in several folders comes from the first one; a differing copy is reported via
+ * `log`.
  */
 export function scanPhotos(dirs, log = () => {}) {
   const byName = new Map()
   for (const dir of dirs.filter(d => existsSync(d))) {
-    for (const name of readdirSync(dir).filter(n => PHOTO_NAME.test(n))) {
+    for (const name of readdirSync(dir).filter(isPhotoName)) {
       const path = join(dir, name)
       const photo = { name, path, size: statSync(path).size, md5: createHash('md5').update(readFileSync(path)).digest('hex') }
       const first = byName.get(name)
@@ -126,10 +133,7 @@ export function scanPhotos(dirs, log = () => {}) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/**
- * `remote`: Map name -> { size, etag, cacheControl? }. Same size and MD5 = already there, unless the object was stored
- * with a different cache-control (e.g. by another uploader): then it is re-uploaded to fix the header.
- */
+/** `remote`: Map name -> { size, etag, cacheControl? }. Same size and MD5 (and cache-control, when known) = already there. */
 export function planUploads(local, remote) {
   const upload = []
   const skip = []
@@ -145,7 +149,10 @@ export function planUploads(local, remote) {
 /** The manifest for the objects in the bucket (`[{ name, etag }]`). Frames count contiguously from 0. */
 export function buildManifest(objects, now = new Date()) {
   const byId = new Map()
+  const kinds = {}
   for (const { name, etag } of objects) {
+    const kind = name.match(KIND_PHOTO_NAME)
+    if (kind) kinds[kind[1]] = shortHash(etag ?? '')
     const match = name.match(PHOTO_NAME)
     if (!match) continue
     const frames = byId.get(match[1]) ?? new Map()
@@ -161,61 +168,87 @@ export function buildManifest(objects, now = new Date()) {
     if (count === 0) continue
     photos[id] = count
     const tags = Array.from({ length: count }, (_, frame) => frames.get(frame)).join('|')
-    rev[id] = createHash('sha256').update(tags).digest('hex').slice(0, 12)
+    rev[id] = shortHash(tags)
   }
-  return { version: 1, updatedAt: now.toISOString(), photos, rev }
+  const sortedKinds = Object.fromEntries(Object.entries(kinds).sort(([a], [b]) => a.localeCompare(b)))
+  return { version: 1, updatedAt: now.toISOString(), photos, rev, kinds: sortedKinds }
+}
+
+/** The object names a stored manifest lists, so photos uploaded from another checkout stay in the next manifest. */
+export function namesIn(manifest) {
+  const names = []
+  for (const [id, count] of Object.entries(manifest?.photos ?? {})) {
+    if (!/^\d+$/.test(id) || !Number.isInteger(count) || count < 1 || count > 20) continue
+    for (let frame = 0; frame < count; frame++) names.push(`own-${id}-${frame}.jpg`)
+  }
+  for (const kind of Object.keys(manifest?.kinds ?? {})) {
+    if (KIND_PHOTO_NAME.test(`kind-${kind}.jpg`)) names.push(`kind-${kind}.jpg`)
+  }
+  return names
 }
 
 const sameContent = (a, b) => !!a && !!b && JSON.stringify(a.photos) === JSON.stringify(b.photos) &&
-  JSON.stringify(a.rev) === JSON.stringify(b.rev)
+  JSON.stringify(a.rev) === JSON.stringify(b.rev) && JSON.stringify(a.kinds ?? {}) === JSON.stringify(b.kinds ?? {})
 
-// ---------- Storage API ----------
+// ---------- the bucket, through the Worker and wrangler ----------
 
-function storageClient({ url, key, fetch }) {
-  const auth = { authorization: `Bearer ${key}`, apikey: key }
-  const objectURL = name => `${url}/storage/v1/object/${BUCKET}/${encodeURIComponent(name)}`
+/**
+ * The bucket behind a Worker. Reads go through the Worker's public route, whose ETag is the object's MD5. Writes go
+ * through `wrangler r2 object put`: --local into the local state folder (which a running `wrangler dev` sees at once),
+ * or --remote into the deployed bucket.
+ */
+export function workerClient({ url, fetch, run = runWrangler, remote = false }) {
+  const publicURL = name => `${url}/photos/exercises/${encodeURIComponent(name)}`
 
-  async function list() {
+  async function list(names) {
     const objects = new Map()
-    for (let offset = 0; ; offset += LIST_PAGE) {
-      const response = await fetch(`${url}/storage/v1/object/list/${BUCKET}`, {
-        method: 'POST',
-        headers: { ...auth, 'content-type': 'application/json' },
-        body: JSON.stringify({ prefix: '', limit: LIST_PAGE, offset, sortBy: { column: 'name', order: 'asc' } }),
+    for (const name of names) {
+      const response = await fetch(publicURL(name), { method: 'HEAD' })
+      if (response.status === 404) continue
+      if (!response.ok) throw new Error(`Reading ${name} from ${url} failed: HTTP ${response.status}`)
+      objects.set(name, {
+        size: Number(response.headers.get('content-length')),
+        etag: String(response.headers.get('etag') ?? '').replaceAll('"', ''),
       })
-      if (!response.ok) throw new Error(`Listing bucket ${BUCKET} failed: HTTP ${response.status}`)
-      const page = await response.json()
-      for (const item of page) {
-        if (!item?.metadata) continue // folders
-        objects.set(item.name, {
-          size: item.metadata.size,
-          etag: String(item.metadata.eTag ?? '').replaceAll('"', ''),
-          cacheControl: item.metadata.cacheControl,
-        })
-      }
-      if (page.length < LIST_PAGE) return objects
     }
+    return objects
   }
 
   async function upload(name, body, contentType, cacheControl) {
-    const response = await fetch(objectURL(name), {
-      method: 'POST',
-      headers: { ...auth, 'content-type': contentType, 'cache-control': cacheControl, 'x-upsert': 'true' },
-      body,
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const where = remote ? ['--remote'] : ['--local', '--persist-to', PATHS.workerState]
+    const args = ['r2', 'object', 'put', `${BUCKET}/${name}`, ...where, '--pipe', '--content-type', contentType,
+      '--cache-control', cacheControl]
+    const { status, stderr } = await run(args, body, { remote })
+    if (status !== 0) throw new Error(`wrangler exited with ${status}: ${String(stderr).trim().split('\n').pop()}`)
   }
 
-  /** Reads through the authenticated endpoint: the public URL may be a stale CDN copy (manifest max-age=60). */
   async function storedJSON(name) {
-    const response = await fetch(`${url}/storage/v1/object/authenticated/${BUCKET}/${encodeURIComponent(name)}`, {
-      headers: { ...auth, 'cache-control': 'no-cache' },
-    })
+    const response = await fetch(publicURL(name), { headers: { 'cache-control': 'no-cache' } })
     if (!response.ok) return null
     try { return await response.json() } catch { return null }
   }
 
   return { list, upload, storedJSON }
+}
+
+/**
+ * `npx wrangler <args>` in server/, with `input` on stdin. Only with --local, or with --remote when the caller asks for
+ * the deployed bucket and the owner's approval is in the environment.
+ */
+export function runWrangler(args, input, { remote = false, env = process.env } = {}) {
+  const local = args.includes('--local') && !args.includes('--remote')
+  const approved = remote && args.includes('--remote') && !args.includes('--local') && env[APPROVAL] === '1'
+  if (!local && !approved) {
+    return Promise.reject(new Error(`wrangler runs here only with --local, or with --remote and ${APPROVAL}=1`))
+  }
+  return new Promise((done, fail) => {
+    const child = spawn('npx', ['wrangler', ...args], { cwd: PATHS.serverDir, stdio: ['pipe', 'ignore', 'pipe'] })
+    let stderr = ''
+    child.stderr.on('data', chunk => { stderr += chunk })
+    child.on('error', fail)
+    child.on('close', status => done({ status, stderr }))
+    child.stdin.end(input)
+  })
 }
 
 async function withRetry(fn, { attempts = MAX_ATTEMPTS, delayMs = 500 } = {}) {
@@ -238,22 +271,25 @@ async function forEachLimited(items, limit, fn) {
 }
 
 /**
- * Uploads new/changed photos from `dir`, then the manifest. Returns
+ * Uploads new/changed photos from `dirs`, then the manifest. Returns
  * { uploaded, skipped, failed, manifest: 'uploaded'|'unchanged'|'dry-run', photos } (photos = exercises in the manifest).
  */
 export async function uploadPhotos({
-  url, key, dirs = PATHS.photoDirs, dryRun = false, fetch = globalThis.fetch, log = console.log,
-  now = () => new Date(), retryDelayMs = 500,
+  url, dirs = PATHS.photoDirs, dryRun = false, fetch = globalThis.fetch, log = console.log,
+  now = () => new Date(), retryDelayMs = 500, remote = false, run = runWrangler,
 }) {
-  const client = storageClient({ url, key, fetch })
+  const client = workerClient({ url, fetch, run, remote })
   const local = scanPhotos(dirs, log)
-  const remote = await client.list()
-  const { upload, skip } = planUploads(local, remote)
+  const stored = await client.storedJSON(MANIFEST_NAME)
+  const localNames = new Set(local.map(p => p.name))
+  const names = [...localNames, ...namesIn(stored).filter(name => !localNames.has(name))]
+  const before = await client.list(names)
+  const { upload, skip } = planUploads(local, before)
   log(`${local.length} local photos in ${dirs.join(', ')}; ${skip.length} already in ${BUCKET}, ${upload.length} to upload (${url})`)
 
   if (dryRun) {
     for (const photo of upload) log(`would upload ${photo.name} (${photo.size} bytes)`)
-    const after = new Map(remote)
+    const after = new Map(before)
     for (const photo of upload) after.set(photo.name, { size: photo.size, etag: photo.md5 })
     const manifest = buildManifest([...after].map(([name, o]) => ({ name, etag: o.etag })), now())
     log(`would write ${MANIFEST_NAME}: ${Object.keys(manifest.photos).length} exercises`)
@@ -262,7 +298,7 @@ export async function uploadPhotos({
 
   let uploaded = 0
   let failed = 0
-  await forEachLimited(upload, CONCURRENCY, async photo => {
+  await forEachLimited(upload, remote ? REMOTE_CONCURRENCY : 1, async photo => {
     try {
       await withRetry(() => client.upload(photo.name, readFileSync(photo.path), 'image/jpeg', PHOTO_CACHE),
         { delayMs: retryDelayMs })
@@ -274,10 +310,10 @@ export async function uploadPhotos({
     }
   })
 
-  const objects = await client.list()
+  const objects = await client.list(names)
   const manifest = buildManifest([...objects].map(([name, o]) => ({ name, etag: o.etag })), now())
   const photos = Object.keys(manifest.photos).length
-  if (sameContent(manifest, await client.storedJSON(MANIFEST_NAME))) {
+  if (sameContent(manifest, stored)) {
     log(`${MANIFEST_NAME} unchanged (${photos} exercises)`)
     return { uploaded, skipped: skip.length, failed, manifest: 'unchanged', photos }
   }
@@ -289,9 +325,9 @@ export async function uploadPhotos({
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const { url, key } = resolveTarget({ target: args.target })
+  const { url, remote } = resolveTarget({ target: args.target })
   const dirs = args.dirs.length > 0 ? args.dirs.map(d => resolve(d)) : PATHS.photoDirs
-  const summary = await uploadPhotos({ url, key, dirs, dryRun: args.dryRun })
+  const summary = await uploadPhotos({ url, remote, dirs, dryRun: args.dryRun })
   console.log(`done: ${summary.uploaded} ${args.dryRun ? 'to upload' : 'uploaded'}, ${summary.skipped} skipped, ` +
     `${summary.failed} failed; manifest ${summary.manifest} (${summary.photos} exercises)`)
   if (summary.failed > 0) process.exitCode = 1

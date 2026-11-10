@@ -1,13 +1,23 @@
 import SwiftUI
 
-/// Plain-language privacy summary: what's stored, what Claude can see, and what GymRollins never does.
+/// Plain-language privacy summary: what's stored, what agents can see and do, and what GymRollins never does.
 struct PrivacyPolicyView: View {
     private static let points = [
         "Your workouts, plan, weigh-ins and profile are stored on this iPhone, and in your account if you sign in.",
-        "Claude can only read what you allow in the Claude section of Settings, and only proposes plan changes "
-            + "you review (or explicitly allow it to apply automatically).",
-        "There are no ads and no third-party trackers. Your data is never sold or shared.",
-        "Deleting your account removes your data from the server and this iPhone.",
+        "Agents you connect, such as Claude, can only read what you allow in Settings \u{203A} AI agents. They "
+            + "propose plan changes you review (or explicitly allow to apply automatically), and add past workouts "
+            + "only if you turn on Add workouts.",
+        "There are no ads and no third-party trackers. Your data is never sold or shared with advertisers.",
+        "Location is asked for only to suggest the gym you're at. It is sent to Apple Maps for that search and "
+            + "isn't stored by GymRollins.",
+        "Gym photos are cleaned on your iPhone first: location data is removed and any faces it finds are blurred. "
+            + "\"This phone only\" photos stay on this iPhone. Synced ones go to your account, where only you can see "
+            + "them. Shared ones are public: anyone can see them, with no account.",
+        "If you report something, moderators see the reason and your note, but not who sent it.",
+        "Sharing a workout link sends only its exercises, sets and reps: no weights, name or history.",
+        "Deleting your account removes your data and photos from the server and this iPhone. Equipment you shared "
+            + "stays listed at the gym, without your name, photos or notes. Reports you sent stay, without your name "
+            + "or note.",
     ]
 
     var body: some View {

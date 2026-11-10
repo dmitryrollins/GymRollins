@@ -28,10 +28,14 @@ public struct RoutineExercise: Codable, Sendable, Identifiable, Hashable {
     public let supersetGroup: String?
     /// When `weightKg` was last set by the user or Claude; gates the `.planned` progression override.
     public let weightSetAt: Date?
+    /// A weight settled up front, for today only: a shared workout's weight comes from this person's own plan and
+    /// history. Never set on a routine's items.
+    public let fixedWeightKg: Double?
 
     public init(id: UUID = UUID(), exerciseId: String, sets: Int, reps: Int, repsMin: Int? = nil, sec: Int? = nil,
                 weightKg: Double? = nil, mode: ExerciseMode = .reps, policy: ProgressionPolicy? = nil,
-                incKg: Double? = nil, supersetGroup: String? = nil, weightSetAt: Date? = nil) {
+                incKg: Double? = nil, supersetGroup: String? = nil, weightSetAt: Date? = nil,
+                fixedWeightKg: Double? = nil) {
         self.id = id
         self.exerciseId = exerciseId
         self.sets = sets
@@ -44,10 +48,26 @@ public struct RoutineExercise: Codable, Sendable, Identifiable, Hashable {
         self.incKg = incKg
         self.supersetGroup = supersetGroup
         self.weightSetAt = weightSetAt
+        self.fixedWeightKg = fixedWeightKg
+    }
+
+    /// This item with a weight settled for today (nil clears it).
+    public func with(fixedWeightKg: Double?) -> RoutineExercise {
+        RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
+                        weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
+                        weightSetAt: weightSetAt, fixedWeightKg: fixedWeightKg)
+    }
+
+    /// This item with a new planned weight, stamped `date` so progression uses it next session.
+    public func with(weightKg: Double, setAt date: Date) -> RoutineExercise {
+        RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
+                        weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
+                        weightSetAt: date, fixedWeightKg: fixedWeightKg)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, exerciseId, sets, reps, repsMin, sec, weightKg, mode, policy, incKg, supersetGroup, weightSetAt
+        case fixedWeightKg
     }
 
     public init(from decoder: Decoder) throws {
@@ -64,7 +84,8 @@ public struct RoutineExercise: Codable, Sendable, Identifiable, Hashable {
             policy: try c.decodeIfPresent(ProgressionPolicy.self, forKey: .policy),
             incKg: try c.decodeIfPresent(Double.self, forKey: .incKg),
             supersetGroup: try c.decodeIfPresent(String.self, forKey: .supersetGroup),
-            weightSetAt: try c.decodeIfPresent(Date.self, forKey: .weightSetAt)
+            weightSetAt: try c.decodeIfPresent(Date.self, forKey: .weightSetAt),
+            fixedWeightKg: try c.decodeIfPresent(Double.self, forKey: .fixedWeightKg)
         )
     }
 }

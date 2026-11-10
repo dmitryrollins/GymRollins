@@ -41,7 +41,7 @@ struct RestBar: View {
             circleButton(system: "plus", label: "Add 15 seconds", identifier: "logging.rest.plus", action: onPlus)
             Button(action: onSkip) { Text("Skip").fixedSize() }
                 .buttonStyle(.glassProminent)
-                .tint(Theme.primaryFill)
+                .tint(Theme.primaryButtonFill)
                 .accessibilityLabel("Skip rest")
                 .accessibilityIdentifier("logging.rest.skip")
         }

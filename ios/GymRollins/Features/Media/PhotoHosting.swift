@@ -3,8 +3,8 @@ import GymSync
 
 /// Where GymRollins' own photos come from, set per build with `PHOTO_HOSTING` (xcconfig -> Info.plist):
 /// - `bundle` (default): only the photos bundled in Resources/OwnPhotos.
-/// - `storage`: the public `exercise-photos` bucket of the configured Supabase project (manifest-driven), with the
-///   bundled photos as fallback. See docs/media/README.md ("Hosting").
+/// - `storage`: the public `exercise-photos` bucket behind the API (`<API_URL>/photos/exercises/`, manifest-driven),
+///   with the bundled photos as fallback. See docs/media/README.md ("Hosting").
 enum PhotoHosting: String, Sendable, Equatable {
     case bundle
     case storage
@@ -21,18 +21,18 @@ enum PhotoHosting: String, Sendable, Equatable {
 /// The photo hosting settings for this launch.
 struct PhotoHostingConfig: Sendable, Equatable {
     let hosting: PhotoHosting
-    /// The Supabase project URL (nil when the build has no valid Supabase config).
-    let supabaseURL: URL?
+    /// The API's origin (`ApiConfig`); nil when the build has no valid `API_URL`.
+    let apiURL: URL?
 
-    /// From Info.plist; in DEBUG, `PHOTO_HOSTING` / `SUPABASE_URL` + `SUPABASE_ANON_KEY` environment variables win (like
-    /// sync), so tests and debug runs can point at the local stack.
+    /// From Info.plist; in DEBUG, the `PHOTO_HOSTING` and `API_URL` environment variables win (as for sync), so tests
+    /// and debug runs can point at a local Worker.
     static func resolve(info: [String: Any], environment: [String: String]) -> PhotoHostingConfig {
         var hostingSetting = info[PhotoHosting.infoKey] as? String
-        var supabaseURL = (try? SupabaseConfig(info: info))?.url
+        var apiURL = (try? ApiConfig(info: info))?.baseURL
         #if DEBUG
         if let override = environment[PhotoHosting.infoKey] { hostingSetting = override }
-        if let fromEnvironment = try? SupabaseConfig(environment: environment) { supabaseURL = fromEnvironment.url }
+        if let fromEnvironment = try? ApiConfig(environment: environment) { apiURL = fromEnvironment.baseURL }
         #endif
-        return PhotoHostingConfig(hosting: PhotoHosting(rawSetting: hostingSetting), supabaseURL: supabaseURL)
+        return PhotoHostingConfig(hosting: PhotoHosting(rawSetting: hostingSetting), apiURL: apiURL)
     }
 }

@@ -1,5 +1,5 @@
 {
- "_comment": "Shared by GymCore (InsightsFixtureTests.swift) and the MCP server (_shared/insights.test.ts): the same inputs must give the same recovery %, weekly hard sets, streak, fresh list and limited groups on both sides. Groups missing from expected.recovery are 100; from expected.weekly_sets, 0.",
+ "_comment": "Shared by GymCore (InsightsFixtureTests.swift) and the MCP server (server/test/shared/insights.test.ts): the same inputs must give the same recovery %, weekly hard sets, streak, fresh list and limited groups on both sides. Groups missing from expected.recovery are 100; from expected.weekly_sets, 0.",
  "exercises": [
   {
    "id": "0025",

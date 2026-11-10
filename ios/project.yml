@@ -66,13 +66,22 @@ targets:
         NSHealthUpdateUsageDescription: >-
           GymRollins saves your finished workouts with their estimated calories, and the weigh-ins you log, to
           Apple Health.
+        NSCameraUsageDescription: >-
+          GymRollins uses the camera to photograph gym equipment. Faces are blurred before the photo is saved.
+        NSLocationWhenInUseUsageDescription: >-
+          GymRollins uses your location to find gyms near you on Apple Maps. GymRollins doesn't store it.
         NSLocalNetworkUsageDescription: >-
           GymRollins syncs with a development server on your local network.
-        SUPABASE_URL: $(SUPABASE_URL)
-        SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
+        # The GymRollins API (Config/Base.xcconfig): sign-in, sync, photos and Claude's connector address.
+        API_URL: $(API_URL)
         # bundle | storage (Config/Base.xcconfig): where GymRollins' own exercise photos come from.
         PHOTO_HOSTING: $(PHOTO_HOSTING)
-        # Plain http to the local Supabase stack (127.0.0.1) only; ATS stays on for every other host.
+        # The domain workout links use (Config/Base.xcconfig). Empty: they use the gymrollins scheme below.
+        SHARE_LINK_HOST: $(SHARE_LINK_HOST)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.rollins.gymrollins.workout-link
+            CFBundleURLSchemes: [gymrollins]
+        # Plain http to local addresses only (the local Worker on 127.0.0.1); ATS stays on for every other host.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:
@@ -146,7 +155,8 @@ targets:
   GymRollinsUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [GymRollinsUITests]
+    # ClaudeTestClient.swift plays Claude (OAuth and MCP), shared with GymSyncIntegrationTests.
+    sources: [GymRollinsUITests, Packages/GymSync/Tests/GymSyncIntegrationTests/ClaudeTestClient.swift]
     dependencies: [{ target: GymRollins }]
     settings: { base: { GENERATE_INFOPLIST_FILE: YES } }
 schemes:

@@ -82,7 +82,8 @@ extension AppEnvironment {
             let start = workout.startedAt.addingTimeInterval(-minutes * 60)
             return Workout(id: workout.id, startedAt: start, endedAt: workout.endedAt,
                            pausedSeconds: workout.pausedSeconds, routineId: workout.routineId, name: workout.name,
-                           entries: workout.entries, source: workout.source, note: workout.note)
+                           entries: workout.entries, source: workout.source, note: workout.note,
+                           gymId: workout.gymId)
         }
         #endif
         return workout

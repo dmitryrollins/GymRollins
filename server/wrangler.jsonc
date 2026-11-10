@@ -1,0 +1,39 @@
+// The GymRollins API: one Worker with D1 and three R2 buckets. The top level is the deployed Worker, so a plain
+// `wrangler deploy` ships only these values (docs/cloudflare-checklist.md, the owner's approval). Every local start
+// (scripts/server-up.sh, scripts/test-server.sh, `npm run dev`) passes its own loopback PUBLIC_BASE_URL and
+// --infer-origin-from-routes=false, and needs no Cloudflare account. database_id is filled in after `wrangler d1 create`.
+{
+  "name": "gymrollins",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Only the custom domain: its zone carries the per-IP rate limits, which a workers.dev or preview address would skip.
+  "routes": [{ "pattern": "api.gymrollins.com", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "ALLOW_PASSWORD_AUTH": "0",
+    "APPLE_BUNDLE_ID": "com.rollins.gymrollins",
+    // The OAuth issuer and the MCP resource are built from it. Local starts override it with --var.
+    "PUBLIC_BASE_URL": "https://api.gymrollins.com"
+  },
+  // A deploy that would leave the Worker without it fails; the first deploy brings it with --secrets-file.
+  "secrets": { "required": ["BETTER_AUTH_SECRET"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gymrollins",
+      "database_id": "b7acfb0b-499b-4471-a430-96a9491fde57",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    // Shared listing photos: anyone reads them through the Worker (/photos/shared/<name>).
+    { "binding": "GYM_PHOTOS", "bucket_name": "gym-photos" },
+    // Private listing photos: their owner only, through /v1/photos/private/<name>.
+    { "binding": "GYM_PHOTOS_PRIVATE", "bucket_name": "gym-photos-private" },
+    // GymRollins' own exercise and kind photos and manifest.json: anyone reads them (/photos/exercises/<name>).
+    { "binding": "EXERCISE_PHOTOS", "bucket_name": "exercise-photos" }
+  ],
+  "dev": { "ip": "127.0.0.1", "port": 8787 }
+}

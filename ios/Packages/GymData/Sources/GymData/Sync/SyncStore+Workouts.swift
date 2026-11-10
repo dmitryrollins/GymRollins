@@ -7,8 +7,14 @@ extension SyncStore {
     public func dirtyWorkouts() throws -> [SyncRow<WorkoutSnapshot>] {
         try context.fetch(FetchDescriptor<WorkoutRecord>(predicate: #Predicate { $0.dirty && !$0.isActive },
                                                          sortBy: [SortDescriptor(\.startedAt)]))
-            .map { SyncRow(value: try $0.snapshot(), clientUpdatedAt: $0.updatedAt, deletedAt: $0.deletedAt,
-                           serverUpdatedAt: $0.serverUpdatedAt) }
+            .map { record in
+                let snapshot = try record.snapshot()
+                // `added_by` is the server's (plan 32): the pushed snapshot never carries it.
+                let sent = WorkoutSnapshot(workout: try sendable(snapshot.workout), records: snapshot.records,
+                                           volumeKg: snapshot.volumeKg)
+                return SyncRow(value: sent, clientUpdatedAt: record.updatedAt, deletedAt: record.deletedAt,
+                               serverUpdatedAt: record.serverUpdatedAt)
+            }
     }
 
     /// Applies remote workouts and returns the ids that conflict: dirty locally and changed on the server since
@@ -50,7 +56,7 @@ extension SyncStore {
     }
 
     private func write(_ row: SyncRow<WorkoutSnapshot>, into existing: WorkoutRecord?) throws {
-        let w = row.value.workout
+        let w = try resolved(row.value.workout, keeping: existing?.value)
         let r = existing ?? {
             let new = WorkoutRecord(id: w.id, startedAt: w.startedAt, name: w.name, sourceRaw: w.source.rawValue,
                                     isActive: false, now: row.clientUpdatedAt)
@@ -65,6 +71,9 @@ extension SyncStore {
         r.name = w.name
         r.sourceRaw = w.source.rawValue
         r.note = w.note
+        r.gymId = w.gymId
+        // The server never clears added_by, so a row without one (a server from before plan 32) keeps the stored name.
+        r.addedBy = row.value.addedBy ?? r.addedBy
         r.isActive = false
         r.volumeKg = row.value.volumeKg
         r.recordsData = row.value.records.isEmpty ? nil : try JSONEncoder().encode(row.value.records)
@@ -77,6 +86,6 @@ extension SyncStore {
 extension WorkoutRecord {
     func snapshot() throws -> WorkoutSnapshot {
         let records = try recordsData.map { try JSONDecoder().decode([PersonalRecord].self, from: $0) } ?? []
-        return WorkoutSnapshot(workout: value, records: records, volumeKg: volumeKg)
+        return WorkoutSnapshot(workout: value, records: records, volumeKg: volumeKg, addedBy: addedBy)
     }
 }

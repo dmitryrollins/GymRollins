@@ -116,8 +116,10 @@ final class ProposalUITests: XCTestCase {
         let claude = app.buttons["settings.claude"]
         XCTAssertTrue(claude.waitForExistence(timeout: 5))
         claude.tap()
+        XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
         let autoApply = app.switches["claude.perm.autoApply"]
-        XCTAssertTrue(autoApply.waitForExistence(timeout: 5))
+        scrollTo(autoApply) // the agents and Connect sections push it below the fold
+        XCTAssertTrue(autoApply.isHittable)
         XCTAssertEqual(autoApply.value as? String, "0")
         flip(autoApply)
         app.terminate()
@@ -131,8 +133,10 @@ final class ProposalUITests: XCTestCase {
         app.tabBars.buttons["Log"].tap()
         app.buttons["log.settings"].tap()
         app.buttons["settings.claude"].tap()
+        XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
         let undo = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'claude.undo.'")).firstMatch
-        XCTAssertTrue(undo.waitForExistence(timeout: 5))
+        scrollTo(undo)
+        XCTAssertTrue(undo.isHittable)
     }
 
     func testClaudeScreenShowsConnectorPendingAndDisconnect() {
@@ -141,25 +145,45 @@ final class ProposalUITests: XCTestCase {
         app.buttons["log.settings"].tap()
         app.buttons["settings.claude"].tap()
         XCTAssertTrue(app.staticTexts["claude.status"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["claude.url"].label.hasSuffix("/functions/v1/mcp"), app.staticTexts["claude.url"].label)
+        XCTAssertTrue(app.staticTexts["claude.url"].label.hasSuffix("/mcp"), app.staticTexts["claude.url"].label)
         app.buttons["claude.copyURL"].tap()
         XCTAssertEqual(app.buttons["claude.copyURL"].label, "Copied")
-        XCTAssertTrue(app.buttons["claude.proposal.C1A0DE00-0000-4000-8000-000000000001"].exists)
-        XCTAssertEqual(app.staticTexts["claude.status"].label, "Not connected yet")
+        // Signed out, the account can't be asked: that isn't "no agents".
+        let status = app.staticTexts["claude.status"]
+        let signIn = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Sign in to GymRollins to see your agents."), object: status)
+        XCTAssertEqual(XCTWaiter().wait(for: [signIn], timeout: 5), .completed, status.label)
+        let pendingRow = app.buttons["claude.proposal.C1A0DE00-0000-4000-8000-000000000001"]
+        scrollTo(pendingRow)
+        XCTAssertTrue(pendingRow.isHittable)
 
         let disconnect = app.buttons["claude.disconnect"]
         scrollTo(disconnect)
+        XCTAssertEqual(disconnect.label, "Disconnect all")
         disconnect.tap()
         app.buttons["claude.disconnect.confirm"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["claude.disconnected"].waitForExistence(timeout: 5))
-        for id in ["readWorkouts", "readBody", "readPlan", "propose", "autoApply"] {
-            let toggle = app.switches["claude.perm.\(id)"]
-            scrollTo(toggle)
+        // The switches sit above Use with Claude now: from the bottom, back up through them (decision A3).
+        let switches = ["claude.perm.autoApply", "claude.perm.propose", "agents.perm.logWorkouts", "claude.perm.readGyms",
+                        "claude.perm.readPlan", "claude.perm.readBody", "claude.perm.readWorkouts"]
+        for id in switches {
+            let toggle = app.switches[id]
+            scrollBack(to: toggle)
+            XCTAssertTrue(toggle.isHittable, id)
             XCTAssertEqual(toggle.value as? String, "0", id)
         }
     }
 
-    private func scrollTo(_ element: XCUIElement, maxSwipes: Int = 6) {
+    /// Like `scrollTo`, for an element above the screen.
+    private func scrollBack(to element: XCUIElement, maxSwipes: Int = 12) {
+        var swipes = 0
+        while !element.isHittable && swipes < maxSwipes {
+            app.swipeDown()
+            swipes += 1
+        }
+    }
+
+    private func scrollTo(_ element: XCUIElement, maxSwipes: Int = 12) {
         var swipes = 0
         while !element.isHittable && swipes < maxSwipes {
             app.swipeUp()

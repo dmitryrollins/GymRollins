@@ -240,7 +240,9 @@ DEBUG-only email/password login exists for the simulator and UI tests (compiled 
 - **Read tools**: `get_profile`, `get_plan` (routines + week), `list_workouts(since?, until?, limit≤60)`,
   `get_workout(id)`, `get_exercise_history(exercise, since?)` (sets + e1RM per session), `get_training_summary(weeks≤12)`
   (frequency, volume by body part, stalls, PRs), `get_bodyweight(since?)`, `search_exercises(query, body_part?, equipment?)`,
-  `get_training_insights(time_zone?)` (plan 12: recovery % per muscle group, weekly hard sets vs targets, streak).
+  `get_training_insights(time_zone?)` (plan 12: recovery % per muscle group, weekly hard sets vs targets, streak),
+  `list_gyms` and `get_gym_equipment(gym_id)` (plan 22, gated by `mcp_read_gyms`: synced gyms and the exercise ids
+  their equipment allows; see the gym equipment spec §5).
 - **Write tools**: `propose_plan_changes(summary, changes[])` → validated → `proposals` row (auto-applied only if
   `mcp_auto_apply`); `get_proposal(id)`; `log_bodyweight(d, w_kg, bf_pct?)` (gated by `mcp_read_body`).
 - Tool descriptions state the units (kg) and the owner's unit preference so Claude talks in lb.

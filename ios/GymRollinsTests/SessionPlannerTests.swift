@@ -139,11 +139,127 @@ import Testing
         #expect(off.sets.count == on.sets.filter { !$0.warmup }.count)
     }
 
-    @Test func swapWeightFollowsHistoryOrKeeps() {
+    @Test func swapTargetFollowsHistoryOrKeeps() {
         let curl = library.exercise("0313")
-        #expect(SessionPlanner.swapWeightKg(exercise: curl, profile: Profile(), history: []) == nil)
+        #expect(SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: []) == .keep)
         let history = [SessionResult(date: .now, weightKg: lb(25), reps: [10, 10, 10])]
-        let suggested = SessionPlanner.swapWeightKg(exercise: curl, profile: Profile(), history: history)
-        #expect(suggested.map(inLb) == 27.5)
+        let resolved = SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: history)
+            .resolved(for: WorkoutSet(weightKg: 1, reps: 7))
+        #expect(inLb(resolved.weightKg) == 27.5)
+        #expect(resolved.reps == 7, "the set keeps its own reps")
+    }
+
+    /// Squat 3x5 swapped to an exercise last logged at 100 x 5 must not become 100 x 10.
+    @Test func swapKeepsEachSetsOwnReps() {
+        let curl = library.exercise("0313")
+        let history = [SessionResult(date: .now, weightKg: 100, reps: [5, 5, 5])]
+        let target = SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: history)
+        #expect(target.resolved(for: WorkoutSet(weightKg: 120, reps: 5)).reps == 5)
+        #expect(target.resolved(for: WorkoutSet(weightKg: 120, reps: 5)).weightKg >= 100)
+        let pyramid = [12, 10, 8].map { target.resolved(for: WorkoutSet(weightKg: 40, reps: $0)).reps }
+        #expect(pyramid == [12, 10, 8])
+    }
+
+    @Test func swapWithGymKeepsRepsWhenTheWeightFits() {
+        let curl = library.exercise("0313")
+        let history = [SessionResult(date: .now, weightKg: 20, reps: [8, 8, 8])]
+        let target = SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: history,
+                                               loads: .fixed(kg: [20, 24]))
+        let resolved = target.resolved(for: WorkoutSet(weightKg: 60, reps: 8))
+        #expect([20.0, 24.0].contains(resolved.weightKg))
+        #expect(resolved.reps == 8)
+    }
+
+    @Test func swapTimedSetsKeepTheirSeconds() {
+        let plank = Exercise(id: "p1", name: "plank", bodyPart: "waist", equipment: "body weight", target: "abs",
+                             mode: .time)
+        let history = [SessionResult(date: .now, weightKg: 0, reps: [1, 1, 1], secs: [30, 30, 30])]
+        let target = SessionPlanner.swapTarget(exercise: plank, profile: Profile(), history: history,
+                                               loads: .fixed(kg: [20, 24]))
+        #expect(target.resolved(for: WorkoutSet(weightKg: 0, reps: 1, sec: 40)).reps == 1)
+    }
+
+    // MARK: Gym loads
+
+    @Test func swapMidWorkoutFitsTheGym() {
+        let curl = library.exercise("0313")
+        let history = [SessionResult(date: .now, weightKg: 40, reps: [10, 10, 10])]
+        let target = SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: history,
+                                               loads: .fixed(kg: [20, 24]))
+        let resolved = target.resolved(for: WorkoutSet(weightKg: 60, reps: 10))
+        #expect(resolved.weightKg == 24)
+        #expect(resolved.reps == 12, "past the heaviest bell the +2 reps rule applies to the set's own reps")
+    }
+
+    @Test func swapWithoutHistoryFitsEachSetAndKeepsItsReps() {
+        let curl = library.exercise("0313")
+        let target = SessionPlanner.swapTarget(exercise: curl, profile: Profile(), history: [],
+                                               loads: .fixed(kg: [20, 24]))
+        #expect(target == .fit(.fixed(kg: [20, 24])))
+        let set = WorkoutSet(weightKg: 60, reps: 8)
+        #expect(target.resolved(for: set) == ResolvedSet(weightKg: 24, reps: 8), "no progression to reward: no extra reps")
+    }
+
+    @Test func addingMidWorkoutFitsTheGym() {
+        let curl = library.exercise("0313")
+        let history = [SessionResult(date: .now, weightKg: 30, reps: [10, 10, 10])]
+        let entry = SessionPlanner.adHocEntry(exerciseId: "0313", exercise: curl, profile: Profile(), history: history,
+                                              autoWarmups: false, loads: .fixed(kg: [20, 24]))
+        #expect(entry.sets.allSatisfy { $0.weightKg == 24 })
+    }
+
+    @Test func loadsFitTheSuggestion() {
+        let curl = library.exercise("0313")
+        let item = RoutineExercise(exerciseId: "0313", sets: 3, reps: 10, repsMin: 8, weightKg: 30, incKg: 2.5)
+        let history = [SessionResult(date: .now, weightKg: 30, reps: [10, 10, 10])]
+        let plain = SessionPlanner.suggestion(for: item, policy: .double, profile: Profile(), exercise: curl,
+                                              history: history)
+        let fitted = SessionPlanner.suggestion(for: item, policy: .double, profile: Profile(), exercise: curl,
+                                               history: history, loads: .fixed(kg: [20, 24]))
+        #expect(plain.weightKg > 24)
+        #expect(fitted.weightKg == 24)
+        #expect(fitted.reps == plain.reps + AvailableLoads.extraRepsAtHeaviest)
+
+        let entry = SessionPlanner.entry(for: item, policy: .double, profile: Profile(), exercise: curl,
+                                         history: history, loads: .fixed(kg: [20, 24]))
+        #expect(entry.sets.allSatisfy { $0.weightKg == 24 && $0.reps == plain.reps + 2 })
+    }
+
+    @Test func nilLoadsAreUnchanged() {
+        let curl = library.exercise("0313")
+        let item = RoutineExercise(exerciseId: "0313", sets: 3, reps: 10, repsMin: 8, weightKg: 30, incKg: 2.5)
+        let history = [SessionResult(date: .now, weightKg: 30, reps: [10, 10, 10])]
+        let without = SessionPlanner.entry(for: item, policy: .double, profile: Profile(), exercise: curl,
+                                           history: history)
+        let withNil = SessionPlanner.entry(for: item, policy: .double, profile: Profile(), exercise: curl,
+                                           history: history, loads: nil)
+        #expect(without.sets.map(\.weightKg) == withNil.sets.map(\.weightKg))
+        #expect(without.sets.map(\.reps) == withNil.sets.map(\.reps))
+        let plates = SessionPlanner.entry(for: item, policy: .double, profile: Profile(), exercise: curl,
+                                          history: history, loads: .plates)
+        #expect(plates.sets.map(\.weightKg) == without.sets.map(\.weightKg))
+    }
+
+    @Test func warmupsUseTheFittedWeight() {
+        let bench = library.exercise("0025")
+        let item = RoutineExercise(exerciseId: "0025", sets: 3, reps: 8, weightKg: 140)
+        let history = [SessionResult(date: .now, weightKg: 140, reps: [8, 8, 8])]
+        let entry = SessionPlanner.entry(for: item, policy: .double, profile: Profile(), exercise: bench,
+                                         history: history, loads: .fixed(kg: [60, 100]))
+        let working = entry.sets.filter { !$0.warmup }
+        #expect(working.allSatisfy { $0.weightKg == 100 })
+        let expected = WarmupGenerator.sets(workingKg: 100, barKg: Profile().barKg,
+                                            rounder: LoadRounding.rounder(for: bench, profile: Profile()))
+        #expect(entry.sets.filter(\.warmup).map(\.weightKg) == expected.map(\.weightKg))
+    }
+
+    @Test func startUsesLoadsPerExercise() {
+        let routine = Routine(name: "KB", exercises: [
+            RoutineExercise(exerciseId: "0313", sets: 3, reps: 10, repsMin: 8, weightKg: 30, incKg: 2.5)])
+        let history = ["0313": [SessionResult(date: .now, weightKg: 30, reps: [10, 10, 10])]]
+        let workout = SessionPlanner.start(routine: routine, profile: Profile(), library: library, now: .now,
+                                           history: { history[$0] ?? [] },
+                                           loads: { $0 == "0313" ? .fixed(kg: [20, 24]) : nil })
+        #expect(workout.entries[0].sets.allSatisfy { $0.weightKg == 24 })
     }
 }

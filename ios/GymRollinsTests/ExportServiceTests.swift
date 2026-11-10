@@ -65,6 +65,13 @@ import Testing
         #expect(decoded.profile.unit == .lb)
     }
 
+    @Test func jsonBackupKeepsTheNotesEndDate() throws {
+        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
+        try profiles.save(Profile(limits: "Knee", limitsUntil: until))
+        let decoded = try JSONDecoder.gymRollinsISO8601().decode(ExportBackup.self, from: service.backupData())
+        #expect(decoded.profile.limitsUntil == until)
+    }
+
     @Test func jsonBackupIncludesWeeklyTargets() throws {
         let targets = MuscleTargetRepository(context: container.mainContext)
         try targets.set(.chest, SetTargetRange(min: 12, max: 18))

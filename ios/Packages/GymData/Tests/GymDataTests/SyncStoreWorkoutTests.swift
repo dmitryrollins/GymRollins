@@ -41,6 +41,70 @@ func sampleWorkout(id: UUID = UUID(), name: String = "Push", at date: Date, weig
         #expect(row.clientUpdatedAt == f.clock.now)
     }
 
+    /// Plan 32: who added a workout comes with the pull, stays through the owner's edits, and is never pushed.
+    @Test func anAgentsNameComesWithThePullAndOutlastsALocalEdit() throws {
+        defer { f.tearDown() }
+        let w = sampleWorkout(at: f.clock.now)
+        let pulled = SyncRow(value: WorkoutSnapshot(workout: w, records: [], volumeKg: WorkoutMetrics.volumeKg(w),
+                                                    addedBy: "Muse"),
+                             clientUpdatedAt: f.clock.now, serverUpdatedAt: f.clock.now)
+        try f.store.applyRemote(workouts: [pulled])
+        #expect(try f.workouts.addedBy(w.id) == "Muse")
+        #expect(try f.store.dirtyWorkouts().isEmpty)
+
+        f.clock.advance()
+        try f.workouts.save(sampleWorkout(id: w.id, name: "Upper", at: w.startedAt, weightKg: 65))
+        #expect(try f.workouts.addedBy(w.id) == "Muse")
+        let dirty = try #require(try f.store.dirtyWorkouts().first)
+        #expect(dirty.value.workout.name == "Upper")
+        #expect(dirty.value.addedBy == nil) // the push leaves it to the server
+    }
+
+    /// The server never clears added_by, so a row without one (a server from before plan 32) keeps the stored name.
+    @Test func aRowWithoutAnAgentKeepsTheStoredOne() throws {
+        defer { f.tearDown() }
+        let w = sampleWorkout(at: f.clock.now)
+        try f.store.applyRemote(workouts: [SyncRow(value: WorkoutSnapshot(workout: w, records: [], volumeKg: 0,
+                                                                          addedBy: "Muse"),
+                                                   clientUpdatedAt: f.clock.now, serverUpdatedAt: f.clock.now)])
+        f.clock.advance()
+        let renamed = sampleWorkout(id: w.id, name: "Upper", at: w.startedAt)
+        try f.store.applyRemote(workouts: [SyncRow(value: WorkoutSnapshot(workout: renamed, records: [], volumeKg: 0),
+                                                   clientUpdatedAt: f.clock.now, serverUpdatedAt: f.clock.now)])
+        #expect(try f.workouts.workout(w.id)?.name == "Upper")
+        #expect(try f.workouts.addedBy(w.id) == "Muse")
+    }
+
+    @Test func theOwnersWorkoutsNameNoAgentAndADeletedOneNone() throws {
+        defer { f.tearDown() }
+        let mine = sampleWorkout(at: f.clock.now)
+        try f.workouts.save(mine)
+        #expect(try f.workouts.addedBy(mine.id) == nil)
+        #expect(try f.workouts.addedBy(UUID()) == nil)
+
+        let theirs = sampleWorkout(at: f.clock.now.addingTimeInterval(-86_400))
+        try f.store.applyRemote(workouts: [SyncRow(value: WorkoutSnapshot(workout: theirs, records: [], volumeKg: 0,
+                                                                          addedBy: "Muse"),
+                                                   clientUpdatedAt: f.clock.now, serverUpdatedAt: f.clock.now)])
+        try f.workouts.delete(theirs.id)
+        #expect(try f.workouts.addedBy(theirs.id) == nil)
+    }
+
+    /// "Keep other" takes the other version whole, the agent's name included.
+    @Test func keepingTheOtherVersionTakesItsAgent() throws {
+        defer { f.tearDown() }
+        let w = sampleWorkout(at: f.clock.now)
+        try savedAndSynced(w, server: f.clock.now)
+        f.clock.advance()
+        try f.workouts.save(sampleWorkout(id: w.id, name: "Mine", at: w.startedAt))
+        let theirs = sampleWorkout(id: w.id, name: "Theirs", at: w.startedAt)
+        let remote = SyncRow(value: WorkoutSnapshot(workout: theirs, records: [], volumeKg: 0, addedBy: "Muse"),
+                             clientUpdatedAt: f.clock.now, serverUpdatedAt: f.clock.now.addingTimeInterval(1))
+        try f.store.resolveWorkoutConflict(id: w.id, keepLocal: false, remote: remote)
+        #expect(try f.workouts.workout(w.id)?.name == "Theirs")
+        #expect(try f.workouts.addedBy(w.id) == "Muse")
+    }
+
     // Rule 5
     @Test func activeWorkoutIsNeverPushedNorOverwritten() throws {
         defer { f.tearDown() }

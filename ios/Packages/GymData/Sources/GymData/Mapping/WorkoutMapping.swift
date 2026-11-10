@@ -5,7 +5,8 @@ import SwiftData
 extension WorkoutRecord {
     public var value: Workout {
         Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSeconds, routineId: routineId,
-                name: name, entries: entryValues, source: WorkoutSource(rawValue: sourceRaw) ?? .app, note: note)
+                name: name, entries: entryValues, source: WorkoutSource(rawValue: sourceRaw) ?? .app, note: note,
+                gymId: gymId)
     }
 
     /// The entries in position order: from the `entriesData` cache when present, else from the relationship.
@@ -32,12 +33,12 @@ extension WorkoutRecord {
 extension WorkoutEntryRecord {
     public var value: WorkoutEntry {
         WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets.sorted { $0.position < $1.position }.map(\.value),
-                     note: note, supersetGroup: supersetGroup)
+                     note: note, supersetGroup: supersetGroup, gymListingId: gymListingId)
     }
 
     public convenience init(_ value: WorkoutEntry, position: Int) {
         self.init(id: value.id, exerciseId: value.exerciseId, position: position, note: value.note,
-                  supersetGroup: value.supersetGroup)
+                  supersetGroup: value.supersetGroup, gymListingId: value.gymListingId)
         self.sets = value.sets.enumerated().map { SetRecord($1, position: $0) }
     }
 }

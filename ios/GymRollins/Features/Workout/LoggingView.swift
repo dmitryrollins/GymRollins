@@ -70,7 +70,7 @@ struct LoggingView: View {
                         Spacer()
                         // iOS 26's confirm role draws the system's round, tinted checkmark above the keyboard.
                         Button("Done", systemImage: "checkmark", role: .confirm) { focus = nil }
-                            .tint(Theme.primaryFill)
+                            .tint(Theme.primaryButtonFill)
                             .accessibilityIdentifier("keyboard.done")
                     }
                 }
@@ -211,7 +211,7 @@ struct LoggingView: View {
 
     private func setsSection(_ sets: [WorkoutSet]) -> some View {
         let unit = env.profile.unit
-        let isBarbell = SessionPlanner.barbellEquipment.contains(exercise?.equipment ?? "")
+        let isBarbell = exercise?.isBarbellLoaded ?? false
         let mode = SetFieldFormat.mode(exercise: exercise, sets: sets)
         let activeId = activeSet(sets)?.id
         let ordinals = SetOrdinal.ordinals(for: sets)
@@ -254,6 +254,7 @@ struct LoggingView: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(!model.canAddSet)
         .padding(.top, 4)
         .accessibilityIdentifier("logging.addSet")
     }
@@ -318,7 +319,8 @@ extension LoggingView {
                         confirmingNever: $confirmingNever, error: $menuError,
                         onDetails: { detailExercise = exerciseId }, onHistory: { showHistory = true },
                         onReplace: { showSwap = true }, onReset: { resetSets(editor, itemId) },
-                        onDelete: { editor.delete(itemId) })
+                        onDelete: { editor.delete(itemId) },
+                        usePlanned: plannedAnyway(editor, itemId))
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -327,6 +329,13 @@ extension LoggingView {
             .accessibilityLabel("More options")
             .accessibilityIdentifier("logging.options")
         }
+    }
+
+    /// "Use <planned> anyway" for an item the gym swapped.
+    private func plannedAnyway(_ editor: TodayPlanEditor, _ itemId: UUID) -> (name: String, action: () -> Void)? {
+        guard let planned = editor.plan?.gymSwaps[itemId] else { return nil }
+        let name = DisplayName.of(env.library.exercise(planned.exerciseId)?.name ?? planned.exerciseId)
+        return (name, { editor.usePlanned(itemId) })
     }
 
     /// Back arrow on the left, where iOS puts Back (the screen is pushed, not presented).
@@ -378,7 +387,7 @@ extension LoggingView {
     private func swap(to candidate: Exercise) {
         drafts = [:]
         let history = (try? env.workouts.history(exerciseId: candidate.id, limit: 5)) ?? []
-        model.swap(to: candidate, profile: env.profile, history: history)
+        model.swap(to: candidate, profile: env.profile, history: history, loads: env.gymLoads(candidate.id))
     }
 
     private func resetSets(_ editor: TodayPlanEditor, _ itemId: UUID) {

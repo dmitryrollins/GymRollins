@@ -14,8 +14,9 @@ public enum SyncStatus: Equatable, Sendable {
 /// Offline-first sync: pushes dirty rows (profile, custom exercises, exercise preferences, routines, weekdays, weekly
 /// targets, bodyweight, then workouts
 /// one RPC each) and proposal resolutions, then pulls each entity since its cursor and applies it through `SyncStore`. Only one sync (or
-/// conflict resolution) runs at a time; network failures leave local data untouched and report `.offline`. A row the
-/// server refuses for its values is recorded as a `SyncFailure` and skipped, so it can't block the rest of the round.
+/// conflict resolution) runs at a time; network failures, a busy server and rate limits leave local data untouched and
+/// report `.offline`. A row the server refuses for its values is recorded as a `SyncFailure` and skipped, so it can't
+/// block the rest of the round.
 /// After the pull, pending proposals are auto-applied when the owner allows it (`autoApply`) and pushed at once.
 /// `shutdown()` (sign-out, account switch/deletion) stops the engine: after it, no response can reach the store.
 @MainActor @Observable
@@ -28,6 +29,8 @@ public final class SyncEngine {
 
     @ObservationIgnored let store: SyncStore
     @ObservationIgnored let transport: any SyncTransport
+    /// The phone's gym photos; nil sends synced listings without their picture and downloads none.
+    @ObservationIgnored let photos: (any GymPhotoFiles)?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var running = false
     @ObservationIgnored private var round: Task<Void, Never>?
@@ -37,10 +40,11 @@ public final class SyncEngine {
     /// Runs after each pull (e.g. `ProposalService.autoApplyPending`); returns how many proposals it applied.
     @ObservationIgnored let autoApply: (@MainActor () throws -> Int)?
 
-    public init(store: SyncStore, transport: any SyncTransport, now: @escaping () -> Date = Date.init,
-                autoApply: (@MainActor () throws -> Int)? = nil) {
+    public init(store: SyncStore, transport: any SyncTransport, photos: (any GymPhotoFiles)? = nil,
+                now: @escaping () -> Date = Date.init, autoApply: (@MainActor () throws -> Int)? = nil) {
         self.store = store
         self.transport = transport
+        self.photos = photos
         self.now = now
         self.autoApply = autoApply
     }
@@ -148,9 +152,28 @@ public final class SyncEngine {
         try await transport.lastMcpUse()
     }
 
-    /// Revokes the OAuth grants this account gave (Claude's connector); returns how many.
+    /// Revokes the OAuth grants this account gave, every agent's (Disconnect all); returns how many.
     public func revokeOAuthGrants() async throws -> Int {
         try await transport.revokeOAuthGrants()
+    }
+
+    /// The agents connected to this account, newest connection first (Settings › AI agents).
+    public func connectedAgents() async throws -> [ConnectedAgent] {
+        try await transport.connectedAgents()
+    }
+
+    /// Disconnects one agent; the others keep their access.
+    public func disconnectAgent(clientId: String) async throws {
+        try await transport.disconnectAgent(clientId: clientId)
+    }
+
+    /// The Claude sign-in waiting with `code` (Approve a connection).
+    public func connectRequest(code: String) async throws -> ConnectRequest {
+        try await transport.connectRequest(code: code)
+    }
+
+    public func decideConnect(code: String, decision: ConnectDecision) async throws {
+        try await transport.decideConnect(code: code, decision: decision)
     }
 
     func noteRemoteChanges() { remoteChangeCount += 1 }
@@ -177,7 +200,8 @@ public final class SyncEngine {
     }
 
     static func status(for error: Error) -> SyncStatus {
-        if error is URLError || (error as NSError).domain == NSURLErrorDomain { return .offline }
+        // Network failures, a busy server (5xx) and rate limits (429) are worth trying again, not reporting.
+        if ApiError.isOffline(error) { return .offline }
         return .error("Couldn't sync. Your data is safe on this iPhone; we'll try again later.")
     }
 }

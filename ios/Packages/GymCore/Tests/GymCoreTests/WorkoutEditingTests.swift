@@ -10,6 +10,29 @@ import Testing
     var curl: WorkoutEntry { WorkoutEntry(exerciseId: "0070", sets: [WorkoutSet(weightKg: 24.9, reps: 10)]) }
     var workout: Workout { Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push", entries: [bench, curl]) }
 
+    @Test func editingKeepsTheGymAndEachEntrysListing() {
+        let gym = UUID(), listing = UUID()
+        let linked = Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push", entries: [
+            WorkoutEntry(exerciseId: "0025", sets: [s1], gymListingId: listing), curl,
+        ], gymId: gym)
+        let entry = linked.entries[0]
+        let edited = linked.updatingSet(entryId: entry.id, setId: s1.id) { $0.completing(at: Date()) }
+            .settingNote(entryId: entry.id, note: "slow")
+            .appendingSet(entryId: entry.id)
+            .finished(at: Date(timeIntervalSince1970: 60), discardingUndone: false)
+        #expect(edited.gymId == gym)
+        #expect(edited.entries[0].gymListingId == listing)
+        #expect(edited.entries[1].gymListingId == nil)
+    }
+
+    @Test func replacingAnExerciseDropsTheListingOfTheOldOne() {
+        let linked = WorkoutEntry(exerciseId: "0025", sets: [s1], gymListingId: UUID())
+        let w = Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push", entries: [linked], gymId: UUID())
+        let swapped = w.replacingExercise(entryId: linked.id, exerciseId: "0070")
+        #expect(swapped.entries[0].exerciseId == "0070" && swapped.entries[0].gymListingId == nil)
+        #expect(swapped.gymId == w.gymId)
+    }
+
     @Test func updatingSetReturnsNewWorkout() {
         let w = workout
         let e = w.entries[0]
@@ -79,5 +102,40 @@ import Testing
         #expect(cardio.minutes == 25 && cardio.distanceM == 5_000 && cardio.sec == 30 && cardio.warmup)
         let single = set.with(multiplier: 1)
         #expect(single.multiplier == 1 && single.completedAt == set.completedAt && single.reps == 8)
+    }
+
+    /// The server stores at most 50 exercises a workout and 50 sets an exercise (server/src/sync/workouts.ts), so
+    /// editing stops there too.
+    @Test func setsAndExercisesStopAtTheServersCaps() {
+        let full = WorkoutEntry(exerciseId: "0025",
+                                sets: (0..<DomainLimits.entrySetsMax).map { _ in WorkoutSet(weightKg: 60, reps: 8) })
+        let short = WorkoutEntry(exerciseId: "0070", sets: [WorkoutSet(weightKg: 24.9, reps: 10)])
+        let w = Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push", entries: [full, short])
+        #expect(!w.canAddSet(entryId: full.id))
+        #expect(w.appendingSet(entryId: full.id).entries[0].sets.count == 50)
+        #expect(w.insertingWarmup(entryId: full.id, set: warm).entries[0].sets.count == 50)
+        #expect(w.canAddSet(entryId: short.id))
+        #expect(w.appendingSet(entryId: short.id).entries[1].sets.count == 2)
+        #expect(!w.canAddSet(entryId: UUID()))
+
+        let more = (0..<60).map { WorkoutEntry(exerciseId: "e\($0)", sets: []) }
+        let crowded = w.appendingEntries(more)
+        #expect(crowded.entries.count == DomainLimits.workoutEntriesMax)
+        #expect(crowded.entries.last?.exerciseId == "e47")
+        #expect(!crowded.canAddEntries)
+        #expect(crowded.appendingEntries([WorkoutEntry(exerciseId: "x", sets: [])]).entries.count == 50)
+        #expect(w.canAddEntries)
+    }
+
+    /// How many more exercises Add exercise may pick: the room under the cap, never negative.
+    @Test func entriesLeftIsTheRoomUnderTheCap() {
+        let sized = { (n: Int) in
+            Workout(startedAt: Date(timeIntervalSince1970: 0), name: "Push",
+                    entries: (0..<n).map { WorkoutEntry(exerciseId: "e\($0)", sets: []) })
+        }
+        #expect(sized(0).entriesLeft == DomainLimits.workoutEntriesMax)
+        #expect(sized(45).entriesLeft == 5 && sized(45).canAddEntries)
+        #expect(sized(50).entriesLeft == 0 && !sized(50).canAddEntries)
+        #expect(sized(60).entriesLeft == 0) // a workout stored before the cap
     }
 }

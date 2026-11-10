@@ -14,6 +14,8 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
     public let trainingDays: Int
     public let experience: String
     public let limits: String
+    /// Postgres `date`, `yyyy-MM-dd`: the injury note's end date.
+    public let limitsUntil: String?
     public let deloadPct: Double
     public let barKg: Double
     public let platesKg: [Double]
@@ -21,8 +23,11 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
     public let mcpReadWorkouts: Bool
     public let mcpReadBody: Bool
     public let mcpReadPlan: Bool
+    public let mcpReadGyms: Bool
     public let mcpPropose: Bool
     public let mcpAutoApply: Bool
+    /// Plan 32's Add workouts (`mcp_log_workouts`): agents may add past workouts.
+    public let mcpLogWorkouts: Bool
     /// `male` / `female` or null (strength levels only).
     public let sex: String?
     public let birthYear: Int?
@@ -31,13 +36,46 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
 
     enum CodingKeys: String, CodingKey {
         case unit, experience, limits
+        case limitsUntil = "limits_until"
         case restSec = "rest_sec", warmupRestSec = "warmup_rest_sec", heightCm = "height_cm"
         case goalWeightKg = "goal_weight_kg", goalDate = "goal_date", trainingDays = "training_days"
         case deloadPct = "deload_pct", barKg = "bar_kg", platesKg = "plates_kg", dumbbellStepKg = "dumbbell_step_kg"
         case mcpReadWorkouts = "mcp_read_workouts", mcpReadBody = "mcp_read_body", mcpPropose = "mcp_propose"
-        case mcpReadPlan = "mcp_read_plan"
+        case mcpReadPlan = "mcp_read_plan", mcpReadGyms = "mcp_read_gyms"
         case sex, birthYear = "birth_year"
         case mcpAutoApply = "mcp_auto_apply", clientUpdatedAt = "client_updated_at", updatedAt = "updated_at"
+        case mcpLogWorkouts = "mcp_log_workouts"
+    }
+
+    /// Synthesized decoding, except that a row without `mcp_read_gyms` reads as on and one without `mcp_log_workouts`
+    /// as off, each column's default.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        unit = try c.decode(String.self, forKey: .unit)
+        restSec = try c.decode(Int.self, forKey: .restSec)
+        warmupRestSec = try c.decode(Int.self, forKey: .warmupRestSec)
+        heightCm = try c.decodeIfPresent(Double.self, forKey: .heightCm)
+        goalWeightKg = try c.decodeIfPresent(Double.self, forKey: .goalWeightKg)
+        goalDate = try c.decodeIfPresent(String.self, forKey: .goalDate)
+        trainingDays = try c.decode(Int.self, forKey: .trainingDays)
+        experience = try c.decode(String.self, forKey: .experience)
+        limits = try c.decode(String.self, forKey: .limits)
+        limitsUntil = try c.decodeIfPresent(String.self, forKey: .limitsUntil)
+        deloadPct = try c.decode(Double.self, forKey: .deloadPct)
+        barKg = try c.decode(Double.self, forKey: .barKg)
+        platesKg = try c.decode([Double].self, forKey: .platesKg)
+        dumbbellStepKg = try c.decode(Double.self, forKey: .dumbbellStepKg)
+        mcpReadWorkouts = try c.decode(Bool.self, forKey: .mcpReadWorkouts)
+        mcpReadBody = try c.decode(Bool.self, forKey: .mcpReadBody)
+        mcpReadPlan = try c.decode(Bool.self, forKey: .mcpReadPlan)
+        mcpReadGyms = try c.decodeIfPresent(Bool.self, forKey: .mcpReadGyms) ?? true
+        mcpPropose = try c.decode(Bool.self, forKey: .mcpPropose)
+        mcpAutoApply = try c.decode(Bool.self, forKey: .mcpAutoApply)
+        mcpLogWorkouts = try c.decodeIfPresent(Bool.self, forKey: .mcpLogWorkouts) ?? false
+        sex = try c.decodeIfPresent(String.self, forKey: .sex)
+        birthYear = try c.decodeIfPresent(Int.self, forKey: .birthYear)
+        clientUpdatedAt = try c.decode(Date.self, forKey: .clientUpdatedAt)
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 
     public init(_ row: SyncRow<ProfileSnapshot>) {
@@ -51,6 +89,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         trainingDays = p.trainingDays
         experience = p.experience
         limits = p.limits
+        limitsUntil = p.limitsUntil.map { SyncDay.format($0) }
         deloadPct = p.deloadPct
         barKg = p.barKg
         platesKg = p.platesKg
@@ -58,8 +97,10 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         mcpReadWorkouts = p.mcpReadWorkouts
         mcpReadBody = p.mcpReadBody
         mcpReadPlan = p.mcpReadPlan
+        mcpReadGyms = p.mcpReadGyms
         mcpPropose = p.mcpPropose
         mcpAutoApply = p.mcpAutoApply
+        mcpLogWorkouts = p.mcpLogWorkouts
         sex = p.sex?.rawValue
         birthYear = p.birthYear
         clientUpdatedAt = row.clientUpdatedAt
@@ -77,6 +118,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         p.trainingDays = trainingDays
         p.experience = experience
         p.limits = limits
+        p.limitsUntil = limitsUntil.flatMap { SyncDay.parse($0) }
         p.deloadPct = deloadPct
         p.barKg = barKg
         p.platesKg = platesKg
@@ -84,8 +126,10 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         p.mcpReadWorkouts = mcpReadWorkouts
         p.mcpReadBody = mcpReadBody
         p.mcpReadPlan = mcpReadPlan
+        p.mcpReadGyms = mcpReadGyms
         p.mcpPropose = mcpPropose
         p.mcpAutoApply = mcpAutoApply
+        p.mcpLogWorkouts = mcpLogWorkouts
         p.sex = sex.flatMap(ProfileSex.init(rawValue:))
         p.birthYear = birthYear
         return SyncRow(value: p, clientUpdatedAt: clientUpdatedAt, serverUpdatedAt: updatedAt)
@@ -104,6 +148,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         try c.encode(trainingDays, forKey: .trainingDays)
         try c.encode(experience, forKey: .experience)
         try c.encode(limits, forKey: .limits)
+        try c.encode(limitsUntil, forKey: .limitsUntil)
         try c.encode(deloadPct, forKey: .deloadPct)
         try c.encode(barKg, forKey: .barKg)
         try c.encode(platesKg, forKey: .platesKg)
@@ -111,8 +156,10 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         try c.encode(mcpReadWorkouts, forKey: .mcpReadWorkouts)
         try c.encode(mcpReadBody, forKey: .mcpReadBody)
         try c.encode(mcpReadPlan, forKey: .mcpReadPlan)
+        try c.encode(mcpReadGyms, forKey: .mcpReadGyms)
         try c.encode(mcpPropose, forKey: .mcpPropose)
         try c.encode(mcpAutoApply, forKey: .mcpAutoApply)
+        try c.encode(mcpLogWorkouts, forKey: .mcpLogWorkouts)
         try c.encode(sex, forKey: .sex)
         try c.encode(birthYear, forKey: .birthYear)
         try c.encode(clientUpdatedAt, forKey: .clientUpdatedAt)

@@ -18,12 +18,14 @@ public final class ProfileRepository {
         return Profile(unit: unit, restSec: r.restSec, warmupRestSec: r.warmupRestSec,
                        heightCm: r.heightCm, goalWeightKg: r.goalWeightKg, goalDate: r.goalDate,
                        trainingDays: r.trainingDays, experience: r.experience, limits: r.limits,
+                       limitsUntil: r.limitsUntil,
                        deloadPct: r.deloadPct, barKg: r.barKg,
                        plateInventory: PlateInventory(unit: unit,
                                                       bar: UnitConverter.fromKg(r.barKg, to: unit).rounded(toPlaces: 2),
                                                       plates: r.platesKg.map { UnitConverter.fromKg($0, to: unit).rounded(toPlaces: 2) }),
                        dumbbellStepKg: r.dumbbellStepKg, mcpReadWorkouts: r.mcpReadWorkouts, mcpReadBody: r.mcpReadBody,
-                       mcpReadPlan: r.mcpReadPlan, mcpPropose: r.mcpPropose, mcpAutoApply: r.mcpAutoApply,
+                       mcpReadPlan: r.mcpReadPlan, mcpReadGyms: r.mcpReadGyms, mcpPropose: r.mcpPropose,
+                       mcpAutoApply: r.mcpAutoApply, mcpLogWorkouts: r.mcpLogWorkouts,
                        sex: r.sexRaw.flatMap(ProfileSex.init(rawValue:)), birthYear: r.birthYear)
     }
 
@@ -47,6 +49,7 @@ public final class ProfileRepository {
         r.trainingDays = p.trainingDays
         r.experience = p.experience
         r.limits = p.limits
+        r.limitsUntil = p.limitsUntil
         r.deloadPct = p.deloadPct
         // The inventory's bar is what the plate calculator shows; persist it (in kg) so `barKg` and the reloaded
         // inventory can never disagree (e.g. a kg inventory saved next to the default 45 lb `barKg`).
@@ -56,8 +59,10 @@ public final class ProfileRepository {
         r.mcpReadWorkouts = p.mcpReadWorkouts
         r.mcpReadBody = p.mcpReadBody
         r.mcpReadPlan = p.mcpReadPlan
+        r.mcpReadGyms = p.mcpReadGyms
         r.mcpPropose = p.mcpPropose
         r.mcpAutoApply = p.mcpAutoApply
+        r.mcpLogWorkouts = p.mcpLogWorkouts
         r.updatedAt = now()
         r.dirty = true
         try context.save()
@@ -82,9 +87,9 @@ public final class ProfileRepository {
         try context.save()
     }
 
-    /// Updates only Claude's permissions (no other field is rewritten), creating the profile if needed.
-    public func setMcpPermissions(readWorkouts: Bool, readBody: Bool, readPlan: Bool, propose: Bool,
-                                  autoApply: Bool) throws {
+    /// Updates only what agents may do (no other field is rewritten), creating the profile if needed.
+    public func setMcpPermissions(readWorkouts: Bool, readBody: Bool, readPlan: Bool, readGyms: Bool,
+                                  propose: Bool, autoApply: Bool, logWorkouts: Bool) throws {
         let r = try record() ?? {
             let new = ProfileRecord(now: now())
             context.insert(new)
@@ -93,8 +98,10 @@ public final class ProfileRepository {
         r.mcpReadWorkouts = readWorkouts
         r.mcpReadBody = readBody
         r.mcpReadPlan = readPlan
+        r.mcpReadGyms = readGyms
         r.mcpPropose = propose
         r.mcpAutoApply = autoApply
+        r.mcpLogWorkouts = logWorkouts
         r.updatedAt = now()
         r.dirty = true
         try context.save()

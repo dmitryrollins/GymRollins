@@ -1,60 +1,80 @@
 import Foundation
 import GymCore
 import GymData
-import Supabase
 import Testing
 @testable import GymSync
 
-/// Proposals and the MCP audit read over the real local stack, as the owner (not an MCP client).
+/// Claude's proposals and last use on the local Worker, read and resolved as the app does: Claude (a real OAuth client,
+/// `ClaudeTestClient`) proposes through `/mcp`, the owner's transport pulls and resolves it, and Claude then sees it
+/// applied. A row the app can't read is covered by `ApiClaudeTransportTests` (the server's tools never write one).
 @MainActor
-@Suite(.enabled(if: supabaseConfigured, "Set SUPABASE_URL and SUPABASE_ANON_KEY to run against local Supabase"))
+@Suite(.enabled(if: apiConfigured, "Set API_URL to run against a local Worker"))
 struct ProposalTransportTests {
-    private struct NewProposal: Encodable {
-        let summary: String
-        let changes: [PlanChange]
-    }
-
-    private struct StatusRow: Decodable {
-        let status: String
-        let applied_change_ids: [String] // swiftlint:disable:this identifier_name
-    }
-
-    @Test func pendingResolveAndLastUse() async throws {
+    @Test func aProposalFromClaudeIsPulledResolvedAndSeenApplied() async throws {
         let user = try await Account.signUp()
         let transport = user.transport
-        let client = user.auth.client
-        let routineId = UUID()
-        try await client.from("proposals").insert(NewProposal(summary: "Heavier bench", changes: [
-            PlanChange(id: "c1", type: .weight, routineId: routineId.uuidString.lowercased(), exerciseId: "0025",
-                       weightKg: 65),
-        ])).execute()
+        #expect(try await transport.lastMcpUse() == nil)
+        let claude = ClaudeTestClient(base: try IntegrationEnv.config().baseURL)
+        let tokens = try await claude.connect { code in
+            try await transport.decideConnect(code: code, decision: .approve)
+        }
 
-        // A row the app can't read (unknown change type) comes back malformed; the valid one still decodes.
-        try await client.from("proposals").insert([
-            "summary": AnyJSON.string("From the future"),
-            "changes": .array([.object(["id": .string("c1"), "type": .string("teleport")])]),
-        ]).execute()
-
+        let proposed = try await claude.callTool(tokens.access, "propose_plan_changes", [
+            "summary": "Add a Push day",
+            "changes": [["id": "c1", "type": "add-routine", "routineId": "new-push", "name": "Push"]],
+        ])
+        #expect(!proposed.isError)
         let pulled = try await transport.pendingProposals()
-        let pending = pulled.compactMap { if case .valid(let dto) = $0 { dto } else { nil } }
-        let malformed = pulled.compactMap { if case .malformed(let bad) = $0 { bad } else { nil } }
-        #expect(malformed.count == 1 && malformed.first?.message.contains("changes") == true)
-        let proposal = try #require(pending.first)
-        #expect(pending.count == 1 && proposal.changes.first?.weightKg == 65)
-        #expect(proposal.toDomain().status == .pending)
+        guard case .valid(let proposal) = try #require(pulled.first), pulled.count == 1 else {
+            Issue.record("expected one valid proposal, got \(pulled)")
+            return
+        }
+        #expect(proposal.summary == "Add a Push day" && proposal.source == "claude")
+        #expect(proposal.changes.first?.type == .addRoutine && proposal.toDomain().status == .pending)
 
         try await transport.resolveProposal(id: proposal.id, status: "applied", appliedChangeIds: ["c1"],
                                             at: max(Date(), proposal.createdAt))
-        #expect(try await transport.pendingProposals().count == 1) // only the malformed one is left
-        let row: [StatusRow] = try await client.from("proposals").select("status,applied_change_ids")
-            .eq("id", value: proposal.id.uuidString.lowercased()).execute().value
-        #expect(row.first?.status == "applied" && row.first?.applied_change_ids == ["c1"])
+        #expect(try await transport.pendingProposals().isEmpty)
+        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposal.id.uuidString.lowercased()])
+        #expect(seen.json["status"] as? String == "applied")
+        #expect(seen.json["applied_change_ids"] as? [String] == ["c1"])
 
-        #expect(try await transport.lastMcpUse() == nil)
-        try await client.from("mcp_audit").insert(["tool": AnyJSON.string("get_plan"), "ok": .bool(true)]).execute()
         let last = try #require(try await transport.lastMcpUse())
         #expect(abs(last.timeIntervalSinceNow) < 120)
+        try await user.deleteAccount()
+    }
 
+    @Test func anOlderResolutionLeavesTheNewerOne() async throws {
+        let user = try await Account.signUp()
+        let transport = user.transport
+        let claude = ClaudeTestClient(base: try IntegrationEnv.config().baseURL)
+        let tokens = try await claude.connect { code in
+            try await transport.decideConnect(code: code, decision: .approve)
+        }
+        _ = try await claude.callTool(tokens.access, "propose_plan_changes", [
+            "summary": "Add a Pull day",
+            "changes": [["id": "c1", "type": "add-routine", "routineId": "new-pull", "name": "Pull"]],
+        ])
+        // Added after review: a row that isn't valid fails the test, instead of passing it without a check.
+        let pulled = try #require(try await transport.pendingProposals().first)
+        guard case .valid(let proposal) = pulled else {
+            Issue.record("expected a valid proposal, got \(pulled)")
+            return
+        }
+        let later = max(Date(), proposal.createdAt).addingTimeInterval(60)
+        try await transport.resolveProposal(id: proposal.id, status: "dismissed", appliedChangeIds: [], at: later)
+        try await transport.resolveProposal(id: proposal.id, status: "applied", appliedChangeIds: ["c1"],
+                                            at: later.addingTimeInterval(-30))
+        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposal.id.uuidString.lowercased()])
+        #expect(seen.json["status"] as? String == "dismissed")
+        try await user.deleteAccount()
+    }
+
+    /// Added after review: the Worker's answer for a proposal it doesn't have (`no_such_proposal`) is the one 404 the
+    /// app counts as sent.
+    @Test func aResolutionOfAProposalTheServerLacksCountsAsSent() async throws {
+        let user = try await Account.signUp()
+        try await user.transport.resolveProposal(id: UUID(), status: "dismissed", appliedChangeIds: [], at: Date())
         try await user.deleteAccount()
     }
 }

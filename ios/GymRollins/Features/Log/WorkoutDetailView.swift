@@ -12,6 +12,8 @@ struct WorkoutDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var workout: Workout?
     @State private var recordCount = 0
+    /// The agent that added this workout (plan 32), read with it; nil for the owner's own.
+    @State private var addedBy: String?
     @State private var editing = false
     @State private var drafts: [SetField: String] = [:]
     /// Edited "Reps left?" ratings by set id (a nil value clears the rating), applied on Save.
@@ -51,7 +53,7 @@ struct WorkoutDetailView: View {
                     .accessibilityIdentifier("detail.cancel")
                 Button("Save", action: save)
                     .buttonStyle(.glassProminent)
-                    .tint(Theme.primaryFill)
+                    .tint(Theme.primaryButtonFill)
                     .accessibilityIdentifier("detail.save")
             } else {
                 Button { showMenu = true } label: { Image(systemName: "ellipsis") }
@@ -88,6 +90,10 @@ struct WorkoutDetailView: View {
             Text(workout.startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
                 .font(.subheadline).foregroundStyle(Theme.textSecondary)
             Text(workout.name).font(Theme.display(34)).foregroundStyle(Theme.textPrimary)
+            if let addedBy {
+                Text(AgentText.addedBy(addedBy)).font(.footnote).foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("detail.addedBy")
+            }
         }
     }
 
@@ -257,6 +263,7 @@ struct WorkoutDetailView: View {
     private func load() {
         workout = try? env.workouts.workout(workoutId)
         recordCount = (try? env.workouts.records(for: workoutId).count) ?? 0
+        addedBy = try? env.workouts.addedBy(workoutId)
     }
 
     private func startEditing() {

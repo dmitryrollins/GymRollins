@@ -1,5 +1,6 @@
 import GymCore
 import GymData
+import GymSync
 import SwiftUI
 
 /// The app's single Settings screen (mockup `Settings.dc.html`): account/sync (folded from `AccountSection`),
@@ -17,9 +18,11 @@ struct SettingsView: View {
     @State private var confirmDelete = false
     @State private var showDeleteSheet = false
     @State private var exportError: String?
+    @State private var deletion = DeletionRun()
     @State private var sharing: ExportShare?
     @State private var claudeLastUse: Date?
     @State private var claudeChecked = false
+    @State private var showModeration = false
 
     private var isSignedIn: Bool {
         if case .signedIn = env.sync.authState { return true }
@@ -35,6 +38,7 @@ struct SettingsView: View {
             Section("Account") { AccountSection() }
             trainingSection
             claudeSection
+            moderationSection
             healthSection
             dataSection
             privacySection
@@ -46,6 +50,7 @@ struct SettingsView: View {
         .tint(Theme.accent)
         .task { unit = env.profile.unit }
         .task(id: isSignedIn) { await loadClaudeLastUse() }
+        .task(id: env.sharingUserId) { await env.refreshGymAdmin() }
         .sheet(item: $sharing, onDismiss: ExportService.removeExportFiles) { share in
             ExportShareSheet(url: share.url) { sharing = nil }
                 .presentationDetents([.medium, .large])
@@ -56,6 +61,7 @@ struct SettingsView: View {
         }
         .navigationDestination(isPresented: $showPrivacy) { PrivacyPolicyView() }
         .navigationDestination(isPresented: $showCredits) { CreditsView() }
+        .navigationDestination(isPresented: $showModeration) { ModerationView() }
         .confirmationDialog("Delete your account and all its data? This can't be undone.",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Continue", role: .destructive) { showDeleteSheet = true }
@@ -63,12 +69,14 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showDeleteSheet) {
             if isSignedIn {
-                DeleteAccountSheet(identifierPrefix: "settings.delete") { runDelete { try await env.sync.deleteAccount() } }
+                DeleteAccountSheet(identifierPrefix: "settings.delete") {
+                    deletion.run(progress: "Deleting your account...") { try await env.sync.deleteAccount() }
+                }
             } else {
-                DeleteAccountSheet(message: "Every workout, plan, weigh-in and custom exercise on this iPhone will "
-                                    + "be erased. This can't be undone.", confirmTitle: "Erase All Data",
+                DeleteAccountSheet(message: "Every workout, plan, weigh-in, custom exercise, gym and equipment photo on "
+                                    + "this iPhone will be erased. This can't be undone.", confirmTitle: "Erase All Data",
                                    navigationTitle: "Erase Data", identifierPrefix: "settings.delete") {
-                    runDelete { try env.eraseAllLocalData() }
+                    deletion.run(progress: "Erasing this iPhone...") { try env.eraseAllLocalData() }
                 }
             }
         }
@@ -108,6 +116,8 @@ struct SettingsView: View {
             NavigationLink { WeeklyTargetsView() } label: { Text("Weekly targets") }
                 .accessibilityIdentifier("settings.weeklyTargets")
 
+            LimitsSettingsRow()
+
             Toggle("Warm-up sets", isOn: $autoWarmups).accessibilityIdentifier("settings.autoWarmups")
 
             Picker("Progression default", selection: $progressionRaw) {
@@ -146,19 +156,38 @@ struct SettingsView: View {
         Binding(get: { env.profile.deloadPct * 100 }, set: { save(env.profile.with(deloadPct: $0 / 100)) })
     }
 
-    // MARK: Claude
+    // MARK: AI agents
 
     private var claudeSection: some View {
-        Section("Claude") {
+        Section("AI agents") {
             NavigationLink { ClaudeConnectionView() } label: {
                 HStack {
-                    Text("Claude connection")
+                    Text("AI agents")
                     Spacer()
                     Badge(text: claudeBadge.text, kind: claudeBadge.kind)
                         .accessibilityIdentifier("settings.claude.badge")
                 }
             }
             .accessibilityIdentifier("settings.claude")
+        }
+    }
+
+    // MARK: Moderation
+
+    /// Only for admins. The server refuses everyone else, so a wrong guess here shows a message, never data.
+    @ViewBuilder
+    private var moderationSection: some View {
+        if env.gymAdmin.isAdmin {
+            Section("Moderation") {
+                Button { showModeration = true } label: {
+                    HStack {
+                        Text("Moderation").foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(Theme.textTertiary)
+                    }
+                }
+                .accessibilityIdentifier("settings.moderation")
+            }
         }
     }
 
@@ -231,10 +260,14 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("settings.privacyPolicy")
 
+            if env.sharingUserId != nil { UnblockEveryoneRow() }
+
             Button(isSignedIn ? "Delete Account and Data" : "Erase All Data on This iPhone", role: .destructive) {
                 confirmDelete = true
             }
+            .disabled(deletion.progress != nil)
             .accessibilityIdentifier("settings.delete")
+            DeletionStatusRows(run: deletion)
         }
     }
 
@@ -263,6 +296,7 @@ struct SettingsView: View {
                 }
             }
             .accessibilityIdentifier("settings.openSource")
+            ContentContactRow(email: GymConstants.contentContactEmail)
         }
     }
 
@@ -303,15 +337,6 @@ struct SettingsView: View {
             env.planChanged()
         } catch {
             AppEnvironment.log.error("Save settings failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    private func runDelete(_ action: @escaping () async throws -> Void) {
-        Task {
-            do { try await action() } catch {
-                AppEnvironment.log.error("Delete/erase failed: \(error.localizedDescription, privacy: .public)")
-                exportError = "Something went wrong. Please try again."
-            }
         }
     }
 }

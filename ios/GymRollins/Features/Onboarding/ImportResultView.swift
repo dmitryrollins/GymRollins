@@ -103,7 +103,7 @@ struct ImportResultView: View {
     }
 
     private func statsLine(_ summary: ImportSummary) -> String {
-        var parts = ["\(summary.workouts) workouts", "\(summary.sets) sets"]
+        var parts = [Self.workoutsText(summary.workouts), "\(summary.sets) sets"]
         if !summary.rowErrors.isEmpty { parts.append(SkippedRowsCard.title(count: summary.rowErrors.count)) }
         if summary.duplicatesSkipped > 0 { parts.append(Self.duplicatesText(summary.duplicatesSkipped)) }
         if let range = plan.stats.dateRange {
@@ -111,6 +111,11 @@ struct ImportResultView: View {
             parts.append("\(range.lowerBound.formatted(f)) \u{2192} \(range.upperBound.formatted(f))")
         }
         return parts.joined(separator: " \u{00B7} ")
+    }
+
+    /// "1 workout" / "3 workouts": the export's workouts, a split one counted once.
+    static func workoutsText(_ count: Int) -> String {
+        count == 1 ? "1 workout" : "\(count) workouts"
     }
 
     static func duplicatesText(_ count: Int) -> String {

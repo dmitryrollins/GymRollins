@@ -18,6 +18,19 @@ actor FakeTransport: SyncTransport {
     private var malformedProposals: [UUID: String] = [:]
     private(set) var grants: [UUID] = []
     private(set) var revokedGrants: [UUID] = []
+    /// The agents connected to the account (plan 32), newest connection first.
+    private(set) var agents: [ConnectedAgent] = []
+
+    private(set) var gyms: [UUID: GymDTO] = [:]
+    private(set) var gymListings: [UUID: GymListingDTO] = [:]
+    private var listingKinds: [UUID: String] = [:]
+    /// Private bucket contents by name.
+    private(set) var privatePhotos: [String: Data] = [:]
+    var failUploads = false
+    var failDownloads = false
+    var failDeletes = false
+    /// Names of the push and pull calls that touch gyms and workouts, in order.
+    private(set) var callLog: [String] = []
 
     private(set) var pushCalls = 0
     /// The `base_updated_at` of the last workout push (`.some(nil)` = sent without a base) and forced pushes.
@@ -28,11 +41,32 @@ actor FakeTransport: SyncTransport {
     private var failure: URLError?
     /// Lowercased ids the "database" refuses with a CHECK violation (the whole batch fails, like Postgres).
     private var rejected: Set<String> = []
+    /// The account's weigh-in cap, as server/migrations/0010_account_caps.sql keeps it: a push holding a new row past
+    /// it is refused whole (one statement), with the server's words; edits of stored rows pass.
+    private var bodyweightCap: Int?
+    static let bodyweightCapWords = "You've reached the limit of 20,000 weigh-ins on one account, deleted ones "
+        + "included. This one stays on this iPhone."
     private var holdPulls = false
     private var heldPull: CheckedContinuation<Void, Never>?
+    private var holdDownloads = false
+    private var missPhoto = false
+    private var heldDownload: CheckedContinuation<Void, Never>?
+
+    /// False makes the engine leave gyms (or proposals) out of the round, as with the API before plans 28 and 29.
+    nonisolated let servesGyms: Bool
+    nonisolated let servesProposals: Bool
+
+    init(servesGyms: Bool = true, servesProposals: Bool = true) {
+        self.servesGyms = servesGyms
+        self.servesProposals = servesProposals
+    }
 
     func fail(with error: URLError?) { failure = error }
+    func setFailUploads(_ value: Bool) { failUploads = value }
+    func setFailDownloads(_ value: Bool) { failDownloads = value }
+    func setFailDeletes(_ value: Bool) { failDeletes = value }
     func reject(ids: [String]) { rejected = Set(ids.map { $0.lowercased() }) }
+    func capBodyweight(at max: Int) { bodyweightCap = max }
 
     /// The next pull suspends until `releasePull()` (to overlap a round with sign-out).
     func holdNextPull() { holdPulls = true }
@@ -67,9 +101,16 @@ actor FakeTransport: SyncTransport {
         forced.force = true
         _ = try store(workout: forced)
     }
+    func seed(gym dto: GymDTO) throws { _ = try accept(dto, into: &gyms, key: dto.id) }
+    func seed(gymListing dto: GymListingDTO) throws {
+        listingKinds[dto.id] = dto.kindId
+        _ = try accept(dto, into: &gymListings, key: dto.id)
+    }
+    func seed(privatePhoto data: Data, name: String) { privatePhotos[name] = data }
     func seed(proposal: ProposalDTO) { proposals[proposal.id] = proposal }
     /// OAuth clients the user has granted access (e.g. Claude's connector).
     func seed(grants clientIds: [UUID]) { grants = clientIds }
+    func seed(agents list: [ConnectedAgent]) { agents = list }
     /// A pending row the app's strict decoder refuses (`changes` is raw JSON), as the server may hold.
     func seed(malformedProposal id: UUID, createdAt: Date, changes: String) {
         let stamp = SyncDate.format(createdAt)
@@ -130,13 +171,73 @@ actor FakeTransport: SyncTransport {
     func push(bodyweight dtos: [BodyweightDTO]) throws -> [RowAck] {
         try gate()
         try checkRejected(dtos.map(\.id.uuidString))
+        if let cap = bodyweightCap, bodyweight.count + Set(dtos.map(\.id)).subtracting(bodyweight.keys).count > cap {
+            throw SyncRecordRejected(code: "too_many_body_weights", message: Self.bodyweightCapWords)
+        }
         return try dtos.compactMap { dto in
             try accept(dto, into: &bodyweight, key: dto.id).map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
         }
     }
 
+    func push(gyms dtos: [GymDTO]) throws -> [RowAck] {
+        try gate()
+        callLog.append("push:gyms")
+        try checkRejected(dtos.map(\.id.uuidString))
+        return try dtos.compactMap { dto in
+            try accept(dto, into: &gyms, key: dto.id).map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
+        }
+    }
+
+    /// The next listing push is answered `photo_missing`, as when the bucket lost the picture.
+    func missPhotoOnNextListingPush() { missPhoto = true }
+
+    func push(gymListings dtos: [GymListingDTO]) throws -> [RowAck] {
+        try gate()
+        if missPhoto {
+            missPhoto = false
+            throw PrivatePhotoMissing()
+        }
+        callLog.append("push:gymListings")
+        try checkRejected(dtos.map(\.id.uuidString))
+        return try dtos.compactMap { dto in
+            listingKinds[dto.id] = dto.kindId
+            return try accept(dto, into: &gymListings, key: dto.id)
+                .map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
+        }
+    }
+
+    func uploadPrivatePhoto(_ data: Data, name: String) throws -> String {
+        if failUploads { throw URLError(.networkConnectionLost) }
+        privatePhotos[name] = data
+        return name
+    }
+
+    func deletePrivatePhoto(path: String) throws {
+        if failDeletes { throw URLError(.networkConnectionLost) }
+        privatePhotos[path] = nil
+    }
+
+    /// The next photo download suspends until `releaseDownload()` (to attach a picture while it is on the wire).
+    func holdNextDownload() { holdDownloads = true }
+    var isDownloadSuspended: Bool { heldDownload != nil }
+    func releaseDownload() {
+        heldDownload?.resume()
+        heldDownload = nil
+    }
+
+    func downloadPrivatePhoto(path: String) async throws -> Data {
+        if holdDownloads {
+            holdDownloads = false
+            await withCheckedContinuation { heldDownload = $0 }
+        }
+        if failDownloads { throw URLError(.networkConnectionLost) }
+        guard let data = privatePhotos[path] else { throw URLError(.fileDoesNotExist) }
+        return data
+    }
+
     func push(workout dto: WorkoutDTO) throws -> WorkoutPushResult {
         try gate()
+        callLog.append("push:workout")
         try checkRejected([dto.id.uuidString])
         let sent = try wire(dto)
         lastWorkoutBase = .some(sent.baseUpdatedAt)
@@ -190,11 +291,27 @@ actor FakeTransport: SyncTransport {
         await waitIfHeld()
         return try pull(Array(muscleTargets.values), since: since)
     }
+    func pullGyms(since: Date?) async throws -> [GymDTO] {
+        callLog.append("pull:gyms")
+        return try pull(Array(gyms.values), since: since)
+    }
+    /// The embedded `equipment_items(kind_id)` the real select returns is added on the way out.
+    func pullGymListings(since: Date?) async throws -> [GymListingDTO] {
+        callLog.append("pull:gymListings")
+        return try pull(Array(gymListings.values), since: since).map { dto in
+            guard var json = try JSONSerialization.jsonObject(with: SyncJSON.encoder.encode(dto)) as? [String: Any]
+            else { throw CocoaError(.coderInvalidValue) }
+            json["equipment_items"] = ["kind_id": listingKinds[dto.id] ?? ""]
+            json["updated_at"] = dto.updatedAt.map(SyncDate.format)
+            return try SyncJSON.decoder.decode(GymListingDTO.self, from: JSONSerialization.data(withJSONObject: json))
+        }
+    }
     func pullBodyweight(since: Date?) async throws -> [BodyweightDTO] {
         await waitIfHeld()
         return try pull(Array(bodyweight.values), since: since)
     }
     func pullWorkouts(since: Date?) async throws -> [WorkoutDTO] {
+        callLog.append("pull:workouts")
         await waitIfHeld()
         return try pull(Array(workouts.values), since: since)
     }
@@ -220,7 +337,7 @@ actor FakeTransport: SyncTransport {
         guard let p = proposals[id] else { return }
         proposals[id] = ProposalDTO(id: p.id, createdAt: p.createdAt, source: p.source, summary: p.summary,
                                     changes: p.changes, status: status, appliedChangeIds: appliedChangeIds,
-                                    resolvedAt: at)
+                                    resolvedAt: at, fromAgent: p.fromAgent)
     }
 
     func revokeOAuthGrants() throws -> Int {
@@ -229,6 +346,18 @@ actor FakeTransport: SyncTransport {
         revokedGrants += revoked
         grants = []
         return revoked.count
+    }
+
+    func connectedAgents() throws -> [ConnectedAgent] {
+        if let failure { throw failure } // a read: not counted in pushCalls
+        return agents
+    }
+
+    /// `POST /v1/agents/:clientId/disconnect`: only that agent goes; one the account doesn't have is `unknown_agent`.
+    func disconnectAgent(clientId: String) throws {
+        try gate()
+        guard agents.contains(where: { $0.clientId == clientId }) else { throw AgentError.unknownAgent }
+        agents = agents.filter { $0.clientId != clientId }
     }
 
     // MARK: - Rules
@@ -283,6 +412,8 @@ extension RoutineDTO: ServerStampedDTO {}
 extension WeekdayDTO: ServerStampedDTO {}
 extension MuscleTargetDTO: ServerStampedDTO {}
 extension BodyweightDTO: ServerStampedDTO {}
+extension GymDTO: ServerStampedDTO {}
+extension GymListingDTO: ServerStampedDTO {}
 extension WorkoutDTO: ServerStampedDTO {
     /// A copy with another `client_updated_at` (the SQL function's `greatest(...)` for forced writes).
     static func restamped(_ dto: WorkoutDTO, clientUpdatedAt: Date) throws -> WorkoutDTO {

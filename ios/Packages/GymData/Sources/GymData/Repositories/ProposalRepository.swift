@@ -60,12 +60,18 @@ public final class ProposalRepository {
 
     /// Stores the server's pending proposals. New ones are inserted clean; a proposal still pending here but no
     /// longer in the server's list was resolved on another device, so it is dropped. Local resolutions are kept.
+    /// Plan 32: a stored proposal without a sender (pulled before the app read `from_agent`) takes the pulled one's.
     public func upsertRemote(_ remote: [Proposal]) throws {
         let ids = Set(remote.map(\.id))
-        for p in remote where try record(p.id) == nil {
+        for p in remote {
+            if let stored = try record(p.id) {
+                if stored.fromAgent == nil { stored.fromAgent = p.fromAgent }
+                continue
+            }
             let r = ProposalRecord(id: p.id, createdAt: p.createdAt, source: p.source, summary: p.summary,
                                    changesData: try JSONEncoder().encode(p.changes), statusRaw: p.status.rawValue,
                                    now: now())
+            r.fromAgent = p.fromAgent
             context.insert(r)
         }
         let raw = ProposalStatus.pending.rawValue
@@ -155,7 +161,7 @@ public final class ProposalRepository {
             return Proposal(id: r.id, createdAt: r.createdAt, source: r.source, summary: r.summary, changes: changes,
                             status: ProposalStatus(rawValue: r.statusRaw) ?? .pending,
                             appliedChangeIds: r.appliedChangeIds, skipped: skipped, resolvedAt: r.resolvedAt,
-                            autoApplied: r.autoApplied, hasSnapshot: r.snapshotData != nil)
+                            autoApplied: r.autoApplied, hasSnapshot: r.snapshotData != nil, fromAgent: r.fromAgent)
         } catch {
             Self.log.error("Unreadable proposal \(r.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return nil

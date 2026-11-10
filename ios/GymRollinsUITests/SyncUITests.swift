@@ -1,8 +1,8 @@
 import XCTest
 
-/// End-to-end sync against the LOCAL Supabase stack (run via `scripts/ios-test-sync.sh`, which passes the local
-/// URL and public anon key as `TEST_RUNNER_SUPABASE_URL` / `TEST_RUNNER_SUPABASE_ANON_KEY`). Skipped otherwise, so
-/// the hermetic suite (`scripts/ios-test.sh`) never touches the network.
+/// End-to-end sync against a throwaway LOCAL Worker (run via `scripts/ios-test-sync.sh`, which passes its URL as
+/// `TEST_RUNNER_API_URL`; Xcode hands it to the runner as `API_URL`). Skipped otherwise, so the hermetic suite
+/// (`scripts/ios-test.sh`) never touches the network. Each test makes its accounts fresh by email (DEBUG builds only).
 @MainActor
 final class SyncUITests: XCTestCase {
     static let password = "Passw0rd!"
@@ -13,10 +13,10 @@ final class SyncUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         let env = ProcessInfo.processInfo.environment
-        guard let url = env["SUPABASE_URL"], let key = env["SUPABASE_ANON_KEY"], !url.isEmpty, !key.isEmpty else {
-            throw XCTSkip("Local Supabase not configured; run scripts/ios-test-sync.sh")
+        guard let url = env["API_URL"], !url.isEmpty else {
+            throw XCTSkip("No local Worker; run scripts/ios-test-sync.sh")
         }
-        backend = ["SUPABASE_URL": url, "SUPABASE_ANON_KEY": key]
+        backend = ["API_URL": url]
     }
 
     // MARK: Tests
@@ -182,6 +182,28 @@ final class SyncUITests: XCTestCase {
         backToLog(app)
         app.tabBars.buttons["Today"].tap()
         XCTAssertFalse(app.buttons["today.start"].waitForExistence(timeout: 3))
+    }
+
+    /// The server-move check (spec section 8), run only by `scripts/server-move-check.sh`, which first puts a copy of
+    /// the owner's phone store and settings into a throwaway simulator. The launch moves the data to the Worker, a new
+    /// account signs in and adopts it, and the first sync uploads all of it. The script then compares D1's counts and
+    /// the store with the copy.
+    func testThePhonesDataMovesToTheWorker() throws {
+        guard ProcessInfo.processInfo.environment["SERVER_MOVE_CHECK"] == "1" else {
+            throw XCTSkip("Run by scripts/server-move-check.sh with a copy of the phone's store")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-uiTestingBackend", "local", "-diskStore", "-noSeed", "-forgetSession"]
+        app.launchEnvironment = backend
+        app.launch()
+        app.tabBars.buttons["Log"].tap()
+        let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'log.workout.'"))
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 20), "the copied store isn't in the app")
+        openAccount(app)
+        // An owner the move failed to clear would bring up the account-switch prompt instead of the email label.
+        submitCredentials(app, email: "move-\(UUID().uuidString.lowercased())@test.local", button: "account.signUp")
+        waitForLabel(app.staticTexts["account.status"], "Up to date", timeout: 600)
+        app.terminate()
     }
 
     // MARK: Helpers

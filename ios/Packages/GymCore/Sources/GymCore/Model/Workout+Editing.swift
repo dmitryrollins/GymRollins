@@ -36,27 +36,40 @@ extension WorkoutSet {
 
 extension WorkoutEntry {
     public func with(sets: [WorkoutSet]) -> WorkoutEntry {
-        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup)
+        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup,
+                     gymListingId: gymListingId)
     }
 
+    /// The listing belonged to the old exercise, so it goes.
     func with(exerciseId: String) -> WorkoutEntry {
         WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup)
     }
 
     func with(note: String?) -> WorkoutEntry {
-        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup)
+        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup,
+                     gymListingId: gymListingId)
+    }
+
+    public func with(gymListingId: UUID?) -> WorkoutEntry {
+        WorkoutEntry(id: id, exerciseId: exerciseId, sets: sets, note: note, supersetGroup: supersetGroup,
+                     gymListingId: gymListingId)
     }
 }
 
 extension Workout {
+    public func with(gymId: UUID?) -> Workout {
+        Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSeconds, routineId: routineId,
+                name: name, entries: entries, source: source, note: note, gymId: gymId)
+    }
+
     public func with(entries: [WorkoutEntry]) -> Workout {
         Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSeconds, routineId: routineId,
-                name: name, entries: entries, source: source, note: note)
+                name: name, entries: entries, source: source, note: note, gymId: gymId)
     }
 
     public func with(endedAt: Date?, pausedSeconds: TimeInterval) -> Workout {
         Workout(id: id, startedAt: startedAt, endedAt: endedAt, pausedSeconds: pausedSeconds, routineId: routineId,
-                name: name, entries: entries, source: source, note: note)
+                name: name, entries: entries, source: source, note: note, gymId: gymId)
     }
 
     private func mappingEntry(_ entryId: UUID, _ transform: (WorkoutEntry) -> WorkoutEntry) -> Workout {
@@ -68,8 +81,21 @@ extension Workout {
         mappingEntry(entryId) { entry in entry.with(sets: entry.sets.map { $0.id == setId ? transform($0) : $0 }) }
     }
 
+    /// Whether the entry can take one more set: an exercise holds at most `DomainLimits.entrySetsMax` sets in a
+    /// workout, as the server stores it.
+    public func canAddSet(entryId: UUID) -> Bool {
+        entries.first { $0.id == entryId }.map { $0.sets.count < DomainLimits.entrySetsMax } ?? false
+    }
+
+    /// How many more exercises the workout can take (`DomainLimits.workoutEntriesMax`); 0 at or past the cap.
+    public var entriesLeft: Int { max(0, DomainLimits.workoutEntriesMax - entries.count) }
+
+    /// Whether the workout can take one more exercise (`DomainLimits.workoutEntriesMax`).
+    public var canAddEntries: Bool { entriesLeft > 0 }
+
     public func appendingSet(entryId: UUID) -> Workout {
-        mappingEntry(entryId) { entry in
+        guard canAddSet(entryId: entryId) else { return self }
+        return mappingEntry(entryId) { entry in
             let template = entry.sets.last(where: { !$0.warmup }) ?? entry.sets.last
             let new = template?.duplicatedUndone() ?? WorkoutSet(weightKg: 0, reps: 8)
             return entry.with(sets: entry.sets + [new])
@@ -77,7 +103,8 @@ extension Workout {
     }
 
     public func insertingWarmup(entryId: UUID, set: WorkoutSet) -> Workout {
-        mappingEntry(entryId) { entry in
+        guard canAddSet(entryId: entryId) else { return self }
+        return mappingEntry(entryId) { entry in
             let index = entry.sets.firstIndex(where: { !$0.warmup }) ?? entry.sets.count
             return entry.with(sets: Array(entry.sets[..<index]) + [set] + Array(entry.sets[index...]))
         }
@@ -95,8 +122,9 @@ extension Workout {
         mappingEntry(entryId) { $0.with(exerciseId: exerciseId) }
     }
 
+    /// The new entries, as many as fit under `DomainLimits.workoutEntriesMax`.
     public func appendingEntries(_ new: [WorkoutEntry]) -> Workout {
-        with(entries: entries + new)
+        with(entries: entries + new.prefix(max(0, DomainLimits.workoutEntriesMax - entries.count)))
     }
 
     public func settingNote(entryId: UUID, note: String?) -> Workout {

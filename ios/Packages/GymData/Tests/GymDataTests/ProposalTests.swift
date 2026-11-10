@@ -76,6 +76,31 @@ struct ProposalFixture {
         #expect(try f.proposals.pending().map(\.id) == [b.id])
     }
 
+    /// Plan 32: the sender's name is stored with a new proposal, and one pulled before the app knew senders learns it
+    /// from the next pull. A name, once stored, stays.
+    @Test func theSendersNameIsKeptAndFilledInOnce() throws {
+        let unnamed = f.kneeBreak()
+        try f.proposals.upsertRemote([unnamed])
+        #expect(try f.proposals.proposal(unnamed.id)?.fromAgent == nil)
+
+        let named = Proposal(id: unnamed.id, createdAt: unnamed.createdAt, summary: unnamed.summary,
+                             changes: unnamed.changes, fromAgent: "Muse")
+        try f.proposals.upsertRemote([named])
+        #expect(try f.proposals.proposal(unnamed.id)?.fromAgent == "Muse")
+        let renamed = Proposal(id: unnamed.id, createdAt: unnamed.createdAt, summary: unnamed.summary,
+                               changes: unnamed.changes, fromAgent: "Claude")
+        try f.proposals.upsertRemote([renamed])
+        #expect(try f.proposals.proposal(unnamed.id)?.fromAgent == "Muse")
+
+        let fresh = Proposal(id: UUID(), createdAt: f.clock.now, summary: "Add dips", changes: [
+            PlanChange(id: "c1", type: .addExercise, routineId: f.id(f.push), exerciseId: "dips", sets: 3, reps: 10),
+        ], fromAgent: "Claude")
+        try f.proposals.upsertRemote([named, fresh])
+        #expect(try f.proposals.proposal(fresh.id)?.fromAgent == "Claude")
+        try f.proposals.dismiss(fresh.id)
+        #expect(try f.proposals.proposal(fresh.id)?.fromAgent == "Claude") // a resolution keeps it
+    }
+
     @Test func markAppliedStoresSnapshotAndGoesDirty() throws {
         let p = f.kneeBreak()
         try f.proposals.upsertRemote([p])
@@ -131,11 +156,23 @@ struct ProposalFixture {
     @Test func mcpPermissionsUpdateOnlyThoseFields() throws {
         try f.profiles.save(Profile(unit: .kg, restSec: 90))
         #expect(try f.profiles.load().mcpReadPlan) // default on
-        try f.profiles.setMcpPermissions(readWorkouts: false, readBody: true, readPlan: false, propose: false,
-                                         autoApply: true)
+        #expect(try f.profiles.load().mcpReadGyms) // default on
+        #expect(try f.profiles.load().mcpLogWorkouts == false) // default off (plan 32)
+        try f.profiles.setMcpPermissions(readWorkouts: false, readBody: true, readPlan: false, readGyms: false, propose: false,
+                                         autoApply: true, logWorkouts: true)
         let p = try f.profiles.load()
-        #expect(!p.mcpReadWorkouts && p.mcpReadBody && !p.mcpReadPlan && !p.mcpPropose && p.mcpAutoApply)
+        #expect(!p.mcpReadWorkouts && p.mcpReadBody && !p.mcpReadPlan && !p.mcpReadGyms && !p.mcpPropose && p.mcpAutoApply)
+        #expect(p.mcpLogWorkouts)
         #expect(p.unit == .kg && p.restSec == 90)
+    }
+
+    /// Plan 32: a whole-profile save (Settings, onboarding, the injury note) keeps Add workouts as it was.
+    @Test func aProfileSaveKeepsAddWorkouts() throws {
+        try f.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
+                                         autoApply: false, logWorkouts: true)
+        try f.profiles.save(try f.profiles.load().withLimits("Knee", until: nil))
+        let saved = try f.profiles.load()
+        #expect(saved.mcpLogWorkouts && saved.limits == "Knee")
     }
 
     @Test func resetAllRemovesProposals() throws {
