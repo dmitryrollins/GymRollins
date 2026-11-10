@@ -145,7 +145,9 @@ struct ClaudeConnectionView: View {
                 Text("A workout an agent adds goes straight into your history, marked with the agent's name. You can "
                      + "edit or delete it like any other.")
                     .accessibilityIdentifier("agents.logWorkoutsNote")
-                Text("Applied changes can be undone for 7 days.")
+                Text("With \u{201C}Apply changes without asking\u{201D} on, an agent's plan changes are applied the "
+                     + "next time GymRollins opens, without a review. Applied changes can be undone for 7 days.")
+                    .accessibilityIdentifier("agents.autoApplyNote")
             }
         }
         .tint(Theme.primaryFill)

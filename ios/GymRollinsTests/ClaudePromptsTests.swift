@@ -11,8 +11,9 @@ import Testing
 
     @Test func itBuildsWorkoutsAsProposalsForOneDay() {
         #expect(ClaudePrompts.coach.contains("When I ask for a workout, build it from my plan, history and the equipment"))
-        #expect(ClaudePrompts.coach.contains("Propose it for that day only."))
-        #expect(ClaudePrompts.coach.contains("goes to GymRollins as a proposal"))
+        #expect(ClaudePrompts.coach.contains("Plan it for that day only."))
+        #expect(ClaudePrompts.coach.contains("My profile says whether they apply straight away or wait for my review"))
+        #expect(!ClaudePrompts.coach.contains("as a proposal"))
     }
 
     @Test func itNamesNoUnitAndChecksItEachChat() {

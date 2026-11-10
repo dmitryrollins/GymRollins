@@ -26,8 +26,8 @@ native iOS workout app with an **MCP server**, so Claude could read my history d
 weeks. I couldn't find one.
 
 So I built my own: a fast, native SwiftUI app for logging in the gym, with a remote MCP server that lets Claude
-read your training and **propose** plan changes. Claude never edits your plan directly; you review each proposal
-in the app and apply it with one tap.
+read your training and **propose** plan changes. Claude never edits your plan directly: you review each proposal
+in the app and apply it with one tap, or turn on auto-apply and the app applies Claude's changes for you.
 
 Now I'm open-sourcing it so we can build it together. If you've also been looking for an AI-ready workout app,
 try it, open an issue, or send a pull request.
