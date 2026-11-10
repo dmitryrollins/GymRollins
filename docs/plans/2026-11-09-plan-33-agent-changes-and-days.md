@@ -907,3 +907,45 @@ git commit -m "feat(ios): Today swipes to later days and has a calendar, read-on
   - Graphical `DatePicker` labels in XCUITest. Step 1 says to match what the simulator shows.
 - **Not covered:**
   - A planned agent day in a UI test. It's covered by unit tests, since there is no launch seed for a future `today` change.
+
+## Outcome
+
+**Commits:**
+- The plan: `728ddc0`.
+- Task 1 `6b76ae8`, Task 2 `609fe0e`, Task 3 `bc9646a` and Task 4 `c8e5eec`.
+- The audit footer: `c7f0ff2`.
+- Review fixes: `2e2dce0` (server) and `77a6a55` (iOS).
+- Docs: `916d9af` and `84bd8fe`.
+- After the screenshots: `707f5bc`.
+
+Merged to `main` with PR #1 (`b79fa09`), which also brought plans 19–32.
+
+**Counts:**
+- Server: `npx vitest run` passed 773 of 773 tests in 57 files, and `npx tsc --noEmit` is clean.
+- Full `scripts/ios-test.sh` on the iOS code of `c7f0ff2`: 1,213 tests, of which 1,193 passed, 1 failed and 19 skipped. That is 14 more tests than at `4a29495`, which had 1,180 passed, 0 failed and 19 skipped.
+  - The failure is `testUnblockEveryoneAudit`, a known flake. It's a contrast check on the Apple Health and Data rows in Settings, which this plan doesn't touch.
+- After `77a6a55`, TodayDays, TodayDay, DayPreviewEnvironment, AccessibilityAudit and TodayFlex passed 55 of 55.
+
+**Screenshots (Step 3):** taken on the simulator (iPhone 17 Pro, iOS 26.2, `-fixedNow 2026-09-26T09:00:00Z`). The app is dark-only, so the light and dark runs look the same.
+- Today.
+- Tomorrow: a rest day.
+- Monday: Push + Arms.
+- The date sheet: days before today are greyed out.
+- The AI agents footer.
+- Wednesday at AX-XXXL: the title fits on one line.
+
+They showed one regression. At accessibility text sizes the new glass date button broke "Sat 26 Sep" one letter per line and pushed Today down. At `4a29495` the date was plain text that wrapped by word.
+- `707f5bc` shows only the calendar icon at those sizes. VoiceOver still reads the date, and the title names the day.
+- `testTodayDateButtonStaysCompactAtAccessibilityXL` checks it: it failed before the fix (334 pt tall against My Plan's 143 pt) and passes after.
+- The rest of the header, with "My Plan" and the streak wrapping at AX sizes, was the same before this plan.
+
+**Shipped:**
+- The server is live on Cloudflare at version `f587bb19`, which includes `2e2dce0`. The first deploy, `816573dc`, was Task 1.
+  - `/mcp` without a token returns 401, and the OAuth metadata returns 200.
+- The `77a6a55` build is installed on the owner's iPhone, after a backup of Library and Documents. Row counts in a copy of the store are the same before and after the install.
+  - The phone was locked, so the new build hasn't been opened yet. The first open applies any pending agent changes, because auto-apply is on.
+  - `707f5bc` isn't on the phone; it matters only at accessibility text sizes.
+
+**Not verified:**
+- A real agent conversation with auto-apply on, from asking for a change to seeing it in the app.
+- A planned agent day in a UI test: there's no launch seed for a future `today` change, so unit tests cover it.

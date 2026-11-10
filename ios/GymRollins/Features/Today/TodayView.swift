@@ -6,6 +6,7 @@ import UIKit
 struct TodayView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model = TodayModel(routineId: nil, title: "", summary: "", rows: [])
     @State private var currentRoutine: Routine?
     @State private var showPlan = false
@@ -245,9 +246,13 @@ struct TodayView: View {
             StreakChip()
             Spacer()
             Button { showDatePicker = true } label: {
-                Label(day.date(now: env.now()).formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)),
-                      systemImage: "calendar")
-                    .font(.footnote.weight(.semibold))
+                let date = day.date(now: env.now()).formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+                // At accessibility sizes the spelled-out date breaks one letter per line; the title names the day.
+                if dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "calendar").font(.footnote.weight(.semibold)).accessibilityLabel(date)
+                } else {
+                    Label(date, systemImage: "calendar").font(.footnote.weight(.semibold))
+                }
             }
             .buttonStyle(.glass)
             .disabled(env.session != nil)

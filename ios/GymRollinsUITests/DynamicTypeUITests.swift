@@ -82,6 +82,16 @@ final class DynamicTypeUITests: XCTestCase {
         screenshot("today-gym-ax-xl")
     }
 
+    /// At accessibility sizes the header's date button is just the calendar icon: spelled out, it broke one letter per
+    /// line and pushed Today down. VoiceOver still reads the date.
+    func testTodayDateButtonStaysCompactAtAccessibilityXL() {
+        let app = launch()
+        let date = app.buttons["today.date"], myPlan = app.buttons["today.myPlan"]
+        XCTAssertTrue(date.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(date.frame.height, myPlan.frame.height, "date \(date.frame) / My Plan \(myPlan.frame)")
+        XCTAssertTrue(date.label.contains("26"), "label was '\(date.label)'")
+    }
+
     /// The Build sheet remembers its last chips, so leave only `chip` selected.
     private func selectOnly(_ app: XCUIApplication, _ chip: String) {
         for name in ["chest", "back", "shoulders", "arms", "legs", "core"] {
