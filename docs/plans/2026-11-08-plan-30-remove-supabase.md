@@ -107,7 +107,7 @@ they create and leave. Where a later edit may have moved a line, a step greps fo
 
 ### Facts checked for this plan
 
-Checked on 2026-11-08 against the tree at `7e85e06` (plans 27–29 partly built) and the texts of plans 26–29. Every scratch file lived outside the
+Checked on 2026-11-08 against the tree at `d6defaa` (plans 27–29 partly built) and the texts of plans 26–29. Every scratch file lived outside the
 repo and was never committed.
 
 | Check | Result |
@@ -3379,32 +3379,32 @@ the file's full new text or an exact replacement.
 
 ## Outcome
 
-Built on 2026-11-08, on `feat-cloudflare`, from base `74a319f` (Task 1, Step 1). Local only, not pushed. No Cloudflare account,
+Built on 2026-11-08, on `feat-cloudflare`, from base `c537ad4` (Task 1, Step 1). Local only, not pushed. No Cloudflare account,
 resource or deploy; nothing on the phone or claude.ai.
 
 **Commits**
 
 | Task | Commits |
 |---|---|
-| 1 The last links | `09242d5` |
-| 2 The photo uploader | `a94fb97` |
-| 3 Delete the old backend | `d455fa5`; then `be0bcbc`, a server test whose fixed date had passed (proposal resolutions now use times relative to now) |
-| 4 GymSync without the SDK | `a831b44` |
-| 5 The app on `API_URL` | `304ca2f` |
-| 6 Docs and the checklist | `c5320a2` |
-| 7 The last mentions and the guard | `9c45d5f` |
-| 8 Review fixes | none: Step 5's review wasn't run (see "Not run"). The full run's one fix: `113f989`, the proposal sync UI test |
+| 1 The last links | `fc56770` |
+| 2 The photo uploader | `e98d7ad` |
+| 3 Delete the old backend | `a38bfd5`; then `ad37ed9`, a server test whose fixed date had passed (proposal resolutions now use times relative to now) |
+| 4 GymSync without the SDK | `7a94bdc` |
+| 5 The app on `API_URL` | `242f4e1` |
+| 6 Docs and the checklist | `bc5471d` |
+| 7 The last mentions and the guard | `eaf3e6d` |
+| 8 Review fixes | none: Step 5's review wasn't run (see "Not run"). The full run's one fix: `ff89f22`, the proposal sync UI test |
 
 **Proof before deletion** (Tasks 1 and 3). The tasks left no record of their runs, so Task 8 re-derived each from git
 history, in a scratch folder outside the repo.
-- Same-code check: Task 1's script, on the tree at `a94fb97` (the last commit with the folder): `All 18 copies match
+- Same-code check: Task 1's script, on the tree at `e98d7ad` (the last commit with the folder): `All 18 copies match
   their originals apart from imports.`
 - Moved tests: Deno `ok | 136 passed | 0 failed` (same tree, `deno test --cached-only --allow-read`, the five paths of
   Task 1, Step 2); Vitest at HEAD `Test Files  11 passed (11)`, `Tests  136 passed (136)`.
 - Live readers found: none.
   - In `server/` at the base, only `scripts/copy-from-deno.mjs` read the folder in code, plus one `server/README.md`
     line, as Task 1, Step 3 expects.
-  - Task 3, Step 1's grep, run on `a94fb97`, prints two lines, both in `web/consent/` (deleted with it): a CDN import in
+  - Task 3, Step 1's grep, run on `e98d7ad`, prints two lines, both in `web/consent/` (deleted with it): a CDN import in
     `consent.js` and a skip message in `e2e.test.mjs`. The filter's `web/consent/` alternative needs `[^:]*` to drop a
     file inside that folder.
 - With the folder away: at HEAD the folder has no tracked file, and the server suite, every Node suite and both seed
@@ -3420,13 +3420,13 @@ history, in a scratch folder outside the repo.
   Watch app builds for `watchsimulator` and `watchos` (the watchOS 26.2 SDKs are installed).
 - Integration: `Test run with 45 tests in 11 suites passed`; `Account deletion verified: 66 deleted users, 0 rows left`.
 - App unit and UI suite: 1,135 passed, 18 skipped, 1 failed on the first run (`testClaudeConnectionAudit`, below; it
-  passed when re-run alone). The second full run, at `113f989`, had the same totals with a different failure:
+  passed when re-run alone). The second full run, at `ff89f22`, had the same totals with a different failure:
   `testUnblockEveryoneAudit` failed, and `testClaudeConnectionAudit` passed.
   - Skipped, all opt-in: `SyncUITests` 5 and `ProposalSyncUITests` 3 (need a Worker), `StoragePhotoIntegrationTests` 1
     (`PHOTO_E2E`), `ReadmeScreenshotsUITests` 8 (`README_SCREENSHOTS_DIR`), `RealExportImportTests` 1
     (`GYM_REAL_EXPORT`). `scripts/ios-test.sh` leaves out `PerformanceUITests`.
 - Sync UI: 8 tests, 7 passed (`SyncUITests` 4, `ProposalSyncUITests` 3), 1 skipped (the server-move test), 0 failed,
-  after `113f989`. Before it, `testClaudeConnectsThroughTheSheetAndItsProposalIsApplied` failed on both runs.
+  after `ff89f22`. Before it, `testClaudeConnectsThroughTheSheetAndItsProposalIsApplied` failed on both runs.
 - Node: share page `# pass 17`; photo matcher 13; wger 21; alias tables 13; photo prompts and generator 32; strength
   `# pass 14`; uploader `# pass 22`; seeds `# pass 3`, and both `--check` runs match; store comparison `# pass 4`.
   Every one `# fail 0`.
@@ -3446,10 +3446,10 @@ history, in a scratch folder outside the repo.
      Collapsed`.
    - The app minimizes the tab bar on scroll down (`RootView`'s `.tabBarMinimizeBehavior(.onScrollDown)`, there since
      the first release).
-   - Plan 29's review fix `a1bea21` changed the test's scrolling from quick swipes to slow ones. Slow swipes up don't
+   - Plan 29's review fix `6aaec6e` changed the test's scrolling from quick swipes to slow ones. Slow swipes up don't
      bring the bar back, so the test reached Today's tap with only Log showing. Plan 29's count of 7 passed predates
      that change.
-   - `113f989` (test only) adds `tapTab`: when the tab is missing it swipes down quickly, as a person would, then taps
+   - `ff89f22` (test only) adds `tapTab`: when the tab is missing it swipes down quickly, as a person would, then taps
      the tab. The test passed alone, then in the whole sync UI suite. No app code changed.
 2. **`AccessibilityAuditUITests/testClaudeConnectionAudit`, intermittent and not caused by the migration.**
    - It failed once, on `Contrast failed … id='claude.coach.showAll' label='Show all'`, and passed when re-run alone.
@@ -3495,7 +3495,7 @@ from sync state.`, then `Server move verified.` It took about 4 minutes.
 phone sync, the `cf-ipcity` check).
 
 **Tests deleted with the old backend, and what covers them:**
-- With the SDK, `a831b44` deleted 17 GymSync tests in 3 suites:
+- With the SDK, `7a94bdc` deleted 17 GymSync tests in 3 suites:
   - `SupabaseConfigTests`, 5: the old config and its in-memory auth storage;
   - `GymCatalogDTOTests`, 10: the old error mapping (5), the old photo URL (`PhotoURLTests`, 1), push refusals by
     SQLSTATE (`GymPushRefusalTests`, 3) and the old listing read cap (1);
@@ -3504,7 +3504,7 @@ phone sync, the `cf-ipcity` check).
 - The API's cases are covered by `GymCatalogErrorsApiTests` (4) and `ApiGymCatalogTransportTests` (9: refusals, pages
   of 500, the Worker's public photo route).
 - The Postgres foreign-key retry (23503, `aForeignKeyRefusalOnAShareReadsAsARetry`) has no API form (decision 11).
-- With the folder, `d455fa5` deleted the Deno suite and the pgTAP tests. The Deno code's 136 tests run as Vitest
+- With the folder, `a38bfd5` deleted the Deno suite and the pgTAP tests. The Deno code's 136 tests run as Vitest
   (above). The pgTAP list wasn't compared with the server tests here: that is Step 5's security review.
 
 **The unused-client query, as checked** (Task 6, Step 4; re-run in Task 8 on a throwaway Worker): the checklist's query
@@ -3518,7 +3518,7 @@ extra `DELETE` is needed.
    `node_modules`. The guard scans tracked files only, as its header says. They are the owner's to delete.
 2. **Task 3, Step 1's filter** lets two lines in `web/consent/` through (above). Its `web/consent/` alternative needs
    `[^:]*`.
-3. **The proposal sync UI test** failed every time until `113f989` (above).
+3. **The proposal sync UI test** failed every time until `ff89f22` (above).
 4. **`MCP_E2E` prints 12 `ok` lines, not ten,** as plan 29's Outcome already counts.
 5. **`scripts/test-all.sh` stops at the first failing block** (`set -e`). The first run stopped after the app suite.
    The blocks after it ran from a copy of `test-all.sh`'s own lines, from the server block to the end. After the fix,

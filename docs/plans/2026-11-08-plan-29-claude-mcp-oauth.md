@@ -6194,7 +6194,7 @@ The app's half of plan 29, after plan 28's iOS tasks.
    - It uses Foundation only, so the integration suites and `GymRollinsUITests` compile the same file (`project.yml` lists it).
    - The approval is the caller's: the transport in the suites, the sheet in the UI tests.
 7. **`scripts/test-server.sh` passes `--var PUBLIC_BASE_URL:$TEST_API_URL`.** The issuer and the MCP resource then name the test Worker's own address (port 8788), not `wrangler.jsonc`'s 8787.
-8. **Proved ahead,** in a scratch copy of the three packages at plan 27's tip (`509cbf1`), never committed:
+8. **Proved ahead,** in a scratch copy of the three packages at plan 27's tip (`3478efc`), never committed:
    - **GymSync** with Task 11's code: `Test run with 201 tests in 26 suites passed`.
    - **Task 13's 5 integration tests** passed against the plan 29 server, run with `wrangler dev --local --port 8791 --var PUBLIC_BASE_URL:http://127.0.0.1:8791` from the server spike.
    - **`ApproveConnectionModel` and its 5 tests** ran on macOS beside GymSync's tests, with a stand-in `SyncUnavailableError`. The opened line, the caution and their 2 tests, added after the server's whole-flow review, weren't proved ahead; nor were Task 11's four new `ConnectRequest` fields.
@@ -8287,26 +8287,26 @@ Expected: all pass. The hermetic suite (`scripts/ios-test.sh`) skips `ProposalSy
 
 ## Outcome
 
-Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudflare account or claude.ai was used. The server tasks were built in a worktree branch and merged as `d92550e`; each was then reviewed (spec, quality, and security for auth, `/connect` and `/mcp`). The iOS tasks were built on the branch.
+Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudflare account or claude.ai was used. The server tasks were built in a worktree branch and merged as `ca5e639`; each was then reviewed (spec, quality, and security for auth, `/connect` and `/mcp`). The iOS tasks were built on the branch.
 
 **Commits**
 
 | Task | Commits |
 |---|---|
-| 1 Shared code on Vitest | `8ba623a` |
-| 2 MCP tools | `a80f5a4` |
-| 3 Claude's `Db` on D1 | `a8828ce` |
-| 4 OAuth: discovery, registration, authorize | `49d0817`, SDK and zod advisories `9d9d9e8`, review fix `4868b6a` |
-| 5 `/connect` | `bb352c1` |
-| 6 Approve a connection | `927fc42`, review fixes `39be224`, `4868b6a`, `6a2a756` |
-| 7 Proposals and last use | `864c344` |
-| 8 `/mcp` | `e222259`, review fix `debcca3` |
-| 9 `claude-local.mjs` | `d7194af` |
+| 1 Shared code on Vitest | `fa90b59` |
+| 2 MCP tools | `f48d8eb` |
+| 3 Claude's `Db` on D1 | `eac0fe5` |
+| 4 OAuth: discovery, registration, authorize | `4f4a561`, SDK and zod advisories `2d1e57c`, review fix `4df60bf` |
+| 5 `/connect` | `0d904e1` |
+| 6 Approve a connection | `90d0537`, review fixes `87a9fc5`, `4df60bf`, `8f19f68` |
+| 7 Proposals and last use | `6d2f2f7` |
+| 8 `/mcp` | `df7388a`, review fix `0c2b094` |
+| 9 `claude-local.mjs` | `6a66e47` |
 | 10 README and suite | the `docs: plan 29 README, suite and outcome` commit |
-| 11 Claude's routes in `ApiSyncTransport` | `c40f6fe` |
-| 12 Approve a connection in the app | `5be3830`, review fix `a1bea21` |
-| 13 Integration suites on the Worker | `255a898` |
-| 14 UI tests on the Worker | `8bcfae5` |
+| 11 Claude's routes in `ApiSyncTransport` | `023c33c` |
+| 12 Approve a connection in the app | `4182d82`, review fix `6aaec6e` |
+| 13 Integration suites on the Worker | `cc0fddf` |
+| 14 UI tests on the Worker | `9ab2e1d` |
 | 15 Finish the iOS part | this commit |
 
 **Final counts**
@@ -8329,23 +8329,23 @@ Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudf
 4. The spec named `@cloudflare/vitest-pool-workers`; it is `@cloudflare/vitest-plugin`, as plan 26 found.
 
 *Review fixes*
-5. `9d9d9e8`: MCP SDK 2.4.0 and zod 4.6.7, for the advisories in the older versions (the SDK's and zod's, four in all).
-6. `debcca3`: Claude's audit rows are pruned, custom exercise search is Unicode-aware, the private-listing rule is stricter, and JSON-RPC batches are refused on `/mcp`.
-7. `39be224`: Claude's browser session is marked `claudeConnect` (migration `0008`) and refused on `/v1`; OAuth tokens never reach `/v1`; the app's auth routes strip cookies.
-8. `e222259` (Task 8): the body limit on `/mcp`, and browser sessions revoked with Disconnect Claude.
-9. `4868b6a`:
+5. `2d1e57c`: MCP SDK 2.4.0 and zod 4.6.7, for the advisories in the older versions (the SDK's and zod's, four in all).
+6. `0c2b094`: Claude's audit rows are pruned, custom exercise search is Unicode-aware, the private-listing rule is stricter, and JSON-RPC batches are refused on `/mcp`.
+7. `87a9fc5`: Claude's browser session is marked `claudeConnect` (migration `0008`) and refused on `/v1`; OAuth tokens never reach `/v1`; the app's auth routes strip cookies.
+8. `df7388a` (Task 8): the body limit on `/mcp`, and browser sessions revoked with Disconnect Claude.
+9. `4df60bf`:
    - authorize ignores app sessions;
    - client names are checked (length, control, bidi and invisible characters);
    - the opener's details are stored (migration `0009`);
    - the `mcp` scope is required;
    - a revoke beats a racing refresh.
-10. `6a2a756`: the opener's city and country come from `request.cf`, never from client headers.
-11. `a1bea21` (app): the approve sheet retries cleanly, never burns tries on a dead code, and sends the code it shows; code parsing is strict; the proposal route answers 404 `no_such_proposal` only for a missing proposal.
+10. `8f19f68`: the opener's city and country come from `request.cf`, never from client headers.
+11. `6aaec6e` (app): the approve sheet retries cleanly, never burns tries on a dead code, and sends the code it shows; code parsing is strict; the proposal route answers 404 `no_such_proposal` only for a missing proposal.
 
 **What the reviews caught.** Three were real holes, all closed with tests:
-- **Claude's browser session reached `/v1` as a bearer.** Fixed in `39be224`.
-- **An app session could mint Claude tokens at authorize.** Fixed in `4868b6a`.
-- **JSON-RPC batches bypassed the per-request limit on `/mcp`.** Fixed in `debcca3`.
+- **Claude's browser session reached `/v1` as a bearer.** Fixed in `87a9fc5`.
+- **An app session could mint Claude tokens at authorize.** Fixed in `4df60bf`.
+- **JSON-RPC batches bypassed the per-request limit on `/mcp`.** Fixed in `0c2b094`.
 
 Smaller findings:
 - approval-code phishing through a long or bidi `client_name` (fixed with the name check and the opener details on the sheet);
@@ -8353,7 +8353,7 @@ Smaller findings:
 - a refresh racing a revoke;
 - client-supplied location headers trusted.
 
-**Security advisories in old packages.** The MCP SDK and zod versions first pinned had published advisories (four between them); `9d9d9e8` moved to SDK 2.4.0 and zod 4.6.7, and `npm audit` reports 0 vulnerabilities.
+**Security advisories in old packages.** The MCP SDK and zod versions first pinned had published advisories (four between them); `2d1e57c` moved to SDK 2.4.0 and zod 4.6.7, and `npm audit` reports 0 vulnerabilities.
 
 **Passed to later plans**
 

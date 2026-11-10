@@ -874,7 +874,7 @@ git commit -m "feat(ios): Today swipes to later days and has a calendar, read-on
 ### Task 5: Whole-suite check, screenshots, outcome
 
 - [ ] **Step 1:** Run `cd server && npx vitest run && npx tsc --noEmit`. Expected: all pass.
-- [ ] **Step 2:** Run `scripts/ios-test.sh`, the full suite. Expected: 0 failures, compared with 1180 passed / 0 failed / 19 skipped at aee1c3c, plus the new tests. If anything fails, check whether it also fails at `aee1c3c` before calling it pre-existing.
+- [ ] **Step 2:** Run `scripts/ios-test.sh`, the full suite. Expected: 0 failures, compared with 1180 passed / 0 failed / 19 skipped at 4a29495, plus the new tests. If anything fails, check whether it also fails at `4a29495` before calling it pre-existing.
 - [ ] **Step 3:** On the simulator with `-uiTesting -fixedNow 2026-09-26T09:00:00Z`, take screenshots of:
   - Today;
   - tomorrow (rest);

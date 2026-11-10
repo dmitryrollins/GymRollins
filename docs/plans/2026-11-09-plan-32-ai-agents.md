@@ -208,7 +208,7 @@ cd server && npx vitest run test/<file>.test.ts    # one file; ignore the punyco
 cd server && npx vitest run && npx tsc --noEmit    # everything
 ```
 
-- The base (`de2bda6` on `feat-ai-agents`) is `Test Files  47 passed (47)`, `Tests  688 passed (688)`. Each task names
+- The base (`7a2d794` on `feat-ai-agents`) is `Test Files  47 passed (47)`, `Tests  688 passed (688)`. Each task names
   the totals it ends at. If the base differs, add this plan's new tests to the base you find, and say so in the
   Outcome.
 - The tests that connect agents print many `Called .text() on an HTTP body which does not appear to be text` console
@@ -3715,7 +3715,7 @@ XcodeGen, `xcodebuild` on the iOS 26.2 simulator.
 **Spec:** `docs/specs/2026-11-09-ai-agents-design.md`, sections 2 (decisions 1–6), 4 and 5. The server half
 (section 3) is drafted separately; this half needs it only in Task A15.
 
-**Builds on:** plan 31 with its `## Outcome`. Base: `de2bda6` or later on `feat-ai-agents`.
+**Builds on:** plan 31 with its `## Outcome`. Base: `7a2d794` or later on `feat-ai-agents`.
 
 **Branch:** `feat-ai-agents`.
 - No push.
@@ -3735,7 +3735,7 @@ XcodeGen, `xcodebuild` on the iOS 26.2 simulator.
 
 ## App facts
 
-Checked on `feat-ai-agents` at `de2bda6` (2026-11-08) by reading the code. The integrator can check the server half
+Checked on `feat-ai-agents` at `7a2d794` (2026-11-08) by reading the code. The integrator can check the server half
 against these.
 
 | Fact | Where |
@@ -7998,7 +7998,7 @@ Expected: no output.
 On the simulator only, never the owner's phone. `<scratchpad>` is this session's scratch folder.
 
 ```bash
-git worktree add <scratchpad>/gym-main de2bda6
+git worktree add <scratchpad>/gym-main 7a2d794
 (cd <scratchpad>/gym-main/ios && xcodegen generate --quiet && xcodebuild build -project GymRollins.xcodeproj \
   -scheme GymRollins -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
   -derivedDataPath <scratchpad>/dd-main -quiet)
@@ -8067,20 +8067,20 @@ git commit -m "docs: plan 32 app half outcome"
 
 ## Outcome (app half, A10–A16)
 
-**Commits:** A10 `17072b2`, A11 `08bc508`, A12 `a0c3d3f`, A13 `6254efa`, A14 `bee5427` (host label fix) and `f589f2d`
-(audits), A15 `1a48216`.
+**Commits:** A10 `80cd680`, A11 `ac30959`, A12 `400b66f`, A13 `b6c46c1`, A14 `5f076eb` (host label fix) and `656c364`
+(audits), A15 `9f98e0a`.
 
 **Counts:** GymData 377 tests passed; GymSync unit 228 passed; app unit (`-only-testing:GymRollinsTests`) 950 passed,
 2 skipped (952 total; base 950 + A11 1 + A13 1); GymSync integration (`scripts/test-sync-integration.sh`) 48 tests in
 12 suites passed, `AgentsTransportTests` 3, "Account deletion verified: 69 deleted users, 0 rows left"; local-Worker UI
 (`scripts/ios-test-sync.sh`) 8 passed, 1 skipped (the server-move test); full `scripts/ios-test.sh` 1168 passed, 7
-failed, 19 skipped. The 7 failures all fail the same way on A9's tip (`b034cd7`) and are not plan 32's:
+failed, 19 skipped. The 7 failures all fail the same way on A9's tip (`a8bd4c3`) and are not plan 32's:
 `testGymEquipmentWithSamplePhotosAudit`, `testModerationAudit`, `testSharedListingDetailsAudit`,
 `testAListingWithoutAPhotoBorrowsTheCataloguePhoto`, `testReportingABorrowedPhotoRemovesItAndKeepsTheListing`,
 `testShareAsksForSignIn`, `testRestoreAndRemoveEmptyTheList` (no flat-bench tile in the catalogue; "Sample" label
 clipped).
 
-**Upgrade check (simulator, iPhone 17 Pro iOS 26.2):** the store made by `de2bda6` with `-seedOwner -seedHistory` held 45
+**Upgrade check (simulator, iPhone 17 Pro iOS 26.2):** the store made by `7a2d794` with `-seedOwner -seedHistory` held 45
 rows in 7 tables (profile 1, routines 4, routine exercises 26, weekdays 4, workouts 2, entries 2, sets 6). The branch build
 installed over it opened the store without a crash and without migration errors, and the rows are identical (same
 per-table counts, 45); the new columns exist (`ZMCPLOGWORKOUTS` = 0 on the profile, `ZADDEDBY`, `ZFROMAGENT`). The
@@ -8092,7 +8092,7 @@ flagged the bare host ("Label not human-readable"); `AgentsUITests` and A15 expe
 Claude-screen audits (`testClaudeConnectionAudit`, `testUseWithClaudeAudit`) and `testAgentsAudit` flagged false positives
 once the screen got longer (switch labels "clipped" although whole in the screenshot, footers at 6.3:1 measured, Use with
 Claude's footer under the tab bar's fade), so `exclusionReason` got narrow exclusions for them. (3) A15: agents with a
-loopback callback are labelled "<name> (local)" by the server (`fc40a1e`), so the tests expect "Muse (local)" and "From
+loopback callback are labelled "<name> (local)" by the server (`e8a13ae`), so the tests expect "Muse (local)" and "From
 Claude Code (local)"; the agents list keeps the bare names.
 
 **Still open (owner):** the three questions above.

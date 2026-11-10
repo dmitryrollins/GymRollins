@@ -39,7 +39,7 @@ Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0 in workerd), Swift 6.2 (`sw
 **Spec:** `docs/specs/2026-11-07-cloudflare-backend-design.md`: sections 4 ("Sync"), 6 (errors) and 8 ("Limits").
 `docs/cloudflare-checklist.md`, section 5, which asked for this plan.
 
-**Builds on:** plans 26–30, each built and with its `## Outcome`. The base is `699f6a4` or later on `feat-cloudflare`.
+**Builds on:** plans 26–30, each built and with its `## Outcome`. The base is `658202e` or later on `feat-cloudflare`.
 
 **Branch:** `feat-cloudflare`.
 - No push.
@@ -268,7 +268,7 @@ Vitest 4.1.12 with `@cloudflare/vitest-plugin` 1.6.0 in workerd), Swift 6.2 (`sw
 
 ### Facts checked for this plan
 
-Checked on 2026-11-08 against `699f6a4`. Every probe lived in a scratch folder outside the repo and was never committed.
+Checked on 2026-11-08 against `658202e`. Every probe lived in a scratch folder outside the repo and was never committed.
 
 | Check | Result |
 |---|---|
@@ -281,7 +281,7 @@ Checked on 2026-11-08 against `699f6a4`. Every probe lived in a scratch folder o
 | `sqlite3`, 0001–0009 with rows already stored, then a draft of 0010 | the backfill counts them: bodyweight 2 (one of them deleted), workouts 1, custom_exercises 1 |
 | `sqlite3`, 10,000 sets in 200 entries | about 276 bytes a set, its indexes and its share of the entry included |
 | workerd, rows written per workout save, today's code and this plan's | decision 14's table |
-| `cd server && npx vitest run` at `699f6a4` | `Test Files  43 passed (43)`, `Tests  602 passed (602)` |
+| `cd server && npx vitest run` at `658202e` | `Test Files  43 passed (43)`, `Tests  602 passed (602)` |
 | Tasks 1–4's server steps, applied from this plan's text to a scratch copy of `server/` (with `fixtures/` and the two Swift files the drift test reads) | after Task 2 `Test Files  44 passed (44)`, `Tests  636 passed (636)`; after Task 3 `Tests  646 passed (646)`; after Task 4 `Test Files  45 passed (45)`, `Tests  652 passed (652)`; `tsc --noEmit` clean each time |
 | Tasks 1, 5, 6 and 7's Swift package steps, applied to a scratch copy of `ios/Packages` | GymCore `--filter ImportSplitTests`: 6 tests in 1 suite passed, each importer's case among them; `--filter 'Importer\|ImportSplit'`: 67 tests in 6 suites passed; the whole of GymCore counts 541 tests in 65 suites (the ones reading the app's bundled `exercises.json` can't pass in the copy, which lacks it); GymSync `ApiSyncTransportCapTests` and `SyncEngineCapTests` 3 tests in 2 suites passed; `GymSyncTests` 217 tests in 28 suites passed |
 | Same, GymSync after a GymCore file was added | the incremental build couldn't find `ImportSplit` until `swift package clean` ("How to run things") |
@@ -2927,7 +2927,7 @@ defined in the task that first needs it.
 
 ## Outcome
 
-Built on 2026-11-08, on `feat-cloudflare`, from base `61312a2` (the plan's last commit). Local only, not pushed. No
+Built on 2026-11-08, on `feat-cloudflare`, from base `e60f376` (the plan's last commit). Local only, not pushed. No
 Cloudflare account, resource or deploy; nothing on the phone or claude.ai.
 
 **The owner's sizes** (Task 1, Step 2's query, run again in Task 9 on the server-move check's own copy of the backup):
@@ -2938,30 +2938,30 @@ exercise, so nothing of the owner's is split, and every count is far under its c
 
 | Task | Commits |
 |---|---|
-| 1 The numbers in `DomainLimits` | `f16f2a0` |
-| 2 The account caps in D1 | `90c4205` |
-| 3 One workout's size, and the logged counts | `c42e63a` |
-| 4 Claude's writes at a cap | `4256db9` |
-| 2–4, added after review | `a8ca035` (the counts on deletion and in the migration's backfill, an account at every cap deleted whole, resolved proposals still counting); `7ba431a` (the logged counts after a lost race, a force save, a lost answer's retry, a bigger re-save and a revival) |
-| 5 The phone stops at 50 and 50 | `df81b35`; after review `1606016` (Add exercise picks no more than the workout has room for; Add warm-up set stops at 50 sets) |
-| 6 The importers split | `306ea3a`; after review `bd240cb` (the pieces follow each other through the session) and `dc2c285` (a split workout counts once in the preview, the summary and the duplicates skipped) |
-| 7 A refused row, one line per reason | `954ef9d`; after review `4d9893a` (each line reads as one sentence; no promise of a retry at an account cap) |
-| 8 The docs | `5152741` |
-| 9 Verify, and small fixes | `98c6fbf`, `42f3269`, `566b2a3` (below); this Outcome |
+| 1 The numbers in `DomainLimits` | `402674b` |
+| 2 The account caps in D1 | `6729bee` |
+| 3 One workout's size, and the logged counts | `132cadd` |
+| 4 Claude's writes at a cap | `958b702` |
+| 2–4, added after review | `938a2e6` (the counts on deletion and in the migration's backfill, an account at every cap deleted whole, resolved proposals still counting); `c7a25cd` (the logged counts after a lost race, a force save, a lost answer's retry, a bigger re-save and a revival) |
+| 5 The phone stops at 50 and 50 | `c6d7a05`; after review `386b463` (Add exercise picks no more than the workout has room for; Add warm-up set stops at 50 sets) |
+| 6 The importers split | `0bbb98b`; after review `aac1971` (the pieces follow each other through the session) and `6dfbaad` (a split workout counts once in the preview, the summary and the duplicates skipped) |
+| 7 A refused row, one line per reason | `63f0ccb`; after review `2484205` (each line reads as one sentence; no promise of a retry at an account cap) |
+| 8 The docs | `9c82ffa` |
+| 9 Verify, and small fixes | `e04dcbe`, `f6bac10`, `d566ee3` (below); this Outcome |
 
 **Task 9's small fixes**
-1. `42f3269`: `RealExportImportTests` (opt-in, `GYM_REAL_EXPORT`) compares the stored rows with the pieces
+1. `f6bac10`: `RealExportImportTests` (opt-in, `GYM_REAL_EXPORT`) compares the stored rows with the pieces
    (`plan.result.workouts.count`), and checks that the summary counts the export's workouts (`plan.stats.workouts`)
    and skips no duplicates. Its `142` still means the export's workouts: `stats.workouts` counts a split workout once
-   since `dc2c285`, and none of the owner's is past the caps. It compiles (`build-for-testing`); it can't run without
+   since `6dfbaad`, and none of the owner's is past the caps. It compiles (`build-for-testing`); it can't run without
    the owner's export.
-2. `98c6fbf`: `ImportSplitTimesTests`, a table of 14 start and end combinations (an hour, a start off the whole second,
+2. `e04dcbe`: `ImportSplitTimesTests`, a table of 14 start and end combinations (an hour, a start off the whole second,
    seven pieces, one piece with far fewer sets, a first piece with none, no sets at all, exactly and just under a
    second a piece, a span shorter than the pieces, an end at or before the start, no end time). With a span of at
    least a second a piece: the durations sum to the span, no overlap or gap, starts strictly increase, every piece
    lasts a second or more, the last ends at the source's end. Without one: the pieces start a second apart and keep
    the source's end. With the minimum-second pass removed from `ImportSplit.times`, the table fails.
-3. `566b2a3`: the current docs give the API's address as `https://api.gymrollins.com` (the owner's custom domain,
+3. `d566ee3`: the current docs give the API's address as `https://api.gymrollins.com` (the owner's custom domain,
    checklist section 1, option A): `docs/release-readiness.md`, `docs/media/README.md`'s cloud upload commands,
    `docs/design/STYLE.md` and the two design canvases showing the connector URL. The checklist's own `workers.dev`
    lines explain option B and stay.
@@ -3011,12 +3011,12 @@ exercise, so nothing of the owner's is split, and every count is far under its c
    `swift package clean` there, GymHealth passed (85 in 17), and the second run passed it too.
 2. **`AccessibilityAuditUITests/testUnblockEveryoneAudit`:** contrast on two of Settings' section headers (y = 135 and
    245); alone it failed again (one header, y = 228). Plan 30 found it intermittent on the code before the migration
-   too. Plan 31 changes no Settings code and not this test (`git log 61312a2..HEAD -- ios/GymRollins/Features/Settings`
+   too. Plan 31 changes no Settings code and not this test (`git log e60f376..HEAD -- ios/GymRollins/Features/Settings`
    is empty). See Task 9's fix 4.
 3. **Server, `claude-proposals.test.ts`, "lists the account's pending proposals, oldest first":** the two proposals
    came back in the other order. The pull orders by `created_at, id`, and `created_at` is SQLite's `now`, to the
    millisecond, so two proposals written in the same millisecond fall back to their random ids. The query and the
-   test are `864c344`'s, before plan 31; the new index `proposals_user_pending (user_id, created_at, id)` doesn't
+   test are `6d2f2f7`'s, before plan 31; the new index `proposals_user_pending (user_id, created_at, id)` doesn't
    change the order asked for. It passed in the server's re-run and in 6 runs of the file alone.
 4. **`EmptyStatesUITests/testLibraryNoResultsOffersCreateCustomExercise`:** the search field got
    `Zzznotarealexerc` of `Zzznotarealexercise` (keystrokes dropped). It passed when re-run alone. Plan 31 touches no
@@ -3034,15 +3034,15 @@ sync state.`, then `Server move verified.` Nothing of the owner's data was refus
 
 **Where the build differs from this plan:**
 1. **Counts.** The server is at 46 files and 669 tests, not 45 and 652: `account-rows.test.ts` and the other review
-   tests (`a8ca035`, `7ba431a`). GymCore 548 in 66, not 541 in 65 (`1606016` +1, `bd240cb` +5, `98c6fbf` a suite of
-   1). GymData 372, not 371 (`4d9893a`).
-2. **`SyncFailure` keeps the server's code** (`4d9893a`): an optional `code`, so failures stored before decode with
+   tests (`938a2e6`, `c7a25cd`). GymCore 548 in 66, not 541 in 65 (`386b463` +1, `aac1971` +5, `e04dcbe` a suite of
+   1). GymData 372, not 371 (`2484205`).
+2. **`SyncFailure` keeps the server's code** (`2484205`): an optional `code`, so failures stored before decode with
    none, and `SyncEngine.recordRejection` passes it. Decision 12 said the stored `SyncFailure` wouldn't change, and
    decision 11 that no GymSync code would. It lets Account drop "Editing one tries again." when every refused row hit
    an account cap, where an edit is refused again; otherwise the footer reads as decision 12 says.
-3. **The phone's caps reach further** than Task 5's buttons (`1606016`): Add exercise lets the picker choose no more
+3. **The phone's caps reach further** than Task 5's buttons (`386b463`): Add exercise lets the picker choose no more
    than the room left, and Add warm-up set stops at 50 sets.
-4. **The split's times and counts** changed after review (`bd240cb`, `dc2c285`); decision 10 records the times.
+4. **The split's times and counts** changed after review (`aac1971`, `6dfbaad`); decision 10 records the times.
 5. **`scripts/test-all.sh` never ended `exit 0` in one run,** as in plan 30 (above).
 6. **The server-move check** needed three attempts (above).
 

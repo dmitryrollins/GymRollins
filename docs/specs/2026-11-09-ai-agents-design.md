@@ -1,7 +1,7 @@
 # AI agents: per-agent list and disconnect, proposals by agent, agent-logged workouts
 
 Approved by the owner on 2026-11-09. Builds on the Cloudflare backend (`docs/specs/2026-11-07-cloudflare-backend-design.md`)
-and the MCP connector, which since commit 2e44be9 takes any agent's https callback, not only Claude's.
+and the MCP connector, which since commit d7550ef takes any agent's https callback, not only Claude's.
 
 ## 1. Why
 

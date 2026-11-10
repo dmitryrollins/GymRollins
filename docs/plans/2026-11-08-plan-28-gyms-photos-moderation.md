@@ -4990,7 +4990,7 @@ Both were decided on 2026-11-08 by the controller, following the approved spec (
 
 ### Added after review (plan 28 server)
 
-First batch (`7e85e06`):
+First batch (`d6defaa`):
 - **Cap triggers count live rows only.** `0005_gyms_photos.sql` adds `gyms_owner_live` and `gym_equipment_owner_live`
   (`WHERE deleted_at IS NULL`), so the private-cap triggers never read tombstones. `schema.test.ts` checks each
   trigger's query plan.
@@ -5035,7 +5035,7 @@ Second batch:
 
 ## iOS tasks
 
-Built on plan 27 as committed (`f3395a2` and the code after it): `ApiError`, `ApiClient`, `ApiConfig`,
+Built on plan 27 as committed (`8d6b3b1` and the code after it): `ApiError`, `ApiClient`, `ApiConfig`,
 `ApiSyncTransport`, `servesGyms`, the server move, `AuthService(api:)`, the integration support and
 `scripts/test-server.sh`.
 
@@ -5102,7 +5102,7 @@ Built on plan 27 as committed (`f3395a2` and the code after it): `ApiError`, `Ap
       to a running Worker's D1 made the next such sign-up an admin.
     - The E2E's search of D1 uses `instr()`, because D1 refuses LIKE patterns over 50 bytes and a marker is longer.
 26. **Checked while writing:** Tasks 11–14 and 16 were applied to a scratch copy of `ios/Packages` at plan 27's head
-    (`509cbf1`), never committed. Results:
+    (`3478efc`), never committed. Results:
     - GymSync: `Test run with 207 tests in 27 suites passed`.
     - GymData: 365 tests in 50 suites. The one failure was `LibraryTests`, which needs the app's `exercises.json` beside
       the copy, as plan 27 found.
@@ -8294,23 +8294,23 @@ Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudf
 | Task | Commits |
 |---|---|
 | 1 R2 buckets and limits | `012a71d` |
-| 2 Shared SQL, caller parameter, entity extensions | `79f8c69` |
-| 3 Text rules, loads, case folding | `9635053` |
-| 4 Private gyms and listings in sync | `2f087d9` |
-| 5 Reading the shared catalogue | `f4d4f36` |
-| 6 Sharing and confirming | `2fb80c2` |
-| 7 Reports, blocks, admin queue | `8a9f233` |
-| 8 Gym photos | `037a42e` |
-| 9 Public photos, exercise photos | `93a2245` |
-| 10 Deletion with photos, isolation, limits | `1f4aae4` |
-| Server review fixes | `7e85e06` (first batch), `8e77d3d` (second batch) |
-| 11 API errors, photo bodies, owned photos | `f546ad6` |
-| 12 `ApiGymCatalogTransport` | `d4cfec2` |
-| 13 Gyms, listings, private photos in sync | `a192966` |
-| 14 The server move forgets the old catalogue | `5280104`, review fix `5e29177` |
-| 15 App on the catalogue API, exercise photos | `2d2a64e` |
-| 16 Gym suites and E2E on the Worker | `48c7f33` |
-| 17 Server-move check with gym links | `24f44bd` |
+| 2 Shared SQL, caller parameter, entity extensions | `f0cdb64` |
+| 3 Text rules, loads, case folding | `201da7f` |
+| 4 Private gyms and listings in sync | `dc59ebb` |
+| 5 Reading the shared catalogue | `0ac6818` |
+| 6 Sharing and confirming | `e07ea6a` |
+| 7 Reports, blocks, admin queue | `fbaff03` |
+| 8 Gym photos | `926dd84` |
+| 9 Public photos, exercise photos | `899ad0b` |
+| 10 Deletion with photos, isolation, limits | `e62894a` |
+| Server review fixes | `d6defaa` (first batch), `e87b259` (second batch) |
+| 11 API errors, photo bodies, owned photos | `c59d2af` |
+| 12 `ApiGymCatalogTransport` | `3858220` |
+| 13 Gyms, listings, private photos in sync | `427aa60` |
+| 14 The server move forgets the old catalogue | `c1f145f`, review fix `0e27ecd` |
+| 15 App on the catalogue API, exercise photos | `d0dccb2` |
+| 16 Gym suites and E2E on the Worker | `8a56148` |
+| 17 Server-move check with gym links | `3ad3d20` |
 | 18 Finish | `docs: plan 28 outcome` |
 
 **Final counts**

@@ -4745,16 +4745,16 @@ Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudf
 
 | Task | Commits |
 |---|---|
-| 1 `ApiError`, session store, `ApiClient` | `106981a`, review fix `c325ec3` |
-| 2 `ApiConfig` and `API_URL` | `4dbb5d4` |
-| 3 The engine leaves out what the server lacks | `a767e2c` |
-| 4 `ApiSyncTransport` | `f2dd98c` |
-| 5 The server move in GymData | `d5b1435` |
-| 6 `AuthService` on Better Auth | `509cbf1`, review gaps `d404e4b` |
-| 7 The app on the API | `8ea76b2`, review fixes `282259b`, `220bc5f` |
-| 8 Integration suites on a throwaway Worker | `46f7a97` |
-| 9 Sync UI tests on the Worker | `452086c` |
-| 10 Server-move check with a copy of the owner's store | `d3eee14`, fix `19179d4` (the comparison names a differing column, never its values) |
+| 1 `ApiError`, session store, `ApiClient` | `7fb3329`, review fix `5224eea` |
+| 2 `ApiConfig` and `API_URL` | `518df2e` |
+| 3 The engine leaves out what the server lacks | `fd1e2a0` |
+| 4 `ApiSyncTransport` | `03180d0` |
+| 5 The server move in GymData | `799f041` |
+| 6 `AuthService` on Better Auth | `3478efc`, review gaps `dd1d3fb` |
+| 7 The app on the API | `a0cd9f1`, review fixes `f5851fb`, `8dcb7f2` |
+| 8 Integration suites on a throwaway Worker | `a9390c4` |
+| 9 Sync UI tests on the Worker | `87f4e47` |
+| 10 Server-move check with a copy of the owner's store | `cd7ed51`, fix `b64c84c` (the comparison names a differing column, never its values) |
 
 **Final counts**
 - GymCore: `Test run with 533 tests in 64 suites passed`.
@@ -4773,20 +4773,20 @@ Built on 2026-11-08, on `feat-cloudflare`. Local only, not pushed, and no Cloudf
 - `Stores match apart from sync state.`
 
 **Where the build differs from the plan as first written**
-1. **Store comparison (Task 10):** the first version printed the differing values. They come from a copy of the owner's training data, so a difference now prints only the table, the column and the record's id (`19179d4`).
-2. **The move forgets the old Supabase session (Task 7):** the plan only moved the data. Review found the old Supabase token left in the Keychain after a move, so `220bc5f` deletes it.
-3. **Sign-out and restore (Task 7):** both were reworked after review (`282259b`), see below.
-4. **Plan 28 widened the move:** the catalogue cache, shared listings and the share outbox are forgotten by the move (`5280104`, `5e29177`), which the plan listed under "Handed to later plans".
+1. **Store comparison (Task 10):** the first version printed the differing values. They come from a copy of the owner's training data, so a difference now prints only the table, the column and the record's id (`b64c84c`).
+2. **The move forgets the old Supabase session (Task 7):** the plan only moved the data. Review found the old Supabase token left in the Keychain after a move, so `8dcb7f2` deletes it.
+3. **Sign-out and restore (Task 7):** both were reworked after review (`f5851fb`), see below.
+4. **Plan 28 widened the move:** the catalogue cache, shared listings and the share outbox are forgotten by the move (`c1f145f`, `0e27ecd`), which the plan listed under "Handed to later plans".
 5. **The Task 11 reviewer step** was done by the per-task reviews, not by one reviewer over the whole diff at the end.
 
 **What reviews caught and fixed**
-- **A stale 401 signing out a newer sign-in.** A request that began under an old session could sign out the one that replaced it (`c325ec3`, `282259b`). A stale 401 now signals nothing.
-- **The restore race.** A slow session restore could overwrite a sign-in that finished after it began (`282259b`).
-- **Sign-out always finishing locally.** It no longer waits on the server: a failed or offline call still clears the local session (`282259b`).
-- **Redirects refused, and tokens redacted.** `ApiClient` follows no redirects, and logs and errors carry no bearer token (`c325ec3`).
-- **The old Supabase Keychain token** deleted after a move (`220bc5f`).
-- **Keychain update-then-add,** and the accessibility class asserted in the tests (`220bc5f`).
-- **Review test gaps in the move** and the API transport (`d404e4b`).
+- **A stale 401 signing out a newer sign-in.** A request that began under an old session could sign out the one that replaced it (`5224eea`, `f5851fb`). A stale 401 now signals nothing.
+- **The restore race.** A slow session restore could overwrite a sign-in that finished after it began (`f5851fb`).
+- **Sign-out always finishing locally.** It no longer waits on the server: a failed or offline call still clears the local session (`f5851fb`).
+- **Redirects refused, and tokens redacted.** `ApiClient` follows no redirects, and logs and errors carry no bearer token (`5224eea`).
+- **The old Supabase Keychain token** deleted after a move (`8dcb7f2`).
+- **Keychain update-then-add,** and the accessibility class asserted in the tests (`8dcb7f2`).
+- **Review test gaps in the move** and the API transport (`dd1d3fb`).
 
 **Passed to later plans**
 - **Plan 30 (remove Supabase):**
