@@ -8,6 +8,8 @@ struct TodayExerciseRow<MenuContent: View>: View {
     let row: TodayModel.Row
     let exercise: Exercise?
     let onOpen: (() -> Void)?
+    /// What VoiceOver says the row opens: today's sets, or just the exercise on a later day's preview.
+    var openHint = "Opens today's sets"
     @ViewBuilder let menu: () -> MenuContent
 
     var body: some View {
@@ -15,7 +17,7 @@ struct TodayExerciseRow<MenuContent: View>: View {
             if let onOpen {
                 Button(action: onOpen) { content }
                     .buttonStyle(.plain)
-                    .accessibilityHint("Opens today's sets")
+                    .accessibilityHint(openHint)
             } else {
                 content
             }

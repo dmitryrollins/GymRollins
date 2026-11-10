@@ -40,6 +40,11 @@ struct TodayView: View {
     /// The gym the phone is at, read once per reload (`env.currentGym` reads the store on every call).
     @State private var currentGym: Gym?
     @State private var buildRequested = false
+    /// The day shown: today, or a later day previewed read-only (`TodayDayPreviewView`).
+    @State private var day = TodayDay.today
+    /// Whether the last move went to a later day, for the slide's direction.
+    @State private var forward = true
+    @State private var showDatePicker = false
 
     /// Onboarding's "Build me a 4-day upper/lower plan…" prompt: the copyable text offered before "Ask Claude to
     /// build one" pushes the connection screen.
@@ -50,37 +55,21 @@ struct TodayView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     header
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            DisplayTitle(text: "Today", size: 48)
-                            Text("\(model.title) \u{00B7} \(model.summary)")
-                                .foregroundStyle(Theme.textSecondary)
-                                .accessibilityIdentifier("today.summary")
-                        }
-                        Spacer(minLength: 8)
-                        if env.session == nil && (env.hasAnyRoutine || plan?.kind == .built) { switchButton }
-                    }
-                    if env.session == nil { GymChipRow(gym: currentGym) }
-                    LimitsReminder(openPlan: { showPlan = true })
-                    if let pendingProposal { proposalChip(pendingProposal) }
-                    SyncStatusBanner()
-                    RecoveryCard(identifier: "today.recovery")
-                    if let loadError { Text(loadError).foregroundStyle(Theme.destructive) }
-                    if let session = env.session { resumeBanner(session) }
-                    if !env.hasAnyRoutine && model.rows.isEmpty { emptyPlanState }
-                    if let note = model.gymNote { gymNote(note) }
-                    ForEach(model.rows) { row in exerciseRow(row) }
-                    if env.session == nil {
-                        addExerciseRow
-                        if plan?.canSaveToRoutine == true { saveToRoutineButton }
-                        if let plan, !plan.exercises.isEmpty {
-                            ShareWorkoutButton(identifier: "today.share") { plan.shareSources }
+                    VStack(alignment: .leading, spacing: 14) {
+                        if day.isToday {
+                            todayContent
+                        } else {
+                            TodayDayPreviewView(day: day, onDetails: { detailExercise = $0 },
+                                                onHistory: { historyExercise = $0 })
                         }
                     }
+                    .id(day.offset)
+                    .transition(.push(from: forward ? .trailing : .leading))
                 }
                 .padding(.horizontal, Theme.gutter)
                 .padding(.bottom, 170)
             }
+            .gesture(DaySwipeGesture { show($0 > 0 ? day.next : day.previous) })
             .background(Theme.background)
             .refreshable { await env.sync.syncNow() }
             .safeAreaInset(edge: .bottom) { bottomBar }
@@ -102,6 +91,7 @@ struct TodayView: View {
             .navigationDestination(item: $detailExercise) { ExerciseDetailView(exerciseId: $0) }
             .navigationDestination(item: $historyExercise) { ExerciseHistoryView(exerciseId: $0) }
             .sheet(isPresented: $showSwitch) { switchSheet }
+            .sheet(isPresented: $showDatePicker) { TodayDatePickerSheet(selected: day, now: env.now()) { show($0) } }
             .buildWorkoutFlow(requested: $buildRequested, onStart: startBuilt)
             .sheet(isPresented: $showAddExercise) {
                 ExercisePickerView(excluded: plan?.usedExerciseIds ?? []) { ids in
@@ -133,21 +123,63 @@ struct TodayView: View {
             // spent, so the screen closes and further edits are ignored.
             .onChange(of: env.session != nil) { _, running in
                 editor.isLocked = running
-                if running { openItem = nil }
+                if running {
+                    openItem = nil
+                    day = .today
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active { reload() }
+                // Reopening the app later shows today; Control Center or a sheet doesn't reset it.
+                if newPhase == .background { day = .today }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in reload() }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                day = .today
+                reload()
+            }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
                 reload()
             }
             .onReceive(NotificationCenter.default.publisher(for: .todayPlanReplaced)) { _ in
+                day = .today
                 closePushedScreens()
                 reload()
             }
             .onReceive(NotificationCenter.default.publisher(for: .resumeWorkoutRequested)) { _ in
                 if env.session != nil { showWorkout = true }
+            }
+        }
+    }
+
+    /// Today's own content: the title, gym, plan, rows and the editing controls.
+    @ViewBuilder
+    private var todayContent: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                DisplayTitle(text: "Today", size: 48)
+                    .accessibilityIdentifier("today.title")
+                Text("\(model.title) \u{00B7} \(model.summary)")
+                    .foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("today.summary")
+            }
+            Spacer(minLength: 8)
+            if env.session == nil && (env.hasAnyRoutine || plan?.kind == .built) { switchButton }
+        }
+        if env.session == nil { GymChipRow(gym: currentGym) }
+        LimitsReminder(openPlan: { showPlan = true })
+        if let pendingProposal { proposalChip(pendingProposal) }
+        SyncStatusBanner()
+        RecoveryCard(identifier: "today.recovery")
+        if let loadError { Text(loadError).foregroundStyle(Theme.destructive) }
+        if let session = env.session { resumeBanner(session) }
+        if !env.hasAnyRoutine && model.rows.isEmpty { emptyPlanState }
+        if let note = model.gymNote { TodayGymNote(text: note) }
+        ForEach(model.rows) { row in exerciseRow(row) }
+        if env.session == nil {
+            addExerciseRow
+            if plan?.canSaveToRoutine == true { saveToRoutineButton }
+            if let plan, !plan.exercises.isEmpty {
+                ShareWorkoutButton(identifier: "today.share") { plan.shareSources }
             }
         }
     }
@@ -159,8 +191,12 @@ struct TodayView: View {
                 PrimaryGlassButton(title: "Resume Workout", identifier: "today.resume") {
                     showWorkout = true
                 }
-            } else {
+            } else if day.isToday {
                 startAndBuild
+            } else {
+                SecondaryGlassButton(title: "Back to today", identifier: "today.backToToday", minHeight: 56) {
+                    show(.today)
+                }
             }
         }
         .padding(.horizontal, Theme.gutter).padding(.bottom, 8)
@@ -182,14 +218,6 @@ struct TodayView: View {
         } else {
             buildButton
         }
-    }
-
-    private func gymNote(_ note: String) -> some View {
-        Text(note).font(.footnote.weight(.semibold))
-            .foregroundStyle(Theme.record)
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .glassCapsule(tint: Theme.record.opacity(0.25), interactive: false)
-            .accessibilityIdentifier("today.gymNote")
     }
 
     /// The Build sheet is gone: today's plan becomes the built workout and it starts like any other. If a workout
@@ -215,10 +243,26 @@ struct TodayView: View {
                 .accessibilityIdentifier("today.myPlan")
             StreakChip()
             Spacer()
-            Text(env.now().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
-                .font(.footnote).foregroundStyle(Theme.textSecondary)
+            Button { showDatePicker = true } label: {
+                Label(day.date(now: env.now()).formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)),
+                      systemImage: "calendar")
+                    .font(.footnote.weight(.semibold))
+            }
+            .buttonStyle(.glass)
+            .disabled(env.session != nil)
+            .accessibilityHint("Pick a day to see its workout")
+            .accessibilityIdentifier("today.date")
+            .accessibilityAction(named: "Next day") { show(day.next) }
+            .accessibilityAction(named: "Previous day") { show(day.previous) }
         }
         .padding(.top, 8)
+    }
+
+    /// Shows `new` with a slide; a running workout keeps Today on today.
+    private func show(_ new: TodayDay) {
+        guard env.session == nil, new != day else { return }
+        forward = new.offset > day.offset
+        withAnimation(.snappy) { day = new }
     }
 
     private var planStore: TodayPlanStore { env.todayPlanStore }
