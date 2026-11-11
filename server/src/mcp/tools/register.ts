@@ -219,8 +219,9 @@ export const TOOL_SPECS = [
     title: 'Check a plan change',
     description:
       'What happened to a change made with change_plan: applies_when_app_opens (auto-apply on: it is made, and ' +
-      'the app puts it in the plan when it next opens), waiting_for_review (auto-apply off), applied, partial or ' +
-      'dismissed, and which change ids were applied.',
+      'the app puts it in the plan when it next opens), waiting_for_review (auto-apply off), wont_apply (it no ' +
+      'longer fits the plan, so the app will not apply it), applied, partial or dismissed; which change ids were ' +
+      'applied, and in wont_apply the changes the app will skip and why.',
     input: schemas.byId,
     annotations: READ,
     run: (ctx, a) => getProposal(ctx, a),

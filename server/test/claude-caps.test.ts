@@ -32,7 +32,7 @@ describe("Claude's proposals, at most 100 waiting for review", () => {
   it('words the refusal for Claude', () => {
     expect(CLAUDE_CAPS.too_many_pending_proposals).toBe(
       'The owner already has 100 proposals waiting for review, the most one account holds. Nothing was saved: ask ' +
-        'the owner to apply or dismiss some in the app, then propose again.',
+        'the owner to apply or dismiss some in the app, then call change_plan again.',
     )
   })
 

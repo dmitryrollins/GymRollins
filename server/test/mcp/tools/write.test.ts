@@ -10,6 +10,8 @@ import {
   APPLIES_AUTOMATICALLY,
   DISMISSED_NOTE,
   PARTIAL_NOTE,
+  SOME_WONT_APPLY_NOTE,
+  WONT_APPLY_NOTE,
   getProposal,
   logBodyweight,
   planSnapshot,
@@ -102,6 +104,7 @@ test('change_plan: with "Apply changes without asking" on, the agent is told the
   assertEquals(out.applies, APPLIES_AUTOMATICALLY)
   assert(String(out.applies).includes("Tell the owner it's done"), String(out.applies))
   assert(String(out.applies).includes("Don't call it a proposal"), String(out.applies))
+  assert(String(out.applies).includes('the app skips'), 'says what happens to a part that no longer fits')
 })
 
 test('change_plan: every invalid fixture case → isError with violations, nothing inserted', async () => {
@@ -162,6 +165,9 @@ test('get_plan_change: status and applied change ids; unknown id → not found',
   )
 })
 
+const PUSH = '6f1c1e2a-4b1d-4c3e-9a51-2d7a1b0c0001'
+const BENCH_UP: PlanChange = { id: 'c1', type: 'weight', routineId: PUSH, exerciseId: '0025', weightKg: 61.235 }
+
 test('get_plan_change: a pending change says how it will land, a resolved one does not', async () => {
   const id = 'e0e0e0e0-0000-4000-8000-000000000002'
   const row = {
@@ -169,7 +175,7 @@ test('get_plan_change: a pending change says how it will land, a resolved one do
     created_at: '2026-09-25T10:00:00Z',
     status: 'pending',
     summary: 'Bench +5 lb',
-    changes: [{ id: 'c1' }],
+    changes: [BENCH_UP],
     applied_change_ids: [],
     resolved_at: null,
   }
@@ -191,6 +197,52 @@ test('get_plan_change: a pending change says how it will land, a resolved one do
   const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
   assertEquals(out.status, 'applied')
   assertEquals(out.applies, undefined)
+})
+
+/** A pending row the app hasn't applied yet, checked again against today's plan (NOW is 2026-09-26). */
+async function pendingRow(changes: PlanChange[], profile: { mcp_auto_apply?: boolean; mcp_read_plan?: boolean } = {}) {
+  const data = await loadOwnerData()
+  data.profile = { ...data.profile!, mcp_auto_apply: true, ...profile }
+  const id = 'e0e0e0e0-0000-4000-8000-000000000003'
+  data.proposals = [{
+    id,
+    created_at: '2026-09-19T10:00:00Z',
+    status: 'pending',
+    summary: 'Push on Sunday',
+    changes,
+    applied_change_ids: [],
+    resolved_at: null,
+  }]
+  return { data, id }
+}
+
+test("get_plan_change: a waiting change that no longer fits the plan says the app won't apply it", async () => {
+  const { data, id } = await pendingRow([{ id: 'c2', type: 'today', routineId: PUSH, date: '2026-09-20' }])
+  const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
+  assertEquals(out.status, 'wont_apply')
+  assertEquals(out.wont_apply.map((w: { change_id: string }) => w.change_id), ['c2'])
+  assert(String(out.wont_apply[0].message).includes('Date passed'), out.wont_apply[0].message)
+  assertEquals(out.note, WONT_APPLY_NOTE)
+  assertEquals(out.applies, undefined)
+})
+
+test('get_plan_change: a partly stale change names the part the app will skip and still applies the rest', async () => {
+  const stale: PlanChange = { id: 'c2', type: 'today', routineId: PUSH, date: '2026-09-20' }
+  const { data, id } = await pendingRow([BENCH_UP, stale])
+  const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
+  assertEquals(out.status, 'applies_when_app_opens')
+  assertEquals(out.wont_apply.map((w: { change_id: string }) => w.change_id), ['c2'])
+  assertEquals(out.note, SOME_WONT_APPLY_NOTE)
+  assertEquals(out.applies, APPLIES_AUTOMATICALLY)
+})
+
+test("get_plan_change: with plan reads off the plan can't be checked, so nothing is called stale", async () => {
+  const { data, id } = await pendingRow([BENCH_UP], { mcp_read_plan: false })
+  data.routines = [] // what D1 answers with plan reads off
+  const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
+  assertEquals(out.status, 'applies_when_app_opens')
+  assertEquals(out.wont_apply, undefined)
+  assertEquals(out.note, undefined)
 })
 
 test('log_bodyweight: inserts with a new id; a date-only value is noon UTC; defaults to now', async () => {
@@ -275,7 +327,7 @@ test('change_plan: a swap without weightKg away from a weighted exercise is save
     change_id: 'c1',
     message:
       "No weightKg: machine-shoulder-press's 40 kg isn't carried over, so db-shoulder-press starts with no " +
-      'planned weight (0 until the owner types one). Propose a weight change for it.',
+      'planned weight (0 until the owner types one). Add a weight change for it.',
   }])
   assertEquals(db.insertedProposals.length, 1)
 })
