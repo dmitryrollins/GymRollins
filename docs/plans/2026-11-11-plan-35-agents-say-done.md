@@ -67,6 +67,17 @@ export function agentStatus(status: string, autoApply: boolean): string {
 
 - [ ] **Step 4: Run them and see them pass.**
 
+## Task 1b: A waiting change that can't happen any more (added after review)
+
+The review found that "Done" could be false. If none of a change fits the plan when the app opens, the app records the skip and keeps the row `pending` (`ProposalService.autoApplyPending`). The server is never told, so `get_plan_change` would say `applies_when_app_opens` forever. The common case is a `today` change whose day passed before the phone opened.
+
+- [x] For a pending row (with plan reads on), `get_plan_change` runs `validateProposal` against the current plan. That's the check `change_plan` runs, with the same ±1 day slack for `today`.
+  - `wont_apply` lists the changes that no longer fit, with the reason.
+  - If none fit, the status is `wont_apply`, `note` is `WONT_APPLY_NOTE` and there's no `applies`.
+  - If only some fail, the status stays and `note` is `SOME_WONT_APPLY_NOTE`.
+- [x] `APPLIES_AUTOMATICALLY` says the app skips a part that no longer fits. The other agent-facing texts lose "proposal" and "propose": `DISMISSED_NOTE`, the not-saved error, the swap warning and the pending cap.
+- Not covered: the server allows ±1 day for the owner's time zone, while the app checks their exact date. So for up to a day, `get_plan_change` can still say a passed day's change will apply.
+
 ## Task 2: Tool names, descriptions, instructions
 
 - [ ] **Step 1: Failing tests:**
