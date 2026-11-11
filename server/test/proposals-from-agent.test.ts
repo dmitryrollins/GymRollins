@@ -1,4 +1,4 @@
-// Which agent sent a proposal (plan 32; docs/specs/2026-11-09-ai-agents-design.md, section 3.3): propose_plan_changes
+// Which agent sent a proposal (plan 32; docs/specs/2026-11-09-ai-agents-design.md, section 3.3): change_plan
 // stores the calling client's label (its registered name with its host, src/claude/hosts.ts agentLabel), and the app's
 // pull of pending proposals serves it as from_agent.
 import { env } from 'cloudflare:workers'
@@ -14,7 +14,7 @@ const PROPOSAL = {
 }
 
 async function propose(token: string): Promise<void> {
-  const msg = await readRpc(await mcp(token, 'tools/call', { name: 'propose_plan_changes', arguments: PROPOSAL }, 2))
+  const msg = await readRpc(await mcp(token, 'tools/call', { name: 'change_plan', arguments: PROPOSAL }, 2))
   expect(msg.result.isError).toBeFalsy()
 }
 

@@ -46,7 +46,7 @@ test('search_exercises: results carry the owner preference, never ones marked', 
   assertEquals(byId['0047'].preference, undefined, 'normal is omitted')
 })
 
-test('propose_plan_changes: adding or swapping to a "never" exercise is refused, nothing saved', async () => {
+test('change_plan: adding or swapping to a "never" exercise is refused, nothing saved', async () => {
   const d = await db()
   const add: PlanChange = {
     id: 'c1',
@@ -73,7 +73,7 @@ test('propose_plan_changes: adding or swapping to a "never" exercise is refused,
   assertEquals(d.insertedProposals.length, 0)
 })
 
-test('propose_plan_changes refuses a "never" exercise even when the plan is hidden from Claude', async () => {
+test('change_plan refuses a "never" exercise even when the plan is hidden from Claude', async () => {
   const d = await db()
   d.prefsHidden = true // mcp_read_plan off: RLS hides exercise_prefs
   const add: PlanChange = {
@@ -96,7 +96,7 @@ test('search_exercises reads preferences only for the results', async () => {
   assert(asked.includes('0025') && asked.includes('0289'), JSON.stringify(asked))
 })
 
-test('propose_plan_changes: removing a "never" exercise and adding a "less" one are fine', async () => {
+test('change_plan: removing a "never" exercise and adding a "less" one are fine', async () => {
   const data = await loadOwnerData()
   data.prefs = [{ exercise_id: '0047', pref: 'never' }, { exercise_id: '0405', pref: 'less' }]
   const d = new FakeDb(data)
@@ -111,7 +111,7 @@ test('propose_plan_changes: removing a "never" exercise and adding a "less" one 
 
 test('tool descriptions tell Claude never to propose "never" exercises', () => {
   const byName = Object.fromEntries(TOOL_SPECS.map((s) => [s.name, s.description]))
-  for (const name of ['get_plan', 'search_exercises', 'propose_plan_changes']) {
+  for (const name of ['get_plan', 'search_exercises', 'change_plan']) {
     assert(/never/.test(byName[name]) && /Don't recommend again/.test(byName[name]), name)
   }
 })

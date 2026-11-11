@@ -8,17 +8,20 @@ import {
   utcDay,
   validateProposal,
 } from '../../shared/plan-validation.ts'
-import type { RoutineRow } from '../db.ts'
+import type { Db, ProposalRow, RoutineRow } from '../db.ts'
 import { ownerUnit } from './common.ts'
 import { parseBound, weight } from './format.ts'
 import { fail, ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
-/** What a saved proposal's result tells the agent to say (owner, 2026-11-09: with "Apply changes without asking" on,
- *  an agent's changes are made, not proposed; the app applies them when it next syncs). */
+/** What a saved change's result tells the agent to say (owner, 2026-11-09: with "Apply changes without asking" on,
+ *  an agent's changes are made, not proposed; the app applies them when it next syncs. Plan 35, 2026-11-11: agents
+ *  still said "pending" while the phone was closed, so this says that status is expected). */
 export const APPLIES_AUTOMATICALLY =
-  'Saved, and the owner turned on "Apply changes without asking": the GymRollins app applies it by itself the next ' +
-  'time it opens or syncs, without a review. Tell the owner the change is made and shows in the app once it opens; ' +
-  'they can undo it there for 7 days. get_proposal shows what the app applied.'
+  'Done: the owner turned on "Apply changes without asking", so nobody reviews or approves this. The GymRollins ' +
+  'app puts it into the plan by itself the next time it opens or syncs; until then this status is expected, not a ' +
+  "problem. Tell the owner it's done and shows when they open the app; they can undo it there for 7 days. Don't " +
+  'call it a proposal or say it is pending or waiting. If the plan changes before then so that part of it no ' +
+  'longer fits (its day has passed, say), the app skips that part; get_plan_change shows what the app applied.'
 export const APPLIES_AFTER_REVIEW =
   'Saved for review: the owner applies it in the GymRollins app. Tell them to review it there. To let agents ' +
   'change the plan without a review, they can turn on "Apply changes without asking" in Settings › AI agents.'
@@ -31,7 +34,20 @@ export function appliesNote(autoApply: boolean): string {
 export const PARTIAL_NOTE =
   'Only the changes in applied_change_ids were applied: the owner kept those, or the app skipped the others ' +
   'because they no longer fit the plan.'
-export const DISMISSED_NOTE = 'The owner turned this proposal down: nothing in it was applied.'
+export const DISMISSED_NOTE = 'The owner turned this change down: nothing in it was applied.'
+/** The app skips what no longer fits the plan without telling the server, so get_plan_change checks it itself. */
+export const WONT_APPLY_NOTE =
+  "None of it fits the plan any more (see wont_apply), so the app won't apply it and nothing changed. Tell the " +
+  "owner, and make a new change if it's still wanted."
+export const SOME_WONT_APPLY_NOTE =
+  'The changes in wont_apply no longer fit the plan, so the app skips them and applies the rest. Tell the owner ' +
+  "which part won't happen."
+
+/** What agents see for a stored status: a pending row is either on its way in by itself or waiting for the owner. */
+export function agentStatus(status: string, autoApply: boolean): string {
+  if (status !== 'pending') return status
+  return autoApply ? 'applies_when_app_opens' : 'waiting_for_review'
+}
 
 function statusNote(status: string): string | null {
   if (status === 'partial') return PARTIAL_NOTE
@@ -110,7 +126,7 @@ export async function proposePlanChanges(
     ...(Array.isArray(args.changes) ? neverViolations(args.changes, never) : []),
   ]
   if (violations.length > 0) {
-    return fail(`The proposal was not saved: ${violations.length} problem(s). Fix them and propose again.`, {
+    return fail(`Nothing was saved: ${violations.length} problem(s). Fix them and call change_plan again.`, {
       violations: violations.map((v) => ({ change_id: v.changeId, field: v.field, message: v.message })),
     })
   }
@@ -118,8 +134,8 @@ export async function proposePlanChanges(
   const warnings = swapWeightWarnings(args.changes, routines)
   const autoApply = await db.autoApply()
   return ok({
-    proposal_id: row.id,
-    status: 'pending',
+    id: row.id,
+    status: agentStatus('pending', autoApply),
     auto_apply: autoApply,
     changes: args.changes.length,
     applies: appliesNote(autoApply),
@@ -143,25 +159,51 @@ function swapWeightWarnings(
       change_id: c.id,
       message:
         `No weightKg: ${c.exerciseId}'s ${old.weight_kg} kg isn't carried over, so ${c.toExerciseId} starts ` +
-        'with no planned weight (0 until the owner types one). Propose a weight change for it.',
+        'with no planned weight (0 until the owner types one). Add a weight change for it.',
     }]
   })
 }
 
-export async function getProposal({ db }: ToolCtx, args: { id: string }): Promise<ToolResult> {
+export async function getProposal({ db, now }: ToolCtx, args: { id: string }): Promise<ToolResult> {
   const p = await db.proposal(args.id)
-  if (!p) throw new ToolError('Proposal not found.')
+  if (!p) throw new ToolError('Plan change not found.')
+  const autoApply = await db.autoApply()
+  const changeCount = Array.isArray(p.changes) ? p.changes.length : 0
+  const wontApply = p.status === 'pending' ? await noLongerFits(db, p, now) : []
+  const noneApply = wontApply.length > 0 && wontApply.length >= changeCount
+  const note = noneApply ? WONT_APPLY_NOTE : wontApply.length > 0 ? SOME_WONT_APPLY_NOTE : statusNote(p.status)
   return ok({
     id: p.id,
     created_at: p.created_at,
-    status: p.status,
+    status: noneApply ? 'wont_apply' : agentStatus(p.status, autoApply),
     summary: p.summary,
-    change_count: Array.isArray(p.changes) ? p.changes.length : 0,
+    change_count: changeCount,
     applied_change_ids: p.applied_change_ids,
     resolved_at: p.resolved_at,
-    ...(p.status === 'pending' ? { applies: appliesNote(await db.autoApply()) } : {}),
-    ...(statusNote(p.status) ? { note: statusNote(p.status) } : {}),
+    ...(p.status === 'pending' && !noneApply ? { applies: appliesNote(autoApply) } : {}),
+    ...(wontApply.length > 0 ? { wont_apply: wontApply } : {}),
+    ...(note ? { note } : {}),
   })
+}
+
+/** A waiting change checked again against the current plan, as the app checks it before applying (a `today` day that
+ *  has passed, a routine that's gone): one entry per change the app will skip. With plan reads off the plan can't be
+ *  read, so nothing is called stale. */
+async function noLongerFits(db: Db, p: ProposalRow, now: Date): Promise<{ change_id: string; message: string }[]> {
+  if (!Array.isArray(p.changes) || !(await db.readPermissions()).plan) return []
+  const changes = p.changes as PlanChange[]
+  const ids = referencedExerciseIds(changes)
+  const [routines, known] = await Promise.all([
+    db.routines(),
+    ids.length ? db.exerciseExists(ids) : Promise.resolve(new Set<string>()),
+  ])
+  const violations = validateProposal({ summary: p.summary, changes }, planSnapshot(routines), (id) => known.has(id), {
+    today: utcDay(now),
+    slackDays: TODAY_SLACK_DAYS,
+  })
+  const byChange = new Map<string, string>()
+  for (const v of violations) if (v.changeId !== null && !byChange.has(v.changeId)) byChange.set(v.changeId, v.message)
+  return [...byChange].map(([change_id, message]) => ({ change_id, message }))
 }
 
 export async function logBodyweight(

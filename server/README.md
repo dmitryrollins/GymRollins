@@ -97,7 +97,7 @@ serves them all; each agent can be disconnected on its own. `src/claude/agents.t
   for this account and client only, the access and refresh tokens, the consent, the unredeemed codes (`verification`
   rows whose JSON has `$.userId` and `$.query.client_id`), the `connect_requests` rows and the `/connect` sessions
   they made. The client's registration stays. `POST /v1/claude/revoke` stays as Disconnect all.
-- `propose_plan_changes` stores the client's name in `proposals.from_agent`; `GET /v1/claude/proposals` serves it.
+- `change_plan` stores the client's name in `proposals.from_agent`; `GET /v1/claude/proposals` serves it.
 - `log_workout` (`src/mcp/tools/log-workout.ts`) adds up to 5 past workouts per call straight to the history while the owner's
   Add workouts switch is on. Each is checked on its own: `not_allowed`, `invalid` (times, ranges, at most 24 hours,
   not in the future), `unknown_exercise`, `overlaps` (a workout already stored, or one added earlier in the call; a

@@ -20,8 +20,10 @@ describe("what the tools say about the owner's permissions", () => {
     for (const s of TOOL_SPECS) expect(s.description, s.name).not.toContain('Claude')
     const byName = Object.fromEntries(TOOL_SPECS.map((s) => [s.name, s.description]))
     expect(byName.get_profile).toContain('which permissions agents have')
-    expect(byName.propose_plan_changes).toContain('permissions.auto_apply')
-    expect(byName.propose_plan_changes).not.toContain('never change anything by themselves')
+    expect(byName.change_plan).toContain('permissions.auto_apply')
+    expect(byName.change_plan).not.toContain('never change anything by themselves')
+    expect(byName.get_plan_change).toContain('applies_when_app_opens')
+    expect(Object.keys(byName).filter((name) => name.includes('propose'))).toEqual([])
     expect(byName.log_bodyweight).toContain('the owner allowed agents to access body data')
     for (const name of ['get_training_insights', 'get_strength_levels', 'list_gyms', 'get_gym_equipment']) {
       expect(byName[name], name).toContain('Only works if the owner allowed agents to read')

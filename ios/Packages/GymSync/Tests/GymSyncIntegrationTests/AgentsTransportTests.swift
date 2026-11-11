@@ -63,7 +63,7 @@ struct AgentsTransportTests {
     @Test func aProposalSaysWhichAgentSentIt() async throws {
         let user = try await Account.signUp()
         let muse = try await connect("Muse", to: user.transport)
-        let proposed = try await muse.client.callTool(muse.tokens.access, "propose_plan_changes", [
+        let proposed = try await muse.client.callTool(muse.tokens.access, "change_plan", [
             "summary": "Add a Pull day",
             "changes": [["id": "c1", "type": "add-routine", "routineId": "new-pull", "name": "Pull"]],
         ])

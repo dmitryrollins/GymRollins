@@ -43,7 +43,7 @@ export const WORKOUT_CAPS = {
 export const CLAUDE_CAPS = {
   too_many_pending_proposals:
     `The owner already has ${grouped(DomainLimits.pendingProposalsMax)} proposals waiting for review, the most one ` +
-    'account holds. Nothing was saved: ask the owner to apply or dismiss some in the app, then propose again.',
+    'account holds. Nothing was saved: ask the owner to apply or dismiss some in the app, then call change_plan again.',
   too_many_proposals:
     `The owner's account already holds ${grouped(DomainLimits.proposalsMax)} proposals, resolved ones included, the ` +
     'most it can. Nothing was saved.',
