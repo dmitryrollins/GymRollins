@@ -54,7 +54,7 @@ describe('Claude on /mcp', () => {
 
   it('writes a proposal the app then pulls', async () => {
     const c = await connectClaude()
-    const res = await callTool(c.tokens.access_token, 'propose_plan_changes', {
+    const res = await callTool(c.tokens.access_token, 'change_plan', {
       summary: 'Add a Push day',
       changes: [{ id: 'c1', type: 'add-routine', routineId: 'new-push', name: 'Push' }],
     })

@@ -13,12 +13,14 @@ import { ownerUnit } from './common.ts'
 import { parseBound, weight } from './format.ts'
 import { fail, ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
-/** What a saved proposal's result tells the agent to say (owner, 2026-11-09: with "Apply changes without asking" on,
- *  an agent's changes are made, not proposed; the app applies them when it next syncs). */
+/** What a saved change's result tells the agent to say (owner, 2026-11-09: with "Apply changes without asking" on,
+ *  an agent's changes are made, not proposed; the app applies them when it next syncs. Plan 35, 2026-11-11: agents
+ *  still said "pending" while the phone was closed, so this says that status is expected). */
 export const APPLIES_AUTOMATICALLY =
-  'Saved, and the owner turned on "Apply changes without asking": the GymRollins app applies it by itself the next ' +
-  'time it opens or syncs, without a review. Tell the owner the change is made and shows in the app once it opens; ' +
-  'they can undo it there for 7 days. get_proposal shows what the app applied.'
+  'Done: the owner turned on "Apply changes without asking", so nobody reviews or approves this. The GymRollins ' +
+  'app puts it into the plan by itself the next time it opens or syncs; until then this status is expected, not a ' +
+  "problem. Tell the owner it's done and shows when they open the app; they can undo it there for 7 days. Don't " +
+  'call it a proposal or say it is pending or waiting. get_plan_change shows what the app applied.'
 export const APPLIES_AFTER_REVIEW =
   'Saved for review: the owner applies it in the GymRollins app. Tell them to review it there. To let agents ' +
   'change the plan without a review, they can turn on "Apply changes without asking" in Settings › AI agents.'
@@ -32,6 +34,12 @@ export const PARTIAL_NOTE =
   'Only the changes in applied_change_ids were applied: the owner kept those, or the app skipped the others ' +
   'because they no longer fit the plan.'
 export const DISMISSED_NOTE = 'The owner turned this proposal down: nothing in it was applied.'
+
+/** What agents see for a stored status: a pending row is either on its way in by itself or waiting for the owner. */
+export function agentStatus(status: string, autoApply: boolean): string {
+  if (status !== 'pending') return status
+  return autoApply ? 'applies_when_app_opens' : 'waiting_for_review'
+}
 
 function statusNote(status: string): string | null {
   if (status === 'partial') return PARTIAL_NOTE
@@ -118,8 +126,8 @@ export async function proposePlanChanges(
   const warnings = swapWeightWarnings(args.changes, routines)
   const autoApply = await db.autoApply()
   return ok({
-    proposal_id: row.id,
-    status: 'pending',
+    id: row.id,
+    status: agentStatus('pending', autoApply),
     auto_apply: autoApply,
     changes: args.changes.length,
     applies: appliesNote(autoApply),
@@ -150,16 +158,17 @@ function swapWeightWarnings(
 
 export async function getProposal({ db }: ToolCtx, args: { id: string }): Promise<ToolResult> {
   const p = await db.proposal(args.id)
-  if (!p) throw new ToolError('Proposal not found.')
+  if (!p) throw new ToolError('Plan change not found.')
+  const autoApply = await db.autoApply()
   return ok({
     id: p.id,
     created_at: p.created_at,
-    status: p.status,
+    status: agentStatus(p.status, autoApply),
     summary: p.summary,
     change_count: Array.isArray(p.changes) ? p.changes.length : 0,
     applied_change_ids: p.applied_change_ids,
     resolved_at: p.resolved_at,
-    ...(p.status === 'pending' ? { applies: appliesNote(await db.autoApply()) } : {}),
+    ...(p.status === 'pending' ? { applies: appliesNote(autoApply) } : {}),
     ...(statusNote(p.status) ? { note: statusNote(p.status) } : {}),
   })
 }

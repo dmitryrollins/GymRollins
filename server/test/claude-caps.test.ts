@@ -22,9 +22,9 @@ const pending = async (userId: string) => (await env.DB.prepare(
   "SELECT count(*) AS n FROM proposals WHERE user_id = ?1 AND status = 'pending'",
 ).bind(userId).first<{ n: number }>())!.n
 
-/** Claude's call of propose_plan_changes: the tool's JSON, and whether it was an error. */
+/** Claude's call of change_plan: the tool's JSON, and whether it was an error. */
 async function propose(token: string): Promise<{ isError: boolean; body: unknown }> {
-  const msg = await readRpc(await callTool(token, 'propose_plan_changes', PROPOSAL))
+  const msg = await readRpc(await callTool(token, 'change_plan', PROPOSAL))
   return { isError: msg.result.isError === true, body: toolJson(msg) }
 }
 
@@ -48,7 +48,7 @@ describe("Claude's proposals, at most 100 waiting for review", () => {
       .toEqual({ isError: true, body: { error: CLAUDE_CAPS.too_many_pending_proposals } })
     expect(await pending(c.userId)).toBe(100)
     const audit = await env.DB.prepare(
-      "SELECT ok FROM mcp_audit WHERE user_id = ?1 AND tool = 'propose_plan_changes' ORDER BY id DESC LIMIT 1",
+      "SELECT ok FROM mcp_audit WHERE user_id = ?1 AND tool = 'change_plan' ORDER BY id DESC LIMIT 1",
     ).bind(c.userId).first<{ ok: number }>()
     expect(audit).toEqual({ ok: 0 })
   })

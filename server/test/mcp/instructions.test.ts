@@ -6,7 +6,7 @@ import { SERVER_INSTRUCTIONS } from '../../src/mcp/instructions.ts'
 import { TOOL_SPECS } from '../../src/mcp/tools/register.ts'
 import { CHANGE_FIELDS } from '../../src/mcp/tools/schemas.ts'
 
-const TOOL_NAME = /\b(?:get|list|search|propose|log)_[a-z_]+\b/g
+const TOOL_NAME = /\b(?:get|list|search|change|log)_[a-z_]+\b/g
 
 test('instructions name only registered tools', () => {
   const named = [...new Set(SERVER_INSTRUCTIONS.match(TOOL_NAME) ?? [])]
@@ -24,7 +24,9 @@ test('instructions name only real change types', () => {
 
 test('instructions say how auto_apply changes what the agent tells the owner', () => {
   assert(SERVER_INSTRUCTIONS.includes('auto_apply'), 'names the permission')
-  assert(SERVER_INSTRUCTIONS.includes("say they're made"), 'switch on: changes are made')
+  assert(SERVER_INSTRUCTIONS.includes("Say it's done"), 'switch on: the change is made')
+  assert(SERVER_INSTRUCTIONS.includes("don't call it a proposal"), 'switch on: not a proposal')
+  assert(!SERVER_INSTRUCTIONS.includes('propose'), 'no tool or rule says propose')
   assert(!SERVER_INSTRUCTIONS.includes('the owner reviews them in the app.'), 'no longer review-only')
 })
 

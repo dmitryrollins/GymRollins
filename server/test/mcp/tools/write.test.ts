@@ -68,7 +68,7 @@ test('planSnapshot: routine ids, library exercise ids and effective rep ranges',
   assertEquals(snap.routines[1].repsMin, {})
 })
 
-test("propose_plan_changes: the fixture's valid proposal is inserted once and returns its id", async () => {
+test("change_plan: the fixture's valid proposal is inserted once and returns its id", async () => {
   const db = fixtureDb()
   const valid = fixture.cases.find((c) => c.name === 'valid knee-break proposal')!
   const r = await proposePlanChanges({ db, now: NOW }, valid.proposal)
@@ -77,13 +77,14 @@ test("propose_plan_changes: the fixture's valid proposal is inserted once and re
   assertEquals(db.insertedProposals[0].summary, valid.proposal.summary)
   assertEquals(db.insertedProposals[0].changes, valid.proposal.changes)
   const out = json(r)
-  assertEquals(out.proposal_id, 'prop-1')
-  assertEquals(out.status, 'pending')
+  assertEquals(out.id, 'prop-1')
+  assertEquals(out.proposal_id, undefined)
+  assertEquals(out.status, 'waiting_for_review')
   assertEquals(out.auto_apply, false)
   assert(String(out.applies).includes('Tell them to review it there'), String(out.applies))
 })
 
-test('propose_plan_changes: with "Apply changes without asking" on, the agent is told the change is made', async () => {
+test('change_plan: with "Apply changes without asking" on, the agent is told the change is made', async () => {
   const data = await loadOwnerData()
   data.profile = { ...data.profile!, mcp_auto_apply: true }
   const db = new FakeDb(data)
@@ -97,11 +98,13 @@ test('propose_plan_changes: with "Apply changes without asking" on, the agent is
   }
   const out = json(await proposePlanChanges({ db, now: NOW }, { summary: 'Bench +5 lb', changes: [change] }))
   assertEquals(out.auto_apply, true)
+  assertEquals(out.status, 'applies_when_app_opens')
   assertEquals(out.applies, APPLIES_AUTOMATICALLY)
-  assert(String(out.applies).includes('Tell the owner the change is made'))
+  assert(String(out.applies).includes("Tell the owner it's done"), String(out.applies))
+  assert(String(out.applies).includes("Don't call it a proposal"), String(out.applies))
 })
 
-test('propose_plan_changes: every invalid fixture case → isError with violations, nothing inserted', async () => {
+test('change_plan: every invalid fixture case → isError with violations, nothing inserted', async () => {
   for (const c of fixture.cases.filter((x) => x.violations.length > 0)) {
     const db = fixtureDb()
     const r = await proposePlanChanges({ db, now: NOW }, c.proposal)
@@ -117,7 +120,7 @@ test('propose_plan_changes: every invalid fixture case → isError with violatio
   }
 })
 
-test('propose_plan_changes: a real-plan weight change on bench is valid', async () => {
+test('change_plan: a real-plan weight change on bench is valid', async () => {
   const db = new FakeDb(await loadOwnerData())
   const change: PlanChange = {
     id: 'c1',
@@ -132,7 +135,7 @@ test('propose_plan_changes: a real-plan weight change on bench is valid', async 
   assertEquals(db.insertedProposals.length, 1)
 })
 
-test('get_proposal: status and applied change ids; unknown id → not found', async () => {
+test('get_plan_change: status and applied change ids; unknown id → not found', async () => {
   const data = await loadOwnerData()
   data.proposals = [{
     id: 'e0e0e0e0-0000-4000-8000-000000000001',
@@ -159,7 +162,7 @@ test('get_proposal: status and applied change ids; unknown id → not found', as
   )
 })
 
-test('get_proposal: a pending proposal says how it will land, a resolved one does not', async () => {
+test('get_plan_change: a pending change says how it will land, a resolved one does not', async () => {
   const id = 'e0e0e0e0-0000-4000-8000-000000000002'
   const row = {
     id,
@@ -170,16 +173,23 @@ test('get_proposal: a pending proposal says how it will land, a resolved one doe
     applied_change_ids: [],
     resolved_at: null,
   }
-  for (const [autoApply, applies] of [[false, APPLIES_AFTER_REVIEW], [true, APPLIES_AUTOMATICALLY]] as const) {
+  const cases = [
+    [false, APPLIES_AFTER_REVIEW, 'waiting_for_review'],
+    [true, APPLIES_AUTOMATICALLY, 'applies_when_app_opens'],
+  ] as const
+  for (const [autoApply, applies, status] of cases) {
     const data = await loadOwnerData()
     data.profile = { ...data.profile!, mcp_auto_apply: autoApply }
     data.proposals = [row]
     const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
+    assertEquals(out.status, status)
     assertEquals(out.applies, applies)
   }
   const data = await loadOwnerData()
+  data.profile = { ...data.profile!, mcp_auto_apply: true }
   data.proposals = [{ ...row, status: 'applied', applied_change_ids: ['c1'], resolved_at: '2026-09-25T11:00:00Z' }]
   const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
+  assertEquals(out.status, 'applied')
   assertEquals(out.applies, undefined)
 })
 
@@ -200,7 +210,7 @@ test('log_bodyweight: inserts with a new id; a date-only value is noon UTC; defa
   assertEquals(db.insertedBodyweight[1].bf_pct, undefined)
 })
 
-test('propose_plan_changes: a today date is checked against the UTC date ±1 day (owner time zone unknown)', async () => {
+test('change_plan: a today date is checked against the UTC date ±1 day (owner time zone unknown)', async () => {
   // NOW is 2026-09-26 12:00 UTC: the owner may already be on the 27th, or still on the 25th.
   for (const date of ['2026-09-25', '2026-09-26', '2026-10-03', '2026-10-04']) {
     const db = fixtureDb()
@@ -219,7 +229,7 @@ test('propose_plan_changes: a today date is checked against the UTC date ±1 day
   }
 })
 
-test('propose_plan_changes: add-routine + today for a one-off session (the "Home · KB Upper" case)', async () => {
+test('change_plan: add-routine + today for a one-off session (the "Home · KB Upper" case)', async () => {
   const db = fixtureDb()
   const r = await proposePlanChanges({ db, now: NOW }, {
     summary: 'Home session today',
@@ -233,7 +243,7 @@ test('propose_plan_changes: add-routine + today for a one-off session (the "Home
   assertEquals(json(r).changes, 3)
 })
 
-test('propose_plan_changes: today on a paused routine is refused', async () => {
+test('change_plan: today on a paused routine is refused', async () => {
   const db = fixtureDb(['legs'])
   const r = await proposePlanChanges({ db, now: NOW }, {
     summary: 'Legs today',
@@ -254,7 +264,7 @@ test('log_bodyweight: a date in the future is rejected', async () => {
   assertEquals(db.insertedBodyweight.length, 0)
 })
 
-test('propose_plan_changes: a swap without weightKg away from a weighted exercise is saved with a warning', async () => {
+test('change_plan: a swap without weightKg away from a weighted exercise is saved with a warning', async () => {
   const db = fixtureDb([], { 'machine-shoulder-press': 40 })
   const r = await proposePlanChanges({ db, now: NOW }, {
     summary: 'Swap the press',
@@ -270,7 +280,7 @@ test('propose_plan_changes: a swap without weightKg away from a weighted exercis
   assertEquals(db.insertedProposals.length, 1)
 })
 
-test('propose_plan_changes: a swap with weightKg, or away from an unweighted exercise, has no warnings', async () => {
+test('change_plan: a swap with weightKg, or away from an unweighted exercise, has no warnings', async () => {
   const unweighted = await proposePlanChanges({ db: fixtureDb(), now: NOW }, {
     summary: 'Swap',
     changes: [SWAP],
