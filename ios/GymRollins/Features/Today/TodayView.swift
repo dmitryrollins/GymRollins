@@ -49,7 +49,7 @@ struct TodayView: View {
 
     /// Onboarding's "Build me a 4-day upper/lower plan…" prompt: the copyable text offered before "Ask Claude to
     /// build one" pushes the connection screen.
-    static let askClaudePrompt = "Build me a training plan using get_profile and propose_plan_changes."
+    static let askClaudePrompt = "Build me a training plan using get_profile and change_plan."
 
     var body: some View {
         NavigationStack {

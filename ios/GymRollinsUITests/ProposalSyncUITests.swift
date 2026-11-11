@@ -49,13 +49,13 @@ final class ProposalSyncUITests: XCTestCase {
         let session = try await appSession(email: email)
         let routines = try await get("/v1/sync/routines?limit=500", token: session)["rows"] as? [[String: Any]] ?? []
         let push = try XCTUnwrap(routines.first { $0["name"] as? String == "Push + Arms" }?["id"] as? String)
-        let proposed = try await claude.callTool(tokens.access, "propose_plan_changes", [
+        let proposed = try await claude.callTool(tokens.access, "change_plan", [
             "summary": "Heavier bench",
             "changes": [["id": "c1", "type": "weight", "routineId": push, "exerciseId": "0025", "weightKg": 65.77,
                          "reason": "Top of range"]],
         ])
         XCTAssertFalse(proposed.isError, "\(proposed.json)")
-        let proposalId = try XCTUnwrap(proposed.json["proposal_id"] as? String)
+        let proposalId = try XCTUnwrap(proposed.json["id"] as? String)
 
         // 3. The app pulls it: chip on Today → review → apply.
         goBack(app, to: "Settings")
@@ -78,7 +78,7 @@ final class ProposalSyncUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         syncNow(app)
         waitForLabel(app.staticTexts["account.status"], "Up to date")
-        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposalId])
+        let seen = try await claude.callTool(tokens.access, "get_plan_change", ["id": proposalId])
         XCTAssertEqual(seen.json["status"] as? String, "applied")
         let plan = try await get("/v1/sync/routines?limit=500", token: session)["rows"] as? [[String: Any]] ?? []
         let exercises = plan.first { $0["id"] as? String == push }?["exercises"] as? [[String: Any]] ?? []
