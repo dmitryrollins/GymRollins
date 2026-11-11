@@ -236,6 +236,18 @@ test('get_plan_change: a partly stale change names the part the app will skip an
   assertEquals(out.applies, APPLIES_AUTOMATICALLY)
 })
 
+test('get_plan_change: a change that needed a skipped one is skipped too, as the app re-checks what is left', async () => {
+  // The new routine's name is too long, so the app drops it and the day planned on it has no routine. The validator
+  // never applies an invalid change, so one check finds both, as the app's repeated check does.
+  const { data, id } = await pendingRow([
+    { id: 'c1', type: 'add-routine', routineId: 'home', name: 'H'.repeat(41) },
+    { id: 'c2', type: 'today', routineId: 'home', date: '2026-09-27' },
+  ])
+  const out = json(await getProposal({ db: new FakeDb(data), now: NOW }, { id }))
+  assertEquals(out.wont_apply.map((w: { change_id: string }) => w.change_id), ['c1', 'c2'])
+  assertEquals(out.status, 'wont_apply')
+})
+
 test("get_plan_change: with plan reads off the plan can't be checked, so nothing is called stale", async () => {
   const { data, id } = await pendingRow([BENCH_UP], { mcp_read_plan: false })
   data.routines = [] // what D1 answers with plan reads off
