@@ -47,6 +47,8 @@ struct TodayView: View {
     /// Whether the last move went to a later day, for the slide's direction.
     @State private var forward = true
     @State private var showDatePicker = false
+    /// Save Changes on a workout that is on other days too: those days, while the question is open.
+    @State private var savingShared: [Int] = []
 
     /// Onboarding's "Build me a 4-day upper/lower plan…" prompt: the copyable text offered before "Ask Claude to
     /// build one" pushes the connection screen.
@@ -96,7 +98,11 @@ struct TodayView: View {
             .navigationDestination(for: String.self) { ExerciseDetailView(exerciseId: $0) }
             .navigationDestination(item: $detailExercise) { ExerciseDetailView(exerciseId: $0) }
             .navigationDestination(item: $historyExercise) { ExerciseHistoryView(exerciseId: $0) }
-            .sheet(isPresented: $showSwitch) { switchSheet }
+            .sheet(isPresented: $showSwitch) {
+                TodaySwitchSheet(routines: (try? env.routines.all()) ?? [], current: plan?.base?.id,
+                                 scheduled: scheduledRoutine?.id, date: day.date(now: env.now()), isToday: day.isToday,
+                                 onAsScheduled: { dayStore.clear(); reload() }, onSwitch: switchDay)
+            }
             .sheet(isPresented: $showDatePicker) { TodayDatePickerSheet(selected: day, now: env.now()) { show($0) } }
             .buildWorkoutFlow(requested: $buildRequested, onStart: startBuilt)
             .sheet(isPresented: $showAddExercise) {
@@ -464,70 +470,66 @@ struct TodayView: View {
     }
 
     private var saveToRoutineButton: some View {
-        SecondaryGlassButton(title: "Save Changes to \(plan?.title ?? "Routine")", identifier: "today.saveToRoutine") {
-            guard let plan, let routine = plan.routineWithEdits(at: env.now()) else { return }
-            do {
+        SecondaryGlassButton(title: "Save Changes to \(plan?.title ?? "Workout")", identifier: "today.saveToRoutine") {
+            guard let base = plan?.base else { return }
+            // The day's own workout asks when it's on other days too; a switched one is saved for its days.
+            let others = base.id == scheduledRoutine?.id ? ((try? env.otherDays(of: base.id, besides: weekday)) ?? []) : []
+            if others.isEmpty { saveChanges(onlyOn: nil) } else { savingShared = others }
+        }
+        .confirmationDialog("\(plan?.title ?? "This workout") is also on \(WeekPlan.dayList(savingShared))",
+                            isPresented: Binding(get: { !savingShared.isEmpty }, set: { if !$0 { savingShared = [] } }),
+                            titleVisibility: .visible) {
+            Button("Change \(WeekPlan.dayList([weekday] + savingShared))") { saveChanges(onlyOn: nil) }
+            Button("Only \(WeekPlan.dayName(weekday))") { saveChanges(onlyOn: weekday) }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    /// Writes the day's edits into its workout, for every day it's on, or (`onlyOn`) into a copy that takes over this
+    /// weekday (the day then shows the copy). Today keeps its sets for the workout about to start; a later day follows
+    /// the saved workout again (a date switched to it stays switched to it).
+    private func saveChanges(onlyOn weekday: Int?) {
+        savingShared = []
+        guard let plan, let routine = plan.routineWithEdits(at: env.now()) else { return }
+        do {
+            if let weekday {
+                try env.saveWorkout(routine, onlyOn: weekday)
+                dayStore.clear()
+            } else {
                 try env.routines.upsert(routine)
-                if day.isToday { apply(plan.savedToRoutine(at: env.now())) } else { dayStore.clear() }
+                if day.isToday {
+                    apply(plan.savedToRoutine(at: env.now()))
+                } else if plan.kind == .switched {
+                    apply(plan.switched(to: routine).adapted(by: env.gymAdapter())) // still this date's workout
+                } else {
+                    dayStore.clear()
+                }
                 env.planChanged()
-            } catch GymDataError.invalidInput(let message) {
-                loadError = message
-            } catch {
-                AppEnvironment.log.error("Save to routine failed: \(error.localizedDescription, privacy: .public)")
-                loadError = "Couldn't save the routine. Try again."
             }
+        } catch GymDataError.invalidInput(let message) {
+            loadError = message
+        } catch {
+            AppEnvironment.log.error("Save to routine failed: \(error.localizedDescription, privacy: .public)")
+            loadError = "Couldn't save the workout. Try again."
         }
     }
 
-    private var switchSheet: some View {
-        NavigationStack {
-            List {
-                Section("Routines") {
-                    ForEach((try? env.routines.all()) ?? []) { routine in
-                        Button {
-                            choose(routine)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(routine.name).foregroundStyle(Theme.textPrimary)
-                                    Text(routine.exercises.count == 1 ? "1 exercise" : "\(routine.exercises.count) exercises")
-                                        .font(.footnote).foregroundStyle(Theme.textSecondary)
-                                }
-                                Spacer()
-                                if routine.id == plan?.base?.id {
-                                    Image(systemName: "checkmark").foregroundStyle(Theme.primaryFill)
-                                }
-                            }
-                        }
-                        .disabled(routine.exercises.isEmpty)
-                        .accessibilityIdentifier("today.switch.routine.\(routine.name)")
-                    }
-                }
-                Section {
-                    Button("Empty Workout") { choose(nil) }
-                        .accessibilityIdentifier("today.switch.empty")
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(Theme.background)
-            .navigationTitle("Switch Workout")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showSwitch = false } }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
+    private var weekday: Int { WeekSchedule.isoWeekday(day.date(now: env.now())) }
 
-    /// Switch for the day shown. Picking the day's own workout (on a later rest day, Rest) is the plan as scheduled.
-    private func choose(_ routine: Routine?) {
-        showSwitch = false
+    /// Switch's pick: this date only, or every week on its weekday (the day then follows the new week).
+    private func switchDay(to routine: Routine?, scope: TodaySwitchSheet.Scope) {
         guard let current = plan else { return }
-        if routine?.id == scheduledRoutine?.id && (routine != nil || !day.isToday) {
-            dayStore.clear()
-            reload()
-        } else {
+        switch scope {
+        case .thisDay:
             apply(current.switched(to: routine).adapted(by: env.gymAdapter()))
+        case .everyWeek:
+            do {
+                try env.schedule(every: weekday, routine?.id)
+                dayStore.clear()
+            } catch {
+                AppEnvironment.log.error("Switch every week failed: \(error.localizedDescription, privacy: .public)")
+                loadError = "Couldn't change your week. Try again."
+            }
         }
     }
 

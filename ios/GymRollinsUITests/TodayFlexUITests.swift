@@ -35,6 +35,9 @@ final class TodayFlexUITests: XCTestCase {
         let empty = app.buttons["today.switch.empty"]
         XCTAssertTrue(empty.waitForExistence(timeout: 5))
         empty.tap()
+        let only = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Only '")).firstMatch
+        XCTAssertTrue(only.waitForExistence(timeout: 5))
+        only.tap()
         waitForSummary(app, containing: "Empty workout")
         XCTAssertEqual(app.buttons["today.start"].label, "Start Empty Workout")
 
@@ -58,6 +61,9 @@ final class TodayFlexUITests: XCTestCase {
         let empty = app.buttons["today.switch.empty"]
         XCTAssertTrue(empty.waitForExistence(timeout: 5))
         empty.tap()
+        let only = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Only '")).firstMatch
+        XCTAssertTrue(only.waitForExistence(timeout: 5))
+        only.tap()
         waitForSummary(app, containing: "Empty workout")
         app.terminate()
 
@@ -80,6 +86,9 @@ final class TodayFlexUITests: XCTestCase {
         let save = app.buttons["today.saveToRoutine"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         save.tap()
+        let both = app.buttons["Change Monday and Saturday"] // Push + Arms is on both days
+        XCTAssertTrue(both.waitForExistence(timeout: 5))
+        both.tap()
         XCTAssertTrue(save.waitForNonExistence(timeout: 5), "saved: nothing left to save")
         XCTAssertFalse(summary(app).label.contains("edited"), summary(app).label)
         XCTAssertFalse(row.exists, "the routine itself no longer has it")

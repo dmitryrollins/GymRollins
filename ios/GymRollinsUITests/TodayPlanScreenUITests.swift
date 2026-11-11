@@ -181,6 +181,9 @@ final class TodayPlanScreenUITests: XCTestCase {
         let save = app.buttons["today.saveToRoutine"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         save.tap()
+        let both = app.buttons["Change Monday and Saturday"] // Push + Arms is on both days
+        XCTAssertTrue(both.waitForExistence(timeout: 5))
+        both.tap()
         XCTAssertTrue(save.waitForNonExistence(timeout: 5), "saved: nothing left to save")
         app.terminate()
 
