@@ -3,13 +3,14 @@ import SwiftUI
 
 /// The exercise screen: hero header, chip row (rest/history/plates/swap), progression hint, set timeline ("Reps left?"
 /// under the set just logged), and a floating bottom bar. The same screen serves a running workout (Log All Sets + Log
-/// Set, replaced by the rest bar while resting) and Today's plan before it starts ("plan mode": one Start Workout
-/// button, no clock, `···` is Today's exercise menu). What it shows and edits goes through `ExerciseScreenModel`.
+/// Set, replaced by the rest bar while resting) and the day's plan on Today before it starts ("plan mode": one Start
+/// Workout button on today, no clock, `···` is Today's exercise menu). What it shows and edits goes through
+/// `ExerciseScreenModel`.
 struct LoggingView: View {
     let model: ExerciseScreenModel
     /// Workout mode: finishes the workout (last exercise done).
     var finish: () -> Void = {}
-    /// Plan mode: starts today's workout and opens it on this item.
+    /// Plan mode: starts the day's workout (today only, `canStart`) and opens it on this item.
     var startWorkout: (UUID) -> Void = { _ in }
     /// Plan mode: false on a later day (it can be edited, not started).
     var canStart = true
@@ -273,7 +274,7 @@ struct LoggingView: View {
 // MARK: - Hero controls
 
 extension LoggingView {
-    /// The workout clock; before the workout (plan mode) there is none, only "Edited" once today's sets changed.
+    /// The workout clock; before the workout (plan mode) there is none, only "Edited" once the day's sets changed.
     @ViewBuilder
     private var heroStatus: some View {
         switch model {
@@ -404,7 +405,7 @@ extension LoggingView {
     /// Runs a structural edit (add / remove / warm-up) with pending typing applied first.
     private func editSets(_ edit: () -> Void) { commitAll(); edit() }
 
-    /// In plan mode every keystroke that parses also goes into today's plan at once (the text stays as typed until
+    /// In plan mode every keystroke that parses also goes into the day's plan at once (the text stays as typed until
     /// the box is left), so a workout started meanwhile (from the watch) gets the latest number.
     private func draftBinding(_ field: SetField, set: WorkoutSet) -> Binding<String> {
         Binding(get: { drafts[field] ?? SetFieldFormat.display(field, set: set, unit: env.profile.unit) },

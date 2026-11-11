@@ -55,7 +55,7 @@ import Testing
         let changed = try env.laterDay(on: date(2, env))
         #expect(changed.changed)
         #expect(changed.plan.exercises.count == count - 1)
-        #expect(env.isLaterDayChanged(TodayPlan.dayKey(date(2, env))))
+        #expect(try env.laterDay(on: date(2, env)).changed)
         #expect(try env.laterDay(on: date(9, env)).plan.exercises.count == count, "the next Monday is as planned")
         #expect(try env.todaysPlan().plan.exercises.count == count, "today (Saturday, Push + Arms) is untouched")
     }
@@ -91,7 +91,7 @@ import Testing
         let reset = try env.laterDay(on: date(2, env))
         #expect(reset.plan.title == "Push + Arms")
         #expect(!reset.changed)
-        #expect(!env.isLaterDayChanged(mondayKey))
+        #expect(!(try env.laterDay(on: date(2, env)).changed))
     }
 
     @Test func restOnATrainingDateIsKept_andAnEmptyRestDayIsNotAChange() throws {
@@ -105,7 +105,7 @@ import Testing
         let sunday = try env.laterDay(on: date(1, env))
         let saver = env.laterDaySaver(on: date(1, env), scheduled: nil)
         saver.save(sunday.plan)
-        #expect(!env.isLaterDayChanged(TodayPlan.dayKey(date(1, env))), "nothing on a rest day is no change")
+        #expect(!(try env.laterDay(on: date(1, env)).changed), "nothing on a rest day is no change")
     }
 
     @Test func onTheDayTheChangeBecomesTodaysPlan() throws {
@@ -123,12 +123,22 @@ import Testing
 
     @Test func aChangeWhoseWorkoutIsGoneIsDroppedWhenRead() throws {
         let env = try makeEnv(), pull = try pull(env)
-        let mondayKey = TodayPlan.dayKey(date(2, env))
         let monday = try env.laterDay(on: date(2, env))
         env.laterDaySaver(on: date(2, env), scheduled: monday.scheduled?.id).save(monday.plan.switched(to: pull))
         try env.routines.delete(pull.id)
         #expect(!(try env.laterDay(on: date(2, env)).changed))
-        #expect(!env.isLaterDayChanged(mondayKey))
+        #expect(LaterDayPlanStore(defaults: env.defaults).days().isEmpty, "the stale change was removed")
+    }
+
+    @Test func aPlannedSwitchTheDayIgnoresIsNoChange() throws {
+        let env = try makeEnv()
+        let legs = try #require(try env.routines.all().first { $0.name.hasPrefix("Legs") })
+        #expect(legs.paused)
+        PlannedSwitchStore(defaults: env.defaults).set(legs.id, on: TodayPlan.dayKey(date(2, env)))
+        let monday = try env.laterDay(on: date(2, env))
+        #expect(monday.plan.title == "Push + Arms")
+        #expect(!monday.changed)
+        #expect(!env.isLaterDayChanged(monday.plan), "Today reads the same answer")
     }
 
     @Test func wipingTheSwitchesClearsLaterDays() throws {

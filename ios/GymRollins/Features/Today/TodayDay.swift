@@ -2,8 +2,8 @@ import Foundation
 import GymCore
 import GymData
 
-/// The day Today shows (owner, 2026-11-09): today, or a later day previewed read-only. Swiping and the date picker
-/// move it; a day before today can't be reached, so past workouts stay in Log.
+/// The day Today shows (owner, 2026-11-09): today, or a later day, edited for that date only. Swiping and the date
+/// picker move it; a day before today can't be reached, so past workouts stay in Log.
 struct TodayDay: Equatable {
     /// Days after today: 0 is today.
     let offset: Int

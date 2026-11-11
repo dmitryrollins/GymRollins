@@ -293,6 +293,7 @@ struct TodayView: View {
         guard env.session == nil, new != day else { return }
         forward = new.offset > day.offset
         withAnimation(.snappy) { day = new }
+        reload()
     }
 
     private var planStore: TodayPlanStore { env.todayPlanStore }
@@ -310,6 +311,11 @@ struct TodayView: View {
         guard env.session == nil else {
             // Started meanwhile (e.g. from the watch): show that workout instead of starting another.
             showWorkout = true
+            return
+        }
+        // A plan for another day (a later day, or yesterday's at midnight) is never started.
+        if let plan, plan.day != TodayPlan.dayKey(env.now()) {
+            reload()
             return
         }
         let starting = plan
@@ -388,7 +394,7 @@ struct TodayView: View {
         if day.isToday {
             model = made
         } else {
-            dayChanged = env.isLaterDayChanged(plan.day)
+            dayChanged = env.isLaterDayChanged(plan)
             model = DayPreview.laterDay(made, plan: plan, changed: dayChanged)
         }
     }

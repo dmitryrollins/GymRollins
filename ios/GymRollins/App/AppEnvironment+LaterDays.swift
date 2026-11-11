@@ -23,14 +23,17 @@ extension AppEnvironment {
         let scheduled = routine?.paused == true ? nil : routine
         let day = TodayPlan.dayKey(date)
         let store = LaterDayPlanStore(defaults: defaults)
+        let plan: TodayPlan
         if let stored = store.plan(day: day, routines: all, scheduled: scheduled?.id) {
-            return LaterDay(plan: stored.adapted(by: gymAdapter()), scheduled: scheduled, changed: true)
+            plan = stored
+        } else {
+            if store.days().contains(day) { store.remove(day: day) }
+            plan = DayPreview.plan(day: day, scheduled: scheduled, routines: all,
+                                   planned: PlannedSwitchStore(defaults: defaults).all()[day])
+                ?? TodayPlan(day: day, kind: .empty, base: nil, exercises: [], edited: false)
         }
-        if store.days().contains(day) { store.remove(day: day) }
-        let preview = DayPreview.plan(day: day, scheduled: scheduled, routines: all,
-                                      planned: PlannedSwitchStore(defaults: defaults).all()[day])
-        let plan = preview ?? TodayPlan(day: day, kind: .empty, base: nil, exercises: [], edited: false)
-        return LaterDay(plan: plan.adapted(by: gymAdapter()), scheduled: scheduled, changed: preview?.kind == .switched)
+        let shown = plan.adapted(by: gymAdapter())
+        return LaterDay(plan: shown, scheduled: scheduled, changed: isLaterDayChanged(shown))
     }
 
     /// Where Today's editor keeps changes to the later day `date` falls on.
@@ -38,10 +41,11 @@ extension AppEnvironment {
         LaterDayPlanSaver(day: TodayPlan.dayKey(date), scheduled: scheduled, defaults: defaults)
     }
 
-    /// Whether the owner or an agent changed the later day `day` (yyyy-MM-dd).
-    func isLaterDayChanged(_ day: String) -> Bool {
-        LaterDayPlanStore(defaults: defaults).days().contains(day)
-            || PlannedSwitchStore(defaults: defaults).all()[day] != nil
+    /// Whether the later day shown as `plan` differs from the week: the owner's change is stored for it, or it shows
+    /// an agent's planned switch.
+    func isLaterDayChanged(_ plan: TodayPlan) -> Bool {
+        LaterDayPlanStore(defaults: defaults).days().contains(plan.day)
+            || (plan.kind == .switched && PlannedSwitchStore(defaults: defaults).all()[plan.day] == plan.base?.id)
     }
 
     /// Reset this day: the date follows the week again (the owner's change and an agent's switch for it go).
