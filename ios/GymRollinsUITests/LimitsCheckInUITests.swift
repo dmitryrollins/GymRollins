@@ -113,6 +113,10 @@ final class LimitsCheckInUITests: XCTestCase {
         XCTAssertTrue(message.waitForExistence(timeout: 5))
         XCTAssertEqual(message.label, "Legs is back, with 6 exercises at 60%. Pick its day in My Plan.")
         scrollAndTap(app, app.buttons["limits.openPlan"])
+        // My Plan has no Start Workout bar: its last row ends above the tab bar, inside scrollAndTap's bottom band.
+        let saved = app.buttons["plan.savedWorkouts"]
+        app.scrollToHittable(saved)
+        saved.tap()
         XCTAssertTrue(element(app, "plan.routine.Legs").waitForExistence(timeout: 5))
     }
 

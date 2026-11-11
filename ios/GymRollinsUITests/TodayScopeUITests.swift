@@ -19,9 +19,20 @@ final class TodayScopeUITests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Only '")).firstMatch
     }
 
+    /// Waits for the day's title between the swipes: two quick swipes once stayed on Sunday.
+    private func waitForTitle(_ app: XCUIApplication, _ text: String,
+                              file: StaticString = #filePath, line: UInt = #line) {
+        let title = app.staticTexts["today.title"].firstMatch
+        let predicate = NSPredicate(format: "label == %@", text)
+        let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: title)], timeout: 5)
+        XCTAssertEqual(result, .completed, "title was '\(title.label)'", file: file, line: line)
+    }
+
     private func openMonday(_ app: XCUIApplication) {
         app.scrollViews.firstMatch.swipeLeft()
+        waitForTitle(app, "Tomorrow")
         app.scrollViews.firstMatch.swipeLeft()
+        waitForTitle(app, "Monday")
         waitForSummary(app, containing: "Push + Arms")
     }
 

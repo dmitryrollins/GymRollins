@@ -59,6 +59,7 @@ final class TodayDaysUITests: XCTestCase {
     func testALaterDayIsChangedForThatDateOnly() {
         let app = XCUIApplication.launchReady { $0.buttons["today.start"] }
         app.scrollViews.firstMatch.swipeLeft()
+        waitForLabel(title(app), "Tomorrow")
         app.scrollViews.firstMatch.swipeLeft()
         waitForLabel(title(app), "Monday")
         XCTAssertFalse(app.buttons["today.start"].exists, "a later day can't be started")
@@ -76,6 +77,7 @@ final class TodayDaysUITests: XCTestCase {
         XCTAssertTrue(bench.waitForExistence(timeout: 5), "today's Push + Arms still has it")
 
         app.scrollViews.firstMatch.swipeLeft()
+        waitForLabel(title(app), "Tomorrow")
         app.scrollViews.firstMatch.swipeLeft()
         waitForLabel(title(app), "Monday")
         XCTAssertFalse(bench.exists, "Monday kept its change")

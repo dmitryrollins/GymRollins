@@ -152,6 +152,7 @@ final class FlowCoverageUITests: XCTestCase {
         // Add it to today's routine.
         app.tabBars.buttons["Today"].tap()
         app.buttons["today.myPlan"].tap()
+        app.buttons["plan.savedWorkouts"].tap()
         let routine = app.buttons["plan.routine.Push + Arms"]
         XCTAssertTrue(routine.waitForExistence(timeout: 5))
         routine.tap()
@@ -174,6 +175,7 @@ final class FlowCoverageUITests: XCTestCase {
         swipeUntilExists(editRow, in: app)
         XCTAssertTrue(editRow.exists)
         app.buttons["edit.done"].tap()
+        app.navigationBars.buttons.firstMatch.tap() // back to My Plan
         app.navigationBars.buttons.firstMatch.tap() // back to Today
 
         let todayRow = app.descendants(matching: .any)["today.row.\(customId)"]
