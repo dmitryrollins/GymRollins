@@ -25,6 +25,11 @@ struct PlannedSwitchStore {
         write(current.filter { $0.key != day })
     }
 
+    /// Removes the entry for `day`, whatever it picks (the owner changed or reset that date).
+    func remove(day: String) {
+        write(all().filter { $0.key != day })
+    }
+
     /// The routine picked for `day`, removed from the store along with anything for earlier days.
     func take(day: String) -> UUID? {
         let current = all()

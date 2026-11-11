@@ -3,7 +3,7 @@ import GymCore
 import Observation
 
 /// Today's plan before the workout starts: the one copy Today and the plan-mode exercise screen both read and edit.
-/// Every change is a today-only `TodayPlan` edit, saved for the rest of the day (`TodayPlanStore`).
+/// Every change is a `TodayPlan` edit for that one day, kept in its store (`TodayPlanSaving`: today's `TodayPlanStore`, or a later day's `LaterDayPlanSaver`).
 ///
 /// Exercises without edited sets show what Start Workout would plan (`suggest`). That suggestion is computed once per
 /// load and kept; a recomputed suggestion (after a reload or a history change) reuses the previous set ids row by row,
@@ -15,7 +15,7 @@ final class TodayPlanEditor {
     /// A workout is running (Today started it, or the watch did): today's plan is spent and every edit is ignored, so
     /// a screen still open on it can't write it back.
     @ObservationIgnored var isLocked = false
-    @ObservationIgnored private var store: TodayPlanStore?
+    @ObservationIgnored private var store: (any TodayPlanSaving)?
     @ObservationIgnored private var defaultRestSec: Int
     @ObservationIgnored private var suggest: (RoutineExercise, TodayPlan) -> [WorkoutSet]
     /// Read from view bodies: ignored by observation so filling it never invalidates a view mid-update.
@@ -23,7 +23,7 @@ final class TodayPlanEditor {
     /// Set ids of dropped suggestions, by item (reused by the next suggestion for the same exercise).
     @ObservationIgnored private var previousIds: [UUID: (exerciseId: String, ids: [UUID], warmups: [Bool])] = [:]
 
-    init(store: TodayPlanStore? = nil, defaultRestSec: Int = 90,
+    init(store: (any TodayPlanSaving)? = nil, defaultRestSec: Int = 90,
          suggest: @escaping (RoutineExercise, TodayPlan) -> [WorkoutSet] = { _, _ in [] }) {
         self.store = store
         self.defaultRestSec = defaultRestSec
@@ -31,7 +31,7 @@ final class TodayPlanEditor {
     }
 
     /// Points the editor at the app's store and planner (Today does this on every reload).
-    func configure(store: TodayPlanStore, defaultRestSec: Int,
+    func configure(store: any TodayPlanSaving, defaultRestSec: Int,
                    suggest: @escaping (RoutineExercise, TodayPlan) -> [WorkoutSet]) {
         self.store = store
         self.defaultRestSec = defaultRestSec
@@ -45,7 +45,7 @@ final class TodayPlanEditor {
         self.plan = plan
     }
 
-    /// Applies a today-only change and remembers it for the rest of the day (ignored while locked).
+    /// Applies a change for the day and keeps it in the day's store (ignored while locked).
     func apply(_ new: TodayPlan) {
         guard !isLocked else { return }
         plan = new
