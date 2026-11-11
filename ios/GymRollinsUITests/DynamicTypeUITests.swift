@@ -92,6 +92,25 @@ final class DynamicTypeUITests: XCTestCase {
         XCTAssertTrue(date.label.contains("26"), "label was '\(date.label)'")
     }
 
+    /// My Plan's day rows stay inside the screen and every day can be reached at the largest text size.
+    func testMyPlanWeekAtAccessibilityXL() {
+        let app = launch()
+        app.buttons["today.myPlan"].tap()
+        let monday = app.buttons["plan.day.1"]
+        XCTAssertTrue(monday.waitForExistence(timeout: 5))
+        screenshot("my-plan-ax-xl")
+        let width = app.windows.firstMatch.frame.width
+        for weekday in 1...7 {
+            let row = app.buttons["plan.day.\(weekday)"]
+            app.scrollToHittable(row)
+            XCTAssertTrue(row.isHittable, "day \(weekday)")
+            XCTAssertLessThanOrEqual(row.frame.maxX, width + 0.5, "day \(weekday) \(row.frame)")
+        }
+        app.buttons["plan.day.1"].tap()
+        XCTAssertTrue(app.buttons["day.workout"].waitForExistence(timeout: 5))
+        screenshot("day-editor-ax-xl")
+    }
+
     /// The Build sheet remembers its last chips, so leave only `chip` selected.
     private func selectOnly(_ app: XCUIApplication, _ chip: String) {
         for name in ["chest", "back", "shoulders", "arms", "legs", "core"] {

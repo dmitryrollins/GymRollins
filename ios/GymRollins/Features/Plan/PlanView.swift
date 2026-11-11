@@ -56,9 +56,9 @@ struct PlanView: View {
                 }
                 Text(routine?.name ?? "Rest").font(.headline)
                     .foregroundStyle(routine == nil ? Theme.textSecondary : Theme.textPrimary)
+                // Wraps whole (three names and "+N" at most): a two-line limit cut the longer ones off with "…".
                 if !names.isEmpty {
                     Text(WeekPlan.exerciseLine(names)).font(.footnote).foregroundStyle(Theme.textSecondary)
-                        .lineLimit(2)
                 }
             }
             Spacer(minLength: 8)

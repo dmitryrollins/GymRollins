@@ -47,9 +47,9 @@ struct SavedWorkoutsView: View {
             if routine.paused { Badge(text: "Paused", kind: .record) }
             Image(systemName: "chevron.right").foregroundStyle(Theme.textTertiary).accessibilityHidden(true)
         }
+        // A paused workout isn't dimmed: its Paused badge says so, and 70% opacity took its second line below 4.5:1.
         .padding(14)
         .background(Theme.card, in: .rect(cornerRadius: Theme.cardRadius))
-        .opacity(routine.paused ? 0.7 : 1)
     }
 
     private func reload() {
