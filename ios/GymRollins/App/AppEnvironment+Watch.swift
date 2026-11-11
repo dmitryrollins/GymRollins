@@ -17,10 +17,9 @@ extension AppEnvironment {
     /// for today (nil when none, or paused).
     func todaysPlan() throws -> (plan: TodayPlan, scheduled: Routine?) { try todaysPlan(at: now()) }
 
-    /// `todaysPlan()` for the day `date` falls on (the owner's change for that date, or a switch
-    /// Claude planned for it, becomes its stored plan). The
-    /// plan is shown at the current gym (`adapted`): Today, plan mode, Start and the watch all read it, and a swap is
-    /// never written to the store or a routine.
+    /// `todaysPlan()` for the day `date` falls on (the owner's change for that date, or a switch Claude planned for
+    /// it, becomes its stored plan). The plan is shown at the current gym (`adapted`): Today, plan mode, Start and the
+    /// watch all read it, and a swap is never written to the store or a routine.
     func todaysPlan(at date: Date) throws -> (plan: TodayPlan, scheduled: Routine?) {
         let schedule = try routines.schedule()
         let routine = try schedule.routineId(on: date).flatMap { try routines.routine($0) }
