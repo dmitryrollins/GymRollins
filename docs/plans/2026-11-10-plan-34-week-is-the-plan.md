@@ -1291,10 +1291,37 @@ final class TodayScopeUITests: XCTestCase {
         XCTAssertFalse(monday.label.contains("(Sat)"), monday.label)
         XCTAssertTrue(saturday.label.contains("Push + Arms (Sat)"), saturday.label)
     }
+
+    /// Monday switched to Pull (on Wednesday only): Save Changes writes into Pull without asking, and Monday still trains
+    /// Pull, without the deleted exercise.
+    func testSaveChangesOnASwitchedLaterDayKeepsTheSwitch() {
+        let app = XCUIApplication.launchReady { $0.buttons["today.start"] }
+        openMonday(app)
+        app.buttons["today.switch"].tap()
+        let pull = app.buttons["today.switch.routine.Pull + Shoulders + Triceps"]
+        XCTAssertTrue(pull.waitForExistence(timeout: 5))
+        pull.tap()
+        XCTAssertTrue(onlyButton(app).waitForExistence(timeout: 5))
+        onlyButton(app).tap()
+        waitForSummary(app, containing: "Pull + Shoulders + Triceps")
+        let menu = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'today.row.menu.'")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        let exerciseId = String(menu.identifier.dropFirst("today.row.menu.".count))
+        menu.tap()
+        let delete = app.buttons["Delete from Workout"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+        let save = app.buttons["today.saveToRoutine"]
+        app.scrollToHittable(save)
+        save.tap()
+        XCTAssertTrue(save.waitForNonExistence(timeout: 5), "saved without a question")
+        waitForSummary(app, containing: "Pull + Shoulders + Triceps")
+        XCTAssertFalse(app.descendants(matching: .any)["today.row.\(exerciseId)"].exists)
+    }
 }
 ```
 
-These tests read the week rows, which Task 6 builds. Before it, `plan.day.N` is the week grid's `Menu`, labelled with the short name ("Push"). Run this suite in Task 6. In this task, the updated existing tests below carry the check.
+Three of these tests read the week rows, which Task 6 builds. Before it, `plan.day.N` is the week grid's `Menu`, labelled with the short name ("Push"). In this task, run only `testSaveChangesOnASwitchedLaterDayKeepsTheSwitch` from this suite; run the whole suite in Task 6. The updated existing tests below carry the rest of the check.
 
 Update the existing tests for the new question:
 - `ios/GymRollinsUITests/TodayFlexUITests.swift`, in `testSwitchToAnEmptyWorkoutAndAddAnExercise` and `testSwitchedPlanDoesNotLeakIntoAFreshLaunch`: after `empty.tap()`, add:
@@ -1493,7 +1520,7 @@ In `ios/GymRollins/Features/Today/TodayView.swift`:
 
     /// Writes the day's edits into its workout, for every day it's on, or (`onlyOn`) into a copy that takes over this
     /// weekday (the day then shows the copy). Today keeps its sets for the workout about to start; a later day follows
-    /// the saved workout again.
+    /// the saved workout again (a date switched to it stays switched to it).
     private func saveChanges(onlyOn weekday: Int?) {
         savingShared = []
         guard let plan, let routine = plan.routineWithEdits(at: env.now()) else { return }
@@ -1503,7 +1530,13 @@ In `ios/GymRollins/Features/Today/TodayView.swift`:
                 dayStore.clear()
             } else {
                 try env.routines.upsert(routine)
-                if day.isToday { apply(plan.savedToRoutine(at: env.now())) } else { dayStore.clear() }
+                if day.isToday {
+                    apply(plan.savedToRoutine(at: env.now()))
+                } else if plan.kind == .switched {
+                    apply(plan.switched(to: routine).adapted(by: env.gymAdapter())) // still this date's workout
+                } else {
+                    dayStore.clear()
+                }
                 env.planChanged()
             }
         } catch GymDataError.invalidInput(let message) {
@@ -1517,7 +1550,7 @@ In `ios/GymRollins/Features/Today/TodayView.swift`:
 
 - [ ] **Step 5: Run the tests**
 
-Run: `scripts/ios-test.sh -only-testing:GymRollinsUITests/TodayFlexUITests -only-testing:GymRollinsUITests/TodayPlanScreenUITests -only-testing:GymRollinsUITests/TodayDaysUITests -only-testing:GymRollinsUITests/SharedWorkoutUITests`
+Run: `scripts/ios-test.sh -only-testing:GymRollinsUITests/TodayScopeUITests/testSaveChangesOnASwitchedLaterDayKeepsTheSwitch -only-testing:GymRollinsUITests/TodayFlexUITests -only-testing:GymRollinsUITests/TodayPlanScreenUITests -only-testing:GymRollinsUITests/TodayDaysUITests -only-testing:GymRollinsUITests/SharedWorkoutUITests`
 Expected: all pass.
 
 - [ ] **Step 6: Commit**
