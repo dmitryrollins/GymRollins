@@ -47,7 +47,7 @@ extension AppEnvironment {
     /// A blank routine for the "new routine" editors (Plan and Today's empty state), starting with the saved
     /// progression default.
     func newRoutineDraft() -> Routine {
-        Routine(name: "New routine", policy: ProgressionDefaultPreference.policy(defaults))
+        Routine(name: "New workout", policy: ProgressionDefaultPreference.policy(defaults))
     }
 
     /// Entry for an exercise added mid-workout, honoring the saved warm-up preference like session start does.

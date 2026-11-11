@@ -576,9 +576,9 @@ struct TodayView: View {
     private var emptyPlanState: some View {
         VStack(spacing: 12) {
             Text("No plan yet").font(.headline).accessibilityIdentifier("today.empty.title")
-            Text("Build a routine to get started, or let Claude plan one for you.")
+            Text("Build a workout to get started, or let Claude plan your week.")
                 .font(.subheadline).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
-            SecondaryGlassButton(title: "Create a Routine", identifier: "today.empty.createRoutine") {
+            SecondaryGlassButton(title: "Create a Workout", identifier: "today.empty.createRoutine") {
                 newRoutine = env.newRoutineDraft()
             }
             SecondaryGlassButton(title: "Ask Claude to Build One", identifier: "today.empty.askClaude") {
