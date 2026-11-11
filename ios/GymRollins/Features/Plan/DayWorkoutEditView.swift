@@ -31,7 +31,8 @@ struct DayWorkoutEditView: View {
                         HStack {
                             Text("Workout").foregroundStyle(Theme.textPrimary)
                             Spacer()
-                            Text(picked == nil ? "Rest" : name).foregroundStyle(Theme.textSecondary)
+                            Text(picked == nil ? "Rest" : name.isEmpty ? "Workout" : name)
+                                .foregroundStyle(Theme.textSecondary)
                         }
                     }
                     .accessibilityIdentifier("day.workout")
@@ -126,7 +127,14 @@ struct DayWorkoutEditView: View {
     private func done() {
         guard let edited else { return assign(nil) }
         if let violation = DomainLimits.routineViolation(edited) { error = violation; return }
-        let others = isNew ? [] : ((try? env.otherDays(of: edited.id, besides: weekday)) ?? [])
+        let others: [Int]
+        do {
+            others = isNew ? [] : try env.otherDays(of: edited.id, besides: weekday)
+        } catch {
+            AppEnvironment.log.error("Day editor other days failed: \(error.localizedDescription, privacy: .public)")
+            self.error = "Couldn't check this workout's other days. Try again."
+            return
+        }
         if changed && !others.isEmpty { sharedDays = others } else { save(onlyThisDay: false) }
     }
 

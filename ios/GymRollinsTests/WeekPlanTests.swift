@@ -97,6 +97,13 @@ import Testing
         #expect(try env.routines.routine(copy.id)?.exercises.count == push.exercises.count - 1)
     }
 
+    @Test func aCopyThatCantGoOnItsDayIsTakenBack() throws {
+        let env = try makeEnv(), push = try push(env)
+        let before = try env.routines.all().count
+        #expect(throws: GymDataError.self) { try env.saveWorkout(push, onlyOn: 9) }
+        #expect(try env.routines.all().count == before)
+    }
+
     @Test func everyWeekdayTrainsTheNewPick() throws {
         let env = try makeEnv(), push = try push(env)
         try env.schedule(every: 2, push.id)

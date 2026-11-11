@@ -20,7 +20,12 @@ extension AppEnvironment {
         }
         let copy = WeekPlan.copy(of: routine, for: weekday)
         try routines.upsert(copy)
-        try routines.setSchedule(weekday: weekday, routineId: copy.id)
+        do {
+            try routines.setSchedule(weekday: weekday, routineId: copy.id)
+        } catch {
+            try? routines.delete(copy.id) // a copy that isn't on its day is taken back
+            throw error
+        }
         planChanged()
         return copy
     }

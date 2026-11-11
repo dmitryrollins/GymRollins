@@ -473,7 +473,14 @@ struct TodayView: View {
         SecondaryGlassButton(title: "Save Changes to \(plan?.title ?? "Workout")", identifier: "today.saveToRoutine") {
             guard let base = plan?.base else { return }
             // The day's own workout asks when it's on other days too; a switched one is saved for its days.
-            let others = base.id == scheduledRoutine?.id ? ((try? env.otherDays(of: base.id, besides: weekday)) ?? []) : []
+            let others: [Int]
+            do {
+                others = base.id == scheduledRoutine?.id ? try env.otherDays(of: base.id, besides: weekday) : []
+            } catch {
+                AppEnvironment.log.error("Save Changes other days failed: \(error.localizedDescription, privacy: .public)")
+                loadError = "Couldn't check this workout's other days. Try again."
+                return
+            }
             if others.isEmpty { saveChanges(onlyOn: nil) } else { savingShared = others }
         }
         .confirmationDialog("\(plan?.title ?? "This workout") is also on \(WeekPlan.dayList(savingShared))",
