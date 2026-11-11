@@ -42,7 +42,7 @@ struct TodayDay: Equatable {
     }
 }
 
-/// What a later day trains, as Today previews it: an agent's one-day change for that date (`PlannedSwitchStore`) wins
+/// What a later day trains, as Today shows it: an agent's one-day change for that date (`PlannedSwitchStore`) wins
 /// over the week schedule, under the rules Today applies on the day (`takePlannedSwitch`). Nil is a rest day.
 enum DayPreview {
     static func plan(day: String, scheduled: Routine?, routines: [Routine], planned: UUID?) -> TodayPlan? {
@@ -54,17 +54,16 @@ enum DayPreview {
         return scheduled == nil ? nil : base
     }
 
-    /// The preview's rows: today's suggestions for that day's exercises; an agent's change is said in the summary.
-    static func model(plan: TodayPlan?, profile: Profile, library: ExerciseLibrary,
-                      history: (String) -> [SessionResult], gym: TodayGymContext?) -> TodayModel {
-        guard let plan else {
-            return TodayModel(routineId: nil, title: "Rest day", summary: "Recover and eat well", rows: [])
+    /// A later day's model, made like today's (`TodayModel.make`): a rest day reads "Rest day", and a date the owner
+    /// or an agent changed says "changed for this day" (never "edited for today").
+    static func laterDay(_ model: TodayModel, plan: TodayPlan, changed: Bool) -> TodayModel {
+        if plan.kind == .empty && plan.exercises.isEmpty {
+            return TodayModel(routineId: nil, title: "Rest day",
+                              summary: changed ? "Changed for this day" : "Recover and eat well", rows: [])
         }
-        let model = TodayModel.make(plan: plan, profile: profile, library: library, history: history, gym: gym,
-                                    loads: { gym?.loads(for: $0) })
-        guard plan.kind == .switched else { return model }
+        let count = model.rows.count == 1 ? "1 exercise" : "\(model.rows.count) exercises"
         return TodayModel(routineId: model.routineId, title: model.title,
-                          summary: "\(model.summary) \u{00B7} changed for this day", rows: model.rows,
+                          summary: changed ? "\(count) \u{00B7} changed for this day" : count, rows: model.rows,
                           gymNote: model.gymNote)
     }
 }

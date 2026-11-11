@@ -11,6 +11,8 @@ struct LoggingView: View {
     var finish: () -> Void = {}
     /// Plan mode: starts today's workout and opens it on this item.
     var startWorkout: (UUID) -> Void = { _ in }
+    /// Plan mode: false on a later day (it can be edited, not started).
+    var canStart = true
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
 
@@ -373,13 +375,15 @@ extension LoggingView {
         case .workout(let session, let entryId):
             WorkoutLogBar(session: session, entryId: entryId, sets: sets, commit: commitAll, finish: finish,
                           next: { dismiss() })
-        case .plan:
+        case .plan where canStart:
             PrimaryGlassButton(title: "Start Workout", identifier: "logging.startWorkout") {
                 commitAll()
                 startWorkout(model.id)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
+        case .plan:
+            EmptyView()
         }
     }
 

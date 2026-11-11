@@ -75,19 +75,28 @@ import Testing
         #expect(DayPreview.plan(day: "d", scheduled: nil, routines: [paused], planned: paused.id) == nil)
     }
 
-    @Test func aRestDayModelSaysRest() {
-        let model = DayPreview.model(plan: nil, profile: Profile(), library: ExerciseLibrary(exercises: []),
-                                     history: { _ in [] }, gym: nil)
+    private func model(_ plan: TodayPlan) -> TodayModel {
+        TodayModel.make(plan: plan, profile: Profile(), library: ExerciseLibrary(exercises: []), history: { _ in [] })
+    }
+
+    @Test func aLaterRestDaySaysRest() {
+        let rest = TodayPlan(day: "2026-09-27", kind: .empty, base: nil, exercises: [], edited: false)
+        let model = DayPreview.laterDay(model(rest), plan: rest, changed: false)
         #expect(model.title == "Rest day")
         #expect(model.summary == "Recover and eat well")
         #expect(model.rows.isEmpty)
+        #expect(DayPreview.laterDay(self.model(rest), plan: rest, changed: true).summary == "Changed for this day")
     }
 
-    @Test func anAgentsChangeIsSaidInTheSummary() {
-        let plan = DayPreview.plan(day: "2026-09-28", scheduled: push, routines: [push, pull], planned: pull.id)
-        let model = DayPreview.model(plan: plan, profile: Profile(), library: ExerciseLibrary(exercises: []),
-                                     history: { _ in [] }, gym: nil)
-        #expect(model.title == "Pull")
-        #expect(model.summary.hasSuffix("changed for this day"))
+    @Test func aChangedLaterDaySaysSoInsteadOfEditedForToday() {
+        let bench = Routine(name: "Push", exercises: [RoutineExercise(exerciseId: "0025", sets: 3, reps: 8),
+                                                      RoutineExercise(exerciseId: "0027", sets: 3, reps: 8)])
+        let edited = TodayPlan.make(scheduled: bench, routines: [bench], lastDone: [:], day: "2026-09-28")
+            .deleting(bench.exercises[0].id)
+        let changed = DayPreview.laterDay(model(edited), plan: edited, changed: true)
+        #expect(changed.title == "Push")
+        #expect(changed.summary == "1 exercise \u{00B7} changed for this day")
+        let planned = TodayPlan.make(scheduled: bench, routines: [bench], lastDone: [:], day: "2026-09-28")
+        #expect(DayPreview.laterDay(model(planned), plan: planned, changed: false).summary == "2 exercises")
     }
 }

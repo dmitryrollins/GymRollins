@@ -8,7 +8,6 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model = TodayModel(routineId: nil, title: "", summary: "", rows: [])
-    @State private var currentRoutine: Routine?
     @State private var showPlan = false
     @State private var showWorkout = false
     @State private var loadError: String?
@@ -41,8 +40,10 @@ struct TodayView: View {
     /// The gym the phone is at, read once per reload (`env.currentGym` reads the store on every call).
     @State private var currentGym: Gym?
     @State private var buildRequested = false
-    /// The day shown: today, or a later day previewed read-only (`TodayDayPreviewView`).
+    /// The day shown: today, or a later day edited for that date only (owner, 2026-11-10).
     @State private var day = TodayDay.today
+    /// The later day shown was changed by the owner or an agent ("changed for this day", Reset this day).
+    @State private var dayChanged = false
     /// Whether the last move went to a later day, for the slide's direction.
     @State private var forward = true
     @State private var showDatePicker = false
@@ -51,18 +52,22 @@ struct TodayView: View {
     /// build one" pushes the connection screen.
     static let askClaudePrompt = "Build me a training plan using get_profile and propose_plan_changes."
 
+    /// Today reloads when the day moves, the plan changes (My Plan, a sync, an agent's change), the gym or its
+    /// equipment changes, or the unit is switched in Settings.
+    private struct ReloadKey: Equatable {
+        let day: TodayDay
+        let plan: Int
+        let gym: Int
+        let unit: WeightUnit
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     header
                     VStack(alignment: .leading, spacing: 14) {
-                        if day.isToday {
-                            todayContent
-                        } else {
-                            TodayDayPreviewView(day: day, onDetails: { detailExercise = $0 },
-                                                onHistory: { historyExercise = $0 })
-                        }
+                        dayContent
                     }
                     .id(day.offset)
                     .transition(.push(from: forward ? .trailing : .leading))
@@ -86,7 +91,7 @@ struct TodayView: View {
                 if let session = env.session { WorkoutFlowView(session: session, initialEntry: startEntry) }
             })
             .navigationDestination(item: $openItem) { itemId in
-                LoggingView(model: .plan(editor, itemId: itemId), startWorkout: start(from:))
+                LoggingView(model: .plan(editor, itemId: itemId), startWorkout: start(from:), canStart: day.isToday)
             }
             .navigationDestination(for: String.self) { ExerciseDetailView(exerciseId: $0) }
             .navigationDestination(item: $detailExercise) { ExerciseDetailView(exerciseId: $0) }
@@ -112,7 +117,9 @@ struct TodayView: View {
             .sheet(item: $newRoutine, onDismiss: reload) { RoutineEditView(routine: $0) }
             .sheet(isPresented: $showAskClaude) { askClaudeSheet }
             .exercisePreferenceConfirmation($confirmingNever, error: $loadError)
-            .task(id: env.planRevision) { reload() }
+            .task(id: ReloadKey(day: day, plan: env.planRevision, gym: env.gymRevision, unit: env.profile.unit)) {
+                reload()
+            }
             // A finished workout changes the history the suggestions come from.
             .onChange(of: env.dataRevision) { _, _ in
                 historyCache = [:]
@@ -153,12 +160,13 @@ struct TodayView: View {
         }
     }
 
-    /// Today's own content: the title, gym, plan, rows and the editing controls.
+    /// The day's content: its title, plan, rows and the editing controls (today's status lines on today only).
     @ViewBuilder
-    private var todayContent: some View {
+    private var dayContent: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
-                DisplayTitle(text: "Today", size: 48)
+                DisplayTitle(text: day.title(now: env.now()), size: 48)
+                    .lineLimit(1).minimumScaleFactor(0.6)
                     .accessibilityIdentifier("today.title")
                 Text("\(model.title) \u{00B7} \(model.summary)")
                     .foregroundStyle(Theme.textSecondary)
@@ -167,22 +175,38 @@ struct TodayView: View {
             Spacer(minLength: 8)
             if env.session == nil && (env.hasAnyRoutine || plan?.kind == .built) { switchButton }
         }
-        if env.session == nil { GymChipRow(gym: currentGym) }
-        LimitsReminder(openPlan: { showPlan = true })
-        if let pendingProposal { proposalChip(pendingProposal) }
-        SyncStatusBanner()
-        RecoveryCard(identifier: "today.recovery")
+        if day.isToday { todayStatus }
         if let loadError { Text(loadError).foregroundStyle(Theme.destructive) }
         if let session = env.session { resumeBanner(session) }
-        if !env.hasAnyRoutine && model.rows.isEmpty { emptyPlanState }
+        if day.isToday && !env.hasAnyRoutine && model.rows.isEmpty { emptyPlanState }
         if let note = model.gymNote { TodayGymNote(text: note) }
         ForEach(model.rows) { row in exerciseRow(row) }
         if env.session == nil {
             addExerciseRow
             if plan?.canSaveToRoutine == true { saveToRoutineButton }
+            if !day.isToday && dayChanged { resetDayButton }
             if let plan, !plan.exercises.isEmpty {
                 ShareWorkoutButton(identifier: "today.share") { plan.shareSources }
             }
+        }
+    }
+
+    /// Today only: the gym, the injury-note check-in, an agent's proposal, sync and recovery.
+    @ViewBuilder
+    private var todayStatus: some View {
+        if env.session == nil { GymChipRow(gym: currentGym) }
+        LimitsReminder(openPlan: { showPlan = true })
+        if let pendingProposal { proposalChip(pendingProposal) }
+        SyncStatusBanner()
+        RecoveryCard(identifier: "today.recovery")
+    }
+
+    /// A later day back to the week: the owner's change and an agent's switch for that date go.
+    private var resetDayButton: some View {
+        SecondaryGlassButton(title: "Reset this day", identifier: "today.resetDay") {
+            guard let plan else { return }
+            env.resetLaterDay(plan.day)
+            reload()
         }
     }
 
@@ -273,6 +297,11 @@ struct TodayView: View {
 
     private var planStore: TodayPlanStore { env.todayPlanStore }
 
+    /// Where the day's changes are kept: today's stored plan, or the later day's (that date only).
+    private var dayStore: any TodayPlanSaving {
+        day.isToday ? planStore : env.laterDaySaver(on: day.date(now: env.now()), scheduled: scheduledRoutine?.id)
+    }
+
     private var plan: TodayPlan? { editor.plan }
 
     /// Starts today's workout as planned (with today's edits); from the exercise screen it opens on that exercise.
@@ -316,25 +345,32 @@ struct TodayView: View {
         let gym = env.todayGymContext()
         gymContext = gym
         currentGym = env.currentGym
-        editor.configure(store: planStore, defaultRestSec: env.profile.restSec) { item, plan in
-            SessionPlanner.entry(for: item, policy: item.policy ?? plan.base?.policy ?? .double, profile: env.profile,
-                                 exercise: env.library.exercise(item.exerciseId),
-                                 history: (try? env.workouts.history(exerciseId: item.exerciseId, limit: 5)) ?? [],
-                                 autoWarmups: WarmupPreferences.autoWarmupsEnabled(env.defaults),
-                                 loads: gym?.preferring(plan.builtListings).loads(for: item.exerciseId)).sets
-        }
         do {
-            let today = try env.todaysPlan()
-            currentRoutine = today.scheduled
-            scheduledRoutine = currentRoutine
-            editor.load(today.plan)
-            gymContext = gym?.preferring(today.plan.builtListings)
+            let plan: TodayPlan
+            if day.isToday {
+                let today = try env.todaysPlan()
+                plan = today.plan
+                scheduledRoutine = today.scheduled
+                pendingProposal = env.pendingProposals().first?.id
+            } else {
+                let later = try env.laterDay(on: day.date(now: env.now()))
+                plan = later.plan
+                scheduledRoutine = later.scheduled
+            }
+            editor.configure(store: dayStore, defaultRestSec: env.profile.restSec) { item, plan in
+                SessionPlanner.entry(for: item, policy: item.policy ?? plan.base?.policy ?? .double, profile: env.profile,
+                                     exercise: env.library.exercise(item.exerciseId),
+                                     history: (try? env.workouts.history(exerciseId: item.exerciseId, limit: 5)) ?? [],
+                                     autoWarmups: WarmupPreferences.autoWarmupsEnabled(env.defaults),
+                                     loads: gym?.preferring(plan.builtListings).loads(for: item.exerciseId)).sets
+            }
+            editor.load(plan)
+            gymContext = gym?.preferring(plan.builtListings)
             refreshModel()
-            pendingProposal = env.pendingProposals().first?.id
             loadError = nil
         } catch {
             AppEnvironment.log.error("Today load failed: \(error.localizedDescription, privacy: .public)")
-            loadError = "Couldn't load today's plan."
+            loadError = day.isToday ? "Couldn't load today's plan." : "Couldn't load this day's plan."
         }
     }
 
@@ -347,11 +383,17 @@ struct TodayView: View {
         }
         if cache.count != historyCache.count { historyCache = cache }
         let gym = gymContext
-        model = TodayModel.make(plan: plan, profile: env.profile, library: env.library,
-                                history: { cache[$0] ?? [] }, gym: gym, loads: { gym?.loads(for: $0) })
+        let made = TodayModel.make(plan: plan, profile: env.profile, library: env.library,
+                                   history: { cache[$0] ?? [] }, gym: gym, loads: { gym?.loads(for: $0) })
+        if day.isToday {
+            model = made
+        } else {
+            dayChanged = env.isLaterDayChanged(plan.day)
+            model = DayPreview.laterDay(made, plan: plan, changed: dayChanged)
+        }
     }
 
-    /// Applies a today-only change and remembers it for the rest of the day.
+    /// Applies a change for the day shown and keeps it for that day.
     private func apply(_ new: TodayPlan) { editor.apply(new) } // the rows follow `editor.plan`
 
     // MARK: Today's workout controls
@@ -361,7 +403,7 @@ struct TodayView: View {
             Label("Switch", systemImage: "arrow.left.arrow.right").font(.subheadline.weight(.semibold))
         }
         .buttonStyle(.glass)
-        .accessibilityHint("Pick another workout for today")
+        .accessibilityHint("Pick another workout for this day")
         .accessibilityIdentifier("today.switch")
     }
 
@@ -420,7 +462,7 @@ struct TodayView: View {
             guard let plan, let routine = plan.routineWithEdits(at: env.now()) else { return }
             do {
                 try env.routines.upsert(routine)
-                apply(plan.savedToRoutine(at: env.now()))
+                if day.isToday { apply(plan.savedToRoutine(at: env.now())) } else { dayStore.clear() }
                 env.planChanged()
             } catch GymDataError.invalidInput(let message) {
                 loadError = message
@@ -471,15 +513,13 @@ struct TodayView: View {
         .presentationDetents([.medium, .large])
     }
 
-    /// Switch for today only. Picking the scheduled routine goes back to the plan as scheduled.
+    /// Switch for the day shown. Picking the day's own workout (on a later rest day, Rest) is the plan as scheduled.
     private func choose(_ routine: Routine?) {
         showSwitch = false
         guard let current = plan else { return }
-        if let routine, routine.id == scheduledRoutine?.id {
-            planStore.clear()
-            editor.load(TodayPlan.make(scheduled: routine, routines: [], lastDone: [:], day: current.day)
-                .adapted(by: env.gymAdapter()))
-            refreshModel()
+        if routine?.id == scheduledRoutine?.id && (routine != nil || !day.isToday) {
+            dayStore.clear()
+            reload()
         } else {
             apply(current.switched(to: routine).adapted(by: env.gymAdapter()))
         }
