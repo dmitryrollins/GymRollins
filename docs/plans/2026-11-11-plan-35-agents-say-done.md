@@ -109,3 +109,37 @@ The review found that "Done" could be false. If none of a change fits the plan w
 - [ ] Append `## Outcome` (commits, test counts, version id, what's unverified) and commit `docs: plan 35 outcome`.
 
 **Not verified by tests:** whether a real agent now says "done". The owner checks by asking an agent for a one-day change.
+
+## Outcome (2026-11-11)
+
+**Commits** on `feat-agent-says-done`, from main 7ef0b20:
+
+| Commit | What |
+| --- | --- |
+| 1ae8c6e | The plan |
+| 01e2365 | The tool rename, the new statuses and the wording |
+| 844a8fd | The app's prompt, and the iOS tests that call the tools |
+| 4895524 | The `wont_apply` check for a waiting change that no longer fits |
+| acd171e | Plan note |
+| 3195d65 | A test that a change depending on a skipped one shows in `wont_apply` too |
+
+**Tests:**
+- Server: 777 passed in 57 files, and `tsc --noEmit` is clean.
+- App: it builds; `EmptyStatesUITests` passed 5/5. The GymSync integration tests compile (`swift build --build-tests`). They need a local server, so they weren't run.
+
+**Review:** a reviewer agent checked the diff twice.
+- **HIGH, fixed (4895524):** "Done" could be false for a change the app skips. This is Task 1b.
+- **MEDIUM, wording, fixed:** "proposal" was left in agent-facing text.
+- **MEDIUM, no change needed:** the app re-checks what's left after dropping invalid changes, and the server checks once. The validator never applies an invalid change (`plan-validation.ts:613`), so anything that depends on it fails in the same pass. 3195d65 tests this.
+
+**Privacy scan:** the diff and commit messages contain no private names or account ID, and gitleaks found nothing.
+
+**Deploy:**
+- The auto-mode classifier blocked my deploy, so the owner ran the deploy script. It's live on api.gymrollins.com as version 9e593884-017b-40e3-b261-2e169f55e4aa.
+- `/mcp` answers 401 without a token, and the well-known endpoint answers 200.
+- Before the deploy, the phone's data was backed up: 157 workouts, 890 entries, 2876 sets.
+
+**Not verified:**
+- What a real agent says now. The owner checks this in a new agent chat; open chats keep the old tool names.
+- The phone runs plan 34 (aa0e684), so its Ask Claude prompt still names `propose_plan_changes` until a build with this branch is installed.
+- Not merged and not pushed.
