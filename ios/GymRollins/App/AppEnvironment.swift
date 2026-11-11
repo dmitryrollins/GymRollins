@@ -238,6 +238,7 @@ final class AppEnvironment {
         health.reset()
         todayPlanStore.clear()
         PlannedSwitchStore(defaults: defaults).clear()
+        LaterDayPlanStore(defaults: defaults).clear()
         removeGymLocalState()
         onboardingComplete = false
         defaults.set(false, forKey: Self.onboardingCompleteKey)

@@ -7,10 +7,12 @@ import GymData
 /// untouched and the next day is back to normal. A workout in progress is never altered: the switch only changes
 /// what Today offers next.
 extension AppEnvironment {
-    /// Forgets today's switched/edited plan and Claude's planned switches (a fresh, reset or wiped store).
+    /// Forgets today's switched/edited plan, the owner's changes to later days and Claude's planned switches (a fresh,
+    /// reset or wiped store).
     static func clearTodaySwitches(in defaults: UserDefaults) {
         TodayPlanStore(defaults: defaults).clear()
         PlannedSwitchStore(defaults: defaults).clear()
+        LaterDayPlanStore(defaults: defaults).clear()
     }
 
     /// Stores each applied `today` change: today's goes into `todayPlanStore` (the watch follows), a later date's
@@ -19,10 +21,12 @@ extension AppEnvironment {
         guard !days.isEmpty else { return }
         let today = TodayPlan.dayKey(now())
         let planned = PlannedSwitchStore(defaults: defaults)
+        let later = LaterDayPlanStore(defaults: defaults)
         for item in days {
             if item.day == today {
                 switchToday(to: item.routineId)
             } else if item.day > today {
+                later.remove(day: item.day) // the agent's change is the newer one
                 planned.set(item.routineId, on: item.day)
             }
         }

@@ -3,7 +3,8 @@ import GymCore
 import Observation
 
 /// Today's plan before the workout starts: the one copy Today and the plan-mode exercise screen both read and edit.
-/// Every change is a `TodayPlan` edit for that one day, kept in its store (`TodayPlanSaving`: today's `TodayPlanStore`, or a later day's `LaterDayPlanSaver`).
+/// Every change is a `TodayPlan` edit for that one day, kept in its store (`TodayPlanSaving`: today's `TodayPlanStore`,
+/// or a later day's `LaterDayPlanSaver`).
 ///
 /// Exercises without edited sets show what Start Workout would plan (`suggest`). That suggestion is computed once per
 /// load and kept; a recomputed suggestion (after a reload or a history change) reuses the previous set ids row by row,
