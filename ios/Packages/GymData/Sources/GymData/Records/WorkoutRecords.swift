@@ -76,6 +76,9 @@ public final class SetRecord {
     @Attribute(.unique) public var id: UUID
     public var position: Int
     public var weightKg: Double
+    /// The pound number `weightKg` was entered or chosen as (plan 38); nil for kg entries, imports and rows written
+    /// before it existed. An optional with no default, so the store migrates lightweight.
+    public var weightLb: Double?
     public var reps: Int
     public var sec: Int?
     public var minutes: Double?
@@ -88,11 +91,13 @@ public final class SetRecord {
     public var completedAt: Date?
     public var entry: WorkoutEntryRecord?
 
-    public init(id: UUID, position: Int, weightKg: Double, reps: Int, sec: Int?, minutes: Double?, distanceM: Double?,
-                done: Bool, warmup: Bool, rir: Double?, rpe: Double?, multiplier: Double, completedAt: Date?) {
+    public init(id: UUID, position: Int, weightKg: Double, weightLb: Double? = nil, reps: Int, sec: Int?,
+                minutes: Double?, distanceM: Double?, done: Bool, warmup: Bool, rir: Double?, rpe: Double?,
+                multiplier: Double, completedAt: Date?) {
         self.id = id
         self.position = position
         self.weightKg = weightKg
+        self.weightLb = weightLb
         self.reps = reps
         self.sec = sec
         self.minutes = minutes

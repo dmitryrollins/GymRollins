@@ -9,16 +9,18 @@ extension RoutineRecord {
 }
 
 extension RoutineExerciseRecord {
+    /// The plan item; a stored pound number that disagrees with the kg is dropped (`RoutineExercise`'s init).
     public var value: RoutineExercise {
         RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
-                        weightKg: weightKg, mode: ExerciseMode(rawValue: modeRaw) ?? .reps,
+                        weightKg: weightKg, weightLb: weightLb, mode: ExerciseMode(rawValue: modeRaw) ?? .reps,
                         policy: policyRaw.flatMap(ProgressionPolicy.init(rawValue:)), incKg: incKg,
                         supersetGroup: supersetGroup, weightSetAt: weightSetAt)
     }
 
     public convenience init(_ value: RoutineExercise, position: Int) {
         self.init(id: value.id, exerciseId: value.exerciseId, position: position, sets: value.sets, reps: value.reps,
-                  repsMin: value.repsMin, sec: value.sec, weightKg: value.weightKg, weightSetAt: value.weightSetAt,
+                  repsMin: value.repsMin, sec: value.sec, weightKg: value.weightKg, weightLb: value.weightLb,
+                  weightSetAt: value.weightSetAt,
                   modeRaw: value.mode.rawValue,
                   policyRaw: value.policy?.rawValue, incKg: value.incKg, supersetGroup: value.supersetGroup)
     }

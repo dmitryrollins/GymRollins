@@ -7,6 +7,9 @@ public enum WorkoutSource: String, Codable, Sendable {
 public struct WorkoutSet: Codable, Sendable, Identifiable, Hashable {
     public let id: UUID
     public let weightKg: Double
+    /// The pound number the weight was entered or chosen as (`PoundWeight`); nil when none was given. It never
+    /// disagrees with `weightKg`: the init drops one that does.
+    public let weightLb: Double?
     public let reps: Int
     public let sec: Int?
     public let minutes: Double?
@@ -19,11 +22,12 @@ public struct WorkoutSet: Codable, Sendable, Identifiable, Hashable {
     public let multiplier: Double
     public let completedAt: Date?
 
-    public init(id: UUID = UUID(), weightKg: Double, reps: Int, sec: Int? = nil, minutes: Double? = nil,
-                distanceM: Double? = nil, done: Bool = false, warmup: Bool = false, rir: Double? = nil,
-                rpe: Double? = nil, multiplier: Double = 1, completedAt: Date? = nil) {
+    public init(id: UUID = UUID(), weightKg: Double, weightLb: Double? = nil, reps: Int, sec: Int? = nil,
+                minutes: Double? = nil, distanceM: Double? = nil, done: Bool = false, warmup: Bool = false,
+                rir: Double? = nil, rpe: Double? = nil, multiplier: Double = 1, completedAt: Date? = nil) {
         self.id = id
         self.weightKg = weightKg
+        self.weightLb = PoundWeight.agreeing(weightLb, kg: weightKg)
         self.reps = reps
         self.sec = sec
         self.minutes = minutes
@@ -36,23 +40,29 @@ public struct WorkoutSet: Codable, Sendable, Identifiable, Hashable {
         self.completedAt = completedAt
     }
 
+    /// The weight as kg and pound number.
+    public var weight: PoundWeight { PoundWeight(kg: weightKg, lb: weightLb) }
+
     /// Returns a copy marked done at `date`.
     public func completing(at date: Date) -> WorkoutSet {
-        WorkoutSet(id: id, weightKg: weightKg, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM,
-                   done: true, warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier, completedAt: date)
+        WorkoutSet(id: id, weightKg: weightKg, weightLb: weightLb, reps: reps, sec: sec, minutes: minutes,
+                   distanceM: distanceM, done: true, warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier,
+                   completedAt: date)
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, weightKg, reps, sec, minutes, distanceM, done, warmup, rir, rpe, multiplier, completedAt
+        case id, weightKg, weightLb, reps, sec, minutes, distanceM, done, warmup, rir, rpe, multiplier, completedAt
     }
 
     /// Custom decode so imported/older payloads that omit a defaulted property (e.g. `done`)
-    /// fall back to the same default as the memberwise init, instead of throwing keyNotFound.
+    /// fall back to the same default as the memberwise init, instead of throwing keyNotFound. A `weightLb` that
+    /// disagrees with `weightKg` is dropped by the init.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             id: try c.decode(UUID.self, forKey: .id),
             weightKg: try c.decode(Double.self, forKey: .weightKg),
+            weightLb: try c.decodeIfPresent(Double.self, forKey: .weightLb),
             reps: try c.decode(Int.self, forKey: .reps),
             sec: try c.decodeIfPresent(Int.self, forKey: .sec),
             minutes: try c.decodeIfPresent(Double.self, forKey: .minutes),

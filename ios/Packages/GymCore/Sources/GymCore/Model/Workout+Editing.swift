@@ -1,36 +1,48 @@
 import Foundation
 
 extension WorkoutSet {
+    /// This set with `weightKg` and `reps`. The pound number stays only while the kg does: a new kg has none
+    /// (`with(weight:reps:)` sets both).
     public func with(weightKg: Double, reps: Int) -> WorkoutSet {
-        WorkoutSet(id: id, weightKg: weightKg, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM, done: done,
-                   warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier, completedAt: completedAt)
+        with(weight: PoundWeight.replacing(weight, kg: weightKg), reps: reps)
+    }
+
+    /// This set with `weight` (kg and pound number) and `reps`.
+    public func with(weight: PoundWeight, reps: Int) -> WorkoutSet {
+        WorkoutSet(id: id, weightKg: weight.kg, weightLb: weight.lb, reps: reps, sec: sec, minutes: minutes,
+                   distanceM: distanceM, done: done, warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier,
+                   completedAt: completedAt)
     }
 
     public func with(sec: Int?) -> WorkoutSet {
-        WorkoutSet(id: id, weightKg: weightKg, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM, done: done,
-                   warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier, completedAt: completedAt)
+        WorkoutSet(id: id, weightKg: weightKg, weightLb: weightLb, reps: reps, sec: sec, minutes: minutes,
+                   distanceM: distanceM, done: done, warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier,
+                   completedAt: completedAt)
     }
 
     public func with(minutes: Double?, distanceM: Double?) -> WorkoutSet {
-        WorkoutSet(id: id, weightKg: weightKg, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM, done: done,
-                   warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier, completedAt: completedAt)
+        WorkoutSet(id: id, weightKg: weightKg, weightLb: weightLb, reps: reps, sec: sec, minutes: minutes,
+                   distanceM: distanceM, done: done, warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier,
+                   completedAt: completedAt)
     }
 
     public func with(multiplier: Double) -> WorkoutSet {
-        WorkoutSet(id: id, weightKg: weightKg, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM, done: done,
-                   warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier, completedAt: completedAt)
+        WorkoutSet(id: id, weightKg: weightKg, weightLb: weightLb, reps: reps, sec: sec, minutes: minutes,
+                   distanceM: distanceM, done: done, warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier,
+                   completedAt: completedAt)
     }
 
     /// Reps in reserve as rated after the set (`SetEffort`); nil clears it.
     public func with(rir: Double?) -> WorkoutSet {
-        WorkoutSet(id: id, weightKg: weightKg, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM, done: done,
-                   warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier, completedAt: completedAt)
+        WorkoutSet(id: id, weightKg: weightKg, weightLb: weightLb, reps: reps, sec: sec, minutes: minutes,
+                   distanceM: distanceM, done: done, warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier,
+                   completedAt: completedAt)
     }
 
-    /// Fresh copy (new id, not done) used for "Add set".
+    /// Fresh copy (new id, not done) used for "Add set": the same weight, pound number and all.
     func duplicatedUndone() -> WorkoutSet {
-        WorkoutSet(weightKg: weightKg, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM, done: false,
-                   warmup: false, multiplier: multiplier)
+        WorkoutSet(weightKg: weightKg, weightLb: weightLb, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM,
+                   done: false, warmup: false, multiplier: multiplier)
     }
 }
 
