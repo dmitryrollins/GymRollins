@@ -176,7 +176,7 @@ Real library rows (from `Resources/exercises.json`) to use as test fixtures:
   - `ExerciseScreenModel.restSeconds` and `setRestSeconds` call the session or editor versions for this entry or item.
 - [ ] **Step 6: Sheet.**
   - In both modes the working section offers 0:30 to 15:00 in 15-second steps (`DomainLimits.restSec` upper bound).
-  - Footnote for the working section: "<Exercise name> rests this long in every workout. Other exercises keep their own rest or the default in Settings."
+  - Footnote for the working section: "<Exercise name> keeps this rest in every workout." (Shortened after the screenshot: the longer note was cut off in the medium sheet.)
   - When the exercise has its own value, show a "Use suggested (1:30)" button that clears it.
   - Warm-up section footnote: "Warm-up rest for this workout."
 - [ ] **Step 7: Settings › Default rest (`RestDefaultsView`).**

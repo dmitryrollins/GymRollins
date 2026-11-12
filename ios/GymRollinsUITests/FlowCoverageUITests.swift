@@ -25,8 +25,7 @@ final class FlowCoverageUITests: XCTestCase {
         let useSuggested = app.buttons["rest.useSuggested"]
         XCTAssertTrue(useSuggested.waitForExistence(timeout: 5), "bench has its own rest now")
         XCTAssertEqual(useSuggested.label, "Use suggested (3:00)")
-        XCTAssertTrue(app.staticTexts["Barbell Bench Press rests this long in every workout. Other exercises keep "
-                                       + "their own rest or the default in Settings."].exists)
+        XCTAssertTrue(app.staticTexts["Barbell Bench Press keeps this rest in every workout."].exists)
         app.buttons["Warm-up sets"].tap()
         XCTAssertTrue(app.staticTexts["Warm-up rest for this workout."].waitForExistence(timeout: 5))
         wheel.adjust(toPickerWheelValue: "2:15")

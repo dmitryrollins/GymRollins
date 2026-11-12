@@ -23,9 +23,9 @@ struct RestSettingsSheet: View {
     static let warmupRange = 30...300
     static let warmupFootnote = "Warm-up rest for this workout."
 
+    /// Short enough for the medium sheet: a longer note was cut off there.
     static func footnote(exerciseName: String) -> String {
-        "\(exerciseName) rests this long in every workout. "
-            + "Other exercises keep their own rest or the default in Settings."
+        "\(exerciseName) keeps this rest in every workout."
     }
 
     /// Every 15 s in `range`, plus `current` when it's off that grid (a stored value keeps its row).
@@ -70,6 +70,7 @@ struct RestSettingsSheet: View {
             Text(isWarmup ? Self.warmupFootnote : footnote)
                 .font(.caption)
                 .foregroundStyle(Theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(20)
         .presentationDetents([.medium, .large])

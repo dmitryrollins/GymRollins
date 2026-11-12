@@ -73,14 +73,18 @@ struct LoggingView: View {
                 }
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
+                        // White like the system's form bar (Safari), not the app's red accent.
                         Button("Previous field", systemImage: "chevron.up") { moveFocus(-1, sets: sets) }
                             .disabled(!canMoveFocus(-1, sets: sets))
+                            .tint(Theme.textPrimary)
                             .accessibilityIdentifier("keyboard.previous")
                         Button("Next field", systemImage: "chevron.down") { moveFocus(1, sets: sets) }
                             .disabled(!canMoveFocus(1, sets: sets))
+                            .tint(Theme.textPrimary)
                             .accessibilityIdentifier("keyboard.next")
                         Spacer()
                         Button("Done") { focus = nil }
+                            .tint(Theme.textPrimary)
                             .accessibilityIdentifier("keyboard.done")
                     }
                 }
