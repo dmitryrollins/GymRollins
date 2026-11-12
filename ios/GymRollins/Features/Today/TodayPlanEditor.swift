@@ -155,12 +155,6 @@ final class TodayPlanEditor {
     /// Today's default rest: the day's own (stored before rest was per exercise; nothing sets it now), else Settings'.
     var restSec: Int { plan?.restSec ?? defaultRestSec }
 
-    /// Today's rest; the profile default is stored as "none" so a later default change still applies.
-    func setRest(_ seconds: Int) {
-        guard let plan else { return }
-        apply(plan.withRest(seconds == defaultRestSec ? nil : seconds))
-    }
-
     /// The rest after a working set of the item's exercise: its own, else its suggestion from today's rest.
     func workingRest(itemId: UUID) -> Int {
         guard let exerciseId = item(itemId)?.exerciseId else { return restSec }

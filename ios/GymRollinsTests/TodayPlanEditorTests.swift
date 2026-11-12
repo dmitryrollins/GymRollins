@@ -73,9 +73,7 @@ import Testing
         let editor = editor(defaults)
         editor.isLocked = true // a workout started (e.g. from the watch)
         editor.updateSet(bench.id, setId: editor.sets(for: bench.id)[3].id) { $0.with(weightKg: lb(150), reps: 7) }
-        editor.setRest(150)
         #expect(!editor.isEdited(bench.id))
-        #expect(editor.plan?.restSec == nil)
         #expect(TodayPlanStore(defaults: defaults).load(day: day, routineIds: [routine.id]) == nil)
     }
 
@@ -125,17 +123,6 @@ import Testing
         #expect(!editor.canRemoveSet(single.id, setId: only.id))
         editor.removeSet(single.id, setId: only.id)
         #expect(editor.sets(for: single.id).count == 1)
-    }
-
-    @Test func restIsTodayOnlyAndTheDefaultMeansNone() {
-        let editor = editor()
-        #expect(editor.restSec == 90)
-        editor.setRest(150)
-        #expect(editor.restSec == 150)
-        #expect(editor.plan?.restSec == 150)
-        #expect(editor.plan?.canSaveToRoutine == false, "rest isn't saved into the routine")
-        editor.setRest(90)
-        #expect(editor.plan?.restSec == nil)
     }
 
     @Test func resetGoesBackToAFreshSuggestion() {
