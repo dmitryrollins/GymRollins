@@ -1,6 +1,7 @@
 import { test } from 'vitest'
 import { assertEquals } from '../../assert.ts'
 import { displayWeight, epley, formatNumber, slopePerWeek, weight } from '../../../src/mcp/tools/format.ts'
+import { agreeingLb } from '../../../src/shared/weights.ts'
 
 test('formatNumber: one decimal at most, trailing .0 trimmed (WeightFormatter.number)', () => {
   assertEquals(formatNumber(140), '140')
@@ -42,4 +43,10 @@ test('weight: a stored pound number is shown as it is, and given as weight_lb', 
 test('weight: a pound number that disagrees with the kg is ignored, and none stored gives no weight_lb', () => {
   assertEquals(weight(20.3, 'lb', 45), { weight_kg: 20.3, weight_display: '44.8 lb (20.3 kg)' })
   assertEquals(weight(20.3, 'lb', null), { weight_kg: 20.3, weight_display: '44.8 lb (20.3 kg)' })
+})
+
+test('weight: 0 kg has no pound number, as in the app (PoundWeight.agreeing)', () => {
+  assertEquals(agreeingLb(0, 0), null)
+  assertEquals(agreeingLb(20.41, 45), 45)
+  assertEquals(weight(0, 'lb', 0), { weight_kg: 0, weight_display: '0 lb (0 kg)' })
 })
