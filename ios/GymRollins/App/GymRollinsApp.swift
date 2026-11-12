@@ -29,6 +29,7 @@ final class Boot {
     private let watch: WatchSyncController?
 
     init() {
+        Self.forgetUITestPreferences()
         do {
             let env = try AppEnvironment()
             state = .ready(env)
@@ -41,6 +42,16 @@ final class Boot {
             state = .failed("Your data wasn't changed. Force-quit and reopen GymRollins. If it keeps happening, "
                 + "restart your iPhone and contact support.")
         }
+    }
+
+    /// A UI test launch starts from defaults (`@AppStorage` values such as Body's section) unless it relaunches on a
+    /// `-diskStore`, where a relaunch should find them again.
+    private static func forgetUITestPreferences() {
+        #if DEBUG
+        let options = LaunchOptions()
+        guard options.uiTesting, options.diskStoreURL == nil else { return }
+        UserDefaults.standard.removeObject(forKey: "bodySection")
+        #endif
     }
 
     /// Starts observing the environment for the workout Live Activity and routes its buttons (`LiveActivityIntent`s,

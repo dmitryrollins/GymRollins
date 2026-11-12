@@ -26,6 +26,7 @@ final class StrengthUITests: XCTestCase {
     private func openBody(_ extra: [String]) -> (XCUIApplication, XCUIElement) {
         let app = XCUIApplication.launchReady(extra)
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Strength")
         return (app, app.collectionViews.firstMatch)
     }
 

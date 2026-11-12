@@ -221,6 +221,7 @@ final class FlowCoverageUITests: XCTestCase {
     func testStep4_3ExerciseHistoryShowsTheE1RMTrend() {
         let app = XCUIApplication.launchReady(["-seedHistory"])
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Strength")
         let lift = app.buttons["body.lift.0025"]
         XCTAssertTrue(lift.waitForExistence(timeout: 5))
         lift.tap()
@@ -237,6 +238,7 @@ final class FlowCoverageUITests: XCTestCase {
     func testStep4_4BodyShowsGoalProgressAndTrend() {
         let app = XCUIApplication.launchReady(["-seedBodyweight"])
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
         let trend = app.staticTexts["body.trend"]
         XCTAssertTrue(trend.waitForExistence(timeout: 5))
         XCTAssertTrue(trend.label.contains("kg / week"), trend.label)

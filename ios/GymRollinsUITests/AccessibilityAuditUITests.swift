@@ -278,6 +278,7 @@ final class AccessibilityAuditUITests: XCTestCase {
     func testBodyAudit() {
         let app = launch(["-seedHistory", "-seedBodyweight"])
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
         XCTAssertTrue(app.buttons["body.addWeighIn"].waitForExistence(timeout: 5))
         audit(app, "Body")
     }

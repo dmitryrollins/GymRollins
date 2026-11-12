@@ -127,4 +127,22 @@ extension XCUIElement {
         XCTAssertEqual(result, .completed, "\(self) never became hittable", file: file, line: line)
         tap()
     }
+
+    /// Waits for the element's `isSelected` to turn true.
+    func waitForSelected(timeout: TimeInterval = 5) -> Bool {
+        let selected = NSPredicate(format: "isSelected == true")
+        return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: selected, object: self)],
+                                timeout: timeout) == .completed
+    }
+}
+
+extension XCUIApplication {
+    /// On the Body tab, picks a section of its switch ("Muscles", "Weight" or "Strength") by its title, so the rows
+    /// of that section are built before a test looks for them.
+    func openBodySection(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
+        let segment = segmentedControls["body.section"].buttons[title]
+        XCTAssertTrue(segment.waitForExistence(timeout: 5), "no Body section \(title)", file: file, line: line)
+        if !segment.isSelected { segment.tap() }
+        XCTAssertTrue(segment.waitForSelected(), "Body section \(title) didn't open", file: file, line: line)
+    }
 }

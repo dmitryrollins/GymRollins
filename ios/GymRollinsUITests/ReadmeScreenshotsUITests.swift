@@ -125,6 +125,7 @@ final class ReadmeScreenshotsUITests: XCTestCase {
     func test04Body() throws {
         let app = launch(Self.fullHistory + ["-seedStrength"])
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Muscles")
         let chest = element(app, "body.weeklySets.chest")
         scroll(app.collectionViews.firstMatch, to: chest)
         // The weekly-sets card starts just under the status bar: the weigh-ins above the recovery card can't sit
@@ -146,6 +147,7 @@ final class ReadmeScreenshotsUITests: XCTestCase {
     func test04cBodyWeight() throws {
         let app = launch(Self.fullHistory)
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
         XCTAssertTrue(element(app, "body.chart").waitForExistence(timeout: 5))
         settle()
         try capture("04c-body-weight")
