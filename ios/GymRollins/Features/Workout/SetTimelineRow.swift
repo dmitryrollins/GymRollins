@@ -29,6 +29,8 @@ struct SetTimelineRow: View {
     /// turns the swipe off.
     var onRemove: (() -> Void)?
     var onToggleWarmup: (() -> Void)?
+    /// Any change closes the row's open Delete button (the screen scrolled, or a box took focus).
+    var swipeCloser = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -43,7 +45,7 @@ struct SetTimelineRow: View {
                 }
             }
             // Only the boxes narrow for the Delete button; the badge and the timeline stay put.
-            .swipeToDelete(identifier: "logging.set.\(index).delete", onDelete: onRemove)
+            .swipeToDelete(identifier: "logging.set.\(index).delete", closing: swipeCloser, onDelete: onRemove)
         }
     }
 

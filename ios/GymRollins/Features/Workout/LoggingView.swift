@@ -35,6 +35,8 @@ struct LoggingView: View {
     /// its set's value. Every keystroke is written as it goes; the edit ends when focus leaves the box, on "Done",
     /// before logging, starting or a structural edit, and when the screen goes away.
     @State private var edit: SetEdit?
+    /// Bumped when the list starts scrolling or focus moves: closes an open swipe-to-delete button.
+    @State private var swipeCloser = 0
 
     private var exercise: Exercise? { model.exerciseId.flatMap { env.library.exercise($0) } }
 
@@ -59,7 +61,11 @@ struct LoggingView: View {
                         }
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .onScrollPhaseChange { _, phase in
+                        if phase == .interacting { swipeCloser += 1 }
+                    }
                     .onChange(of: focus) { old, new in
+                        swipeCloser += 1
                         if let old { commit(old) }
                         if let new { withAnimation { proxy.scrollTo(new.setId, anchor: .center) } }
                     }
@@ -238,7 +244,8 @@ struct LoggingView: View {
                                   mode: mode, unit: unit, isBarbell: isBarbell,
                                   text: { draftBinding($0, set: set) }, focus: $focus, isPlanned: model.isPlan,
                                   onRemove: remove,
-                                  onToggleWarmup: model.canToggleWarmup ? { editSets { model.toggleWarmup(set) } } : nil)
+                                  onToggleWarmup: model.canToggleWarmup ? { editSets { model.toggleWarmup(set) } } : nil,
+                                  swipeCloser: swipeCloser)
                         .id(set.id)
                     if set.id == model.effortPromptSetId(mode: mode) { // optional rating of the set just logged; the rest keeps running
                         SetEffortRow(rir: set.rir) { model.rateSet(set, tapping: $0) }.padding(.leading, 40)

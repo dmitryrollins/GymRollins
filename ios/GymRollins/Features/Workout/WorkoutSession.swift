@@ -19,7 +19,7 @@ final class WorkoutSession: Identifiable {
     private(set) var restCompletions = 0
     private(set) var lastError: String?
     /// The workout's default rest between working sets: today's rest if the day had one, else Settings'. Each
-    /// exercise rests its own time or its suggestion from it (`workingRestSeconds(entryId:)`); `IdleFinish` uses it.
+    /// exercise rests its own time or its suggestion from it (`workingRestSeconds(entryId:)`).
     var restSeconds: TimeInterval
     /// Warm-up rest for every exercise of this workout.
     var warmupRestSeconds: TimeInterval
@@ -214,9 +214,19 @@ final class WorkoutSession: Identifiable {
     /// is stamped after the workout's end).
     func markAllDone(at date: Date? = nil) { apply(workout.markingAllDone(at: date ?? now())) }
 
-    /// The earlier end to offer when the last set was long ago (`IdleFinish`), or nil.
+    /// The earlier end to offer when the last set was long ago (`IdleFinish`), or nil. The rest it counts after that
+    /// set is the working rest of its exercise.
     func idleFinishSuggestion() -> Date? {
-        IdleFinish.suggestedEnd(completedAt: completedSetDates, clock: clock, restSeconds: restSeconds, now: now())
+        IdleFinish.suggestedEnd(completedAt: completedSetDates, clock: clock, restSeconds: lastLoggedRestSeconds,
+                                now: now())
+    }
+
+    /// The working rest of the exercise whose set was logged last, else the workout's default.
+    private var lastLoggedRestSeconds: TimeInterval {
+        let latest = workout.entries.compactMap { entry in
+            entry.sets.compactMap(\.completedAt).max().map { (entryId: entry.id, at: $0) }
+        }.max { $0.at < $1.at }
+        return latest.map { workingRestSeconds(entryId: $0.entryId) } ?? restSeconds
     }
 
     /// When the latest set was logged, or nil when none was.
