@@ -10,6 +10,8 @@ struct LoggingView: View {
     let model: ExerciseScreenModel
     /// Workout mode: finishes the workout (last exercise done).
     var finish: () -> Void = {}
+    /// Workout mode: swaps this screen for another exercise's (Next exercise).
+    var openEntry: (UUID) -> Void = { _ in }
     /// Plan mode: starts the day's workout (today only, `canStart`) and opens it on this item.
     var startWorkout: (UUID) -> Void = { _ in }
     /// Plan mode: false on a later day (it can be edited, not started).
@@ -375,7 +377,7 @@ extension LoggingView {
         switch model {
         case .workout(let session, let entryId):
             WorkoutLogBar(session: session, entryId: entryId, sets: sets, commit: commitAll, finish: finish,
-                          next: { dismiss() })
+                          open: openEntry)
         case .plan where canStart:
             PrimaryGlassButton(title: "Start Workout", identifier: "logging.startWorkout") {
                 commitAll()

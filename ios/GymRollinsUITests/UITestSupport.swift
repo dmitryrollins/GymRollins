@@ -53,6 +53,23 @@ extension XCUIApplication {
         XCTAssertTrue(staticTexts["logging.title"].waitForExistence(timeout: 5), "logging didn't open",
                       file: file, line: line)
     }
+
+    /// Taps Next exercise and waits for the next exercise's screen to replace this one (its title differs).
+    func openNextExercise(file: StaticString = #filePath, line: UInt = #line) {
+        let title = staticTexts["logging.title"]
+        let before = title.label
+        buttons["logging.next"].tapCenter(file: file, line: line)
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", before), object: title)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed, "next exercise didn't open",
+                       file: file, line: line)
+    }
+
+    /// From an exercise screen, Back to the workout overview (where Finish lives).
+    func backToOverview(file: StaticString = #filePath, line: UInt = #line) {
+        buttons["logging.close"].tapCenter(file: file, line: line)
+        XCTAssertTrue(buttons["workout.finish"].waitForExistence(timeout: 5), "overview didn't show",
+                      file: file, line: line)
+    }
 }
 
 extension XCUIElement {

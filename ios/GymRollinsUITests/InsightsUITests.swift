@@ -128,7 +128,8 @@ final class InsightsUITests: XCTestCase {
         app.buttons["logging.logAll"].tapCenter()
         let skipRest = app.buttons["logging.rest.skip"]
         if skipRest.waitForExistence(timeout: 3) { skipRest.tap() }
-        app.buttons["logging.next"].tapCenter()
+        app.openNextExercise()
+        app.backToOverview()
         app.buttons["workout.finish"].tapCenter()
         let discard = app.buttons["finish.discardEmpty"]
         if discard.waitForExistence(timeout: 3) { discard.tap() }

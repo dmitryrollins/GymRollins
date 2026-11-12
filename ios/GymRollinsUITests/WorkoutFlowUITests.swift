@@ -7,6 +7,19 @@ final class WorkoutFlowUITests: XCTestCase {
         XCUIApplication.launchReady(["-seedHistory"] + extra) { $0.buttons["today.start"] }
     }
 
+    /// Next exercise opens the next exercise itself; Back from it still leads to the workout list.
+    func testNextExerciseOpensTheNextExerciseAndBackLeadsToTheList() {
+        let app = launch()
+        app.startWorkout()
+        app.openExercise("0025")
+        app.buttons["logging.logAll"].tapCenter()
+        app.openNextExercise()
+        XCTAssertTrue(app.staticTexts["logging.title"].exists)
+        XCTAssertNotEqual(app.staticTexts["logging.title"].label, "Barbell Bench Press")
+        app.backToOverview()
+        XCTAssertTrue(app.buttons["workout.entry.0025"].exists, "Back leads to the list")
+    }
+
     func testFullWorkoutWithRestPlatesAndRecords() {
         let app = launch()
         app.startWorkout()
@@ -37,7 +50,8 @@ final class WorkoutFlowUITests: XCTestCase {
         }
         app.dismissKeyboardIfPresent()
         app.buttons["logging.logAll"].tapCenter()
-        app.buttons["logging.next"].tapCenter()
+        app.openNextExercise()
+        app.backToOverview()
 
         app.buttons["workout.finish"].tapCenter()
         XCTAssertTrue(app.buttons["finish.discardEmpty"].waitForExistence(timeout: 3))

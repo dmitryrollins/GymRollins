@@ -31,7 +31,8 @@ final class LiveActivityUITests: XCTestCase {
         XCTAssertTrue(probe(app).label.contains("no rest"), probe(app).label)
 
         app.buttons["logging.logAll"].tapCenter()
-        app.buttons["logging.next"].tapCenter()
+        app.openNextExercise()
+        app.backToOverview()
         app.buttons["workout.finish"].tapCenter()
         XCTAssertTrue(app.buttons["finish.discardEmpty"].waitForExistence(timeout: 3))
         app.buttons["finish.discardEmpty"].tap()

@@ -136,6 +136,14 @@ extension Workout {
 
     public var entriesWithUndoneSets: [WorkoutEntry] { entries.filter { $0.sets.contains { !$0.done } } }
 
+    /// The exercise to open after `id`: the first one after it with sets left, else the first one before it with
+    /// sets left. Nil when none has sets left, or `id` isn't in the workout.
+    public func nextEntryToDo(after id: UUID) -> UUID? {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
+        let undone = { (entry: WorkoutEntry) in entry.sets.contains { !$0.done } }
+        return (entries[(index + 1)...].first(where: undone) ?? entries[..<index].first(where: undone))?.id
+    }
+
     public func markingAllDone(at date: Date) -> Workout {
         with(entries: entries.map { e in e.with(sets: e.sets.map { $0.done ? $0 : $0.completing(at: date) }) })
     }
