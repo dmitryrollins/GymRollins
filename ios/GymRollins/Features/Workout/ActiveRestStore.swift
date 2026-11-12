@@ -40,8 +40,8 @@ struct ActiveRestStore {
     }
 }
 
-/// The rest duration chosen for one in-progress workout when it differs from the profile default (Today's "Rest
-/// today"), so a relaunch restores the workout with it.
+/// The default rest of one in-progress workout when it differs from the profile's: the day's stored rest, if any
+/// (kept from before rest was per exercise; nothing sets one now), so a relaunch restores the workout with it.
 struct ActiveRestDurationStore {
     private struct Stored: Codable {
         let workoutId: UUID

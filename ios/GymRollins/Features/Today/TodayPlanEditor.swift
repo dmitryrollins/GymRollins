@@ -96,6 +96,11 @@ final class TodayPlanEditor {
         editSets(itemId, TodaySetEdits.replacing(sets, index: index, with: transform(sets[index])))
     }
 
+    /// Updates several sets as one edit (one save), each by its own transform (`SetEdit.changes`).
+    func updateSets(_ itemId: UUID, _ transforms: [UUID: (WorkoutSet) -> WorkoutSet]) {
+        editSets(itemId, sets(for: itemId).map { set in transforms[set.id].map { $0(set) } ?? set })
+    }
+
     func addSet(_ itemId: UUID) { editSets(itemId, TodaySetEdits.adding(to: sets(for: itemId))) }
 
     func canRemoveSet(_ itemId: UUID, setId: UUID) -> Bool {
@@ -149,12 +154,6 @@ final class TodayPlanEditor {
 
     /// Today's default rest: the day's own (stored before rest was per exercise; nothing sets it now), else Settings'.
     var restSec: Int { plan?.restSec ?? defaultRestSec }
-
-    /// Today's rest; the profile default is stored as "none" so a later default change still applies.
-    func setRest(_ seconds: Int) {
-        guard let plan else { return }
-        apply(plan.withRest(seconds == defaultRestSec ? nil : seconds))
-    }
 
     /// The rest after a working set of the item's exercise: its own, else its suggestion from today's rest.
     func workingRest(itemId: UUID) -> Int {

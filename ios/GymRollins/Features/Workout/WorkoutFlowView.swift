@@ -50,7 +50,10 @@ struct WorkoutFlowView: View {
                 NavigationStack(path: $path) {
                     WorkoutOverviewView(session: session, finish: finish)
                         .navigationDestination(for: UUID.self) { entryId in
+                            // Keyed by the entry: Next exercise replaces the screen in place, and the new one must
+                            // start with its own state (no edit, focus or sheet of the previous exercise).
                             LoggingView(model: .workout(session, entryId: entryId), finish: finish, openEntry: openEntry)
+                                .id(entryId)
                         }
                         .navigationDestination(for: String.self) { exerciseId in
                             ExerciseDetailView(exerciseId: exerciseId)

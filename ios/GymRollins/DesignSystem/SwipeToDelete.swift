@@ -11,6 +11,8 @@ struct SwipeToDelete: ViewModifier {
     /// nil turns the gesture off (e.g. a logged set, or the last one).
     let onDelete: (() -> Void)?
     let identifier: String
+    /// Any change closes an open Delete button (e.g. the screen scrolled, or a box took focus).
+    let closing: Int
 
     /// How far the view has narrowed: the button plus the gap before it.
     @State private var reveal: CGFloat = 0
@@ -42,6 +44,7 @@ struct SwipeToDelete: ViewModifier {
             .onChange(of: onDelete == nil) { _, off in
                 if off { reveal = 0 }
             }
+            .onChange(of: closing) { reveal = 0 }
             .animation(.snappy(duration: 0.2), value: reveal)
     }
 
@@ -92,8 +95,9 @@ struct SwipeToDeleteTargetKey: PreferenceKey {
 }
 
 extension View {
-    func swipeToDelete(identifier: String, onDelete: (() -> Void)?) -> some View {
-        modifier(SwipeToDelete(onDelete: onDelete, identifier: identifier))
+    /// `closing`: any change closes an open Delete button.
+    func swipeToDelete(identifier: String, closing: Int = 0, onDelete: (() -> Void)?) -> some View {
+        modifier(SwipeToDelete(onDelete: onDelete, identifier: identifier, closing: closing))
     }
 
     /// Marks the view whose height and vertical position the `swipeToDelete` button takes.

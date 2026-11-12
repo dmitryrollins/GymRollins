@@ -76,30 +76,22 @@ enum ExerciseScreenModel {
         }
     }
 
-    /// A set edit that carries each value it changes (weight, reps, seconds) to the later sets still at the old one
-    /// (`SetCarry`), so one change sets that value for the rest of the exercise.
-    func updateSetCarrying(_ setId: UUID, _ transform: (WorkoutSet) -> WorkoutSet) {
-        guard let before = sets, let old = before.first(where: { $0.id == setId }) else {
-            updateSet(setId, transform)
-            return
+    /// Several sets changed as one edit: one save.
+    func updateSets(_ transforms: [UUID: (WorkoutSet) -> WorkoutSet]) {
+        switch self {
+        case .workout(let session, let entryId): session.update(entryId: entryId, sets: transforms)
+        case .plan(let editor, let itemId): editor.updateSets(itemId, transforms)
         }
-        let new = transform(old)
-        updateSet(setId, transform)
-        if new.weightKg != old.weightKg {
-            for id in SetCarry.following(before, edited: setId, fromKg: old.weightKg) {
-                updateSet(id) { $0.with(weightKg: new.weightKg, reps: $0.reps) }
-            }
-        }
-        if new.reps != old.reps {
-            for id in SetCarry.following(before, edited: setId, fromReps: old.reps) {
-                updateSet(id) { $0.with(weightKg: $0.weightKg, reps: new.reps) }
-            }
-        }
-        if new.sec != old.sec {
-            for id in SetCarry.following(before, edited: setId, fromSec: old.sec) {
-                updateSet(id) { $0.with(sec: new.sec) }
-            }
-        }
+    }
+
+    /// One keystroke in `field`'s box: continues `edit` when it is that box's, else starts one from the sets as they
+    /// are now (`SetEdit`), and writes what the text means for the edited set and the sets that follow it, in one
+    /// save. Returns the edit to keep until the box is left; nil once the set is gone.
+    func type(_ text: String, in field: SetField, continuing edit: SetEdit?, unit: WeightUnit) -> SetEdit? {
+        let current = edit?.field == field ? edit : sets.flatMap { SetEdit(field: field, sets: $0, unit: unit) }
+        guard let typed = current?.typing(text) else { return nil }
+        updateSets(typed.changes)
+        return typed
     }
 
     func addSet() {

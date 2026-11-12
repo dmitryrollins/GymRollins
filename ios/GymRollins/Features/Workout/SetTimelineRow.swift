@@ -8,8 +8,8 @@ import UIKit
 /// "Bar + Plates" caption under the weight.
 ///
 /// Stateless on purpose: the text shown in each box and keyboard focus are owned by the logging
-/// screen (`text(for:)` returns a binding into its draft dictionary; `focus` is its single
-/// `@FocusState`), so rebuilding this row after a session update can never reset a draft or drop
+/// screen (`text(for:)` returns a binding to its edit in progress, `SetEdit`; `focus` is its single
+/// `@FocusState`), so rebuilding this row after a session update can never reset typing or drop
 /// focus, and merely displaying a set never writes it back.
 struct SetTimelineRow: View {
     let set: WorkoutSet
@@ -29,6 +29,8 @@ struct SetTimelineRow: View {
     /// turns the swipe off.
     var onRemove: (() -> Void)?
     var onToggleWarmup: (() -> Void)?
+    /// Any change closes the row's open Delete button (the screen scrolled, or a box took focus).
+    var swipeCloser = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -43,7 +45,7 @@ struct SetTimelineRow: View {
                 }
             }
             // Only the boxes narrow for the Delete button; the badge and the timeline stay put.
-            .swipeToDelete(identifier: "logging.set.\(index).delete", onDelete: onRemove)
+            .swipeToDelete(identifier: "logging.set.\(index).delete", closing: swipeCloser, onDelete: onRemove)
         }
     }
 
