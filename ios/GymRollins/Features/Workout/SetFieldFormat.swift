@@ -2,7 +2,7 @@ import Foundation
 import GymCore
 
 /// One editable box on the logging screen. The screen owns a single `@FocusState` of this type
-/// and a draft-text dictionary keyed by it, so focus and in-progress text never live in (and never
+/// and keys its in-progress text by it (`SetEdit`), so focus and in-progress text never live in (and never
 /// get reset with) individual rows.
 enum SetField: Hashable {
     case reps(UUID)
@@ -14,6 +14,17 @@ enum SetField: Hashable {
     var setId: UUID {
         switch self {
         case .reps(let id), .weight(let id), .sec(let id), .minutes(let id), .distance(let id): id
+        }
+    }
+
+    /// The same box on another set.
+    func on(setId: UUID) -> SetField {
+        switch self {
+        case .reps: .reps(setId)
+        case .weight: .weight(setId)
+        case .sec: .sec(setId)
+        case .minutes: .minutes(setId)
+        case .distance: .distance(setId)
         }
     }
 
@@ -115,6 +126,17 @@ enum SetFieldFormat {
             if trimmed.isEmpty { return set.with(minutes: set.minutes, distanceM: nil) }
             return decimal(trimmed).map { $0 * metersPerDistanceUnit(unit) }
                 .flatMap { DomainLimits.setDistanceM.contains($0) ? set.with(minutes: set.minutes, distanceM: $0) : nil }
+        }
+    }
+
+    /// `set` with `field`'s values (the ones `applying` writes) taken from `source`; everything else stays.
+    static func copying(_ field: SetField, from source: WorkoutSet, to set: WorkoutSet) -> WorkoutSet {
+        switch field {
+        case .reps: set.with(weightKg: set.weightKg, reps: source.reps)
+        case .weight: set.with(weightKg: source.weightKg, reps: set.reps)
+        case .sec: set.with(sec: source.sec)
+        case .minutes: set.with(minutes: source.minutes, distanceM: set.distanceM).with(sec: source.sec)
+        case .distance: set.with(minutes: set.minutes, distanceM: source.distanceM)
         }
     }
 

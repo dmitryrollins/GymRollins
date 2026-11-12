@@ -96,6 +96,11 @@ final class TodayPlanEditor {
         editSets(itemId, TodaySetEdits.replacing(sets, index: index, with: transform(sets[index])))
     }
 
+    /// Updates several sets as one edit (one save), each by its own transform (`SetEdit.changes`).
+    func updateSets(_ itemId: UUID, _ transforms: [UUID: (WorkoutSet) -> WorkoutSet]) {
+        editSets(itemId, sets(for: itemId).map { set in transforms[set.id].map { $0(set) } ?? set })
+    }
+
     func addSet(_ itemId: UUID) { editSets(itemId, TodaySetEdits.adding(to: sets(for: itemId))) }
 
     func canRemoveSet(_ itemId: UUID, setId: UUID) -> Bool {

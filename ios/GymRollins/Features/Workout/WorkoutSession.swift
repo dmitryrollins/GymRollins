@@ -93,6 +93,16 @@ final class WorkoutSession: Identifiable {
         apply(updated)
     }
 
+    /// Updates several sets of one entry as one change (one save), each by its own transform (`SetEdit.changes`).
+    /// No-op (and no save) when nothing changed.
+    func update(entryId: UUID, sets transforms: [UUID: (WorkoutSet) -> WorkoutSet]) {
+        let updated = transforms.reduce(workout) { w, change in
+            w.updatingSet(entryId: entryId, setId: change.key, change.value)
+        }
+        guard updated != workout else { return }
+        apply(updated)
+    }
+
     /// Completes the next undone set of `entryId` with the given values and starts the rest timer,
     /// unless that was the exercise's last set (nothing left to rest before). Always acts on the
     /// entry the caller shows, never on `currentEntryId` (which may already have advanced).

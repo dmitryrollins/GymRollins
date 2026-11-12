@@ -30,11 +30,11 @@ struct LoggingView: View {
     @State private var history: [SessionResult] = []
     /// The one focus state for every box on the screen (see `SetTimelineRow`).
     @FocusState private var focus: SetField?
-    /// Text the user has typed but not yet committed, keyed by box. A box without a draft shows
-    /// the current value; the text stays as typed until the box is left. Every keystroke that parses is applied (and
-    /// carried to the later sets) as it goes; the draft is committed when focus leaves the box, on "Done", before
-    /// logging or starting, and when the screen goes away.
-    @State private var drafts: [SetField: String] = [:]
+    /// The box being typed in, from its first keystroke until it is left (`SetEdit`): its text, which it shows as
+    /// typed, and the snapshot of the sets the edit started from. One box is edited at a time; every other box shows
+    /// its set's value. Every keystroke is written as it goes; the edit ends when focus leaves the box, on "Done",
+    /// before logging, starting or a structural edit, and when the screen goes away.
+    @State private var edit: SetEdit?
 
     private var exercise: Exercise? { model.exerciseId.flatMap { env.library.exercise($0) } }
 
@@ -112,8 +112,8 @@ struct LoggingView: View {
         .navigationDestination(item: $detailExercise) { ExerciseDetailView(exerciseId: $0) }
         .exercisePreferenceConfirmation($confirmingNever, error: $menuError)
         .onDisappear(perform: commitAll)
-        // Typed text means the old unit: never reinterpret it (valid plan typing is already applied).
-        .onChange(of: env.profile.unit) { _, _ in drafts = [:] }
+        // Typed text means the old unit: never reinterpret it (what it parsed to is already written).
+        .onChange(of: env.profile.unit) { _, _ in edit = nil }
         .task(id: model.id) {
             if case .workout(let session, let entryId) = model { session.select(entryId) }
         }
@@ -371,7 +371,7 @@ extension LoggingView {
     }
 }
 
-// MARK: - Bottom bar, sheets and drafts
+// MARK: - Bottom bar, sheets and typing
 
 extension LoggingView {
     // MARK: Bottom bar
@@ -394,32 +394,32 @@ extension LoggingView {
         }
     }
 
-    /// Typed values were for the old exercise's sets: they go with it.
+    /// The edit in progress was on the old exercise's sets: it ends (its typing is already written).
     private func swap(to candidate: Exercise) {
-        drafts = [:]
+        edit = nil
         let history = (try? env.workouts.history(exerciseId: candidate.id, limit: 5)) ?? []
         model.swap(to: candidate, profile: env.profile, history: history, loads: env.gymLoads(candidate.id))
     }
 
     private func resetSets(_ editor: TodayPlanEditor, _ itemId: UUID) {
-        (drafts, focus) = ([:], nil)
+        (edit, focus) = (nil, nil)
         editor.resetSets(itemId)
     }
 
-    // MARK: Drafts
+    // MARK: Typing
 
-    /// Runs a structural edit (add / remove / warm-up) with pending typing applied first.
-    private func editSets(_ edit: () -> Void) { commitAll(); edit() }
+    /// Runs a structural edit (add / remove / warm-up) once the edit in progress has ended.
+    private func editSets(_ change: () -> Void) { commitAll(); change() }
 
-    /// Every keystroke that parses is applied at once (the text stays as typed until the box is left): later sets
-    /// follow live, and in plan mode a workout started meanwhile (from the watch) gets the latest number.
+    /// A box's text: the edit's while it is typed in, else its set's value. Every keystroke is written at once, in one
+    /// save (`ExerciseScreenModel.type`): later sets follow live, text that doesn't parse (a cleared box) puts them back
+    /// as they were, and in plan mode a workout started meanwhile (from the watch) gets the latest number.
     private func draftBinding(_ field: SetField, set: WorkoutSet) -> Binding<String> {
-        Binding(get: { drafts[field] ?? SetFieldFormat.display(field, set: set, unit: env.profile.unit) },
-                set: { typed in
-                    drafts[field] = typed
-                    let unit = env.profile.unit
-                    model.updateSetCarrying(field.setId) { SetFieldFormat.applying(typed, to: field, set: $0, unit: unit) ?? $0 }
-                })
+        Binding(get: {
+                    if let edit, edit.field == field { return edit.text }
+                    return SetFieldFormat.display(field, set: set, unit: env.profile.unit)
+                },
+                set: { edit = model.type($0, in: field, continuing: edit, unit: env.profile.unit) })
     }
 
     /// Every box on the screen in order: each set top to bottom, within a set the mode's field order.
@@ -441,14 +441,12 @@ extension LoggingView {
         focus = orderedFields(sets)[index + step]
     }
 
-    /// Applies one box's draft (invalid text is dropped, reverting the box).
+    /// Ends the box's edit. Its last text is already written (or, when it didn't parse, the sets are back as they
+    /// were), so the box shows its set's value again.
     private func commit(_ field: SetField) {
-        guard let text = drafts.removeValue(forKey: field) else { return }
-        let unit = env.profile.unit
-        model.updateSetCarrying(field.setId) { SetFieldFormat.applying(text, to: field, set: $0, unit: unit) ?? $0 }
+        if edit?.field == field { edit = nil }
     }
 
-    private func commitAll() {
-        drafts.keys.forEach(commit)
-    }
+    /// Ends whichever edit is in progress.
+    private func commitAll() { edit = nil }
 }
