@@ -62,12 +62,21 @@ import Testing
         #expect(try item("incline-db", out).weightLb == 45)
     }
 
-    @Test func aReturnWeightNeverKeepsTheOldPoundNumber() throws {
+    @Test func aReturnWeightKeepsItsOwnPoundNumberNeverTheOldOne() throws {
         let routine = Routine(name: "Push", paused: true, exercises: Self.plan.routines[0].exercises)
-        let resumed = ReturnWeights.resume(routine, now: Self.now) { $0.exerciseId == "bench" ? Self.lb(80) : nil }
-        let bench = try item("bench", resumed.routine.exercises)
-        #expect(bench.weightKg == Self.lb(80) && bench.weightLb == nil, "lowered: the kg-only setter clears it")
-        #expect(try item("incline-db", resumed.routine.exercises).weightLb == 45, "untouched: kept")
+        let pounds = ReturnWeights.resume(routine, now: Self.now) {
+            $0.exerciseId == "bench" ? PoundWeight.entered(80, unit: .lb) : nil
+        }
+        let bench = try item("bench", pounds.routine.exercises)
+        #expect(bench.weightKg == Self.lb(80) && bench.weightLb == 80, "lowered on the lb grid: 80 lb")
+        #expect(bench.weightSetAt == Self.now)
+        #expect(try item("incline-db", pounds.routine.exercises).weightLb == 45, "untouched: kept")
+
+        let kg = ReturnWeights.resume(routine, now: Self.now) {
+            $0.exerciseId == "bench" ? PoundWeight(kg: 36, lb: nil) : nil
+        }
+        let inKg = try item("bench", kg.routine.exercises)
+        #expect(inKg.weightKg == 36 && inKg.weightLb == nil, "a kg return weight never keeps 135 lb")
     }
 
     @Test func aPoundNumberOutOfRangeIsRefused() throws {
