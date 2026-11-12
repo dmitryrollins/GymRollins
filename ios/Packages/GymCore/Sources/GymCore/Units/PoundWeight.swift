@@ -20,9 +20,10 @@ public struct PoundWeight: Sendable, Hashable {
     }
 
     /// `lb` when it is the pound number of `kg`: both there, finite, and within `toleranceKg` of each other once
-    /// converted. Nil otherwise.
+    /// converted. Nil otherwise, and for 0 kg: a bodyweight or timed set weighs nothing and has no pound number to keep
+    /// (so it never syncs `w_lb: 0`).
     public static func agreeing(_ lb: Double?, kg: Double?) -> Double? {
-        guard let lb, let kg, lb.isFinite, kg.isFinite,
+        guard let lb, let kg, lb.isFinite, kg.isFinite, kg != 0,
               abs(UnitConverter.toKg(lb, from: .lb) - kg) <= toleranceKg else { return nil }
         return lb
     }

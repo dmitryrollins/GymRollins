@@ -66,6 +66,16 @@ import Testing
 
     // MARK: Carried weights
 
+    @Test func aBodyweightOrTimedWeightCarriedInPoundsHasNoPoundNumber() {
+        let off = barbellLb.suggest(policy: .off, target: target(), history: [session(1, kg: 0, reps: [10, 10, 10])])
+        #expect(off.weight == PoundWeight(kg: 0, lb: nil))
+        let time = dumbbellLb.suggest(policy: .time, mode: .time, target: target(),
+                                      history: [SessionResult(date: day(1), weightKg: 0, reps: [1], secs: [30])])
+        #expect(time.weight == PoundWeight(kg: 0, lb: nil))
+        let fixed = barbellLb.suggest(policy: .double, target: target(fixedKg: 0), history: [])
+        #expect(fixed.weight == PoundWeight(kg: 0, lb: nil))
+    }
+
     @Test func keepGoingCopiesThePoundNumberOrSnapsInPounds() {
         let kept = barbellLb.suggest(policy: .double, target: target(),
                                      history: [session(1, kg: lb(47.5), lb: 47.5, reps: [10, 9, 8])])
