@@ -39,6 +39,8 @@ const SET: readonly Column[] = [
   { name: 'id', kind: 'uuid' },
   { name: 'position', kind: 'int' },
   { name: 'w_kg', kind: 'real' },
+  // The pound number the weight was entered as (plan 38); null for kg entries, imports and older rows.
+  { name: 'w_lb', kind: 'real', nullable: true },
   { name: 'r', kind: 'int' },
   { name: 'sec', kind: 'int', nullable: true },
   { name: 'min', kind: 'real', nullable: true },

@@ -33,3 +33,13 @@ test('slopePerWeek: least-squares slope in kg per week', () => {
   const day = 86_400_000
   assertEquals(slopePerWeek([{ t: 0, v: 81 }, { t: 14 * day, v: 81.6 }]), 0.3)
 })
+
+test('weight: a stored pound number is shown as it is, and given as weight_lb', () => {
+  assertEquals(weight(20.41, 'lb', 45), { weight_kg: 20.41, weight_lb: 45, weight_display: '45 lb (20.4 kg)' })
+  assertEquals(weight(20.41, 'kg', 45), { weight_kg: 20.41, weight_lb: 45, weight_display: '20.4 kg (45 lb)' })
+})
+
+test('weight: a pound number that disagrees with the kg is ignored, and none stored gives no weight_lb', () => {
+  assertEquals(weight(20.3, 'lb', 45), { weight_kg: 20.3, weight_display: '44.8 lb (20.3 kg)' })
+  assertEquals(weight(20.3, 'lb', null), { weight_kg: 20.3, weight_display: '44.8 lb (20.3 kg)' })
+})

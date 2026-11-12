@@ -1,9 +1,10 @@
 // Formatting and training math shared by the tools. Mirrors the Swift app:
 //   WeightFormatter / UnitConverter (GymCore/Units), OneRepMax (GymCore/Strength), WorkoutMetrics (GymCore/Metrics).
 import type { SetRow, WeightUnit } from '../db.ts'
+import { agreeingLb, KG_PER_LB } from '../../shared/weights.ts'
 import { ToolError } from './result.ts'
 
-export const KG_PER_LB = 0.45359237
+export { KG_PER_LB }
 const DAY_MS = 86_400_000
 export const WEEK_MS = 7 * DAY_MS
 /** OneRepMax.maxReps — estimates above this are unreliable and not reported. */
@@ -20,16 +21,29 @@ export function formatNumber(value: number): string {
   return Number.isInteger(r) ? String(r) : r.toFixed(1)
 }
 
-/** "140 lb (63.5 kg)" for lb, "20 kg (44.1 lb)" for kg (WeightFormatter.format). */
-export function displayWeight(kg: number, unit: WeightUnit): string {
-  const lb = kg / KG_PER_LB
+/**
+ * "140 lb (63.5 kg)" for lb, "20 kg (44.1 lb)" for kg (WeightFormatter.format). `storedLb` is the pound number the
+ * weight was entered as (plan 38); it is shown instead of the converted kg when it agrees with `kg`.
+ */
+export function displayWeight(kg: number, unit: WeightUnit, storedLb?: number | null): string {
+  const lb = agreeingLb(kg, storedLb) ?? kg / KG_PER_LB
   return unit === 'lb'
     ? `${formatNumber(lb)} lb (${formatNumber(kg)} kg)`
     : `${formatNumber(kg)} kg (${formatNumber(lb)} lb)`
 }
 
-export function weight(kg: number, unit: WeightUnit): { weight_kg: number; weight_display: string } {
-  return { weight_kg: round(kg, 2), weight_display: displayWeight(kg, unit) }
+/** A weight as tools answer it: kg, the stored pound number when there is one (weight_lb), and the display. */
+export function weight(
+  kg: number,
+  unit: WeightUnit,
+  storedLb?: number | null,
+): { weight_kg: number; weight_lb?: number; weight_display: string } {
+  const lb = agreeingLb(kg, storedLb)
+  return {
+    weight_kg: round(kg, 2),
+    ...(lb !== null ? { weight_lb: lb } : {}),
+    weight_display: displayWeight(kg, unit, lb),
+  }
 }
 
 /** Epley estimate for 1…12 reps; 1 rep is the weight itself (OneRepMax.estimate). */

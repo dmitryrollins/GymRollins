@@ -7,7 +7,8 @@ export const SERVER_INSTRUCTIONS = [
   '- Start with get_profile: unit, goal, injury limits and the day they end, and what you may do. Then read only ' +
   'what the question needs (get_plan, list_workouts, get_exercise_history, get_training_summary).',
   "- Talk in the owner's unit, read from get_profile in every chat: they can switch it at any time. Results give " +
-  'weight_kg and weight_display in their unit; change_plan takes kg.',
+  'weight_kg, weight_lb and weight_display in their unit. Give weights in their unit too: weightLb in plan changes ' +
+  'and weight_lb in logged sets when get_profile says lb; the server converts.',
   "- While injury limits are active, don't plan exercises that load that area. Only the owner sets or clears " +
   'the note, in the app.',
   "- Change the plan only with change_plan; its result's `applies` says what to tell the owner. If get_profile " +

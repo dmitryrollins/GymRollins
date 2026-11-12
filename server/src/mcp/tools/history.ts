@@ -52,9 +52,9 @@ export async function getExerciseHistory(
       date: isoDate(s.started_at),
       workout_id: s.workout_id,
       working_sets: workingSets(s.sets).map((w) =>
-        compact({ reps: w.r, ...weight(w.w_kg, unit), rir: w.rir, rpe: w.rpe })
+        compact({ reps: w.r, ...weight(w.w_kg, unit, w.w_lb), rir: w.rir, rpe: w.rpe })
       ),
-      top_set: { reps: top.r, ...weight(top.w_kg, unit) },
+      top_set: { reps: top.r, ...weight(top.w_kg, unit, top.w_lb) },
       e1rm_kg: e1rm === null ? null : round(e1rm, 1),
       e1rm_display: e1rm === null ? null : weight(e1rm, unit).weight_display,
     }]

@@ -5,7 +5,7 @@ import { storedRow } from '../src/sync/columns.ts'
 import { ENTITIES } from '../src/sync/entities.ts'
 import { upsertSql } from '../src/sync/table-sync.ts'
 import { ORIGIN, request, signUp } from './helpers.ts'
-import { BAD, KEY, pulled, type Row, SAMPLES, sampleNeeds, T0, T1, T2 } from './samples.ts'
+import { appUUID, BAD, KEY, pulled, type Row, SAMPLES, sampleNeeds, T0, T1, T2 } from './samples.ts'
 
 beforeAll(sampleNeeds)
 
@@ -274,5 +274,19 @@ describe('review follow-ups', () => {
     const { token } = await signUp()
     const res = await request('GET', '/v1/sync/weekdays?since=2026-11-07T10:00:00Z&after=1x', { token })
     expect(res.status).toBe(400)
+  })
+})
+
+describe("a routine exercise's pound number", () => {
+  it('is kept in the exercises JSON as weight_lb, and an exercise without it stays as it was', async () => {
+    const { token } = await signUp()
+    const row = SAMPLES.routines()
+    const [kgOnly] = row.exercises as Record<string, unknown>[]
+    row.exercises = [{ ...kgOnly, weight_kg: 20.41165665, weight_lb: 45 }, { ...kgOnly, id: appUUID(), position: 1 }]
+    await acks(token, 'routines', [row])
+    const [pulled] = await pull(token, 'routines')
+    const [a, b] = pulled.exercises as Record<string, unknown>[]
+    expect([a.weight_kg, a.weight_lb]).toEqual([20.41165665, 45])
+    expect(b.weight_lb).toBeUndefined()
   })
 })

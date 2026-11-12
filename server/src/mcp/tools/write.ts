@@ -7,6 +7,7 @@ import {
   type RoutineRef,
   utcDay,
   validateProposal,
+  withWeightKg,
 } from '../../shared/plan-validation.ts'
 import type { Db, ProposalRow, RoutineRow } from '../db.ts'
 import { ownerUnit } from './common.ts'
@@ -130,7 +131,7 @@ export async function proposePlanChanges(
       violations: violations.map((v) => ({ change_id: v.changeId, field: v.field, message: v.message })),
     })
   }
-  const row = await db.insertProposal({ summary: args.summary, changes: args.changes })
+  const row = await db.insertProposal({ summary: args.summary, changes: withWeightKg(args.changes) })
   const warnings = swapWeightWarnings(args.changes, routines)
   const autoApply = await db.autoApply()
   return ok({
@@ -150,7 +151,7 @@ function swapWeightWarnings(
   routines: RoutineRow[],
 ): { change_id: string; message: string }[] {
   return changes.flatMap((c) => {
-    if (c.type !== 'swap-exercise' || c.weightKg !== undefined) return []
+    if (c.type !== 'swap-exercise' || c.weightKg !== undefined || c.weightLb !== undefined) return []
     const old = routines.find((r) => r.id === c.routineId)?.exercises.find((e) =>
       e.exercise_id === c.exerciseId
     )
@@ -158,7 +159,7 @@ function swapWeightWarnings(
     return [{
       change_id: c.id,
       message:
-        `No weightKg: ${c.exerciseId}'s ${old.weight_kg} kg isn't carried over, so ${c.toExerciseId} starts ` +
+        `No weight: ${c.exerciseId}'s ${old.weight_kg} kg isn't carried over, so ${c.toExerciseId} starts ` +
         'with no planned weight (0 until the owner types one). Add a weight change for it.',
     }]
   })

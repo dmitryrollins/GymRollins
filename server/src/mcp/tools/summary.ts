@@ -97,7 +97,7 @@ function prs(
         e1rm_kg: round(s.e1rm, 1),
         e1rm_display: weight(s.e1rm, unit).weight_display,
         previous_best_e1rm_kg: round(Math.max(...previous), 1),
-        top_set: { reps: s.top.r, ...weight(s.top.w_kg, unit) },
+        top_set: { reps: s.top.r, ...weight(s.top.w_kg, unit, s.top.w_lb) },
       }]
     })
   )
@@ -119,7 +119,7 @@ function stalls(
     return [{
       exercise_id: id,
       exercise: names.get(id)?.n ?? null,
-      ...weight(last[0].top.w_kg, unit),
+      ...weight(last[0].top.w_kg, unit, last[0].top.w_lb),
       reps: last.map((s) => s.top.r),
       dates: last.map((s) => s.date),
     }]
