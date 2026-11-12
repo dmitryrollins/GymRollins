@@ -11,6 +11,21 @@ final class LibraryUITests: XCTestCase {
         app.tabBars.buttons["Library"].tap()
     }
 
+    func testMusclesTabShowsTheBodyMap() {
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("barbell bench press")
+        let row = app.buttons["library.row.0025"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        XCTAssertTrue(app.staticTexts["detail.title"].waitForExistence(timeout: 5))
+        app.buttons["Muscles"].tap()
+        let map = app.otherElements["detail.muscleMap"]
+        XCTAssertTrue(map.waitForExistence(timeout: 5))
+        XCTAssertTrue(map.label.localizedCaseInsensitiveContains("chest"), map.label)
+    }
+
     func testSearchAndOpenDetail() {
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
