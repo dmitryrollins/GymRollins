@@ -226,3 +226,63 @@ Real library rows (from `Resources/exercises.json`) to use as test fixtures:
 - [ ] A phone install only with the owner's go-ahead: back up first (see the owner-phone-install memory). Not merged, not pushed.
 
 **Not verified by tests:** how the swipe feels on a real phone, and whether the rest suggestions suit the owner. The owner checks both at the next workout.
+
+## Outcome (2026-11-12)
+
+**Commits** on `feat-workout-fixes`, from `feat-week-plan` 087d1d8:
+
+| Commit | What |
+| --- | --- |
+| 20e3ddb | The plan |
+| b34f1f2 | Reps and seconds carry to the later sets, like weight (GymCore `SetCarry`) |
+| f83757f | Next exercise opens the next exercise with sets left (GymCore `Workout.nextEntryToDo(after:)`); Finish when none are left |
+| ed90073 | Task 1b: values carry while typing; the keyboard bar gets previous/next chevrons and a plain Done |
+| d42dd66, merge 8b07120 | Task 4: the swipe narrows only the boxes and shows a box-sized delete button |
+| 56cc8e1 | The delete button uses the Log Set red; plan notes for Task 1b |
+| 3d75f80 | Rest is per exercise, remembered on this phone, with a suggestion by type (GymCore `ExerciseRest`) |
+| 4af2400 | The keyboard bar is white like the system form bar; the rest sheet's note is short enough to show whole |
+| 149ecf2, 135c116, 6865e56, merge a9bfd02 | Review fixes |
+
+**Review:** a reviewer agent checked `git diff 087d1d8..3d75f80`. Fixed:
+- **HIGH:** a minutes box carried only `sec`, so later cardio sets kept stale minutes; distance didn't carry at all.
+- **MEDIUM:**
+  - clearing a box with Backspace carried the "1" on the way and never reverted;
+  - every keystroke made one save per changed set;
+  - a later set set by hand to a typing prefix ("1" on the way to "12") was overwritten.
+- **Fixes:** all four are fixed by one design, "a set edit starts from a snapshot" (`SetEdit`, 149ecf2):
+  - the first keystroke remembers the sets;
+  - the chain of followers is worked out once, by comparing the shown text;
+  - every keystroke writes from that snapshot in one batched save;
+  - text that doesn't parse puts the sets back.
+- **Also fixed:**
+  - Next exercise reused the previous screen's state (edit, focus, sheet). The destination is now keyed by its entry.
+  - The idle-finish suggestion ignored per-exercise rest. It now adds the rest of the exercise logged last.
+  - An open Delete stayed open while scrolling or typing. It now closes.
+  - The unused `TodayPlanEditor.setRest` was dropped.
+
+**Deviations from the plan:**
+- **Editing a logged set carries nothing.** Correcting history doesn't change what's still to do. This also changes weight's old behaviour, on purpose.
+- **The edit writes only the edited box's values** onto each set, so a rating or a set logged meanwhile stays.
+- **Clearing a distance box carries the cleared value.** Distance is optional, so an empty box is a valid value, not a revert.
+- **The by-type suggestion applies to rep-based exercises only.** Timed and cardio exercises use the default.
+- **`FlowCoverageUITests` sets 3:30 on the bench press, not 3:00.** 3:00 equals the big-lift suggestion, so it isn't stored as the exercise's own rest.
+
+**Tests:**
+- Full suite on a9bfd02 (`scripts/ios-test.sh`, iPhone 17 Pro): 1283 tests, 1264 passed, 0 failed, 19 skipped.
+- GymCore `swift test`: 563 passed.
+- `AccessibilityAuditUITests.testUnblockEveryoneAudit` failed once in an earlier full run, on the contrast of Settings' "Apple Health" / "Data". Run alone, it passed 2 of 2 on this branch and on 087d1d8, so it's flaky and not caused by this plan.
+
+**Screenshots** on a9bfd02, iPhone 17 Pro Max simulator:
+- **Keyboard bar:** white chevrons and Done. The simulator didn't draw the number pad in the still shot.
+- **Typing:** typing 12 into set 1's reps showed 12 on set 2 before Done. That frame caught the bar mid-animation.
+- **Delete swipe:** set 3 swiped open. The number stays and the boxes narrow; the red button is one box tall.
+- **Rest sheet:** 3:30 on the bench press, with "Use suggested (3:00)" and the whole note.
+- **Next exercise:** the incline dumbbell press shows 2:00.
+- **Settings › Default rest:** the footer, and "Barbell Bench Press 3:30" under "Your exercise rests".
+- **Not from this plan:** a two-line exercise name touches the bottom of its icon in the header, which this plan didn't change.
+
+**Not verified:**
+- How the swipe feels on a real phone.
+- Whether the rest suggestions suit the owner.
+- The phone install needs the owner's go-ahead and a Library backup first.
+- Not merged and not pushed.
