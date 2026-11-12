@@ -65,6 +65,7 @@ final class InsightsUITests: XCTestCase {
     func testBodyTabShowsRecoveryAndWeeklySets() {
         let app = launch()
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Muscles")
         let list = app.collectionViews.firstMatch
         let recovery = element(app, "body.recovery")
         scroll(list, to: recovery)
@@ -93,6 +94,7 @@ final class InsightsUITests: XCTestCase {
         app.launchArguments = ["-uiTesting", "-fixedNow", XCUIApplication.fixedNow, "-diskStore"]
         app.launchReady()
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Muscles")
         let chest = element(app, "body.weeklySets.chest")
         scroll(app.collectionViews.firstMatch, to: chest)
         XCTAssertTrue(chest.label.contains("of 12 to 20 sets this week"), chest.label)
