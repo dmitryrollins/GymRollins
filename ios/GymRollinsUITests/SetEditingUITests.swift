@@ -77,5 +77,19 @@ final class SetEditingUITests: XCTestCase {
         XCTAssertTrue((weight.value as? String)?.contains("77") == true, "typed into the next box")
         XCTAssertTrue(app.buttons["keyboard.done"].exists)
         XCTAssertTrue(previous.isEnabled)
+        assertBarSitsAboveTheKeys(app)
+
+        app.buttons["keyboard.done"].tap()
+        XCTAssertTrue(app.buttons["keyboard.done"].waitForNonExistence(timeout: 3), "Done closes the bar")
+    }
+
+    /// The bar floats `KeyboardBar.gap` (6 pt) above the keys instead of touching them. Checked only when the software
+    /// keyboard shows: with a hardware keyboard there are no keys to measure against.
+    private func assertBarSitsAboveTheKeys(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let keys = app.keyboards.firstMatch
+        guard keys.exists else { return }
+        let done = app.buttons["keyboard.done"].frame
+        XCTAssertLessThanOrEqual(done.maxY, keys.frame.minY - 4, "Done at \(done), keys at \(keys.frame)",
+                                 file: file, line: line)
     }
 }
