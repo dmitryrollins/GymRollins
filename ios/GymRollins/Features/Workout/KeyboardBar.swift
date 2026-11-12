@@ -15,21 +15,24 @@ struct KeyboardBar: View {
     static let gap: CGFloat = 6
 
     var body: some View {
-        HStack {
-            HStack(spacing: 0) {
-                arrow("Previous field", systemImage: "chevron.up", enabled: canMovePrevious, action: movePrevious)
-                    .accessibilityIdentifier("keyboard.previous")
-                arrow("Next field", systemImage: "chevron.down", enabled: canMoveNext, action: moveNext)
-                    .accessibilityIdentifier("keyboard.next")
-            }
-            .padding(.horizontal, 6)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            Spacer()
-            Button("Done", action: done)
-                .font(.body)
-                .buttonStyle(HitAreaButtonStyle(horizontalPadding: 18))
+        // One glass group, as the logging screen's chip row: the capsules render and react together.
+        GlassEffectContainer(spacing: 8) {
+            HStack {
+                HStack(spacing: 0) {
+                    arrow("Previous field", systemImage: "chevron.up", enabled: canMovePrevious, action: movePrevious)
+                        .accessibilityIdentifier("keyboard.previous")
+                    arrow("Next field", systemImage: "chevron.down", enabled: canMoveNext, action: moveNext)
+                        .accessibilityIdentifier("keyboard.next")
+                }
+                .padding(.horizontal, 6)
                 .glassEffect(.regular.interactive(), in: .capsule)
-                .accessibilityIdentifier("keyboard.done")
+                Spacer()
+                Button("Done", action: done)
+                    .font(.body)
+                    .buttonStyle(HitAreaButtonStyle(horizontalPadding: 18))
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .accessibilityIdentifier("keyboard.done")
+            }
         }
         .foregroundStyle(Theme.textPrimary)
         .padding(.horizontal, 16)

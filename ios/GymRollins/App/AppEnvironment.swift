@@ -178,6 +178,7 @@ final class AppEnvironment {
         autoApplyProposals() // proposals pulled earlier, or seeded, while auto-apply is on
         sync.onRemoteChanges = { [weak self] in
             self?.reloadAll()
+            self?.cleanUpPlanWeightsOnce() // after reloadAll: the pulled profile decides the unit
             self?.syncHealthAfterPull()
         }
         sync.onLocalDataReset = { [weak self] in

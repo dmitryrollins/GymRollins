@@ -15,9 +15,10 @@ final class BodyUITests: XCTestCase {
     }
 
     /// Body opens on Muscles (the recovery card is on screen without scrolling), and the section picked is kept
-    /// after leaving the tab and coming back.
+    /// after leaving the tab and coming back, and after a relaunch (`@AppStorage`).
     func testBodyOpensOnMusclesAndRemembersTheSectionPicked() {
-        let app = XCUIApplication.launchReady([])
+        // A launch without -diskStore forgets the section an earlier test picked, so this one opens on Muscles.
+        var app = XCUIApplication.launchReady([])
         app.tabBars.buttons["Body"].tap()
 
         let section = app.segmentedControls["body.section"]
@@ -38,6 +39,15 @@ final class BodyUITests: XCTestCase {
         XCTAssertTrue(weight.waitForExistence(timeout: 5))
         XCTAssertTrue(weight.isSelected)
         XCTAssertTrue(app.buttons["body.addWeighIn"].exists)
+
+        // A -diskStore relaunch keeps preferences, as a real one does (-resetStore only empties the store).
+        app.terminate()
+        app = XCUIApplication.launchReady(["-diskStore", "-resetStore"])
+        app.tabBars.buttons["Body"].tap()
+        let kept = app.segmentedControls["body.section"].buttons["Weight"]
+        XCTAssertTrue(kept.waitForExistence(timeout: 5))
+        XCTAssertTrue(kept.isSelected, "the section picked is kept across launches")
+        XCTAssertTrue(app.buttons["body.addWeighIn"].waitForExistence(timeout: 5))
     }
 
     func testEmptyStateThenAddWeighIn() {

@@ -27,11 +27,17 @@ import Testing
         defaults = try #require(UserDefaults(suiteName: "PlanWeightsLbCleanupTests.\(UUID())"))
     }
 
-    private func seed(_ items: [RoutineExercise]) throws -> Routine {
-        let routine = Routine(name: "Push", exercises: items)
+    private func seed(_ items: [RoutineExercise], name: String = "Push") throws -> Routine {
+        let routine = Routine(name: name, exercises: items)
         try routines.upsert(routine)
         try markSynced()
         return routine
+    }
+
+    /// Renames a saved routine behind the repository's back, as an older build or a pull could have stored it.
+    private func rename(_ id: UUID, to name: String) throws {
+        try container.mainContext.fetch(FetchDescriptor<RoutineRecord>()).first { $0.id == id }?.name = name
+        try container.mainContext.save()
     }
 
     /// As after a sync: nothing left to push.
@@ -86,6 +92,30 @@ import Testing
         #expect(try routines.routine(routine.id)?.exercises.map(\.weight) == [pounds(137.5), nil])
         #expect(try !isDirty(routine.id))
         #expect(defaults.bool(forKey: PlanWeightsLbCleanup.flagKey), "done: it doesn't look again")
+    }
+
+    @Test func anEmptyStoreWaitsForAPlanBeforeSettingTheFlag() throws {
+        #expect(try run() == 0)
+        #expect(!defaults.bool(forKey: PlanWeightsLbCleanup.flagKey), "a reinstall or sign-in pulls the plan later")
+
+        let routine = try seed([RoutineExercise(exerciseId: "0025", sets: 3, reps: 10, weightKg: 20.3)])
+        #expect(try run() == 1)
+        #expect(try routines.routine(routine.id)?.exercises.first?.weight == pounds(45))
+        #expect(defaults.bool(forKey: PlanWeightsLbCleanup.flagKey))
+    }
+
+    @Test func aRoutineThatCantBeSavedIsSkippedAndTheOthersAreCleaned() throws {
+        // Each routine its own item: item ids are unique in the store.
+        let agentsKg = { [RoutineExercise(exerciseId: "0025", sets: 3, reps: 10, weightKg: 20.3)] }
+        let bad = try seed(agentsKg(), name: "Bad")
+        let good = try seed(agentsKg(), name: "Good")
+        try rename(bad.id, to: " ") // no name: `DomainLimits` refuses to save it
+        #expect(try run() == 1)
+        #expect(try routines.routine(good.id)?.exercises.first?.weight == pounds(45))
+        #expect(try isDirty(good.id))
+        #expect(try routines.routine(bad.id)?.exercises.first?.weight == PoundWeight(kg: 20.3, lb: nil))
+        #expect(try !isDirty(bad.id))
+        #expect(defaults.bool(forKey: PlanWeightsLbCleanup.flagKey), "a retry would fail the same way, so it's done")
     }
 
     @Test func inKgNothingChangesAndItWaitsForPounds() throws {

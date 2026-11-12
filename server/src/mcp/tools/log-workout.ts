@@ -4,7 +4,7 @@
 import type { z } from 'zod'
 import { DomainLimits } from '../../shared/domain-limits.ts'
 import { AGENT_WORKOUT_CAPS, grouped } from '../../sync/caps.ts'
-import { kgFromLb, LOGGED_SET_WEIGHT_LB, weightDisagreement } from '../../shared/weights.ts'
+import { agreeingLb, kgFromLb, LOGGED_SET_WEIGHT_LB, weightDisagreement } from '../../shared/weights.ts'
 import { isStorableText } from '../../sync/columns.ts'
 import { normalizeTimestamp } from '../../sync/time.ts'
 import type { LoggedSet, LoggedWorkout } from '../db.ts'
@@ -79,10 +79,11 @@ function checkedExercises(w: WorkoutArg, index: number): LoggedWorkout['exercise
     for (const [j, s] of e.sets.entries()) {
       const problem = setProblem(s)
       if (problem !== null) return refused(index, 'invalid', `exercises[${i}].sets[${j}].${problem}`)
+      const kg = s.weight_kg ?? kgFromLb(s.weight_lb!)
       sets.push({
         reps: s.reps,
-        weight_kg: s.weight_kg ?? kgFromLb(s.weight_lb!),
-        weight_lb: s.weight_lb ?? null,
+        weight_kg: kg,
+        weight_lb: agreeingLb(kg, s.weight_lb),
         sec: s.sec ?? null,
         dist_m: s.dist_m ?? null,
         warmup: s.warmup ?? false,

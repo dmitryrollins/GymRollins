@@ -3,24 +3,44 @@ import GymCore
 import GymData
 
 /// Plan 38's one-time cleanup of plan weights. Before the pound number, agents sent plan weights in kg and rounded their
-/// conversion (45 lb as 20.3 kg, which shows as 44.8 lb). On the first launch in lb, every plan weight without a pound
-/// number gets one: snapped to its exercise's grid (the plan stepper's rounder, `LoadRounding`), or kept as it is when
-/// its kg already is a ½ lb number. Changed routines are saved, which marks them to sync. Logged history isn't touched.
+/// conversion (45 lb as 20.3 kg, which shows as 44.8 lb). On the first launch in lb with a plan (or the first pull that
+/// brings one), every plan weight without a pound number gets one: snapped to its exercise's grid (the plan stepper's
+/// rounder, `LoadRounding`), or kept as it is when its kg already is a ½ lb number. Changed routines are saved, which
+/// marks them to sync. Logged history isn't touched.
 enum PlanWeightsLbCleanup {
     /// Set in UserDefaults once the cleanup has run.
     static let flagKey = "planWeightsLbV1"
 
-    /// Runs the cleanup unless it has run before or the unit is kg (it waits for the first launch in lb). Returns how
-    /// many routines changed.
+    /// Runs the cleanup unless it has run before, the unit is kg (it waits for the first launch in lb), or there's no
+    /// plan yet: after a reinstall or a new sign-in the plan comes with the first pull, which runs the cleanup again.
+    /// Each changed routine is saved on its own. One that can't be saved is logged and skipped, and the flag is set
+    /// anyway, since it would fail the same way on every launch. Returns how many routines were saved.
     @MainActor
     static func runOnce(routines: RoutineRepository, profile: Profile, library: ExerciseLibrary,
                         defaults: UserDefaults) throws -> Int {
         guard profile.unit == .lb, !defaults.bool(forKey: flagKey) else { return 0 }
+        let plan = try routines.all()
+        guard !plan.isEmpty else { return 0 }
         let rounder = { LoadRounding.rounder(for: library.exercise($0), profile: profile) }
-        let changed = try routines.all().compactMap { cleaned($0, rounder: rounder) }
-        for routine in changed { try routines.upsert(routine) }
+        let savedEach = plan.compactMap { cleaned($0, rounder: rounder) }.map { save($0, to: routines) }
         defaults.set(true, forKey: flagKey)
-        return changed.count
+        return savedEach.filter { $0 }.count
+    }
+
+    /// Saves one cleaned routine. False when it can't be saved, such as one an older build stored that `DomainLimits`
+    /// now refuses; the log names it by id only.
+    @MainActor
+    private static func save(_ routine: Routine, to routines: RoutineRepository) -> Bool {
+        do {
+            try routines.upsert(routine)
+            return true
+        } catch {
+            AppEnvironment.log.error("""
+                Plan weight cleanup skipped workout \(routine.id.uuidString, privacy: .public): \
+                \(error.localizedDescription, privacy: .private)
+                """)
+            return false
+        }
     }
 
     /// `routine` with each plan weight given a pound number (`cleaned(_:rounder:)`, with the exercise's rounder); nil

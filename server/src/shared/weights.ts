@@ -16,9 +16,12 @@ export const weightsAgree = (kg: number, lb: number): boolean => Math.abs(kg - l
 /** The kg for a pound number: exact, not rounded. */
 export const kgFromLb = (lb: number): number => lb * KG_PER_LB
 
-/** The stored pound number for a weight, or null when it is missing or disagrees with `kg`. */
+/**
+ * The stored pound number for a weight, or null when it is missing or disagrees with `kg`. A weight of 0 kg (a
+ * bodyweight or timed set) weighs nothing and has no pound number, as in the app's PoundWeight.agreeing.
+ */
 export function agreeingLb(kg: number, lb: number | null | undefined): number | null {
-  return typeof lb === 'number' && Number.isFinite(lb) && weightsAgree(kg, lb) ? lb : null
+  return typeof lb === 'number' && Number.isFinite(lb) && kg !== 0 && weightsAgree(kg, lb) ? lb : null
 }
 
 /** The refusal text when both are given and disagree, or null. */

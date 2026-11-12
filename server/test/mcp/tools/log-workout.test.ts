@@ -251,6 +251,12 @@ describe('weight_lb', () => {
     expect(stored(db)).toMatchObject([{ weight_kg: 20.41, weight_lb: 45 }, { weight_kg: 20, weight_lb: null }])
   })
 
+  it('a set of 0 lb weighs nothing and keeps no pound number', async () => {
+    const db = await fakeDb()
+    await run(db, [withSets([{ reps: 10, weight_lb: 0 }, { reps: 10, weight_kg: 0, weight_lb: 0 }])])
+    expect(stored(db)).toMatchObject([{ weight_kg: 0, weight_lb: null }, { weight_kg: 0, weight_lb: null }])
+  })
+
   it('refuses both that disagree by more than 0.01 kg, and a set with neither', async () => {
     const db = await fakeDb()
     const r = await run(db, [
