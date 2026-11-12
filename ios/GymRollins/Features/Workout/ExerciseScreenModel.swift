@@ -66,18 +66,29 @@ enum ExerciseScreenModel {
         }
     }
 
-    /// A set edit that, when it changes the set's weight, carries the new weight to the later sets still at the old
-    /// one (`SetWeightCarry`), so one change sets the weight for the rest of the exercise.
-    func updateSetCarryingWeight(_ setId: UUID, _ transform: (WorkoutSet) -> WorkoutSet) {
+    /// A set edit that carries each value it changes (weight, reps, seconds) to the later sets still at the old one
+    /// (`SetCarry`), so one change sets that value for the rest of the exercise.
+    func updateSetCarrying(_ setId: UUID, _ transform: (WorkoutSet) -> WorkoutSet) {
         guard let before = sets, let old = before.first(where: { $0.id == setId }) else {
             updateSet(setId, transform)
             return
         }
         let new = transform(old)
         updateSet(setId, transform)
-        guard new.weightKg != old.weightKg else { return }
-        for id in SetWeightCarry.following(before, edited: setId, fromKg: old.weightKg) {
-            updateSet(id) { $0.with(weightKg: new.weightKg, reps: $0.reps) }
+        if new.weightKg != old.weightKg {
+            for id in SetCarry.following(before, edited: setId, fromKg: old.weightKg) {
+                updateSet(id) { $0.with(weightKg: new.weightKg, reps: $0.reps) }
+            }
+        }
+        if new.reps != old.reps {
+            for id in SetCarry.following(before, edited: setId, fromReps: old.reps) {
+                updateSet(id) { $0.with(weightKg: $0.weightKg, reps: new.reps) }
+            }
+        }
+        if new.sec != old.sec {
+            for id in SetCarry.following(before, edited: setId, fromSec: old.sec) {
+                updateSet(id) { $0.with(sec: new.sec) }
+            }
         }
     }
 

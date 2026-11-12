@@ -1,7 +1,7 @@
 import XCTest
 
-/// Set list editing on the exercise screen: swipe a set left to delete it, and a new weight on one set carries to
-/// the later sets still to do. Barbell Bench Press (0025) starts with two warm-ups, so index 2 is the first working set.
+/// Set list editing on the exercise screen: swipe a set left to delete it, and a new weight or reps value on one set
+/// carries to the later sets still to do. Barbell Bench Press (0025) starts with two warm-ups, so index 2 is the first working set.
 final class SetEditingUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -46,5 +46,17 @@ final class SetEditingUITests: XCTestCase {
         XCTAssertEqual(app.textFields["logging.set.3.weight"].value as? String, "150")
         XCTAssertEqual(app.textFields["logging.set.4.weight"].value as? String, "150")
         XCTAssertNotEqual(app.textFields["logging.set.1.weight"].value as? String, "150", "warm-ups keep their ramp")
+    }
+
+    func testNewRepsCarryToTheLaterSets() {
+        let app = openBench()
+        let first = app.textFields["logging.set.2.reps"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let before = app.textFields["logging.set.3.reps"].value as? String
+        XCTAssertNotEqual(before, "12", "the test needs a start other than 12")
+        first.clearAndType("12")
+        app.dismissKeyboardIfPresent()
+        XCTAssertEqual(app.textFields["logging.set.3.reps"].value as? String, "12")
+        XCTAssertEqual(app.textFields["logging.set.4.reps"].value as? String, "12")
     }
 }

@@ -27,19 +27,26 @@ import Testing
                       WorkoutSet(weightKg: 20.4, reps: 12), WorkoutSet(weightKg: 20.4, reps: 12)])
         let entry = s.workout.entries[0]
         let model = ExerciseScreenModel.workout(s, entryId: entry.id)
-        model.updateSetCarryingWeight(entry.sets[1].id) { $0.with(weightKg: 24, reps: $0.reps) }
+        model.updateSetCarrying(entry.sets[1].id) { $0.with(weightKg: 24, reps: $0.reps) }
         #expect(weights(s) == [20.4, 24, 24, 24])
     }
 
-    @Test func repsEditsAndHandChangedSetsDontCarry() {
+    @Test func handChangedSetsStopTheCarry() {
         let s = make([WorkoutSet(weightKg: 20, reps: 10), WorkoutSet(weightKg: 22, reps: 10),
                       WorkoutSet(weightKg: 20, reps: 10)])
         let entry = s.workout.entries[0]
         let model = ExerciseScreenModel.workout(s, entryId: entry.id)
-        model.updateSetCarryingWeight(entry.sets[0].id) { $0.with(weightKg: $0.weightKg, reps: 12) }
-        #expect(weights(s) == [20, 22, 20])
-        model.updateSetCarryingWeight(entry.sets[0].id) { $0.with(weightKg: 25, reps: $0.reps) }
+        model.updateSetCarrying(entry.sets[0].id) { $0.with(weightKg: 25, reps: $0.reps) }
         #expect(weights(s) == [25, 22, 20]) // set 2 was changed by hand: the carry stops there
-        #expect(s.workout.entries[0].sets.map(\.reps) == [12, 10, 10])
+    }
+
+    @Test func newRepsCarryToTheSetsAfter() {
+        let s = make([WorkoutSet(weightKg: 20, reps: 10), WorkoutSet(weightKg: 20, reps: 10),
+                      WorkoutSet(weightKg: 20, reps: 10)])
+        let entry = s.workout.entries[0]
+        let model = ExerciseScreenModel.workout(s, entryId: entry.id)
+        model.updateSetCarrying(entry.sets[1].id) { $0.with(weightKg: $0.weightKg, reps: 12) }
+        #expect(s.workout.entries[0].sets.map(\.reps) == [10, 12, 12])
+        #expect(weights(s) == [20, 20, 20])
     }
 }

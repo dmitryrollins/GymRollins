@@ -413,7 +413,7 @@ extension LoggingView {
                     drafts[field] = typed
                     guard model.isPlan else { return }
                     let unit = env.profile.unit
-                    model.updateSetCarryingWeight(field.setId) { SetFieldFormat.applying(typed, to: field, set: $0, unit: unit) ?? $0 }
+                    model.updateSetCarrying(field.setId) { SetFieldFormat.applying(typed, to: field, set: $0, unit: unit) ?? $0 }
                 })
     }
 
@@ -421,7 +421,7 @@ extension LoggingView {
     private func commit(_ field: SetField) {
         guard let text = drafts.removeValue(forKey: field) else { return }
         let unit = env.profile.unit
-        model.updateSetCarryingWeight(field.setId) { SetFieldFormat.applying(text, to: field, set: $0, unit: unit) ?? $0 }
+        model.updateSetCarrying(field.setId) { SetFieldFormat.applying(text, to: field, set: $0, unit: unit) ?? $0 }
     }
 
     private func commitAll() {
