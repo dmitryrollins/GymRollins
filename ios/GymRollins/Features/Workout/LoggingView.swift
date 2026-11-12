@@ -239,7 +239,6 @@ struct LoggingView: View {
                                   text: { draftBinding($0, set: set) }, focus: $focus, isPlanned: model.isPlan,
                                   onRemove: remove,
                                   onToggleWarmup: model.canToggleWarmup ? { editSets { model.toggleWarmup(set) } } : nil)
-                        .swipeToDelete(identifier: "logging.set.\(offset).delete", onDelete: remove)
                         .id(set.id)
                     if set.id == model.effortPromptSetId(mode: mode) { // optional rating of the set just logged; the rest keeps running
                         SetEffortRow(rir: set.rir) { model.rateSet(set, tapping: $0) }.padding(.leading, 40)

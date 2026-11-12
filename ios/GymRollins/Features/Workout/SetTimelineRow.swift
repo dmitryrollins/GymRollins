@@ -25,7 +25,8 @@ struct SetTimelineRow: View {
     var focus: FocusState<SetField?>.Binding
     /// Today's plan before the workout (no done / current status).
     var isPlanned = false
-    /// Long-press menu on the badge (and VoiceOver actions): nil hides the item.
+    /// Long-press menu on the badge (and VoiceOver actions), and swiping the boxes left: nil hides the item and
+    /// turns the swipe off.
     var onRemove: (() -> Void)?
     var onToggleWarmup: (() -> Void)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -41,6 +42,8 @@ struct SetTimelineRow: View {
                     box(field)
                 }
             }
+            // Only the boxes narrow for the Delete button; the badge and the timeline stay put.
+            .swipeToDelete(identifier: "logging.set.\(index).delete", onDelete: onRemove)
         }
     }
 
@@ -131,6 +134,7 @@ struct SetTimelineRow: View {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(isActive ? Theme.textPrimary : Theme.divider, lineWidth: isActive ? 1.5 : 1)
                 }
+                .swipeToDeleteTarget() // the Delete button is one box tall, level with the boxes
                 .focused(focus, equals: field)
                 .accessibilityLabel("\(label), \(ordinalName)")
                 .accessibilityIdentifier("logging.set.\(index).\(field.identifierSuffix)")
