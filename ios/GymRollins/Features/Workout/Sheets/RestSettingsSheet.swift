@@ -2,21 +2,31 @@ import GymCore
 import SwiftUI
 
 /// Rest timer settings for the exercise screen: working vs. warm-up duration, and two global toggles (rest timer
-/// on/off, sound + haptic). In a workout it edits the session's rests; on Today's plan screen, today's rest (working
-/// sets only: `warmup` is nil).
+/// on/off, sound + haptic). The working rest is the exercise's own, in every workout (`ExerciseRestStore`); the
+/// warm-up rest is the running workout's (Today's plan screen has none: `warmup` is nil).
 struct RestSettingsSheet: View {
     let working: Binding<TimeInterval>
     var warmup: Binding<TimeInterval>?
     /// Called when "Rest timer between sets" changes (the running session follows it at once).
     var onRestEnabled: (Bool) -> Void = { _ in }
-    var footnote = "Default for this exercise; change all in Settings."
+    /// The working section's note.
+    var footnote = "Rest between working sets."
+    /// The exercise's suggested working rest: "Use suggested" shows while the working rest differs from it.
+    var suggested: TimeInterval?
     @Environment(\.dismiss) private var dismiss
     @State private var section = 0
     @AppStorage(RestPreferences.enabledKey) private var restTimerEnabled = true
     @AppStorage(RestPreferences.soundKey) private var restSound = true
 
-    /// The session's choices; today's rest (plan mode) offers everything a plan may hold (`DomainLimits.restSec`).
-    var range: ClosedRange<Int> = 30...300
+    /// Working sets: 0:30 to 15:00 (`DomainLimits.restSec`'s top). Warm-ups: 0:30 to 5:00.
+    static let workingRange = 30...DomainLimits.restSec.upperBound
+    static let warmupRange = 30...300
+    static let warmupFootnote = "Warm-up rest for this workout."
+
+    static func footnote(exerciseName: String) -> String {
+        "\(exerciseName) rests this long in every workout. "
+            + "Other exercises keep their own rest or the default in Settings."
+    }
 
     /// Every 15 s in `range`, plus `current` when it's off that grid (a stored value keeps its row).
     static func options(in range: ClosedRange<Int>, including current: Int) -> [TimeInterval] {
@@ -40,19 +50,24 @@ struct RestSettingsSheet: View {
                 .pickerStyle(.segmented)
             }
             Picker("Rest duration", selection: durationBinding) {
-                ForEach(Self.options(in: range, including: Int(durationBinding.wrappedValue)), id: \.self) { seconds in
+                ForEach(Self.options(in: isWarmup ? Self.warmupRange : Self.workingRange,
+                                     including: Int(durationBinding.wrappedValue)), id: \.self) { seconds in
                     Text(DurationFormatter.clock(seconds)).tag(seconds)
                 }
             }
             .pickerStyle(.wheel)
             .frame(height: 120)
+            if !isWarmup, let suggested, Int(working.wrappedValue) != Int(suggested) {
+                GlassPillButton(title: "Use suggested (\(DurationFormatter.clock(suggested)))",
+                                identifier: "rest.useSuggested") { working.wrappedValue = suggested }
+            }
             Toggle("Rest timer between sets", isOn: restEnabledBinding)
                 .padding(12)
                 .background(Theme.card, in: .rect(cornerRadius: 16))
             Toggle("Sound + haptic when rest ends", isOn: $restSound)
                 .padding(12)
                 .background(Theme.card, in: .rect(cornerRadius: 16))
-            Text(footnote)
+            Text(isWarmup ? Self.warmupFootnote : footnote)
                 .font(.caption)
                 .foregroundStyle(Theme.textTertiary)
         }
@@ -60,8 +75,10 @@ struct RestSettingsSheet: View {
         .presentationDetents([.medium, .large])
     }
 
+    private var isWarmup: Bool { section == 1 && warmup != nil }
+
     private var durationBinding: Binding<TimeInterval> {
-        if section == 1, let warmup { return warmup }
+        if isWarmup, let warmup { return warmup }
         return working
     }
 
@@ -71,18 +88,20 @@ struct RestSettingsSheet: View {
 }
 
 extension RestSettingsSheet {
-    /// The exercise screen's rest sheet: the session's working and warm-up rests, or today's rest (plan mode).
+    /// The exercise screen's rest sheet: the exercise's own working rest (both modes, suggested from the workout's or
+    /// today's default) and, in a workout, the workout's warm-up rest.
     @MainActor
-    init(model: ExerciseScreenModel) {
+    init(model: ExerciseScreenModel, exercise: Exercise?) {
         let working = Binding(get: { model.restSeconds }, set: { model.setRestSeconds($0) })
+        let footnote = Self.footnote(exerciseName: exercise.map { DisplayName.of($0.name) } ?? "This exercise")
+        let suggested = TimeInterval(ExerciseRest.suggested(for: exercise, defaultSec: Int(model.defaultRestSeconds)))
         switch model {
         case .workout(let session, _):
             self.init(working: working,
                       warmup: Binding(get: { session.warmupRestSeconds }, set: { session.warmupRestSeconds = $0 }),
-                      onRestEnabled: { session.restEnabled = $0 })
+                      onRestEnabled: { session.restEnabled = $0 }, footnote: footnote, suggested: suggested)
         case .plan:
-            self.init(working: working, footnote: "Rest between sets for today's workout.",
-                      range: DomainLimits.restSec)
+            self.init(working: working, footnote: footnote, suggested: suggested)
         }
     }
 }

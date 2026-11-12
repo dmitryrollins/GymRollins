@@ -44,18 +44,28 @@ enum ExerciseScreenModel {
         return false
     }
 
-    /// Rest between working sets: the running workout's, or today's.
+    /// Rest between working sets of this exercise: its own (`ExerciseRestStore`), else its suggestion from
+    /// `defaultRestSeconds`.
     var restSeconds: TimeInterval {
+        switch self {
+        case .workout(let session, let entryId): session.workingRestSeconds(entryId: entryId)
+        case .plan(let editor, let itemId): TimeInterval(editor.workingRest(itemId: itemId))
+        }
+    }
+
+    /// The default the exercise's suggestion starts from: the running workout's rest, or today's.
+    var defaultRestSeconds: TimeInterval {
         switch self {
         case .workout(let session, _): session.restSeconds
         case .plan(let editor, _): TimeInterval(editor.restSec)
         }
     }
 
+    /// Keeps `seconds` as this exercise's rest in every workout; other exercises keep theirs.
     func setRestSeconds(_ seconds: TimeInterval) {
         switch self {
-        case .workout(let session, _): session.restSeconds = seconds
-        case .plan(let editor, _): editor.setRest(Int(seconds))
+        case .workout(let session, let entryId): session.setWorkingRest(seconds, entryId: entryId)
+        case .plan(let editor, let itemId): editor.setWorkingRest(Int(seconds), itemId: itemId)
         }
     }
 

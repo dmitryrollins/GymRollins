@@ -9,25 +9,34 @@ final class FlowCoverageUITests: XCTestCase {
     // MARK: 3.3 Rest timer settings
 
     /// Changing the working and warm-up durations in the rest sheet sets the chip and the next rests' length.
-    /// `-fixedNow` freezes the clock, so the rest bar shows the full duration.
+    /// `-fixedNow` freezes the clock, so the rest bar shows the full duration. The working rest is the exercise's
+    /// own: the next exercise keeps its own, and going back to bench still shows bench's.
     func testStep3_3RestSettingsChangeTheNextRestDuration() {
         let app = XCUIApplication.launchReady(["-seedHistory"]) { $0.buttons["today.start"] }
         app.startWorkout()
         app.openExercise("0025")
+        let chip = app.buttons["logging.chip.rest"]
+        XCTAssertTrue(chip.label.contains("3:00 rest"), "a big barbell lift is suggested 3:00: \(chip.label)")
 
-        app.buttons["logging.chip.rest"].tap()
+        chip.tap()
         let wheel = app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: 5))
-        wheel.adjust(toPickerWheelValue: "3:00")
+        wheel.adjust(toPickerWheelValue: "3:30")
+        let useSuggested = app.buttons["rest.useSuggested"]
+        XCTAssertTrue(useSuggested.waitForExistence(timeout: 5), "bench has its own rest now")
+        XCTAssertEqual(useSuggested.label, "Use suggested (3:00)")
+        XCTAssertTrue(app.staticTexts["Barbell Bench Press rests this long in every workout. Other exercises keep "
+                                       + "their own rest or the default in Settings."].exists)
         app.buttons["Warm-up sets"].tap()
+        XCTAssertTrue(app.staticTexts["Warm-up rest for this workout."].waitForExistence(timeout: 5))
         wheel.adjust(toPickerWheelValue: "2:15")
         app.buttons["rest.done"].tapCenter()
         XCTAssertTrue(app.buttons["rest.done"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["logging.chip.rest"].label.contains("3:00 rest"), app.buttons["logging.chip.rest"].label)
+        XCTAssertTrue(chip.label.contains("3:30 rest"), chip.label)
 
-        // Two warm-ups rest 2:15 each, then the first working set rests 3:00.
+        // Two warm-ups rest 2:15 each, then the first working set rests 3:30.
         // The rest readout is one accessibility element whose value is the spoken remaining time (the clock is fixed).
-        for expected in ["2 minutes 15 seconds", "2 minutes 15 seconds", "3 minutes"] {
+        for expected in ["2 minutes 15 seconds", "2 minutes 15 seconds", "3 minutes 30 seconds"] {
             app.buttons["logging.logSet"].tapCenter()
             XCTAssertTrue(app.buttons["logging.rest.skip"].waitForExistence(timeout: 5))
             let rest = app.descendants(matching: .any)["logging.rest"]
@@ -36,6 +45,17 @@ final class FlowCoverageUITests: XCTestCase {
             app.buttons["logging.rest.skip"].tap()
             XCTAssertTrue(app.buttons["logging.logSet"].waitForExistence(timeout: 5))
         }
+
+        // Dumbbell incline bench press has no rest of its own: the 2:00 default, not bench's 3:30.
+        app.buttons["logging.logAll"].tapCenter()
+        app.openNextExercise()
+        XCTAssertTrue(app.staticTexts["logging.title"].label.contains("Incline"), app.staticTexts["logging.title"].label)
+        XCTAssertFalse(chip.label.contains("3:30"), chip.label)
+        XCTAssertTrue(chip.label.contains("2:00 rest"), chip.label)
+
+        app.backToOverview()
+        app.openExercise("0025")
+        XCTAssertTrue(chip.label.contains("3:30 rest"), "bench keeps its own rest: \(chip.label)")
     }
 
     // MARK: 3.5 How-to

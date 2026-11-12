@@ -19,23 +19,36 @@ final class TodayPlanEditor {
     @ObservationIgnored private var store: (any TodayPlanSaving)?
     @ObservationIgnored private var defaultRestSec: Int
     @ObservationIgnored private var suggest: (RoutineExercise, TodayPlan) -> [WorkoutSet]
+    /// Exercise id and today's rest → the exercise's working rest (its own, else its suggestion).
+    @ObservationIgnored private var workingRest: (String, Int) -> Int
+    /// Exercise id, seconds and today's rest: keeps the exercise's rest for every workout.
+    @ObservationIgnored private var saveWorkingRest: (String, Int, Int) -> Void
     /// Read from view bodies: ignored by observation so filling it never invalidates a view mid-update.
     @ObservationIgnored private var suggestions: [UUID: [WorkoutSet]] = [:]
     /// Set ids of dropped suggestions, by item (reused by the next suggestion for the same exercise).
     @ObservationIgnored private var previousIds: [UUID: (exerciseId: String, ids: [UUID], warmups: [Bool])] = [:]
 
+    /// `suggest` comes first, so a trailing closure still lands on it.
     init(store: (any TodayPlanSaving)? = nil, defaultRestSec: Int = 90,
-         suggest: @escaping (RoutineExercise, TodayPlan) -> [WorkoutSet] = { _, _ in [] }) {
+         suggest: @escaping (RoutineExercise, TodayPlan) -> [WorkoutSet] = { _, _ in [] },
+         workingRest: @escaping (String, Int) -> Int = { $1 },
+         saveWorkingRest: @escaping (String, Int, Int) -> Void = { _, _, _ in }) {
         self.store = store
         self.defaultRestSec = defaultRestSec
+        self.workingRest = workingRest
+        self.saveWorkingRest = saveWorkingRest
         self.suggest = suggest
     }
 
-    /// Points the editor at the app's store and planner (Today does this on every reload).
+    /// Points the editor at the app's store, per-exercise rests and planner (Today does this on every reload).
     func configure(store: any TodayPlanSaving, defaultRestSec: Int,
+                   workingRest: @escaping (String, Int) -> Int,
+                   saveWorkingRest: @escaping (String, Int, Int) -> Void,
                    suggest: @escaping (RoutineExercise, TodayPlan) -> [WorkoutSet]) {
         self.store = store
         self.defaultRestSec = defaultRestSec
+        self.workingRest = workingRest
+        self.saveWorkingRest = saveWorkingRest
         self.suggest = suggest
     }
 
@@ -132,14 +145,27 @@ final class TodayPlanEditor {
         apply(plan.deleting(itemId))
     }
 
-    // MARK: Rest (today-wide)
+    // MARK: Rest
 
+    /// Today's default rest: the day's own (stored before rest was per exercise; nothing sets it now), else Settings'.
     var restSec: Int { plan?.restSec ?? defaultRestSec }
 
     /// Today's rest; the profile default is stored as "none" so a later default change still applies.
     func setRest(_ seconds: Int) {
         guard let plan else { return }
         apply(plan.withRest(seconds == defaultRestSec ? nil : seconds))
+    }
+
+    /// The rest after a working set of the item's exercise: its own, else its suggestion from today's rest.
+    func workingRest(itemId: UUID) -> Int {
+        guard let exerciseId = item(itemId)?.exerciseId else { return restSec }
+        return workingRest(exerciseId, restSec)
+    }
+
+    /// Keeps `seconds` as the item's exercise's rest in every workout (ignored while locked, like every edit).
+    func setWorkingRest(_ seconds: Int, itemId: UUID) {
+        guard !isLocked, let exerciseId = item(itemId)?.exerciseId else { return }
+        saveWorkingRest(exerciseId, seconds, restSec)
     }
 
     private func forget(_ itemId: UUID) {

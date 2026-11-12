@@ -90,7 +90,7 @@ struct LoggingView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .sheet(isPresented: $showRestSettings) { RestSettingsSheet(model: model) }
+        .sheet(isPresented: $showRestSettings) { RestSettingsSheet(model: model, exercise: exercise) }
         .sheet(isPresented: $showHistory) {
             // `ExerciseHistoryView` doesn't wrap its own `NavigationStack` (nesting one inside
             // Body's existing stack broke that push entry point), so the sheet provides it here.

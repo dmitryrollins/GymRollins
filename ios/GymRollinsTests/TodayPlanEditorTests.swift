@@ -79,14 +79,6 @@ import Testing
         #expect(TodayPlanStore(defaults: defaults).load(day: day, routineIds: [routine.id]) == nil)
     }
 
-    @Test func planRestOffersTheWholeSupportedRange() {
-        let options = RestSettingsSheet.options(in: DomainLimits.restSec, including: 95)
-        #expect(options.first == 0)
-        #expect(options.last == 900)
-        #expect(options.contains(95), "a stored value off the 15 s grid still has a row")
-        #expect(RestSettingsSheet.options(in: 30...300, including: 90).count == 19)
-    }
-
     @Test func editingSetTwoChangesOnlyThatSetAndIsSaved() throws {
         let defaults = try freshDefaults()
         let editor = editor(defaults)
@@ -195,7 +187,7 @@ import Testing
         model.addSet()
         #expect(model.sets?.count == 6)
         model.setRestSeconds(120)
-        #expect(editor.plan?.restSec == 120)
+        #expect(editor.plan?.restSec == nil, "rest is the exercise's own now, not today's (TodayPlanEditorRestTests)")
         #expect(model.isEdited)
         #expect(ExerciseScreenModel.plan(editor, itemId: UUID()).sets == nil, "a deleted item closes the screen")
     }

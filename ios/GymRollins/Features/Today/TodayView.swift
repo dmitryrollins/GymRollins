@@ -369,7 +369,9 @@ struct TodayView: View {
                 plan = later.plan
                 scheduledRoutine = later.scheduled
             }
-            editor.configure(store: dayStore, defaultRestSec: env.profile.restSec) { item, plan in
+            editor.configure(store: dayStore, defaultRestSec: env.profile.restSec,
+                             workingRest: { env.workingRest(exerciseId: $0, defaultSec: $1) },
+                             saveWorkingRest: { env.setWorkingRest($1, exerciseId: $0, defaultSec: $2) }) { item, plan in
                 SessionPlanner.entry(for: item, policy: item.policy ?? plan.base?.policy ?? .double, profile: env.profile,
                                      exercise: env.library.exercise(item.exerciseId),
                                      history: (try? env.workouts.history(exerciseId: item.exerciseId, limit: 5)) ?? [],
