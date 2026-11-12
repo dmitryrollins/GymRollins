@@ -338,7 +338,7 @@ test('change_plan: a swap without weightKg away from a weighted exercise is save
   assertEquals(json(r).warnings, [{
     change_id: 'c1',
     message:
-      "No weightKg: machine-shoulder-press's 40 kg isn't carried over, so db-shoulder-press starts with no " +
+      "No weight: machine-shoulder-press's 40 kg isn't carried over, so db-shoulder-press starts with no " +
       'planned weight (0 until the owner types one). Add a weight change for it.',
   }])
   assertEquals(db.insertedProposals.length, 1)
@@ -367,3 +367,49 @@ const SWAP: PlanChange = {
   exerciseId: 'machine-shoulder-press',
   toExerciseId: 'db-shoulder-press',
 }
+
+test('change_plan: weightLb alone stores the exact kg and the pound number', async () => {
+  const db = new FakeDb(await loadOwnerData())
+  const change: PlanChange = { id: 'c1', type: 'weight', routineId: PUSH, exerciseId: '0025', weightLb: 45 }
+  const r = await proposePlanChanges({ db, now: NOW }, { summary: 'Bench to 45 lb', changes: [change] })
+  assert(!r.isError, r.content[0].text)
+  assertEquals(db.insertedProposals[0]!.changes, [{ ...change, weightKg: 45 * 0.45359237, weightLb: 45 }])
+})
+
+test('change_plan: weightKg and weightLb that agree are both kept; weightKg alone gets no weightLb', async () => {
+  const db = new FakeDb(await loadOwnerData())
+  const both: PlanChange = { id: 'c1', type: 'weight', routineId: PUSH, exerciseId: '0025', weightKg: 20.41, weightLb: 45 }
+  const kgOnly: PlanChange = { id: 'c2', type: 'weight', routineId: PUSH, exerciseId: '0025', weightKg: 20.3 }
+  const r = await proposePlanChanges({ db, now: NOW }, { summary: 'Two', changes: [both, kgOnly] })
+  assert(!r.isError, r.content[0].text)
+  assertEquals(db.insertedProposals[0]!.changes, [both, kgOnly])
+})
+
+test('change_plan: weightKg and weightLb that disagree by more than 0.01 kg are refused', async () => {
+  const db = new FakeDb(await loadOwnerData())
+  const change: PlanChange = { id: 'c1', type: 'weight', routineId: PUSH, exerciseId: '0025', weightKg: 20.3, weightLb: 45 }
+  const r = await proposePlanChanges({ db, now: NOW }, { summary: 'Bench', changes: [change] })
+  assert(r.isError === true)
+  assertEquals(db.insertedProposals.length, 0)
+  const v = JSON.parse(r.content[0].text).violations
+  assertEquals(v[0].field, 'weightLb')
+  assert(String(v[0].message).includes('different weights'), v[0].message)
+})
+
+test('change_plan: weightLb is 0–1100, and a weight change needs weightKg or weightLb', async () => {
+  const db = new FakeDb(await loadOwnerData())
+  const high: PlanChange = { id: 'c1', type: 'weight', routineId: PUSH, exerciseId: '0025', weightLb: 1101 }
+  const none: PlanChange = { id: 'c2', type: 'weight', routineId: PUSH, exerciseId: '0025' }
+  const r = await proposePlanChanges({ db, now: NOW }, { summary: 'Bench', changes: [high, none] })
+  assert(r.isError === true)
+  const v = JSON.parse(r.content[0].text).violations
+  assertEquals(v.map((x: any) => [x.change_id, x.field]), [['c1', 'weightLb'], ['c2', 'weightKg']])
+})
+
+test('change_plan: a swap with weightLb has no weight warning', async () => {
+  const r = await proposePlanChanges({ db: fixtureDb([], { 'machine-shoulder-press': 40 }), now: NOW }, {
+    summary: 'Swap',
+    changes: [{ ...SWAP, weightLb: 50 }],
+  })
+  assertEquals(json(r).warnings, undefined)
+})

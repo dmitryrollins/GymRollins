@@ -45,7 +45,7 @@ describe('saving a workout', () => {
         id: entry.id.toLowerCase(), exercise_id: 'bench_press', position: 0, note: null, superset_group: null,
         gym_equipment_id: null,
         sets: entry.sets.map((s: Record<string, unknown>) => ({
-          sec: null, min: null, dist_m: null, rir: null, rpe: null, completed_at: null, ...s,
+          sec: null, min: null, dist_m: null, rir: null, rpe: null, completed_at: null, w_lb: null, ...s,
           id: String(s.id).toLowerCase(),
         })),
       }],
@@ -265,7 +265,7 @@ describe('workout saves under load and in shape', () => {
       ['id', 'exercise_id', 'position', 'note', 'superset_group', 'gym_equipment_id', 'sets'].sort(),
     )
     expect(keys(w.entries[0].sets[0])).toEqual([
-      'id', 'position', 'w_kg', 'r', 'sec', 'min', 'dist_m', 'done', 'warmup', 'rir', 'rpe', 'multiplier', 'completed_at',
+      'id', 'position', 'w_kg', 'w_lb', 'r', 'sec', 'min', 'dist_m', 'done', 'warmup', 'rir', 'rpe', 'multiplier', 'completed_at',
     ].sort())
   })
 
@@ -339,5 +339,37 @@ describe('the size of one workout', () => {
     const stored = await fetchOne(token, w.id)
     expect(stored.entries.map((e) => e.id)).toEqual([w.entries[0].id.toLowerCase()])
     expect(stored.updated_at).toBe(first.updated_at)
+  })
+})
+
+describe("a set's pound number", () => {
+  const withSets = (sets: Record<string, unknown>[]) => {
+    const w = workoutSample()
+    w.entries[0].sets = sets.map((s, position) => ({ id: appUUID(), position, r: 5, ...s }))
+    return w
+  }
+
+  it('is saved and pulled as w_lb; a set without it comes back null', async () => {
+    const { token } = await signUp()
+    const w = withSets([{ w_kg: 20.41165665, w_lb: 45 }, { w_kg: 20 }])
+    await save(token, w)
+    const sets = (await fetchOne(token, w.id)).entries[0].sets
+    expect(sets.map((s: Record<string, unknown>) => [s.w_kg, s.w_lb])).toEqual([[20.41165665, 45], [20, null]])
+  })
+
+  it('is kept when the workout is saved again, and may be cleared', async () => {
+    const { token } = await signUp()
+    const w = withSets([{ w_kg: 20.41165665, w_lb: 45 }])
+    const first = await save(token, w)
+    const again = { ...w, client_updated_at: T2, base_updated_at: first.updated_at }
+    again.entries = [{ ...w.entries[0], sets: [{ ...w.entries[0].sets[0], w_kg: 20, w_lb: null }] }]
+    await save(token, again)
+    expect((await fetchOne(token, w.id)).entries[0].sets[0]).toMatchObject({ w_kg: 20, w_lb: null })
+  })
+
+  it('is refused above 2205', async () => {
+    const { token } = await signUp()
+    const res = await request('POST', '/v1/sync/workouts', { token, body: withSets([{ w_kg: 1000, w_lb: 2206 }]) })
+    expect(res.status).toBeGreaterThanOrEqual(400)
   })
 })

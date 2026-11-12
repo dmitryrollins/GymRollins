@@ -77,8 +77,8 @@ describe('each workout', () => {
         exercises: [{
           exercise_id: '0025',
           sets: [
-            { reps: 8, weight_kg: 63.5, sec: null, dist_m: null, warmup: false },
-            { reps: 10, weight_kg: 20, sec: null, dist_m: null, warmup: true },
+            { reps: 8, weight_kg: 63.5, weight_lb: null, sec: null, dist_m: null, warmup: false },
+            { reps: 10, weight_kg: 20, weight_lb: null, sec: null, dist_m: null, warmup: true },
           ],
         }],
       },
@@ -230,6 +230,38 @@ describe('the earliest date', () => {
     expect(results(r)).toEqual([
       { index: 0, status: 'refused', reason: 'invalid', message: 'The workout starts before 2000.' },
     ])
+    expect(db.insertedWorkouts).toEqual([])
+  })
+})
+
+describe('weight_lb', () => {
+  const withSets = (sets: object[]) => later(0, { exercises: [{ exercise_id: '0025', sets: sets as any }] })
+  const stored = (db: FakeDb) => db.insertedWorkouts[0]!.workout.exercises[0]!.sets
+
+  it('with only weight_lb stores the exact kg and the pound number', async () => {
+    const db = await fakeDb()
+    const r = await run(db, [withSets([{ reps: 8, weight_lb: 45 }])])
+    expect(r.isError).toBeFalsy()
+    expect(stored(db)).toMatchObject([{ weight_kg: 45 * 0.45359237, weight_lb: 45 }])
+  })
+
+  it('with both that agree keeps both; with only weight_kg keeps no pound number', async () => {
+    const db = await fakeDb()
+    await run(db, [withSets([{ reps: 8, weight_kg: 20.41, weight_lb: 45 }, { reps: 8, weight_kg: 20 }])])
+    expect(stored(db)).toMatchObject([{ weight_kg: 20.41, weight_lb: 45 }, { weight_kg: 20, weight_lb: null }])
+  })
+
+  it('refuses both that disagree by more than 0.01 kg, and a set with neither', async () => {
+    const db = await fakeDb()
+    const r = await run(db, [
+      withSets([{ reps: 8, weight_kg: 20.3, weight_lb: 45 }]),
+      later(1, { exercises: [{ exercise_id: '0025', sets: [{ reps: 8 }] as any }] }),
+      later(2, { exercises: [{ exercise_id: '0025', sets: [{ reps: 8, weight_lb: 2206 }] as any }] }),
+    ])
+    const [a, b, c] = results(r)
+    expect(a.message).toMatch(/exercises\[0\]\.sets\[0\]\.weight_kg and weight_lb are different weights/)
+    expect(b.message).toBe('exercises[0].sets[0].weight_kg or weight_lb is needed.')
+    expect(c.message).toBe('exercises[0].sets[0].weight_lb must be 0–2,204.')
     expect(db.insertedWorkouts).toEqual([])
   })
 })

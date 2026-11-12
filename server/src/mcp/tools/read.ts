@@ -110,7 +110,7 @@ export async function getPlan({ db }: ToolCtx): Promise<ToolResult> {
           reps_min: e.reps_min,
           sec: e.sec,
           mode: e.mode,
-          ...(e.weight_kg != null ? weight(e.weight_kg, unit) : {}),
+          ...(e.weight_kg != null ? weight(e.weight_kg, unit, e.weight_lb) : {}),
           prog: e.prog,
           inc_kg: e.inc_kg,
           superset_group: e.sg,
@@ -155,7 +155,7 @@ function workoutSummary(w: WorkoutRow, names: Map<string, ExerciseRow>, unit: We
         exercise_id: e.exercise_id,
         exercise: names.get(e.exercise_id)?.n ?? null,
         reps: top.r,
-        ...weight(top.w_kg, unit),
+        ...weight(top.w_kg, unit, top.w_lb),
       }]
     }),
   }
@@ -186,7 +186,7 @@ export async function listWorkouts(
 function setDetail(s: SetRow, unit: WeightUnit) {
   return compact({
     reps: s.r,
-    ...weight(s.w_kg, unit),
+    ...weight(s.w_kg, unit, s.w_lb),
     warmup: s.warmup ? true : null,
     done: s.done ? null : false,
     multiplier: s.multiplier !== 1 ? s.multiplier : null,

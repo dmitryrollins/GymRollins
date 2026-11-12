@@ -170,6 +170,7 @@ describe("Claude's reads", () => {
       .toEqual([{
         position: 0,
         w_kg: 60,
+        w_lb: null,
         r: 8,
         sec: null,
         min: null,

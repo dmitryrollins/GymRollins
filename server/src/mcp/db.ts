@@ -39,6 +39,8 @@ export interface RoutineExercise {
   reps_min?: number | null
   sec?: number | null
   weight_kg?: number | null
+  /** The pound number the weight was chosen as (plan 38); absent for a kg weight. */
+  weight_lb?: number | null
   mode: string
   prog?: string | null
   inc_kg?: number | null
@@ -64,6 +66,8 @@ export interface ScheduleRow {
 export interface SetRow {
   position: number
   w_kg: number
+  /** The pound number the weight was entered as (plan 38); null for a kg entry, an import or an older row. */
+  w_lb?: number | null
   r: number
   sec?: number | null
   min?: number | null
@@ -197,6 +201,8 @@ export interface ExerciseRequirementRow {
 export interface LoggedSet {
   reps: number
   weight_kg: number
+  /** The pound number the agent sent, or null when it sent kg only (plan 38). */
+  weight_lb: number | null
   sec: number | null
   dist_m: number | null
   warmup: boolean
