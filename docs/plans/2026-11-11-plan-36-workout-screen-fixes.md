@@ -92,6 +92,18 @@ This changes one case: on the last exercise, with an earlier exercise skipped, t
   - Add one test: log all of exercise 1, tap Next exercise, see exercise 2's title (`logging.title`), tap Back, see the list.
 - [ ] **Step 5: Run the changed UI test classes. Commit** `feat(app): Next exercise opens the next exercise instead of the workout list`.
 
+## Task 1b: Carry while typing, and the keyboard bar (owner, 2026-11-11, added mid-plan)
+
+The owner added two asks after the plan was written. They sent a screenshot of the iOS 26 form keyboard bar from Safari.
+
+- **Carry while typing.** In a workout, set 3 changes while the owner types in set 2, not only after Done.
+  - `draftBinding` applies every parseable keystroke in both modes; before, only plan mode did.
+  - The typed text still stays in `drafts` until the box is left.
+- **Keyboard bar.**
+  - On the left, a capsule with up and down chevrons: `keyboard.previous` / `keyboard.next` ("Previous field" / "Next field"). They walk every box in screen order.
+  - On the right, a plain text "Done" (`keyboard.done`), not the round red check.
+- [x] Done in ed90073, with the UI tests `testNewRepsCarryToTheLaterSets` (asserts before Done) and `testKeyboardNextMovesToTheNextBox`.
+
 ## Task 3: Rest per exercise, with a suggestion by type
 
 **Files:**
@@ -184,7 +196,7 @@ Real library rows (from `Resources/exercises.json`) to use as test fixtures:
 - The swipe moves only the set's boxes. The hexagon number, the timeline line and the labels' left edge stay put.
 - The boxes make room by narrowing, not by sliding under the number.
 - The revealed button:
-  - a white trash icon on `Theme.destructive`;
+  - a white trash icon on `Theme.primaryFill`, the Log Set red. The plan first said `Theme.destructive`, but white on it is only about 2.3:1 and looked washed out;
   - the boxes' 12-point corner radius, about 64 points wide;
   - exactly as tall as an input box and level with the boxes, never spanning the active row's "Reps / Weight" labels or its "Per Arm" / "Bar + Plates" caption.
 - The rest of the behavior stays:
