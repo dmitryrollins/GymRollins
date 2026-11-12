@@ -70,28 +70,20 @@ struct LoggingView: View {
                         if let new { withAnimation { proxy.scrollTo(new.setId, anchor: .center) } }
                     }
                 }
-                .background(Theme.background)
-                // Hidden while a box is being edited: the bar rides up with the keyboard and
-                // would otherwise sit on top of the lower rows, so a tap meant for a box would
-                // hit the bar's button instead.
+                // Under the keyboard too: otherwise the window's black shows behind the bar above the keys.
+                .background { Theme.background.ignoresSafeArea() }
+                // While a box is being edited the log bar gives way to the keyboard bar: it rides up with
+                // the keyboard and would otherwise sit on top of the lower rows, so a tap meant for a box
+                // would hit the bar's button instead.
                 .safeAreaInset(edge: .bottom) {
-                    if focus == nil { bottomBar(sets) }
-                }
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        // White like the system's form bar (Safari), not the app's red accent.
-                        Button("Previous field", systemImage: "chevron.up") { moveFocus(-1, sets: sets) }
-                            .disabled(!canMoveFocus(-1, sets: sets))
-                            .tint(Theme.textPrimary)
-                            .accessibilityIdentifier("keyboard.previous")
-                        Button("Next field", systemImage: "chevron.down") { moveFocus(1, sets: sets) }
-                            .disabled(!canMoveFocus(1, sets: sets))
-                            .tint(Theme.textPrimary)
-                            .accessibilityIdentifier("keyboard.next")
-                        Spacer()
-                        Button("Done") { focus = nil }
-                            .tint(Theme.textPrimary)
-                            .accessibilityIdentifier("keyboard.done")
+                    if focus == nil {
+                        bottomBar(sets)
+                    } else {
+                        KeyboardBar(canMovePrevious: canMoveFocus(-1, sets: sets),
+                                    canMoveNext: canMoveFocus(1, sets: sets),
+                                    movePrevious: { moveFocus(-1, sets: sets) },
+                                    moveNext: { moveFocus(1, sets: sets) },
+                                    done: { focus = nil })
                     }
                 }
             } else {
