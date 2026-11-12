@@ -178,6 +178,8 @@ public struct WorkoutSetDTO: Codable, Sendable, Equatable {
     public let id: UUID
     public let position: Int
     public let wKg: Double
+    /// The weight's pound number (`w_lb`, plan 38): sent only when there is one; nil from rows without it.
+    public let wLb: Double?
     public let r: Int
     public let sec: Int?
     public let min: Double?
@@ -191,13 +193,14 @@ public struct WorkoutSetDTO: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, position, r, sec, min, done, warmup, rir, rpe, multiplier
-        case wKg = "w_kg", distM = "dist_m", completedAt = "completed_at"
+        case wKg = "w_kg", wLb = "w_lb", distM = "dist_m", completedAt = "completed_at"
     }
 
     public init(_ s: WorkoutSet, position: Int) {
         id = s.id
         self.position = position
         wKg = s.weightKg
+        wLb = s.weightLb
         r = s.reps
         sec = s.sec
         min = s.minutes
@@ -210,8 +213,9 @@ public struct WorkoutSetDTO: Codable, Sendable, Equatable {
         completedAt = s.completedAt
     }
 
+    /// The set; a `w_lb` that disagrees with `w_kg` is dropped (`WorkoutSet`'s init).
     public var domain: WorkoutSet {
-        WorkoutSet(id: id, weightKg: wKg, reps: r, sec: sec, minutes: min, distanceM: distM, done: done,
+        WorkoutSet(id: id, weightKg: wKg, weightLb: wLb, reps: r, sec: sec, minutes: min, distanceM: distM, done: done,
                    warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier, completedAt: completedAt)
     }
 }

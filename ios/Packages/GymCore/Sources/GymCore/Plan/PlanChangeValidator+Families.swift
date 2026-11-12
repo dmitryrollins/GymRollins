@@ -172,6 +172,7 @@ extension PlanChangeChecker {
         range(change.sec, "sec", PlanChangeLimits.sec, required: false)
         range(change.minutes, "minutes", PlanChangeLimits.minutes, required: false)
         range(change.weightKg, "weightKg", PlanChangeLimits.weightKg, required: false)
+        range(change.weightLb, "weightLb", PlanChangeLimits.weightLb, required: false)
         if let min = change.repsMin, min < 1 || min > (topReps ?? PlanChangeLimits.reps.upperBound) {
             fail("repsMin", "Must be 1–reps")
         }
@@ -193,6 +194,7 @@ extension PlanChangeChecker {
             _ = inRoutine(change.exerciseId, "exerciseId"); range(change.sec, "sec", PlanChangeLimits.sec)
         case .weight:
             _ = inRoutine(change.exerciseId, "exerciseId"); range(change.weightKg, "weightKg", PlanChangeLimits.weightKg)
+            range(change.weightLb, "weightLb", PlanChangeLimits.weightLb, required: false)
         case .cardio:
             _ = inRoutine(change.exerciseId, "exerciseId"); range(change.minutes, "minutes", PlanChangeLimits.minutes)
             range(change.speed, "speed", PlanChangeLimits.speed, required: false)

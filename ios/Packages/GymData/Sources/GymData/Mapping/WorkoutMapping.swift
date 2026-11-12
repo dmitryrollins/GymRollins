@@ -44,14 +44,17 @@ extension WorkoutEntryRecord {
 }
 
 extension SetRecord {
+    /// The set; a stored pound number that disagrees with the kg is dropped (`WorkoutSet`'s init).
     public var value: WorkoutSet {
-        WorkoutSet(id: id, weightKg: weightKg, reps: reps, sec: sec, minutes: minutes, distanceM: distanceM, done: done,
-                   warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier, completedAt: completedAt)
+        WorkoutSet(id: id, weightKg: weightKg, weightLb: weightLb, reps: reps, sec: sec, minutes: minutes,
+                   distanceM: distanceM, done: done, warmup: warmup, rir: rir, rpe: rpe, multiplier: multiplier,
+                   completedAt: completedAt)
     }
 
     public convenience init(_ value: WorkoutSet, position: Int) {
-        self.init(id: value.id, position: position, weightKg: value.weightKg, reps: value.reps, sec: value.sec,
-                  minutes: value.minutes, distanceM: value.distanceM, done: value.done, warmup: value.warmup,
-                  rir: value.rir, rpe: value.rpe, multiplier: value.multiplier, completedAt: value.completedAt)
+        self.init(id: value.id, position: position, weightKg: value.weightKg, weightLb: value.weightLb,
+                  reps: value.reps, sec: value.sec, minutes: value.minutes, distanceM: value.distanceM,
+                  done: value.done, warmup: value.warmup, rir: value.rir, rpe: value.rpe, multiplier: value.multiplier,
+                  completedAt: value.completedAt)
     }
 }

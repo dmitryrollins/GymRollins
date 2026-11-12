@@ -28,6 +28,9 @@ public struct PlanChange: Codable, Sendable, Equatable, Identifiable {
     public let repsMin: Int?
     public let sec: Int?
     public let weightKg: Double?
+    /// The pound number `weightKg` was given as (plan 38); nil when none was, and dropped when it disagrees with
+    /// `weightKg` or there's no `weightKg` (the server fills kg from a pound number before it stores a change).
+    public let weightLb: Double?
     public let minutes: Double?
     public let speed: Double?
     public let incKg: Double?
@@ -42,10 +45,10 @@ public struct PlanChange: Codable, Sendable, Equatable, Identifiable {
 
     public init(id: String, type: PlanChangeType, routineId: String? = nil, exerciseId: String? = nil,
                 toExerciseId: String? = nil, withExerciseId: String? = nil, sets: Int? = nil, reps: Int? = nil,
-                repsMin: Int? = nil, sec: Int? = nil, weightKg: Double? = nil, minutes: Double? = nil,
-                speed: Double? = nil, incKg: Double? = nil, policy: ProgressionPolicy? = nil, position: Int? = nil,
-                name: String? = nil, weekday: Int? = nil, paused: Bool? = nil, date: String? = nil,
-                reason: String? = nil) {
+                repsMin: Int? = nil, sec: Int? = nil, weightKg: Double? = nil, weightLb: Double? = nil,
+                minutes: Double? = nil, speed: Double? = nil, incKg: Double? = nil, policy: ProgressionPolicy? = nil,
+                position: Int? = nil, name: String? = nil, weekday: Int? = nil, paused: Bool? = nil,
+                date: String? = nil, reason: String? = nil) {
         self.id = id
         self.type = type
         self.routineId = routineId
@@ -57,6 +60,7 @@ public struct PlanChange: Codable, Sendable, Equatable, Identifiable {
         self.repsMin = repsMin
         self.sec = sec
         self.weightKg = weightKg
+        self.weightLb = PoundWeight.agreeing(weightLb, kg: weightKg)
         self.minutes = minutes
         self.speed = speed
         self.incKg = incKg
@@ -67,6 +71,40 @@ public struct PlanChange: Codable, Sendable, Equatable, Identifiable {
         self.paused = paused
         self.date = date
         self.reason = reason
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, routineId, exerciseId, toExerciseId, withExerciseId, sets, reps, repsMin, sec, weightKg, weightLb
+        case minutes, speed, incKg, policy, position, name, weekday, paused, date, reason
+    }
+
+    /// Decodes through the init, so a `weightLb` that disagrees with `weightKg` is dropped.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(String.self, forKey: .id),
+            type: try c.decode(PlanChangeType.self, forKey: .type),
+            routineId: try c.decodeIfPresent(String.self, forKey: .routineId),
+            exerciseId: try c.decodeIfPresent(String.self, forKey: .exerciseId),
+            toExerciseId: try c.decodeIfPresent(String.self, forKey: .toExerciseId),
+            withExerciseId: try c.decodeIfPresent(String.self, forKey: .withExerciseId),
+            sets: try c.decodeIfPresent(Int.self, forKey: .sets),
+            reps: try c.decodeIfPresent(Int.self, forKey: .reps),
+            repsMin: try c.decodeIfPresent(Int.self, forKey: .repsMin),
+            sec: try c.decodeIfPresent(Int.self, forKey: .sec),
+            weightKg: try c.decodeIfPresent(Double.self, forKey: .weightKg),
+            weightLb: try c.decodeIfPresent(Double.self, forKey: .weightLb),
+            minutes: try c.decodeIfPresent(Double.self, forKey: .minutes),
+            speed: try c.decodeIfPresent(Double.self, forKey: .speed),
+            incKg: try c.decodeIfPresent(Double.self, forKey: .incKg),
+            policy: try c.decodeIfPresent(ProgressionPolicy.self, forKey: .policy),
+            position: try c.decodeIfPresent(Int.self, forKey: .position),
+            name: try c.decodeIfPresent(String.self, forKey: .name),
+            weekday: try c.decodeIfPresent(Int.self, forKey: .weekday),
+            paused: try c.decodeIfPresent(Bool.self, forKey: .paused),
+            date: try c.decodeIfPresent(String.self, forKey: .date),
+            reason: try c.decodeIfPresent(String.self, forKey: .reason)
+        )
     }
 }
 
@@ -146,6 +184,8 @@ public enum PlanChangeLimits {
     public static let minutes: ClosedRange<Double> = 1...300
     public static let speed: ClosedRange<Double> = 0...50
     public static let weightKg: ClosedRange<Double> = 0...500
+    /// A pound number given with `weightKg` (plan 38); it must also agree with it, or `PlanChange` drops it.
+    public static let weightLb: ClosedRange<Double> = 0...1100
     public static let incKg: ClosedRange<Double> = 0.1...20
     public static let position = 0...(DomainLimits.routineExercisesMax - 1)
     /// How many days after the owner's date a `today` change may be for (0 = today).
