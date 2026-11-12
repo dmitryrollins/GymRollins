@@ -55,8 +55,27 @@ final class SetEditingUITests: XCTestCase {
         let before = app.textFields["logging.set.3.reps"].value as? String
         XCTAssertNotEqual(before, "12", "the test needs a start other than 12")
         first.clearAndType("12")
+        // Live: the later sets follow while the box is still being edited, before Done.
+        XCTAssertEqual(app.textFields["logging.set.3.reps"].value as? String, "12")
         app.dismissKeyboardIfPresent()
         XCTAssertEqual(app.textFields["logging.set.3.reps"].value as? String, "12")
         XCTAssertEqual(app.textFields["logging.set.4.reps"].value as? String, "12")
+    }
+
+    func testKeyboardNextMovesToTheNextBox() {
+        let app = openBench()
+        let reps = app.textFields["logging.set.1.reps"]
+        XCTAssertTrue(reps.waitForExistence(timeout: 5))
+        reps.tap()
+        let previous = app.buttons["keyboard.previous"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["keyboard.next"].isEnabled)
+        app.buttons["keyboard.next"].tap()
+        // The next box in a set's order is its weight; typing lands there.
+        let weight = app.textFields["logging.set.1.weight"]
+        app.typeText("77")
+        XCTAssertTrue((weight.value as? String)?.contains("77") == true, "typed into the next box")
+        XCTAssertTrue(app.buttons["keyboard.done"].exists)
+        XCTAssertTrue(previous.isEnabled)
     }
 }

@@ -31,8 +31,9 @@ struct LoggingView: View {
     /// The one focus state for every box on the screen (see `SetTimelineRow`).
     @FocusState private var focus: SetField?
     /// Text the user has typed but not yet committed, keyed by box. A box without a draft shows
-    /// the current value; drafts are committed when focus leaves the box, on "Done", before
-    /// logging or starting, and when the screen goes away -- never per keystroke.
+    /// the current value; the text stays as typed until the box is left. Every keystroke that parses is applied (and
+    /// carried to the later sets) as it goes; the draft is committed when focus leaves the box, on "Done", before
+    /// logging or starting, and when the screen goes away.
     @State private var drafts: [SetField: String] = [:]
 
     private var exercise: Exercise? { model.exerciseId.flatMap { env.library.exercise($0) } }
@@ -72,10 +73,14 @@ struct LoggingView: View {
                 }
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
+                        Button("Previous field", systemImage: "chevron.up") { moveFocus(-1, sets: sets) }
+                            .disabled(!canMoveFocus(-1, sets: sets))
+                            .accessibilityIdentifier("keyboard.previous")
+                        Button("Next field", systemImage: "chevron.down") { moveFocus(1, sets: sets) }
+                            .disabled(!canMoveFocus(1, sets: sets))
+                            .accessibilityIdentifier("keyboard.next")
                         Spacer()
-                        // iOS 26's confirm role draws the system's round, tinted checkmark above the keyboard.
-                        Button("Done", systemImage: "checkmark", role: .confirm) { focus = nil }
-                            .tint(Theme.primaryButtonFill)
+                        Button("Done") { focus = nil }
                             .accessibilityIdentifier("keyboard.done")
                     }
                 }
@@ -407,16 +412,34 @@ extension LoggingView {
     /// Runs a structural edit (add / remove / warm-up) with pending typing applied first.
     private func editSets(_ edit: () -> Void) { commitAll(); edit() }
 
-    /// In plan mode every keystroke that parses also goes into the day's plan at once (the text stays as typed until
-    /// the box is left), so a workout started meanwhile (from the watch) gets the latest number.
+    /// Every keystroke that parses is applied at once (the text stays as typed until the box is left): later sets
+    /// follow live, and in plan mode a workout started meanwhile (from the watch) gets the latest number.
     private func draftBinding(_ field: SetField, set: WorkoutSet) -> Binding<String> {
         Binding(get: { drafts[field] ?? SetFieldFormat.display(field, set: set, unit: env.profile.unit) },
                 set: { typed in
                     drafts[field] = typed
-                    guard model.isPlan else { return }
                     let unit = env.profile.unit
                     model.updateSetCarrying(field.setId) { SetFieldFormat.applying(typed, to: field, set: $0, unit: unit) ?? $0 }
                 })
+    }
+
+    /// Every box on the screen in order: each set top to bottom, within a set the mode's field order.
+    private func orderedFields(_ sets: [WorkoutSet]) -> [SetField] {
+        let mode = SetFieldFormat.mode(exercise: exercise, sets: sets)
+        return sets.flatMap { SetFieldFormat.fields(for: mode, setId: $0.id) }
+    }
+
+    private func canMoveFocus(_ step: Int, sets: [WorkoutSet]) -> Bool {
+        let fields = orderedFields(sets)
+        guard let current = focus, let index = fields.firstIndex(of: current) else { return false }
+        return fields.indices.contains(index + step)
+    }
+
+    /// Previous / next box; the old box is committed by the focus change.
+    private func moveFocus(_ step: Int, sets: [WorkoutSet]) {
+        guard canMoveFocus(step, sets: sets), let current = focus,
+              let index = orderedFields(sets).firstIndex(of: current) else { return }
+        focus = orderedFields(sets)[index + step]
     }
 
     /// Applies one box's draft (invalid text is dropped, reverting the box).
