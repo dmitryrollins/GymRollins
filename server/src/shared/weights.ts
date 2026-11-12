@@ -5,8 +5,6 @@
 export const KG_PER_LB = 0.45359237
 /** The most a kg and a pound number for one weight may differ by (in kg) and still be the same weight. */
 export const WEIGHT_AGREE_KG = 0.01
-/** The pound range an agent may send for a plan weight: 0–500 kg, rounded up. */
-export const PLAN_WEIGHT_LB = { min: 0, max: 1_100 } as const
 /** The pound range of a set (workout_sets.w_lb's CHECK): 1,000 kg, rounded up. */
 export const SET_WEIGHT_LB = { min: 0, max: 2_205 } as const
 /** The pound range log_workout takes: 1,000 kg rounded down, so the kg it converts to stays within w_kg's CHECK. */

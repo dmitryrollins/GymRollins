@@ -8,7 +8,7 @@
 // Shares the fixture app/fixtures/plan-changes.json with the Swift tests — see plan-validation.test.ts. The
 // Swift behavior is the reference; keep this file in sync with it by hand, not by re-deriving the rules.
 import { DomainLimits } from './domain-limits.ts'
-import { kgFromLb, PLAN_WEIGHT_LB, weightDisagreement } from './weights.ts'
+import { kgFromLb, weightDisagreement } from './weights.ts'
 
 export type PlanChangeType =
   | 'add-exercise'
@@ -105,6 +105,8 @@ export const PlanChangeLimits = {
   minutes: { min: 1, max: 300 },
   speed: { min: 0, max: 50 },
   weightKg: { min: 0, max: 500 },
+  /** A pound number for a plan weight (plan 38): 0–500 kg, rounded up. */
+  weightLb: { min: 0, max: 1100 },
   incKg: { min: 0.1, max: 20 },
   position: { min: 0, max: DomainLimits.routineExercisesMax - 1 },
   /** How many days after the owner's date a `today` change may be for (0 = today). */
@@ -412,7 +414,7 @@ class PlanChangeChecker {
    */
   private weightFields(required: boolean): void {
     const c = this.change
-    this.range(c.weightLb, 'weightLb', PLAN_WEIGHT_LB, false)
+    this.range(c.weightLb, 'weightLb', PlanChangeLimits.weightLb, false)
     this.range(c.weightKg, 'weightKg', PlanChangeLimits.weightKg, required && isNil(c.weightLb))
     if (!Number.isFinite(c.weightKg) || !Number.isFinite(c.weightLb)) return
     const disagreement = weightDisagreement(c.weightKg, c.weightLb, 'weightKg', 'weightLb')
