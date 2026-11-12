@@ -80,11 +80,17 @@ enum ProposalModel {
         if item.mode == .cardio { return "\((item.sec ?? 0) / 60) min" }
         let reps = item.repsMin.map { $0 < item.reps ? "\($0)\u{2013}\(item.reps)" : "\(item.reps)" } ?? "\(item.reps)"
         let body = item.sec.map { "\(item.sets) \u{00D7} \($0) s" } ?? "\(item.sets) \u{00D7} \(reps)"
-        guard let kg = item.weightKg, kg > 0 else { return body }
-        return body + " @ " + weight(kg, unit)
+        guard let planned = item.weight, planned.kg > 0 else { return body }
+        return body + " @ " + weight(planned, unit)
     }
 
+    /// An amount in kg, such as an increment, in `unit`.
     static func weight(_ kg: Double, _ unit: WeightUnit) -> String {
         WeightFormatter.format(kg: kg, unit: unit, includeSecondary: false)
+    }
+
+    /// A plan weight in `unit`: its pound number in lb (plan 38).
+    static func weight(_ weight: PoundWeight, _ unit: WeightUnit) -> String {
+        WeightFormatter.format(kg: weight.kg, lb: weight.lb, unit: unit, includeSecondary: false)
     }
 }

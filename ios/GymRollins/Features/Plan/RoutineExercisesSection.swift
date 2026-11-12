@@ -32,7 +32,8 @@ struct RoutineExercisesSection: View {
                 .accessibilityIdentifier("edit.sets.\(item.exerciseId)")
             Stepper("\(item.repsMin.map { "\($0)\u{2013}" } ?? "")\(item.reps) reps", value: binding(item, \.reps, 1...50))
                 .accessibilityIdentifier("edit.reps.\(item.exerciseId)")
-            Stepper(item.weightKg.map { WeightFormatter.format(kg: $0, unit: env.profile.unit) } ?? "Bodyweight",
+            Stepper(item.weight.map { WeightFormatter.format(kg: $0.kg, lb: $0.lb, unit: env.profile.unit) }
+                        ?? "Bodyweight",
                     value: weightBinding(item), step: 1)
                 .accessibilityIdentifier("edit.weight.\(item.exerciseId)")
         }
@@ -43,25 +44,27 @@ struct RoutineExercisesSection: View {
                          _ range: ClosedRange<Int>) -> Binding<Int> {
         Binding(get: { item[keyPath: key] }, set: { newValue in
             let v = min(max(newValue, range.lowerBound), range.upperBound)
-            replace(item, sets: key == \.sets ? v : item.sets, reps: key == \.reps ? v : item.reps, weightKg: item.weightKg)
+            replace(item, sets: key == \.sets ? v : item.sets, reps: key == \.reps ? v : item.reps, weight: item.weight)
         })
     }
 
-    /// Weight stepper moves one loadable increment in the user's unit.
+    /// Weight stepper moves one loadable increment in the user's unit. The step lands on the rounder's grid, so in lb
+    /// the new weight has the grid's pound number (plan 38).
     private func weightBinding(_ item: RoutineExercise) -> Binding<Double> {
         let rounder = LoadRounding.rounder(for: env.library.exercise(item.exerciseId), profile: env.profile)
         let stepKg = UnitConverter.toKg(rounder.step, from: rounder.unit)
         return Binding(get: { (item.weightKg ?? 0) / stepKg }, set: { steps in
-            let kg = max(0, rounder.nearest(steps.rounded() * stepKg))
-            replace(item, sets: item.sets, reps: item.reps, weightKg: kg == 0 ? nil : kg)
+            let weight = rounder.nearestWeight(steps.rounded() * stepKg)
+            replace(item, sets: item.sets, reps: item.reps, weight: weight.kg > 0 ? weight : nil)
         })
     }
 
-    private func replace(_ item: RoutineExercise, sets: Int, reps: Int, weightKg: Double?) {
+    private func replace(_ item: RoutineExercise, sets: Int, reps: Int, weight: PoundWeight?) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-        let weightChanged = abs((weightKg ?? 0) - (item.weightKg ?? 0)) > 0.001
+        let weightChanged = abs((weight?.kg ?? 0) - (item.weightKg ?? 0)) > 0.001
         items[index] = RoutineExercise(id: item.id, exerciseId: item.exerciseId, sets: sets, reps: reps,
-                                       repsMin: item.repsMin.map { min($0, reps) }, sec: item.sec, weightKg: weightKg,
+                                       repsMin: item.repsMin.map { min($0, reps) }, sec: item.sec,
+                                       weightKg: weight?.kg, weightLb: weight?.lb,
                                        mode: item.mode, policy: item.policy, incKg: item.incKg,
                                        supersetGroup: item.supersetGroup,
                                        weightSetAt: weightChanged ? env.now() : item.weightSetAt)

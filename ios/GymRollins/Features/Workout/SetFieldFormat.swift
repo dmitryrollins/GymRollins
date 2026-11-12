@@ -42,7 +42,8 @@ enum SetField: Hashable {
 
 /// Pure display/parse rules for set fields. Parsing only ever happens for text the user edited:
 /// text equal to the current display string maps back to the unchanged set, so viewing a set
-/// (with its rounded display) can never rewrite the stored load.
+/// (with its rounded display) can never rewrite the stored load. A weight keeps its pound number (plan 38): it shows in
+/// lb, a number typed in lb is one, and copying a weight copies it.
 enum SetFieldFormat {
     static let metersPerMile = 1_609.344
 
@@ -92,7 +93,7 @@ enum SetFieldFormat {
     static func display(_ field: SetField, set: WorkoutSet, unit: WeightUnit) -> String {
         switch field {
         case .reps: return "\(set.reps)"
-        case .weight: return WeightFormatter.number(UnitConverter.fromKg(set.weightKg, to: unit))
+        case .weight: return WeightFormatter.number(kg: set.weightKg, lb: set.weightLb, unit: unit)
         case .sec: return set.sec.map(String.init) ?? ""
         case .minutes:
             let minutes = set.minutes ?? set.sec.map { Double($0) / 60 }
@@ -110,13 +111,13 @@ enum SetFieldFormat {
         switch field {
         case .reps:
             return Int(trimmed).flatMap {
-                DomainLimits.setReps.contains($0) ? set.with(weightKg: set.weightKg, reps: $0) : nil
+                DomainLimits.setReps.contains($0) ? set.with(weight: set.weight, reps: $0) : nil
             }
         case .sec:
             return Int(trimmed).flatMap { DomainLimits.setSeconds.contains($0) ? set.with(sec: $0) : nil }
         case .weight:
-            return decimal(trimmed).map { UnitConverter.toKg($0, from: unit) }
-                .flatMap { DomainLimits.setWeightKg.contains($0) ? set.with(weightKg: $0, reps: set.reps) : nil }
+            return decimal(trimmed).map { PoundWeight.entered($0, unit: unit) }
+                .flatMap { DomainLimits.setWeightKg.contains($0.kg) ? set.with(weight: $0, reps: set.reps) : nil }
         case .minutes:
             return decimal(trimmed).flatMap {
                 DomainLimits.setMinutes.contains($0)
@@ -129,11 +130,12 @@ enum SetFieldFormat {
         }
     }
 
-    /// `set` with `field`'s values (the ones `applying` writes) taken from `source`; everything else stays.
+    /// `set` with `field`'s values (the ones `applying` writes) taken from `source`; everything else stays. A weight
+    /// comes with its pound number.
     static func copying(_ field: SetField, from source: WorkoutSet, to set: WorkoutSet) -> WorkoutSet {
         switch field {
-        case .reps: set.with(weightKg: set.weightKg, reps: source.reps)
-        case .weight: set.with(weightKg: source.weightKg, reps: set.reps)
+        case .reps: set.with(weight: set.weight, reps: source.reps)
+        case .weight: set.with(weight: source.weight, reps: set.reps)
         case .sec: set.with(sec: source.sec)
         case .minutes: set.with(minutes: source.minutes, distanceM: set.distanceM).with(sec: source.sec)
         case .distance: set.with(minutes: set.minutes, distanceM: source.distanceM)

@@ -46,6 +46,9 @@ struct LaunchOptions {
     /// DEBUG/UI-test only (`-seedTodayProposal`): a pending proposal that adds "Home · KB Upper" and picks it for
     /// today (`today` change), for the one-off-session UI test.
     let seedTodayProposal: Bool
+    /// DEBUG/UI-test only (`-seedKgPlanWeight`): Push's bench is planned at 20.3 kg with no pound number, as an agent
+    /// sent it before plan 38, for the plan weight cleanup's UI test (`DebugPlanWeightSeed`).
+    let seedKgPlanWeight: Bool
     /// DEBUG/UI-test only (`-seedInsights`): six weeks of split workouts ending this Friday, for the recovery
     /// map, weekly sets and streak screens (`DebugInsightsSeed`).
     let seedInsights: Bool
@@ -157,6 +160,7 @@ struct LaunchOptions {
             .map { min(max($0, 0), 600) }
         seedProposal = arguments.contains("-seedProposal")
         seedTodayProposal = arguments.contains("-seedTodayProposal")
+        seedKgPlanWeight = arguments.contains("-seedKgPlanWeight")
         seedInsights = arguments.contains("-seedInsights")
         seedStrength = arguments.contains("-seedStrength")
         seedLimitsDue = arguments.contains("-seedLimitsDue")
@@ -183,6 +187,7 @@ struct LaunchOptions {
         workoutStartedMinutesAgo = nil
         seedProposal = false
         seedTodayProposal = false
+        seedKgPlanWeight = false
         seedInsights = false
         seedStrength = false
         seedLimitsDue = false

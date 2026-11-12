@@ -68,6 +68,6 @@ struct WorkoutLogBar: View {
     private func logActive() {
         commit()
         guard let active = session.entry(entryId)?.sets.first(where: { !$0.done }) else { return }
-        session.logNextSet(entryId: entryId, weightKg: active.weightKg, reps: active.reps, sec: active.sec)
+        session.logNextSet(entryId: entryId, weight: active.weight, reps: active.reps, sec: active.sec)
     }
 }

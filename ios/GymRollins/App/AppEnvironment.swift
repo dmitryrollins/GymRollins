@@ -99,6 +99,7 @@ final class AppEnvironment {
             Self.clearTodaySwitches(in: defaults)
             defaults.removeObject(forKey: Self.gymLocationCheckedKey)
             defaults.removeObject(forKey: ExerciseRestStore.key) // UI tests share the simulator's defaults
+            defaults.removeObject(forKey: PlanWeightsLbCleanup.flagKey) // a fresh store's plan hasn't been cleaned
         }
         if options.seedOwner {
             try OwnerSeed.apply(to: context, now: now())
@@ -113,6 +114,7 @@ final class AppEnvironment {
         #if DEBUG
         if options.seedProposal { try DebugProposalSeed.apply(context: context, now: now()) }
         if options.seedTodayProposal { try DebugProposalSeed.applyToday(context: context, now: now()) }
+        if options.seedKgPlanWeight { try DebugPlanWeightSeed.apply(context: context, now: now()) }
         if options.seedAgentWorkout { try DebugAgents.seedWorkout(into: syncStore, now: now()) }
         if options.seedInsights { try DebugInsightsSeed.apply(context: context, now: now()) }
         if options.seedStrength { try DebugStrengthSeed.apply(context: context, now: now()) }
@@ -170,6 +172,7 @@ final class AppEnvironment {
         self.calories = calories
         self.health = Self.makeHealth(options: options, defaults: defaults, workouts: workouts, body: body,
                                       calories: calories, now: now)
+        cleanUpPlanWeightsOnce()
         restoreSession()
         sync.autoApply = { [weak self] in try self?.autoApplyPulledProposals() ?? 0 }
         autoApplyProposals() // proposals pulled earlier, or seeded, while auto-apply is on

@@ -35,14 +35,15 @@ enum WeekPlan {
     }
 
     /// `routine` for one day only: a new workout with new ids (an item id belongs to one workout), named
-    /// "Push + Arms (Mon)" within the name limit.
+    /// "Push + Arms (Mon)" within the name limit. Plan weights keep their pound numbers.
     static func copy(of routine: Routine, for weekday: Int, calendar: Calendar = .current) -> Routine {
         let suffix = " (\(shortDayName(weekday, calendar: calendar)))"
         let name = String(routine.name.prefix(DomainLimits.routineNameMax - suffix.count)) + suffix
         let items = routine.exercises.map { item in
             RoutineExercise(exerciseId: item.exerciseId, sets: item.sets, reps: item.reps, repsMin: item.repsMin,
-                            sec: item.sec, weightKg: item.weightKg, mode: item.mode, policy: item.policy,
-                            incKg: item.incKg, supersetGroup: item.supersetGroup, weightSetAt: item.weightSetAt)
+                            sec: item.sec, weightKg: item.weightKg, weightLb: item.weightLb, mode: item.mode,
+                            policy: item.policy, incKg: item.incKg, supersetGroup: item.supersetGroup,
+                            weightSetAt: item.weightSetAt)
         }
         return Routine(name: name, emoji: routine.emoji, policy: routine.policy, exercises: items)
     }

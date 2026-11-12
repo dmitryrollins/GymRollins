@@ -69,7 +69,7 @@ actor SeededConflictTransport: SyncTransport {
         let row = dto.toDomain()
         let mine = row.value.workout
         let theirs = mine.with(entries: mine.entries.map { entry in
-            entry.with(sets: entry.sets.dropLast().map { $0.with(weightKg: $0.weightKg, reps: max(1, $0.reps - 1)) })
+            entry.with(sets: entry.sets.dropLast().map { $0.with(weight: $0.weight, reps: max(1, $0.reps - 1)) })
         })
         let snapshot = WorkoutSnapshot(workout: theirs, records: [], volumeKg: WorkoutMetrics.volumeKg(theirs))
         return WorkoutDTO(SyncRow(value: snapshot, clientUpdatedAt: row.clientUpdatedAt.addingTimeInterval(0.001),

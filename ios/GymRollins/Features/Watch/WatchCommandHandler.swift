@@ -91,9 +91,10 @@ final class WatchCommandHandler {
         case .logSet(let workoutId, let entryId, let setId, let weight, let unit, let reps):
             guard weight.isFinite, DomainLimits.setReps.contains(reps),
                   let planned = session.entry(entryId)?.sets.first(where: { $0.id == setId }) else { return nil }
-            let kg = WatchStateMapper.loggedKg(weight: weight, unit: unit, plannedKg: planned.weightKg)
-            guard DomainLimits.setWeightKg.contains(kg) else { return nil }
-            return .logSet(workoutId: workoutId, entryId: entryId, setId: setId, weightKg: kg, reps: reps)
+            let logged = WatchStateMapper.loggedWeight(weight: weight, unit: unit, planned: planned.weight)
+            guard DomainLimits.setWeightKg.contains(logged.kg) else { return nil }
+            return .logSet(workoutId: workoutId, entryId: entryId, setId: setId, weightKg: logged.kg,
+                           weightLb: logged.lb, reps: reps)
         case .extendRest(let workoutId, let entryId, let startedAt, let seconds):
             guard isCurrentRest(startedAt, in: session), seconds.isFinite, seconds > 0, seconds <= 600 else { return nil }
             return .extendRest(workoutId: workoutId, entryId: entryId, seconds: seconds)

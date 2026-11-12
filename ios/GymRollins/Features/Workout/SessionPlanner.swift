@@ -27,11 +27,12 @@ enum SessionPlanner {
         return Workout(startedAt: now, routineId: routine.id, name: routine.name, entries: entries, gymId: gymId)
     }
 
-    /// An entry with sets edited on Today: fresh, not-done copies with the exercise's volume multiplier.
+    /// An entry with sets edited on Today: fresh, not-done copies (weights with their pound numbers) with the exercise's
+    /// volume multiplier.
     static func planned(item: RoutineExercise, sets: [WorkoutSet], exercise: Exercise?) -> WorkoutEntry {
         let multiplier = multiplier(for: exercise)
         let fresh = sets.map {
-            WorkoutSet(weightKg: $0.weightKg, reps: $0.reps, sec: $0.sec, minutes: $0.minutes,
+            WorkoutSet(weightKg: $0.weightKg, weightLb: $0.weightLb, reps: $0.reps, sec: $0.sec, minutes: $0.minutes,
                        distanceM: $0.distanceM, warmup: $0.warmup, multiplier: multiplier)
         }
         return WorkoutEntry(exerciseId: item.exerciseId, sets: fresh, supersetGroup: item.supersetGroup)
@@ -41,16 +42,18 @@ enum SessionPlanner {
 
     /// Picks the barbell/dumbbell rounder and increment and returns the suggested weight/reps/time for an
     /// exercise's next session. Shared by `SessionPlanner.entry` (starting a workout) and `TodayModel` (showing
-    /// today's plan) so both agree on the same weight. With `loads`, the weight is fitted to what the gym offers.
+    /// today's plan) so both agree on the same weight. With `loads`, the weight is fitted to what the gym offers. The
+    /// plan's and the fixed weight's pound numbers go with them, so the suggestion keeps its own.
     static func suggestion(for item: RoutineExercise, policy: ProgressionPolicy, profile: Profile, exercise: Exercise?,
                            history: [SessionResult], loads: ListingLoads? = nil) -> Suggestion {
         let isBarbell = exercise?.isBarbellLoaded ?? false
         let rounder = LoadRounding.rounder(for: exercise, profile: profile)
         let engine = ProgressionEngine(rounder: rounder, deloadPct: profile.deloadPct)
         let target = ProgressionTarget(sets: item.sets, reps: item.reps, repsMin: item.repsMin, sec: item.sec,
-                                       weightKg: item.weightKg ?? 0,
+                                       weightKg: item.weightKg ?? 0, weightLb: item.weightLb,
                                        incKg: item.incKg ?? UnitConverter.toKg(isBarbell ? 5 : 2.5, from: .lb),
-                                       weightSetAt: item.weightSetAt, fixedWeightKg: item.fixedWeightKg)
+                                       weightSetAt: item.weightSetAt, fixedWeightKg: item.fixedWeightKg,
+                                       fixedWeightLb: item.fixedWeightLb)
         let suggestion = engine.suggest(policy: policy, mode: item.mode, target: target, history: history)
         return loads.map(suggestion.fitted(to:)) ?? suggestion
     }
@@ -63,8 +66,8 @@ enum SessionPlanner {
         let suggestion = suggestion(for: item, policy: policy, profile: profile, exercise: exercise, history: history,
                                     loads: loads)
         let working = (0..<item.sets).map { _ in
-            WorkoutSet(weightKg: suggestion.weightKg, reps: suggestion.reps, sec: suggestion.sec,
-                       multiplier: multiplier)
+            WorkoutSet(weightKg: suggestion.weightKg, weightLb: suggestion.weightLb, reps: suggestion.reps,
+                       sec: suggestion.sec, multiplier: multiplier)
         }
         let warmups = (isBarbell && autoWarmups)
             ? WarmupGenerator.sets(workingKg: suggestion.weightKg, barKg: profile.barKg, rounder: rounder)
@@ -111,41 +114,56 @@ enum SessionPlanner {
             let item = RoutineDefaults.item(for: exercise, profile: profile)
             let next = suggestion(for: item, policy: item.policy ?? .double, profile: profile, exercise: exercise,
                                   history: history)
-            return .suggested(weightKg: next.weightKg, loads: loads, timed: next.sec != nil)
+            return .suggested(weight: next.weight, loads: loads, timed: next.sec != nil)
         }
         return loads.map(SwapTarget.fit) ?? .keep
     }
 }
 
-/// A set's weight and reps after a swap.
+/// A set's weight (kg and pound number) and reps after a swap.
 struct ResolvedSet: Equatable {
-    let weightKg: Double
+    let weight: PoundWeight
     let reps: Int
+
+    init(weight: PoundWeight, reps: Int) {
+        self.weight = weight
+        self.reps = reps
+    }
+
+    /// A weight in kg only: no pound number.
+    init(weightKg: Double, reps: Int) {
+        self.init(weight: PoundWeight(kg: weightKg, lb: nil), reps: reps)
+    }
+
+    var weightKg: Double { weight.kg }
 }
 
-/// How `WorkoutSession.swap` retargets the undone working sets.
+/// How `WorkoutSession.swap` retargets the undone working sets. Every weight keeps its pound number: a kept or fitted
+/// weight its own (`AvailableLoads.fit`), a suggested one the suggestion's.
 enum SwapTarget: Equatable {
     case keep
     /// The new exercise's progression weight, fitted per set to `loads` when the gym has them. A timed exercise's
     /// sets keep their reps.
-    case suggested(weightKg: Double, loads: ListingLoads?, timed: Bool)
+    case suggested(weight: PoundWeight, loads: ListingLoads?, timed: Bool)
     /// No history: each set's own weight fitted to the gym's loads, reps unchanged.
     case fit(ListingLoads)
 
     func resolved(for set: WorkoutSet) -> ResolvedSet {
         switch self {
-        case .keep: ResolvedSet(weightKg: set.weightKg, reps: set.reps)
-        case let .suggested(weightKg, loads, timed):
-            Self.suggested(weightKg: weightKg, loads: loads, timed: timed, set: set)
+        case .keep: ResolvedSet(weight: set.weight, reps: set.reps)
+        case let .suggested(weight, loads, timed):
+            Self.suggested(weight: weight, loads: loads, timed: timed, set: set)
         case let .fit(loads):
-            ResolvedSet(weightKg: AvailableLoads.fit(weightKg: set.weightKg, reps: set.reps, to: loads).weightKg,
+            ResolvedSet(weight: AvailableLoads.fit(weightKg: set.weightKg, weightLb: set.weightLb, reps: set.reps,
+                                                   to: loads).weight,
                         reps: set.reps)
         }
     }
 
-    private static func suggested(weightKg: Double, loads: ListingLoads?, timed: Bool, set: WorkoutSet) -> ResolvedSet {
-        guard let loads else { return ResolvedSet(weightKg: weightKg, reps: set.reps) }
-        let fitted = AvailableLoads.fit(weightKg: weightKg, reps: set.reps, to: loads)
-        return ResolvedSet(weightKg: fitted.weightKg, reps: timed ? set.reps : fitted.reps)
+    private static func suggested(weight: PoundWeight, loads: ListingLoads?, timed: Bool,
+                                  set: WorkoutSet) -> ResolvedSet {
+        guard let loads else { return ResolvedSet(weight: weight, reps: set.reps) }
+        let fitted = AvailableLoads.fit(weightKg: weight.kg, weightLb: weight.lb, reps: set.reps, to: loads)
+        return ResolvedSet(weight: fitted.weight, reps: timed ? set.reps : fitted.reps)
     }
 }

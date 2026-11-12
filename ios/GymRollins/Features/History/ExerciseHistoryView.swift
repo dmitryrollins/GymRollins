@@ -92,7 +92,8 @@ struct ExerciseHistoryView: View {
     }
 
     private func sessionSummary(_ session: SessionResult) -> String {
-        "\(session.reps.count) \u{00D7} \(session.reps.first ?? 0) @ " + WeightFormatter.format(kg: session.weightKg, unit: unit)
+        "\(session.reps.count) \u{00D7} \(session.reps.first ?? 0) @ "
+            + WeightFormatter.format(kg: session.weightKg, lb: session.weightLb, unit: unit)
     }
 
     // MARK: Trends
@@ -119,8 +120,8 @@ struct ExerciseHistoryView: View {
                     SolidCard {
                         VStack(alignment: .leading, spacing: 8) {
                             SectionLabel(text: "Best set")
-                            Text("\(WeightFormatter.format(kg: best.weightKg, unit: unit, includeSecondary: false)) " +
-                                 "\u{00D7} \(best.reps)")
+                            Text(WeightFormatter.format(kg: best.weightKg, lb: best.weightLb, unit: unit,
+                                                        includeSecondary: false) + " \u{00D7} \(best.reps)")
                                 .font(Theme.display(26))
                                 .foregroundStyle(Theme.textPrimary)
                         }

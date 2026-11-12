@@ -106,15 +106,21 @@ final class WorkoutSession: Identifiable {
     /// Completes the next undone set of `entryId` with the given values and starts the rest timer,
     /// unless that was the exercise's last set (nothing left to rest before). Always acts on the
     /// entry the caller shows, never on `currentEntryId` (which may already have advanced).
-    /// `sec` of nil keeps the set's existing duration.
-    func logNextSet(entryId: UUID, weightKg: Double, reps: Int, sec: Int? = nil) {
+    /// `sec` of nil keeps the set's existing duration. `weight` is stored with its pound number.
+    func logNextSet(entryId: UUID, weight: PoundWeight, reps: Int, sec: Int? = nil) {
         guard let entry = entry(entryId), let next = entry.sets.first(where: { !$0.done }) else { return }
         let date = now()
         apply(workout.updatingSet(entryId: entryId, setId: next.id) {
-            $0.with(weightKg: weightKg, reps: reps).with(sec: sec ?? $0.sec).completing(at: date)
+            $0.with(weight: weight, reps: reps).with(sec: sec ?? $0.sec).completing(at: date)
         })
         if !isEntryComplete(entryId) { startRest(entryId: entryId, warmup: next.warmup, at: date) }
         advanceIfComplete(entryId)
+    }
+
+    /// `logNextSet(entryId:weight:reps:sec:)` with a weight in kg: the set's pound number stays only while its kg does.
+    func logNextSet(entryId: UUID, weightKg: Double, reps: Int, sec: Int? = nil) {
+        let planned = entry(entryId)?.sets.first { !$0.done }?.weight
+        logNextSet(entryId: entryId, weight: PoundWeight.replacing(planned, kg: weightKg), reps: reps, sec: sec)
     }
 
     /// Rates a logged working set ("Reps left?", `SetEffort`): one tap stores the reps in reserve, tapping the
@@ -189,8 +195,8 @@ final class WorkoutSession: Identifiable {
         let reconciled = sets.reduce(replaced) { w, set in
             w.updatingSet(entryId: entryId, setId: set.id) { current in
                 let moved = !current.done && !current.warmup
-                    ? target.resolved(for: current) : ResolvedSet(weightKg: current.weightKg, reps: current.reps)
-                return current.with(multiplier: multiplier).with(weightKg: moved.weightKg, reps: moved.reps)
+                    ? target.resolved(for: current) : ResolvedSet(weight: current.weight, reps: current.reps)
+                return current.with(multiplier: multiplier).with(weight: moved.weight, reps: moved.reps)
             }
         }
         apply(reconciled)

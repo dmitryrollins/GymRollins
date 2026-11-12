@@ -20,26 +20,27 @@ enum WorkoutText {
         }
     }
 
+    /// Weights show their pound numbers in lb (plan 38); whether they're equal is still decided in kg.
     private static func repsSummary(_ sets: [WorkoutSet], unit: WeightUnit) -> String {
-        let weightsKg = sets.map(\.weightKg)
+        let weights = sets.map(\.weight)
         let reps = sets.map(\.reps)
         let repsText = reps.map(String.init).joined(separator: ", ")
 
-        if weightsKg.allSatisfy({ abs($0) < 0.01 }) { return repsText }
+        if weights.allSatisfy({ abs($0.kg) < 0.01 }) { return repsText }
 
-        let firstKg = weightsKg[0]
-        let weightsEqual = weightsKg.allSatisfy { abs($0 - firstKg) < 0.01 }
+        let first = weights[0]
+        let weightsEqual = weights.allSatisfy { abs($0.kg - first.kg) < 0.01 }
         if weightsEqual {
             let repsEqual = reps.allSatisfy { $0 == reps[0] }
             if repsEqual {
-                return "\(sets.count) \u{00D7} \(reps[0]) @ \(weightText(firstKg, unit: unit))"
+                return "\(sets.count) \u{00D7} \(reps[0]) @ \(weightText(first, unit: unit))"
             }
-            return "\(repsText) @ \(weightText(firstKg, unit: unit))"
+            return "\(repsText) @ \(weightText(first, unit: unit))"
         }
 
-        let minKg = weightsKg.min() ?? firstKg
-        let maxKg = weightsKg.max() ?? firstKg
-        let range = "\(number(minKg, unit: unit))\u{2013}\(number(maxKg, unit: unit)) \(unit.rawValue)"
+        let lightest = weights.min { $0.kg < $1.kg } ?? first
+        let heaviest = weights.max { $0.kg < $1.kg } ?? first
+        let range = "\(number(lightest, unit: unit))\u{2013}\(number(heaviest, unit: unit)) \(unit.rawValue)"
         return "\(repsText) @ \(range)"
     }
 
@@ -60,11 +61,11 @@ enum WorkoutText {
         return "\(minutesText) min \u{00B7} \(distanceText) \(SetFieldFormat.distanceUnit(unit))"
     }
 
-    private static func weightText(_ kg: Double, unit: WeightUnit) -> String {
-        "\(number(kg, unit: unit)) \(unit.rawValue)"
+    private static func weightText(_ weight: PoundWeight, unit: WeightUnit) -> String {
+        "\(number(weight, unit: unit)) \(unit.rawValue)"
     }
 
-    private static func number(_ kg: Double, unit: WeightUnit) -> String {
-        WeightFormatter.number(UnitConverter.fromKg(kg, to: unit))
+    private static func number(_ weight: PoundWeight, unit: WeightUnit) -> String {
+        WeightFormatter.number(kg: weight.kg, lb: weight.lb, unit: unit)
     }
 }

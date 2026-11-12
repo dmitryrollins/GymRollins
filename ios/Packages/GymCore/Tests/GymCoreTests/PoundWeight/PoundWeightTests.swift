@@ -43,6 +43,16 @@ import Testing
         #expect(PoundWeight(kg: 20.3, lb: nil).carried(in: .kg) == PoundWeight(kg: 20.3, lb: nil), "kg isn't snapped")
     }
 
+    @Test func aWeightOfNothingHasNoPoundNumber() {
+        // Bodyweight and timed sets weigh 0 kg: in lb they must not sync `w_lb: 0`.
+        #expect(PoundWeight.snappedToHalfPound(kg: 0) == PoundWeight(kg: 0, lb: nil))
+        #expect(PoundWeight(kg: 0, lb: nil).carried(in: .lb) == PoundWeight(kg: 0, lb: nil))
+        #expect(PoundWeight.entered(0, unit: .lb) == PoundWeight(kg: 0, lb: nil))
+        #expect(LoadRounder.barbellLb.downWeight(0) == PoundWeight(kg: 0, lb: nil))
+        #expect(WorkoutSet(weightKg: 0, weightLb: 0, reps: 10).weightLb == nil)
+        #expect(PoundWeight.snappedToHalfPound(kg: 0.1) == PoundWeight(kg: 0, lb: nil), "0.22 lb snaps to nothing")
+    }
+
     @Test func aWeightThatReplacesAnotherKeepsItsPoundNumberOnlyWhileTheKgIsTheSame() {
         let old = PoundWeight(kg: lb(45), lb: 45)
         #expect(PoundWeight.replacing(old, kg: lb(45)) == old)
