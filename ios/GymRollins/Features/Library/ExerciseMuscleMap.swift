@@ -35,7 +35,7 @@ struct ExerciseMuscleMap: View {
                     }
                 }
                 .frame(height: 220)
-                key(hasSecondary: contributions.contains { !$0.isPrimary })
+                key(Self.keyRoles(contributions))
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .ignore)
@@ -44,10 +44,10 @@ struct ExerciseMuscleMap: View {
         }
     }
 
-    private func key(hasSecondary: Bool) -> some View {
+    private func key(_ roles: [MuscleRole]) -> some View {
         HStack(spacing: 12) {
-            swatch("Target", MuscleRole.target.color)
-            if hasSecondary { swatch("Secondary", MuscleRole.secondary.color) }
+            if roles.contains(.target) { swatch("Target", MuscleRole.target.color) }
+            if roles.contains(.secondary) { swatch("Secondary", MuscleRole.secondary.color) }
         }
         .font(.caption)
         .foregroundStyle(Theme.textSecondary)
@@ -58,6 +58,14 @@ struct ExerciseMuscleMap: View {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(text)
         }
+    }
+
+    /// The colours the key explains: Target when the exercise has a target group, Secondary when it has a secondary
+    /// one. An exercise whose target isn't on the map (only its secondary muscles are) shows no Target swatch.
+    nonisolated static func keyRoles(_ contributions: [MuscleContribution]) -> [MuscleRole] {
+        let hasTarget = contributions.contains(where: \.isPrimary)
+        let hasSecondary = contributions.contains { !$0.isPrimary }
+        return [MuscleRole.target, .secondary].filter { $0 == .target ? hasTarget : hasSecondary }
     }
 
     /// "Works chest; also shoulders, triceps".

@@ -20,6 +20,19 @@ import Testing
         #expect(MuscleTaxonomy.contributions(for: run).isEmpty)
     }
 
+    @Test func theKeyShowsOnlyTheRolesTheMapUses() {
+        #expect(ExerciseMuscleMap.keyRoles(MuscleTaxonomy.contributions(for: bench)) == [.target, .secondary])
+        let curl = Exercise(id: "c", name: "curl", bodyPart: "upper arms", equipment: "dumbbell", target: "biceps")
+        #expect(ExerciseMuscleMap.keyRoles(MuscleTaxonomy.contributions(for: curl)) == [.target])
+        // A target the taxonomy doesn't know, on a body part it doesn't know either: only the secondary group shows.
+        let odd = Exercise(id: "o", name: "odd", bodyPart: "unknown", equipment: "band", target: "unknown",
+                           secondary: ["triceps"])
+        let secondaryOnly = MuscleTaxonomy.contributions(for: odd)
+        #expect(secondaryOnly.map(\.isPrimary) == [false])
+        #expect(ExerciseMuscleMap.keyRoles(secondaryOnly) == [.secondary])
+        #expect(ExerciseMuscleMap.keyRoles([]) == [])
+    }
+
     @Test func labelNamesTargetThenSecondary() {
         #expect(ExerciseMuscleMap.label(MuscleTaxonomy.contributions(for: bench))
                 == "Works chest; also triceps, shoulders")
