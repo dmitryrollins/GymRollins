@@ -80,7 +80,7 @@ extension ProposalModel {
             case .reps: "\(change.reps ?? 0) reps"
             case .repsMin: "at least \(change.repsMin ?? 0) reps"
             case .sec: "\(change.sec ?? 0) s"
-            case .weight: weight(change.weightKg ?? 0, unit)
+            case .weight: weight(PoundWeight(kg: change.weightKg ?? 0, lb: change.weightLb), unit)
             default: "\(Int(change.minutes ?? 0)) min"
             }
         }

@@ -178,8 +178,8 @@ final class TodayPlanEditor {
         guard let previous = previousIds.removeValue(forKey: itemId), previous.exerciseId == exerciseId,
               previous.warmups == sets.map(\.warmup) else { return sets }
         return zip(sets, previous.ids).map { set, id in
-            WorkoutSet(id: id, weightKg: set.weightKg, reps: set.reps, sec: set.sec, minutes: set.minutes,
-                       distanceM: set.distanceM, warmup: set.warmup, multiplier: set.multiplier)
+            WorkoutSet(id: id, weightKg: set.weightKg, weightLb: set.weightLb, reps: set.reps, sec: set.sec,
+                       minutes: set.minutes, distanceM: set.distanceM, warmup: set.warmup, multiplier: set.multiplier)
         }
     }
 
@@ -190,11 +190,12 @@ final class TodayPlanEditor {
 }
 
 extension RoutineExercise {
-    /// The same item under another id (Replace keeps the id of the item it replaces).
+    /// The same item under another id (Replace keeps the id of the item it replaces), pound numbers included.
     func withId(_ newId: UUID) -> RoutineExercise {
         RoutineExercise(id: newId, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
-                        weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
-                        weightSetAt: weightSetAt, fixedWeightKg: fixedWeightKg)
+                        weightKg: weightKg, weightLb: weightLb, mode: mode, policy: policy, incKg: incKg,
+                        supersetGroup: supersetGroup, weightSetAt: weightSetAt, fixedWeightKg: fixedWeightKg,
+                        fixedWeightLb: fixedWeightLb)
     }
 }
 

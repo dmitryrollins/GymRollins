@@ -42,8 +42,8 @@ enum IncomingWorkoutScreen: Equatable {
         case let .valid(workout, dropped):
             if isWorkoutRunning { return .workoutRunning }
             let items = workout.routineItems { library.exercise($0)?.mode }.map { item in
-                item.with(fixedWeightKg: ownWeight(exerciseId: item.exerciseId, routines: routines, library: library,
-                                                   profile: profile, history: history(item.exerciseId)))
+                item.with(fixedWeight: ownWeight(exerciseId: item.exerciseId, routines: routines, library: library,
+                                                 profile: profile, history: history(item.exerciseId)))
             }
             let plan = TodayPlan.shared(items: items, day: day)
             let model = TodayModel.make(plan: plan, profile: profile, library: library, history: history, gym: gym,
@@ -57,19 +57,24 @@ enum IncomingWorkoutScreen: Equatable {
     }
 
     /// This person's weight for `exerciseId`: what their own routine would suggest, else what they last lifted, else none.
-    /// The sender's sets and reps never reach it.
+    /// The sender's sets and reps never reach it. The weight keeps its pound number (plan 38).
     private static func ownWeight(exerciseId: String, routines: [Routine], library: ExerciseLibrary, profile: Profile,
-                                  history: [SessionResult]) -> Double {
+                                  history: [SessionResult]) -> PoundWeight {
         let candidates = routines.flatMap { routine in
             routine.exercises.filter { $0.exerciseId == exerciseId }.map { (routine: routine, item: $0) }
         }
         let chosen = candidates.max { ($0.item.weightSetAt ?? .distantPast) < ($1.item.weightSetAt ?? .distantPast) }
         let best = chosen?.item.weightSetAt != nil ? chosen : (candidates.first { $0.item.weightKg != nil } ?? candidates.first)
-        guard let best else { return max(0, history.first?.weightKg ?? 0) }
+        guard let best else { return nonNegative(history.first?.weight) }
         let suggestion = SessionPlanner.suggestion(for: best.item, policy: best.item.policy ?? best.routine.policy,
                                                    profile: profile, exercise: library.exercise(exerciseId),
                                                    history: history)
-        return max(0, suggestion.weightKg)
+        return nonNegative(suggestion.weight)
+    }
+
+    /// `weight` when there is one above 0; else none (0 kg).
+    private static func nonNegative(_ weight: PoundWeight?) -> PoundWeight {
+        weight.flatMap { $0.kg > 0 ? $0 : nil } ?? PoundWeight(kg: 0, lb: nil)
     }
 
     private static func count(_ count: Int) -> String { count == 1 ? "1 exercise" : "\(count) exercises" }

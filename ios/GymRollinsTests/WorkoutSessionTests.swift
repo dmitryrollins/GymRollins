@@ -168,7 +168,8 @@ import Testing
         let s = make(spy, now: { Date(timeIntervalSince1970: 1_100) })
         let bench = s.workout.entries[0].id
         s.logNextSet(entryId: bench, weightKg: 20.41, reps: 10) // warm-up done
-        s.swap(entryId: bench, to: "0289", multiplier: 2, target: .suggested(weightKg: 22, loads: nil, timed: false))
+        s.swap(entryId: bench, to: "0289", multiplier: 2,
+               target: .suggested(weight: PoundWeight(kg: 22, lb: nil), loads: nil, timed: false))
         let swapped = s.workout.entries[0]
         #expect(swapped.exerciseId == "0289")
         #expect(swapped.sets.allSatisfy { $0.multiplier == 2 })
@@ -189,7 +190,8 @@ import Testing
         s.logNextSet(entryId: bench, weightKg: 63.5, reps: 7)   // first working set
         let logged = s.workout.entries[0].sets[1]
         #expect(logged.done && !logged.warmup, "this is a working set, not the warm-up")
-        s.swap(entryId: bench, to: "0289", multiplier: 2, target: .suggested(weightKg: 22, loads: nil, timed: false))
+        s.swap(entryId: bench, to: "0289", multiplier: 2,
+               target: .suggested(weight: PoundWeight(kg: 22, lb: nil), loads: nil, timed: false))
         let swapped = s.workout.entries[0].sets
         #expect(swapped[1].weightKg == 63.5 && swapped[1].reps == 7, "the logged working set keeps its load and reps")
         #expect(swapped[2].weightKg == 22, "the undone one moves")

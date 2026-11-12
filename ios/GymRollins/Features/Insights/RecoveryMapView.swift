@@ -171,22 +171,22 @@ struct MuscleDetailSheet: View {
         .accessibilityIdentifier("muscle.session")
     }
 
-    /// "135 lb × 8, 8, 7" when every set shares the load, else one "load × reps" per set.
+    /// "135 lb × 8, 8, 7" when every set shares the load, else one "load × reps" per set. Loads show their pound
+    /// numbers in lb (plan 38).
     private func setsText(_ sets: [WorkoutSet]) -> String {
         let unit = env.profile.unit
         let describe = { (s: WorkoutSet) -> String in
             if let sec = s.sec, sec > 0, s.reps <= 1 { return "\(sec) s" }
             return "\(s.reps)"
         }
-        let loads = Set(sets.map(\.weightKg))
-        if loads.count == 1, let kg = loads.first {
-            let reps = sets.map(describe).joined(separator: ", ")
-            return kg > 0 ? "\(WeightFormatter.format(kg: kg, unit: unit, includeSecondary: false)) \u{00D7} \(reps)"
-                : "Bodyweight \u{00D7} \(reps)"
+        let load = { (s: WorkoutSet) in
+            WeightFormatter.format(kg: s.weightKg, lb: s.weightLb, unit: unit, includeSecondary: false)
         }
-        return sets.map {
-            "\(WeightFormatter.format(kg: $0.weightKg, unit: unit, includeSecondary: false)) \u{00D7} \(describe($0))"
-        }.joined(separator: ", ")
+        if Set(sets.map(\.weightKg)).count == 1, let first = sets.first {
+            let reps = sets.map(describe).joined(separator: ", ")
+            return first.weightKg > 0 ? "\(load(first)) \u{00D7} \(reps)" : "Bodyweight \u{00D7} \(reps)"
+        }
+        return sets.map { "\(load($0)) \u{00D7} \(describe($0))" }.joined(separator: ", ")
     }
 
     private static func day(_ date: Date) -> String {

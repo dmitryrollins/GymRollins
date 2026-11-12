@@ -131,15 +131,16 @@ struct TodayModel: Equatable {
         kinds.first.map { matcher.kind($0)?.name.lowercased() ?? $0 } ?? "equipment"
     }
 
-    /// "3 × 10 · 140 lb" for edited sets: working sets, their top reps (or seconds) and top weight.
+    /// "3 × 10 · 140 lb" for edited sets: working sets, their top reps (or seconds) and top weight (its pound number in
+    /// lb).
     static func subtitle(sets: [WorkoutSet], unit: WeightUnit) -> String {
         let working = sets.filter { !$0.warmup }
         let top = working.map(\.reps).max() ?? 0
         let low = working.map(\.reps).min() ?? 0
         let secs = working.compactMap(\.sec).max()
         let amount = secs.map { "\($0) s" } ?? (low < top ? "\(low)\u{2013}\(top)" : "\(top)")
-        let weight = working.map(\.weightKg).max() ?? 0
-        let load = weight > 0 ? " \u{00B7} " + WeightFormatter.format(kg: weight, unit: unit) : ""
+        let weight = TodaySetEdits.heaviest(working)
+        let load = weight.kg > 0 ? " \u{00B7} " + WeightFormatter.format(kg: weight.kg, lb: weight.lb, unit: unit) : ""
         return "\(working.count) \u{00D7} \(amount)\(load)"
     }
 }

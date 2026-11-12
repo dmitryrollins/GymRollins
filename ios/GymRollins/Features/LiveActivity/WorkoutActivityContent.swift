@@ -59,17 +59,18 @@ enum WorkoutActivityContent {
         }
     }
 
-    /// The planned values in the user's unit: "60 kg × 8" (or "8 reps" without load), "45 s", "20 min · 3.1 mi".
+    /// The planned values in the user's unit: "60 kg × 8" (or "8 reps" without load), "45 s", "20 min · 3.1 mi". A
+    /// weight shows its pound number in lb (plan 38).
     static func setDetail(_ set: WorkoutSet, mode: ExerciseMode, unit: WeightUnit) -> String {
+        let load = WeightFormatter.format(kg: set.weightKg, lb: set.weightLb, unit: unit, includeSecondary: false)
         switch mode {
         case .reps:
             guard set.weightKg > 0 else { return "\(set.reps) reps" }
-            return "\(WeightFormatter.format(kg: set.weightKg, unit: unit, includeSecondary: false)) \u{00D7} \(set.reps)"
+            return "\(load) \u{00D7} \(set.reps)"
         case .time:
             let seconds = set.sec.map { "\($0) s" } ?? ""
             guard set.weightKg > 0 else { return seconds }
-            return [seconds, WeightFormatter.format(kg: set.weightKg, unit: unit, includeSecondary: false)]
-                .filter { !$0.isEmpty }.joined(separator: " · ")
+            return [seconds, load].filter { !$0.isEmpty }.joined(separator: " · ")
         case .cardio:
             let minutes = SetFieldFormat.display(.minutes(set.id), set: set, unit: unit)
             let distance = SetFieldFormat.display(.distance(set.id), set: set, unit: unit)

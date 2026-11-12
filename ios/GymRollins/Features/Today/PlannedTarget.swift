@@ -23,13 +23,15 @@ struct PlannedTarget: Equatable {
             : item.repsMin.map { $0 < item.reps ? "\($0)\u{2013}\(item.reps)" : "\(item.reps)" } ?? "\(item.reps)"
         let target = item.mode != .reps && suggestion.sec != nil ? time(suggestion.sec ?? 0) : reps
         let load = suggestion.weightKg > 0
-            ? " \u{00B7} " + WeightFormatter.format(kg: suggestion.weightKg, unit: profile.unit)
+            ? " \u{00B7} " + WeightFormatter.format(kg: suggestion.weightKg, lb: suggestion.weightLb, unit: profile.unit)
             : ""
-        let delta = history.first.map { suggestion.weightKg - $0.weightKg } ?? 0
+        let last = history.first?.weight
+        let delta = last.map { suggestion.weightKg - $0.kg } ?? 0
         // At a gym a weight within the bell's own rounding (44 lb vs a 20 kg bell) hasn't risen; with none, any
-        // real rise, even a 0.2 kg micro-plate, shows.
+        // real rise, even a 0.2 kg micro-plate, shows. The rise is between the numbers shown (pound numbers in lb).
+        let shownRise = last.map { suggestion.weight.value(in: profile.unit) - $0.value(in: profile.unit) } ?? 0
         let badge = delta > (loads != nil ? AvailableLoads.toleranceKg : 0.01)
-            ? "+\(WeightFormatter.format(kg: delta, unit: profile.unit, includeSecondary: false))"
+            ? "+\(WeightFormatter.number(shownRise)) \(profile.unit.rawValue)"
             : nil
         return PlannedTarget(subtitle: "\(item.sets) \u{00D7} \(target)\(load)", suggestedKg: suggestion.weightKg > 0 ? suggestion.weightKg : nil,
                              badge: badge)

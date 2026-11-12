@@ -115,6 +115,13 @@ import Testing
         #expect(shown.plan.exercises[0].fixedWeightKg == kg(95))
     }
 
+    /// Plan 38: the weight settled for today keeps its pound number (in lb, 137.25 isn't snapped to 137.5).
+    @Test func theSettledWeightKeepsItsPoundNumber() throws {
+        let last = SessionResult(date: .now, weightKg: kg(137.25), weightLb: 137.25, reps: [8, 8, 8])
+        let shown = try preview(benchLink) { _ in [last] }
+        #expect(shown.plan.exercises[0].fixedWeight == PoundWeight.entered(137.25, unit: .lb))
+    }
+
     @Test func bodyweightWithHistoryAtZeroStaysZero() throws {
         let dips = URL(string: "gymrollins://w#1.0251_3_10")!
         let shown = try preview(dips) { _ in [session(0, reps: [10, 10, 10])] }

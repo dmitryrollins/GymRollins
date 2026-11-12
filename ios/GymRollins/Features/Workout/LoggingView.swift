@@ -207,9 +207,10 @@ struct LoggingView: View {
             let unit = env.profile.unit
             let lastCount = max(last.reps.count, 1)
             let lastReps = last.reps.first ?? 0
-            Text("Last time \(lastCount) \u{00D7} \(lastReps) @ " +
-                 "\(WeightFormatter.format(kg: last.weightKg, unit: unit, includeSecondary: false)). Today " +
-                 "\(WeightFormatter.format(kg: working.weightKg, unit: unit, includeSecondary: false)) \u{00D7} \(working.reps).")
+            let lastLoad = WeightFormatter.format(kg: last.weightKg, lb: last.weightLb, unit: unit, includeSecondary: false)
+            let todayLoad = WeightFormatter.format(kg: working.weightKg, lb: working.weightLb, unit: unit,
+                                                   includeSecondary: false)
+            Text("Last time \(lastCount) \u{00D7} \(lastReps) @ \(lastLoad). Today \(todayLoad) \u{00D7} \(working.reps).")
                 .font(.caption)
                 .foregroundStyle(Theme.success.opacity(0.9))
                 .frame(maxWidth: .infinity, alignment: .leading)
