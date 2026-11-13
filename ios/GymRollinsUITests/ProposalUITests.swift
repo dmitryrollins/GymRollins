@@ -94,10 +94,11 @@ final class ProposalUITests: XCTestCase {
 
         // The routine was added, and the weekly schedule is untouched: Saturday doesn't become the home session.
         app.buttons["today.myPlan"].tap()
-        XCTAssertTrue(app.buttons["plan.routine.Home \u{00B7} KB Upper"].waitForExistence(timeout: 5))
         let saturday = app.buttons["plan.day.6"]
-        XCTAssertTrue(saturday.exists)
+        XCTAssertTrue(saturday.waitForExistence(timeout: 5))
         XCTAssertFalse(saturday.label.contains("Home"), saturday.label)
+        app.buttons["plan.savedWorkouts"].tap()
+        XCTAssertTrue(app.buttons["plan.routine.Home \u{00B7} KB Upper"].waitForExistence(timeout: 5))
     }
 
     func testDismissAllRemovesTheChip() {

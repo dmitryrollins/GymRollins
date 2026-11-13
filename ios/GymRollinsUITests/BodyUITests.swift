@@ -14,9 +14,46 @@ final class BodyUITests: XCTestCase {
         field.typeText(text)
     }
 
+    /// Body opens on Muscles (the recovery card is on screen without scrolling), and the section picked is kept
+    /// after leaving the tab and coming back, and after a relaunch (`@AppStorage`).
+    func testBodyOpensOnMusclesAndRemembersTheSectionPicked() {
+        // A launch without -diskStore forgets the section an earlier test picked, so this one opens on Muscles.
+        var app = XCUIApplication.launchReady([])
+        app.tabBars.buttons["Body"].tap()
+
+        let section = app.segmentedControls["body.section"]
+        XCTAssertTrue(section.waitForExistence(timeout: 5))
+        XCTAssertTrue(section.buttons["Muscles"].isSelected)
+        let recovery = app.descendants(matching: .any)["body.recovery"]
+        XCTAssertTrue(recovery.waitForExistence(timeout: 5))
+        XCTAssertTrue(recovery.isHittable, "Muscle Recovery should be on screen without scrolling")
+        XCTAssertFalse(app.buttons["body.addWeighIn"].exists)
+
+        app.openBodySection("Weight")
+        XCTAssertTrue(app.buttons["body.addWeighIn"].waitForExistence(timeout: 5))
+        XCTAssertFalse(recovery.exists)
+
+        app.tabBars.buttons["Today"].tap()
+        app.tabBars.buttons["Body"].tap()
+        let weight = app.segmentedControls["body.section"].buttons["Weight"]
+        XCTAssertTrue(weight.waitForExistence(timeout: 5))
+        XCTAssertTrue(weight.isSelected)
+        XCTAssertTrue(app.buttons["body.addWeighIn"].exists)
+
+        // A -diskStore relaunch keeps preferences, as a real one does (-resetStore only empties the store).
+        app.terminate()
+        app = XCUIApplication.launchReady(["-diskStore", "-resetStore"])
+        app.tabBars.buttons["Body"].tap()
+        let kept = app.segmentedControls["body.section"].buttons["Weight"]
+        XCTAssertTrue(kept.waitForExistence(timeout: 5))
+        XCTAssertTrue(kept.isSelected, "the section picked is kept across launches")
+        XCTAssertTrue(app.buttons["body.addWeighIn"].waitForExistence(timeout: 5))
+    }
+
     func testEmptyStateThenAddWeighIn() {
         let app = XCUIApplication.launchReady([])
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
 
         XCTAssertTrue(app.staticTexts["body.empty"].waitForExistence(timeout: 5))
 
@@ -40,6 +77,7 @@ final class BodyUITests: XCTestCase {
     func testAddWeighInShowsTrendPendingWithoutEnoughDataForTrend() {
         let app = XCUIApplication.launchReady([], fixedNow: "2027-01-15T09:00:00Z")
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
 
         XCTAssertTrue(app.staticTexts["body.empty"].waitForExistence(timeout: 5))
 
@@ -61,6 +99,7 @@ final class BodyUITests: XCTestCase {
     func testStrengthRowPushesExerciseHistoryWithinBodyStack() {
         let app = XCUIApplication.launchReady(["-seedHistory"])
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Strength")
 
         let liftRow = app.buttons["body.lift.0025"]
         XCTAssertTrue(liftRow.waitForExistence(timeout: 5))
@@ -69,16 +108,16 @@ final class BodyUITests: XCTestCase {
         XCTAssertTrue(app.buttons["history.close"].waitForExistence(timeout: 5))
         app.buttons["history.close"].tap()
 
-        // Back on Body, still scrolled down to the lift row: the (lazy) list only has the top card once scrolled up.
+        // Back on Body, still on the Strength section.
         XCTAssertTrue(liftRow.waitForExistence(timeout: 5))
-        let addWeighIn = app.buttons["body.addWeighIn"]
-        for _ in 0..<6 where !addWeighIn.exists { app.swipeDown() }
-        XCTAssertTrue(addWeighIn.waitForExistence(timeout: 5))
+        app.openBodySection("Weight")
+        XCTAssertTrue(app.buttons["body.addWeighIn"].waitForExistence(timeout: 5))
     }
 
     func testInvalidWeighInRejected() {
         let app = XCUIApplication.launchReady([])
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
 
         XCTAssertTrue(app.buttons["body.addWeighIn"].waitForExistence(timeout: 5))
         app.buttons["body.addWeighIn"].tapCenter()

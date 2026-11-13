@@ -73,10 +73,10 @@ public enum DomainLimits {
     /// User-facing reason the routine can't be saved, or nil when it fits.
     public static func routineViolation(_ routine: Routine) -> String? {
         let name = routine.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if name.isEmpty { return "Give the routine a name." }
-        if name.count > routineNameMax { return "Routine names can be up to \(routineNameMax) characters." }
+        if name.isEmpty { return "Give the workout a name." }
+        if name.count > routineNameMax { return "Workout names can be up to \(routineNameMax) characters." }
         if routine.exercises.count > routineExercisesMax {
-            return "A routine can have up to \(routineExercisesMax) exercises."
+            return "A workout can have up to \(routineExercisesMax) exercises."
         }
         return nil
     }

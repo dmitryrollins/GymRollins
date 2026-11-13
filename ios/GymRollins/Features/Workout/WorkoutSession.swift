@@ -18,7 +18,10 @@ final class WorkoutSession: Identifiable {
     /// Counts rests that ran out on their own (drives the rest-over haptic).
     private(set) var restCompletions = 0
     private(set) var lastError: String?
+    /// The workout's default rest between working sets: today's rest if the day had one, else Settings'. Each
+    /// exercise rests its own time or its suggestion from it (`workingRestSeconds(entryId:)`).
     var restSeconds: TimeInterval
+    /// Warm-up rest for every exercise of this workout.
     var warmupRestSeconds: TimeInterval
     /// Whether logging a set starts the rest timer at all (RestSettingsSheet's "Rest timer between sets" toggle).
     var restEnabled = true
@@ -32,6 +35,10 @@ final class WorkoutSession: Identifiable {
     private let saveFinished: (Workout, [PersonalRecord]) throws -> Void
     private let discard: () throws -> Void
     private let persistRest: (RestTimer?) -> Void
+    /// Exercise id and workout default → the exercise's working rest (its own, else its suggestion).
+    private let workingRest: (String, TimeInterval) -> TimeInterval
+    /// Exercise id, seconds and workout default: keeps the exercise's rest for every workout.
+    private let saveWorkingRest: (String, TimeInterval, TimeInterval) -> Void
     private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "session")
 
     init(workout: Workout, clock: WorkoutClock, restSeconds: TimeInterval, warmupRestSeconds: TimeInterval,
@@ -39,7 +46,9 @@ final class WorkoutSession: Identifiable {
          persist: @escaping (Workout, WorkoutClock) throws -> Void,
          previousBests: @escaping (String) throws -> ExerciseBests?,
          saveFinished: @escaping (Workout, [PersonalRecord]) throws -> Void, discard: @escaping () throws -> Void,
-         rest: RestTimer? = nil, persistRest: @escaping (RestTimer?) -> Void = { _ in }) {
+         rest: RestTimer? = nil, persistRest: @escaping (RestTimer?) -> Void = { _ in },
+         workingRest: @escaping (String, TimeInterval) -> TimeInterval = { $1 },
+         saveWorkingRest: @escaping (String, TimeInterval, TimeInterval) -> Void = { _, _, _ in }) {
         self.workout = workout
         self.clock = clock
         self.restSeconds = restSeconds
@@ -51,6 +60,8 @@ final class WorkoutSession: Identifiable {
         self.saveFinished = saveFinished
         self.discard = discard
         self.persistRest = persistRest
+        self.workingRest = workingRest
+        self.saveWorkingRest = saveWorkingRest
         self.rest = rest
         self.currentEntryId = workout.entriesWithUndoneSets.first?.id ?? workout.entries.first?.id
     }
@@ -82,18 +93,34 @@ final class WorkoutSession: Identifiable {
         apply(updated)
     }
 
+    /// Updates several sets of one entry as one change (one save), each by its own transform (`SetEdit.changes`).
+    /// No-op (and no save) when nothing changed.
+    func update(entryId: UUID, sets transforms: [UUID: (WorkoutSet) -> WorkoutSet]) {
+        let updated = transforms.reduce(workout) { w, change in
+            w.updatingSet(entryId: entryId, setId: change.key, change.value)
+        }
+        guard updated != workout else { return }
+        apply(updated)
+    }
+
     /// Completes the next undone set of `entryId` with the given values and starts the rest timer,
     /// unless that was the exercise's last set (nothing left to rest before). Always acts on the
     /// entry the caller shows, never on `currentEntryId` (which may already have advanced).
-    /// `sec` of nil keeps the set's existing duration.
-    func logNextSet(entryId: UUID, weightKg: Double, reps: Int, sec: Int? = nil) {
+    /// `sec` of nil keeps the set's existing duration. `weight` is stored with its pound number.
+    func logNextSet(entryId: UUID, weight: PoundWeight, reps: Int, sec: Int? = nil) {
         guard let entry = entry(entryId), let next = entry.sets.first(where: { !$0.done }) else { return }
         let date = now()
         apply(workout.updatingSet(entryId: entryId, setId: next.id) {
-            $0.with(weightKg: weightKg, reps: reps).with(sec: sec ?? $0.sec).completing(at: date)
+            $0.with(weight: weight, reps: reps).with(sec: sec ?? $0.sec).completing(at: date)
         })
-        if !isEntryComplete(entryId) { startRest(warmup: next.warmup, at: date) }
+        if !isEntryComplete(entryId) { startRest(entryId: entryId, warmup: next.warmup, at: date) }
         advanceIfComplete(entryId)
+    }
+
+    /// `logNextSet(entryId:weight:reps:sec:)` with a weight in kg: the set's pound number stays only while its kg does.
+    func logNextSet(entryId: UUID, weightKg: Double, reps: Int, sec: Int? = nil) {
+        let planned = entry(entryId)?.sets.first { !$0.done }?.weight
+        logNextSet(entryId: entryId, weight: PoundWeight.replacing(planned, kg: weightKg), reps: reps, sec: sec)
     }
 
     /// Rates a logged working set ("Reps left?", `SetEffort`): one tap stores the reps in reserve, tapping the
@@ -113,7 +140,7 @@ final class WorkoutSession: Identifiable {
             w.updatingSet(entryId: entryId, setId: set.id) { $0.completing(at: date) }
         }
         apply(updated)
-        if !isEntryComplete(entryId) { startRest(warmup: false, at: date) }
+        if !isEntryComplete(entryId) { startRest(entryId: entryId, warmup: false, at: date) }
         advanceIfComplete(entryId)
     }
 
@@ -138,6 +165,18 @@ final class WorkoutSession: Identifiable {
         notifier.cancel()
     }
 
+    /// The rest after a working set of the entry's exercise: its own, else its suggestion from `restSeconds`.
+    func workingRestSeconds(entryId: UUID) -> TimeInterval {
+        guard let exerciseId = entry(entryId)?.exerciseId else { return restSeconds }
+        return workingRest(exerciseId, restSeconds)
+    }
+
+    /// Keeps `seconds` as the entry's exercise's rest in every workout; the other exercises keep theirs.
+    func setWorkingRest(_ seconds: TimeInterval, entryId: UUID) {
+        guard !isAbandoned, let exerciseId = entry(entryId)?.exerciseId else { return }
+        saveWorkingRest(exerciseId, seconds, restSeconds)
+    }
+
     // MARK: Editing
 
     func addSet(entryId: UUID) { apply(workout.appendingSet(entryId: entryId)) }
@@ -156,8 +195,8 @@ final class WorkoutSession: Identifiable {
         let reconciled = sets.reduce(replaced) { w, set in
             w.updatingSet(entryId: entryId, setId: set.id) { current in
                 let moved = !current.done && !current.warmup
-                    ? target.resolved(for: current) : ResolvedSet(weightKg: current.weightKg, reps: current.reps)
-                return current.with(multiplier: multiplier).with(weightKg: moved.weightKg, reps: moved.reps)
+                    ? target.resolved(for: current) : ResolvedSet(weight: current.weight, reps: current.reps)
+                return current.with(multiplier: multiplier).with(weight: moved.weight, reps: moved.reps)
             }
         }
         apply(reconciled)
@@ -181,9 +220,19 @@ final class WorkoutSession: Identifiable {
     /// is stamped after the workout's end).
     func markAllDone(at date: Date? = nil) { apply(workout.markingAllDone(at: date ?? now())) }
 
-    /// The earlier end to offer when the last set was long ago (`IdleFinish`), or nil.
+    /// The earlier end to offer when the last set was long ago (`IdleFinish`), or nil. The rest it counts after that
+    /// set is the working rest of its exercise.
     func idleFinishSuggestion() -> Date? {
-        IdleFinish.suggestedEnd(completedAt: completedSetDates, clock: clock, restSeconds: restSeconds, now: now())
+        IdleFinish.suggestedEnd(completedAt: completedSetDates, clock: clock, restSeconds: lastLoggedRestSeconds,
+                                now: now())
+    }
+
+    /// The working rest of the exercise whose set was logged last, else the workout's default.
+    private var lastLoggedRestSeconds: TimeInterval {
+        let latest = workout.entries.compactMap { entry in
+            entry.sets.compactMap(\.completedAt).max().map { (entryId: entry.id, at: $0) }
+        }.max { $0.at < $1.at }
+        return latest.map { workingRestSeconds(entryId: $0.entryId) } ?? restSeconds
     }
 
     /// When the latest set was logged, or nil when none was.
@@ -261,9 +310,9 @@ final class WorkoutSession: Identifiable {
         catch { report("Couldn't save your last change. Keep going; we'll retry.", error) }
     }
 
-    private func startRest(warmup: Bool, at date: Date) {
+    private func startRest(entryId: UUID, warmup: Bool, at date: Date) {
         guard restEnabled, !isAbandoned else { return }
-        let timer = RestTimer(startedAt: date, duration: warmup ? warmupRestSeconds : restSeconds)
+        let timer = RestTimer(startedAt: date, duration: warmup ? warmupRestSeconds : workingRestSeconds(entryId: entryId))
         rest = timer
         notifier.schedule(endsAt: timer.endsAt)
     }

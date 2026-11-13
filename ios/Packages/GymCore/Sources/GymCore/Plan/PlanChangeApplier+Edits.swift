@@ -40,6 +40,8 @@ struct ExerciseDraft {
     var repsMin: Int?
     var sec: Int?
     var weightKg: Double?
+    /// `weightKg`'s pound number: whatever sets `weightKg` sets this too.
+    var weightLb: Double?
     var mode: ExerciseMode
     var policy: ProgressionPolicy?
     var incKg: Double?
@@ -54,6 +56,7 @@ struct ExerciseDraft {
         repsMin = e.repsMin
         sec = e.sec
         weightKg = e.weightKg
+        weightLb = e.weightLb
         mode = e.mode
         policy = e.policy
         incKg = e.incKg
@@ -63,8 +66,8 @@ struct ExerciseDraft {
 
     var value: RoutineExercise {
         RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
-                        weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
-                        weightSetAt: weightSetAt)
+                        weightKg: weightKg, weightLb: weightLb, mode: mode, policy: policy, incKg: incKg,
+                        supersetGroup: supersetGroup, weightSetAt: weightSetAt)
     }
 }
 
@@ -88,6 +91,11 @@ extension PlanDraft {
         return try checked(c.minutes, PlanChangeLimits.minutes, c).map { Int(($0 * 60).rounded()) }
     }
 
+    /// The change's pound number (it already agrees with its kg: `PlanChange` drops one that doesn't), when in range.
+    static func weightLb(_ c: PlanChange) throws -> Double? {
+        try checked(c.weightLb, PlanChangeLimits.weightLb, c)
+    }
+
     /// repsMin, when given, must lie in 1...top.
     static func repsMin(_ c: PlanChange, top: Int) throws -> Int? {
         try checked(c.repsMin, 1...max(top, 1), c)
@@ -106,10 +114,12 @@ extension PlanDraft {
         let kind = mode(exerciseId)
         let reps = try Self.requiredIn(c.reps, PlanChangeLimits.reps, c)
         let weight = try Self.checked(c.weightKg, PlanChangeLimits.weightKg, c)
+        let weightLb = try Self.weightLb(c)
         let sec = try Self.seconds(c) ?? RoutineExercise.defaults(exerciseId: exerciseId, mode: kind, barbell: false).sec
         let item = RoutineExercise(exerciseId: exerciseId, sets: try Self.requiredIn(c.sets, PlanChangeLimits.sets, c),
                                    reps: reps, repsMin: try Self.repsMin(c, top: reps), sec: sec,
-                                   weightKg: weight, mode: kind, weightSetAt: weight == nil ? nil : now)
+                                   weightKg: weight, weightLb: weightLb, mode: kind,
+                                   weightSetAt: weight == nil ? nil : now)
         let position = min(max(c.position ?? routines[r].exercises.count, 0), routines[r].exercises.count)
         routines[r].exercises.insert(ExerciseDraft(item), at: position)
     }
@@ -135,6 +145,7 @@ extension PlanDraft {
         item.sec = try Self.seconds(c) ?? item.sec
         // The old exercise's load means nothing for the new one: keep Claude's weight if given, else none.
         item.weightKg = try Self.checked(c.weightKg, PlanChangeLimits.weightKg, c)
+        item.weightLb = try Self.weightLb(c)
         item.weightSetAt = item.weightKg == nil ? nil : now
         routines[r].exercises[e] = item
     }
@@ -152,6 +163,7 @@ extension PlanDraft {
         case .sec: item.sec = try Self.requiredIn(c.sec, PlanChangeLimits.sec, c)
         case .weight:
             item.weightKg = try Self.requiredIn(c.weightKg, PlanChangeLimits.weightKg, c)
+            item.weightLb = try Self.weightLb(c) // nil without one: the new kg has no pound number
             item.weightSetAt = now // a planned weight: progression uses it as-is next session
         case .cardio: // speed has no plan field
             item.sec = Int((try Self.requiredIn(c.minutes, PlanChangeLimits.minutes, c) * 60).rounded())

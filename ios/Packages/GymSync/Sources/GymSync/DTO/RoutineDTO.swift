@@ -55,7 +55,7 @@ public struct RoutineDTO: Codable, Sendable, Equatable, ServerStamped {
     }
 }
 
-/// One element of `routines.exercises` (spec §4 shape, plus `weight_set_at`).
+/// One element of `routines.exercises` (spec §4 shape, plus `weight_set_at` and `weight_lb`).
 public struct RoutineExerciseDTO: Codable, Sendable, Equatable {
     public let id: UUID
     public let exerciseId: String
@@ -65,6 +65,8 @@ public struct RoutineExerciseDTO: Codable, Sendable, Equatable {
     public let repsMin: Int?
     public let sec: Int?
     public let weightKg: Double?
+    /// The plan weight's pound number (`weight_lb`, plan 38): sent only when there is one; nil from rows without it.
+    public let weightLb: Double?
     public let mode: String
     public let prog: String?
     public let incKg: Double?
@@ -73,8 +75,8 @@ public struct RoutineExerciseDTO: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, position, sets, reps, sec, mode, prog, sg
-        case exerciseId = "exercise_id", repsMin = "reps_min", weightKg = "weight_kg", incKg = "inc_kg"
-        case weightSetAt = "weight_set_at"
+        case exerciseId = "exercise_id", repsMin = "reps_min", weightKg = "weight_kg", weightLb = "weight_lb"
+        case incKg = "inc_kg", weightSetAt = "weight_set_at"
     }
 
     public init(_ e: RoutineExercise, position: Int) {
@@ -86,6 +88,7 @@ public struct RoutineExerciseDTO: Codable, Sendable, Equatable {
         repsMin = e.repsMin
         sec = e.sec
         weightKg = e.weightKg
+        weightLb = e.weightLb
         mode = e.mode.rawValue
         prog = e.policy?.rawValue
         incKg = e.incKg
@@ -93,9 +96,10 @@ public struct RoutineExerciseDTO: Codable, Sendable, Equatable {
         weightSetAt = e.weightSetAt
     }
 
+    /// The plan item; a `weight_lb` that disagrees with `weight_kg` is dropped (`RoutineExercise`'s init).
     public var domain: RoutineExercise {
         RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
-                        weightKg: weightKg, mode: ExerciseMode(rawValue: mode) ?? .reps,
+                        weightKg: weightKg, weightLb: weightLb, mode: ExerciseMode(rawValue: mode) ?? .reps,
                         policy: prog.flatMap(ProgressionPolicy.init(rawValue:)), incKg: incKg, supersetGroup: sg,
                         weightSetAt: weightSetAt)
     }

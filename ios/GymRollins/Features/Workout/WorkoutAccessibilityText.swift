@@ -42,8 +42,8 @@ enum SetAccessibilityText {
 
     private static func measures(set: WorkoutSet, mode: ExerciseMode, unit: WeightUnit) -> [String] {
         switch mode {
-        case .reps: return [count(set.reps, "rep"), load(set.weightKg, unit: unit)]
-        case .time: return [count(set.sec ?? 0, "second"), load(set.weightKg, unit: unit)]
+        case .reps: return [count(set.reps, "rep"), load(set.weight, unit: unit)]
+        case .time: return [count(set.sec ?? 0, "second"), load(set.weight, unit: unit)]
         case .cardio:
             let minutes = set.minutes ?? set.sec.map { Double($0) / 60 }
             let distance = set.distanceM.map { $0 / SetFieldFormat.metersPerDistanceUnit(unit) }
@@ -52,9 +52,10 @@ enum SetAccessibilityText {
         }
     }
 
-    private static func load(_ weightKg: Double, unit: WeightUnit) -> String {
-        guard weightKg > 0 else { return "bodyweight" }
-        return quantity(UnitConverter.fromKg(weightKg, to: unit), unit == .lb ? "pound" : "kilogram")
+    /// The weight in `unit`, by its pound number in lb (plan 38).
+    private static func load(_ weight: PoundWeight, unit: WeightUnit) -> String {
+        guard weight.kg > 0 else { return "bodyweight" }
+        return quantity(weight.value(in: unit), unit == .lb ? "pound" : "kilogram")
     }
 
     private static func count(_ value: Int, _ noun: String) -> String { "\(value) \(noun)\(value == 1 ? "" : "s")" }

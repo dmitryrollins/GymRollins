@@ -38,12 +38,13 @@ enum WatchStateMapper {
         return WatchLoadGrid(unit: unit, step: rounder.step, offset: rounder.offset)
     }
 
-    /// The kilograms to log for a weight the watch sent. Unchanged from the plan (the watch shows the planned kg in the
-    /// user's unit, possibly off the grid) keeps the planned kg exactly, so a round trip never drifts.
-    static func loggedKg(weight: Double, unit: WatchWeightUnit, plannedKg: Double) -> Double {
+    /// The weight to log for one the watch sent. Unchanged from the plan (the watch shows the planned weight in the
+    /// user's unit, possibly off the grid) keeps the planned weight exactly, kg and pound number, so a round trip never
+    /// drifts. A new one is what was set on the crown: in lb that number is its pound number (plan 38).
+    static func loggedWeight(weight: Double, unit: WatchWeightUnit, planned: PoundWeight) -> PoundWeight {
         let appUnit = weightUnit(unit)
-        if abs(UnitConverter.fromKg(plannedKg, to: appUnit) - weight) < 0.001 { return plannedKg }
-        return UnitConverter.toKg(weight, from: appUnit)
+        if abs(planned.value(in: appUnit) - weight) < 0.001 { return planned }
+        return PoundWeight.entered(weight, unit: appUnit)
     }
 
     static func watchUnit(_ unit: WeightUnit) -> WatchWeightUnit { unit == .kg ? .kg : .lb }
@@ -56,7 +57,7 @@ enum WatchStateMapper {
               let set = entry.sets.first(where: { $0.id == setId }) else { return nil }
         return WatchNextSet(entryId: entryId, setId: setId, exerciseName: content.exerciseName,
                             setLabel: content.setLabel, setDetail: content.setDetail, canLog: content.canLogSet,
-                            weight: UnitConverter.fromKg(set.weightKg, to: profile.unit), reps: set.reps,
+                            weight: set.weight.value(in: profile.unit), reps: set.reps,
                             grid: grid(for: exercise(entry.exerciseId), profile: profile))
     }
 }

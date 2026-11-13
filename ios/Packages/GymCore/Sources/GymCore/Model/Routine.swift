@@ -22,6 +22,9 @@ public struct RoutineExercise: Codable, Sendable, Identifiable, Hashable {
     public let repsMin: Int?
     public let sec: Int?
     public let weightKg: Double?
+    /// The pound number `weightKg` was chosen as (`PoundWeight`); nil when none was given or there's no weight. It
+    /// never disagrees with `weightKg`: the init drops one that does.
+    public let weightLb: Double?
     public let mode: ExerciseMode
     public let policy: ProgressionPolicy?
     public let incKg: Double?
@@ -31,11 +34,13 @@ public struct RoutineExercise: Codable, Sendable, Identifiable, Hashable {
     /// A weight settled up front, for today only: a shared workout's weight comes from this person's own plan and
     /// history. Never set on a routine's items.
     public let fixedWeightKg: Double?
+    /// `fixedWeightKg`'s pound number, as `weightLb` is `weightKg`'s.
+    public let fixedWeightLb: Double?
 
     public init(id: UUID = UUID(), exerciseId: String, sets: Int, reps: Int, repsMin: Int? = nil, sec: Int? = nil,
-                weightKg: Double? = nil, mode: ExerciseMode = .reps, policy: ProgressionPolicy? = nil,
-                incKg: Double? = nil, supersetGroup: String? = nil, weightSetAt: Date? = nil,
-                fixedWeightKg: Double? = nil) {
+                weightKg: Double? = nil, weightLb: Double? = nil, mode: ExerciseMode = .reps,
+                policy: ProgressionPolicy? = nil, incKg: Double? = nil, supersetGroup: String? = nil,
+                weightSetAt: Date? = nil, fixedWeightKg: Double? = nil, fixedWeightLb: Double? = nil) {
         self.id = id
         self.exerciseId = exerciseId
         self.sets = sets
@@ -43,33 +48,56 @@ public struct RoutineExercise: Codable, Sendable, Identifiable, Hashable {
         self.repsMin = repsMin
         self.sec = sec
         self.weightKg = weightKg
+        self.weightLb = PoundWeight.agreeing(weightLb, kg: weightKg)
         self.mode = mode
         self.policy = policy
         self.incKg = incKg
         self.supersetGroup = supersetGroup
         self.weightSetAt = weightSetAt
         self.fixedWeightKg = fixedWeightKg
+        self.fixedWeightLb = PoundWeight.agreeing(fixedWeightLb, kg: fixedWeightKg)
     }
 
-    /// This item with a weight settled for today (nil clears it).
+    /// The planned weight as kg and pound number; nil with none planned.
+    public var weight: PoundWeight? { weightKg.map { PoundWeight(kg: $0, lb: weightLb) } }
+
+    /// The weight settled for today as kg and pound number; nil with none.
+    public var fixedWeight: PoundWeight? { fixedWeightKg.map { PoundWeight(kg: $0, lb: fixedWeightLb) } }
+
+    /// This item with a weight settled for today (nil clears it). Its pound number stays only while the kg does
+    /// (`with(fixedWeight:)` sets both).
     public func with(fixedWeightKg: Double?) -> RoutineExercise {
-        RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
-                        weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
-                        weightSetAt: weightSetAt, fixedWeightKg: fixedWeightKg)
+        with(fixedWeight: fixedWeightKg.map { PoundWeight.replacing(fixedWeight, kg: $0) })
     }
 
-    /// This item with a new planned weight, stamped `date` so progression uses it next session.
-    public func with(weightKg: Double, setAt date: Date) -> RoutineExercise {
+    /// This item with a weight, kg and pound number, settled for today (nil clears it).
+    public func with(fixedWeight: PoundWeight?) -> RoutineExercise {
         RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
-                        weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
-                        weightSetAt: date, fixedWeightKg: fixedWeightKg)
+                        weightKg: weightKg, weightLb: weightLb, mode: mode, policy: policy, incKg: incKg,
+                        supersetGroup: supersetGroup, weightSetAt: weightSetAt, fixedWeightKg: fixedWeight?.kg,
+                        fixedWeightLb: fixedWeight?.lb)
+    }
+
+    /// This item with a new planned weight, stamped `date` so progression uses it next session. Its pound number stays
+    /// only while the kg does (`with(weight:setAt:)` sets both).
+    public func with(weightKg: Double, setAt date: Date) -> RoutineExercise {
+        with(weight: PoundWeight.replacing(weight, kg: weightKg), setAt: date)
+    }
+
+    /// This item with a new planned weight, kg and pound number, stamped `date` as `with(weightKg:setAt:)`.
+    public func with(weight: PoundWeight, setAt date: Date) -> RoutineExercise {
+        RoutineExercise(id: id, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
+                        weightKg: weight.kg, weightLb: weight.lb, mode: mode, policy: policy, incKg: incKg,
+                        supersetGroup: supersetGroup, weightSetAt: date, fixedWeightKg: fixedWeightKg,
+                        fixedWeightLb: fixedWeightLb)
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, exerciseId, sets, reps, repsMin, sec, weightKg, mode, policy, incKg, supersetGroup, weightSetAt
-        case fixedWeightKg
+        case id, exerciseId, sets, reps, repsMin, sec, weightKg, weightLb, mode, policy, incKg, supersetGroup
+        case weightSetAt, fixedWeightKg, fixedWeightLb
     }
 
+    /// Older payloads without a field get the init's default; pound numbers that disagree with their kg are dropped.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
@@ -80,12 +108,14 @@ public struct RoutineExercise: Codable, Sendable, Identifiable, Hashable {
             repsMin: try c.decodeIfPresent(Int.self, forKey: .repsMin),
             sec: try c.decodeIfPresent(Int.self, forKey: .sec),
             weightKg: try c.decodeIfPresent(Double.self, forKey: .weightKg),
+            weightLb: try c.decodeIfPresent(Double.self, forKey: .weightLb),
             mode: try c.decodeIfPresent(ExerciseMode.self, forKey: .mode) ?? .reps,
             policy: try c.decodeIfPresent(ProgressionPolicy.self, forKey: .policy),
             incKg: try c.decodeIfPresent(Double.self, forKey: .incKg),
             supersetGroup: try c.decodeIfPresent(String.self, forKey: .supersetGroup),
             weightSetAt: try c.decodeIfPresent(Date.self, forKey: .weightSetAt),
-            fixedWeightKg: try c.decodeIfPresent(Double.self, forKey: .fixedWeightKg)
+            fixedWeightKg: try c.decodeIfPresent(Double.self, forKey: .fixedWeightKg),
+            fixedWeightLb: try c.decodeIfPresent(Double.self, forKey: .fixedWeightLb)
         )
     }
 }

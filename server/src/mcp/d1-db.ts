@@ -75,12 +75,13 @@ function stamp(iso: string): string {
 }
 
 const SET_COLS =
-  's.position, s.w_kg, s.r, s.sec, s.min, s.dist_m, s.done, s.warmup, s.rir, s.rpe, s.multiplier'
+  's.position, s.w_kg, s.w_lb, s.r, s.sec, s.min, s.dist_m, s.done, s.warmup, s.rir, s.rpe, s.multiplier'
 
 function setRow(r: Raw): SetRow {
   return {
     position: r.position as number,
     w_kg: r.w_kg as number,
+    w_lb: r.w_lb as number | null,
     r: r.r as number,
     sec: r.sec as number | null,
     min: r.min as number | null,
@@ -136,6 +137,7 @@ function loggedBody(id: string, w: LoggedWorkout, editedAt: string): Record<stri
         id: crypto.randomUUID(),
         position: j,
         w_kg: s.weight_kg,
+        w_lb: s.weight_lb,
         r: s.reps,
         sec: s.sec,
         dist_m: s.dist_m,

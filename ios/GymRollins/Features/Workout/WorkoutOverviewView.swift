@@ -167,7 +167,7 @@ struct WorkoutOverviewView: View {
         let working = entry.sets.filter { !$0.warmup }
         guard let first = working.first else { return "\(entry.sets.count) sets" }
         return "\(working.count) \u{00D7} \(first.reps) \u{00B7} " +
-            WeightFormatter.format(kg: first.weightKg, unit: env.profile.unit)
+            WeightFormatter.format(kg: first.weightKg, lb: first.weightLb, unit: env.profile.unit)
     }
 
     private var addExerciseButton: some View {

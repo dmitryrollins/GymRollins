@@ -17,17 +17,20 @@ extension AppEnvironment {
     /// for today (nil when none, or paused).
     func todaysPlan() throws -> (plan: TodayPlan, scheduled: Routine?) { try todaysPlan(at: now()) }
 
-    /// `todaysPlan()` for the day `date` falls on (a switch Claude planned for that day becomes its stored plan). The
-    /// plan is shown at the current gym (`adapted`): Today, plan mode, Start and the watch all read it, and a swap is
-    /// never written to the store or a routine.
+    /// `todaysPlan()` for the day `date` falls on (the owner's change for that date, or a switch Claude planned for
+    /// it, becomes its stored plan). The plan is shown at the current gym (`adapted`): Today, plan mode, Start and the
+    /// watch all read it, and a swap is never written to the store or a routine.
     func todaysPlan(at date: Date) throws -> (plan: TodayPlan, scheduled: Routine?) {
         let schedule = try routines.schedule()
         let routine = try schedule.routineId(on: date).flatMap { try routines.routine($0) }
         let scheduled = routine?.paused == true ? nil : routine
         let all = try routines.all()
         let day = TodayPlan.dayKey(date)
+        // The owner's change for this date goes first; an agent's planned switch then finds today's plan stored.
+        let laterDay = takeLaterDayPlan(day: day, routines: all, scheduled: scheduled)
         let planned = takePlannedSwitch(day: day, routines: all, scheduled: scheduled)
         let plan = TodayPlanStore(defaults: defaults).load(day: day, routines: all, scheduled: scheduled?.id)
+            ?? laterDay
             ?? planned
             ?? TodayPlan.make(scheduled: scheduled, routines: all, lastDone: lastDoneByRoutine(), day: day)
         return (plan.adapted(by: gymAdapter()), scheduled)

@@ -51,7 +51,7 @@ final class IdleFinishUITests: XCTestCase {
         for (index, id) in ids.enumerated() {
             app.openExercise(id)
             app.buttons["logging.logAll"].tapCenter()
-            if index < ids.count - 1 { app.buttons["logging.next"].tapCenter() }
+            if index < ids.count - 1 { app.backToOverview() }
         }
         XCTAssertTrue(app.buttons["workout.finish"].waitForExistence(timeout: 5)) // the last exercise is done
         app.terminate()

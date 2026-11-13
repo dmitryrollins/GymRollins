@@ -10,8 +10,9 @@ enum ExerciseStep: Equatable, Sendable {
 enum WorkoutActivityAction: Equatable, Sendable {
     /// Log the next set of `entryId` with its planned values, only if `setId` is still that next set.
     case logPlannedSet(workoutId: UUID, entryId: UUID, setId: UUID)
-    /// Like `logPlannedSet`, with the weight and reps adjusted on the watch (Digital Crown).
-    case logSet(workoutId: UUID, entryId: UUID, setId: UUID, weightKg: Double, reps: Int)
+    /// Like `logPlannedSet`, with the weight and reps adjusted on the watch (Digital Crown). `weightLb` is the weight's
+    /// pound number when it was set in pounds (plan 38), nil otherwise.
+    case logSet(workoutId: UUID, entryId: UUID, setId: UUID, weightKg: Double, weightLb: Double? = nil, reps: Int)
     /// Show the exercise before/after `fromEntryId`, only while that is the exercise shown (the watch's buttons).
     case showExercise(workoutId: UUID, fromEntryId: UUID, step: ExerciseStep)
     /// Add `seconds` to the running rest. `entryId` is the exercise the activity shows, so a relaunched app (whose
@@ -22,7 +23,7 @@ enum WorkoutActivityAction: Equatable, Sendable {
 
     var workoutId: UUID {
         switch self {
-        case .logPlannedSet(let id, _, _), .logSet(let id, _, _, _, _), .showExercise(let id, _, _),
+        case .logPlannedSet(let id, _, _), .logSet(let id, _, _, _, _, _), .showExercise(let id, _, _),
              .extendRest(let id, _, _), .skipRest(let id, _):
             id
         }

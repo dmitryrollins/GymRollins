@@ -73,18 +73,8 @@ import Testing
         let editor = editor(defaults)
         editor.isLocked = true // a workout started (e.g. from the watch)
         editor.updateSet(bench.id, setId: editor.sets(for: bench.id)[3].id) { $0.with(weightKg: lb(150), reps: 7) }
-        editor.setRest(150)
         #expect(!editor.isEdited(bench.id))
-        #expect(editor.plan?.restSec == nil)
         #expect(TodayPlanStore(defaults: defaults).load(day: day, routineIds: [routine.id]) == nil)
-    }
-
-    @Test func planRestOffersTheWholeSupportedRange() {
-        let options = RestSettingsSheet.options(in: DomainLimits.restSec, including: 95)
-        #expect(options.first == 0)
-        #expect(options.last == 900)
-        #expect(options.contains(95), "a stored value off the 15 s grid still has a row")
-        #expect(RestSettingsSheet.options(in: 30...300, including: 90).count == 19)
     }
 
     @Test func editingSetTwoChangesOnlyThatSetAndIsSaved() throws {
@@ -133,17 +123,6 @@ import Testing
         #expect(!editor.canRemoveSet(single.id, setId: only.id))
         editor.removeSet(single.id, setId: only.id)
         #expect(editor.sets(for: single.id).count == 1)
-    }
-
-    @Test func restIsTodayOnlyAndTheDefaultMeansNone() {
-        let editor = editor()
-        #expect(editor.restSec == 90)
-        editor.setRest(150)
-        #expect(editor.restSec == 150)
-        #expect(editor.plan?.restSec == 150)
-        #expect(editor.plan?.canSaveToRoutine == false, "rest isn't saved into the routine")
-        editor.setRest(90)
-        #expect(editor.plan?.restSec == nil)
     }
 
     @Test func resetGoesBackToAFreshSuggestion() {
@@ -195,7 +174,7 @@ import Testing
         model.addSet()
         #expect(model.sets?.count == 6)
         model.setRestSeconds(120)
-        #expect(editor.plan?.restSec == 120)
+        #expect(editor.plan?.restSec == nil, "rest is the exercise's own now, not today's (TodayPlanEditorRestTests)")
         #expect(model.isEdited)
         #expect(ExerciseScreenModel.plan(editor, itemId: UUID()).sets == nil, "a deleted item closes the screen")
     }

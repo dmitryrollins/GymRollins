@@ -33,21 +33,28 @@ extension AppEnvironment {
         return (routine.name, result.lowered)
     }
 
-    /// 60% of what Today would suggest for `item` now, from this person's history, with no gym fitting.
-    private func returnWeight(for item: RoutineExercise, in routine: Routine) -> Double? {
+    /// 60% of what Today would suggest for `item` now, from this person's history, with no gym fitting. In lb it has
+    /// its pound number (the rounder's grid value), so it shows as 80 lb and not 79.9.
+    private func returnWeight(for item: RoutineExercise, in routine: Routine) -> PoundWeight? {
         let exercise = library.exercise(item.exerciseId)
         let history = (try? workouts.history(exerciseId: item.exerciseId, limit: 5)) ?? []
         let suggested = SessionPlanner.suggestion(for: item, policy: item.policy ?? routine.policy, profile: profile,
                                                   exercise: exercise, history: history).weightKg
         let rounder = LoadRounding.rounder(for: exercise, profile: profile)
         let smallest = (exercise?.isBarbellLoaded ?? false)
-            ? profile.barKg : UnitConverter.toKg(rounder.step, from: rounder.unit)
-        guard let light = ReturnWeights.weight(from: suggested, rounder: rounder, minimumKg: smallest) else { return nil }
+            ? emptyBar : PoundWeight.entered(rounder.step, unit: rounder.unit)
+        guard let light = ReturnWeights.weight(from: suggested, rounder: rounder, minimum: smallest) else { return nil }
         // The engine plans a weight only when it differs from the last logged one by more than this. A floor clamp that
         // lands on the last weight would be ignored and progression would take over, so it isn't counted.
         let tolerance = 0.01
-        guard suggested - light > tolerance else { return nil }
-        if let last = history.first?.weightKg, abs(light - last) <= tolerance { return nil }
+        guard suggested - light.kg > tolerance else { return nil }
+        if let last = history.first?.weightKg, abs(light.kg - last) <= tolerance { return nil }
         return light
+    }
+
+    /// The profile's bar, with its pound number when the bar and plates are set up in pounds.
+    private var emptyBar: PoundWeight {
+        let inventory = profile.plateInventory
+        return PoundWeight(kg: profile.barKg, lb: inventory.unit == .lb ? inventory.bar : nil)
     }
 }

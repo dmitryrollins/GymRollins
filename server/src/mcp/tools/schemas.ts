@@ -4,6 +4,7 @@
 import { z } from 'zod'
 import { DomainLimits } from '../../shared/domain-limits.ts'
 import type { PlanChangeType } from '../../shared/plan-validation.ts'
+import { LOGGED_SET_WEIGHT_LB } from '../../shared/weights.ts'
 
 const ref = z.string().min(1).max(64)
 const isoDate = z.string().min(10).max(40).describe('YYYY-MM-DD or an ISO 8601 timestamp')
@@ -12,17 +13,19 @@ const uuid = z.guid()
 /** Required fields per change type — the validator's rules, written for Claude. */
 export const CHANGE_FIELDS: Record<PlanChangeType, string> = {
   'add-exercise':
-    'routineId, exerciseId (library id), sets 1–10, reps 1–100; optional repsMin, weightKg 0–500',
+    'routineId, exerciseId (library id), sets 1–10, reps 1–100; optional repsMin, weightKg 0–500 or weightLb 0–1100',
   'remove-exercise': 'routineId, exerciseId',
   'swap-exercise':
     'routineId, exerciseId (in the routine), toExerciseId (library id, not already in the routine); optional ' +
-    "sets, reps, repsMin, sec, weightKg 0–500. The old exercise's weight is NOT carried over: give weightKg for " +
-    'the new one, or it starts at 0',
+    "sets, reps, repsMin, sec, weightKg 0–500 or weightLb 0–1100. The old exercise's weight is NOT carried over: " +
+    'give a weight for the new one, or it starts at 0',
   'sets': 'routineId, exerciseId, sets 1–10',
   'reps': 'routineId, exerciseId, reps 1–100 (top of the range); optional repsMin ≤ reps',
   'repsMin': 'routineId, exerciseId, repsMin 1–reps (bottom of the range)',
   'sec': 'routineId, exerciseId, sec 5–3600 (timed exercises)',
-  'weight': 'routineId, exerciseId, weightKg 0–500 (the next planned working weight, in kg)',
+  'weight':
+    'routineId, exerciseId, weightLb 0–1100 when the owner uses lb, else weightKg 0–500 (the next planned working ' +
+    'weight). Send one; with both, they must be the same weight',
   'cardio': 'routineId, exerciseId, minutes 1–300; optional speed 0–50',
   'reorder': 'routineId, exerciseId, position 0–19',
   'superset': 'routineId, exerciseId, withExerciseId (both in the routine)',
@@ -55,6 +58,7 @@ export const planChangeSchema = z.object({
   repsMin: z.number().int().optional(),
   sec: z.number().int().optional(),
   weightKg: z.number().optional(),
+  weightLb: z.number().optional().describe("The weight in pounds: use it when the owner's unit is lb"),
   minutes: z.number().optional(),
   speed: z.number().optional(),
   incKg: z.number().optional(),
@@ -76,7 +80,11 @@ const range = ({ min, max }: { min: number; max: number }) => `${min}–${max}`
  */
 const loggedSet = z.object({
   reps: z.number().int().describe(`${range(DomainLimits.setReps)}; 0 for a timed or distance set`),
-  weight_kg: z.number().describe(`kg, ${range(DomainLimits.setWeightKg)}; 0 for bodyweight`),
+  weight_kg: z.number().optional().describe(`kg, ${range(DomainLimits.setWeightKg)}; 0 for bodyweight`),
+  weight_lb: z.number().optional().describe(
+    `Pounds, ${range(LOGGED_SET_WEIGHT_LB)}: use it when the owner's unit is lb. Send weight_kg or weight_lb; with both, ` +
+      'they must be the same weight',
+  ),
   sec: z.number().int().optional().describe(`Seconds, for a timed set: ${range(DomainLimits.setSeconds)}`),
   dist_m: z.number().optional().describe(`Metres, for a distance set: ${range(DomainLimits.setDistanceM)}`),
   warmup: z.boolean().optional().describe('true for a warm-up set. Default false'),

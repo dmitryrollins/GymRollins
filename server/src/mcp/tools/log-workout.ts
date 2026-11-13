@@ -4,6 +4,7 @@
 import type { z } from 'zod'
 import { DomainLimits } from '../../shared/domain-limits.ts'
 import { AGENT_WORKOUT_CAPS, grouped } from '../../sync/caps.ts'
+import { agreeingLb, kgFromLb, LOGGED_SET_WEIGHT_LB, weightDisagreement } from '../../shared/weights.ts'
 import { isStorableText } from '../../sync/columns.ts'
 import { normalizeTimestamp } from '../../sync/time.ts'
 import type { LoggedSet, LoggedWorkout } from '../db.ts'
@@ -42,6 +43,7 @@ const refused = (index: number, reason: string, message: string): Refused => ({
 const SET_RANGES = [
   ['reps', DomainLimits.setReps],
   ['weight_kg', DomainLimits.setWeightKg],
+  ['weight_lb', LOGGED_SET_WEIGHT_LB],
   ['sec', DomainLimits.setSeconds],
   ['dist_m', DomainLimits.setDistanceM],
 ] as const
@@ -57,7 +59,8 @@ function setProblem(s: SetArg): string | null {
       return `${field} must be ${grouped(min)}–${grouped(max)}.`
     }
   }
-  return null
+  if (s.weight_kg === undefined && s.weight_lb === undefined) return 'weight_kg or weight_lb is needed.'
+  return weightDisagreement(s.weight_kg, s.weight_lb, 'weight_kg', 'weight_lb')
 }
 
 /** The workout's exercises, checked: the first problem, as a refusal, or the sets as the Db takes them. */
@@ -76,9 +79,11 @@ function checkedExercises(w: WorkoutArg, index: number): LoggedWorkout['exercise
     for (const [j, s] of e.sets.entries()) {
       const problem = setProblem(s)
       if (problem !== null) return refused(index, 'invalid', `exercises[${i}].sets[${j}].${problem}`)
+      const kg = s.weight_kg ?? kgFromLb(s.weight_lb!)
       sets.push({
         reps: s.reps,
-        weight_kg: s.weight_kg,
+        weight_kg: kg,
+        weight_lb: agreeingLb(kg, s.weight_lb),
         sec: s.sec ?? null,
         dist_m: s.dist_m ?? null,
         warmup: s.warmup ?? false,

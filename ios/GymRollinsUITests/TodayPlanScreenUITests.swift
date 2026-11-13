@@ -74,6 +74,15 @@ final class TodayPlanScreenUITests: XCTestCase {
         XCTAssertTrue(row.label.contains("Edited"), row.label)
         XCTAssertTrue(row.label.contains("4 \u{00D7} 7\u{2013}8"), row.label)
         screenshot(app, "4-today-edited")
+
+        // 2:30 is bench's own rest: the next exercise keeps its default.
+        let incline = app.buttons["today.row.0314"]
+        XCTAssertTrue(incline.waitForExistence(timeout: 5))
+        incline.tap()
+        XCTAssertTrue(app.buttons["logging.startWorkout"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["logging.chip.rest"].label.contains("2:30"), app.buttons["logging.chip.rest"].label)
+        app.buttons["logging.close"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
         app.terminate()
 
         app = launch(["-diskStore"])
@@ -181,6 +190,9 @@ final class TodayPlanScreenUITests: XCTestCase {
         let save = app.buttons["today.saveToRoutine"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         save.tap()
+        let both = app.buttons["Change Monday and Saturday"] // Push + Arms is on both days
+        XCTAssertTrue(both.waitForExistence(timeout: 5))
+        both.tap()
         XCTAssertTrue(save.waitForNonExistence(timeout: 5), "saved: nothing left to save")
         app.terminate()
 

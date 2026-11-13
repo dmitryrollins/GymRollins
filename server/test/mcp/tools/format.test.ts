@@ -1,6 +1,7 @@
 import { test } from 'vitest'
 import { assertEquals } from '../../assert.ts'
 import { displayWeight, epley, formatNumber, slopePerWeek, weight } from '../../../src/mcp/tools/format.ts'
+import { agreeingLb } from '../../../src/shared/weights.ts'
 
 test('formatNumber: one decimal at most, trailing .0 trimmed (WeightFormatter.number)', () => {
   assertEquals(formatNumber(140), '140')
@@ -32,4 +33,20 @@ test('slopePerWeek: least-squares slope in kg per week', () => {
   assertEquals(slopePerWeek([{ t: 0, v: 80 }]), null)
   const day = 86_400_000
   assertEquals(slopePerWeek([{ t: 0, v: 81 }, { t: 14 * day, v: 81.6 }]), 0.3)
+})
+
+test('weight: a stored pound number is shown as it is, and given as weight_lb', () => {
+  assertEquals(weight(20.41, 'lb', 45), { weight_kg: 20.41, weight_lb: 45, weight_display: '45 lb (20.4 kg)' })
+  assertEquals(weight(20.41, 'kg', 45), { weight_kg: 20.41, weight_lb: 45, weight_display: '20.4 kg (45 lb)' })
+})
+
+test('weight: a pound number that disagrees with the kg is ignored, and none stored gives no weight_lb', () => {
+  assertEquals(weight(20.3, 'lb', 45), { weight_kg: 20.3, weight_display: '44.8 lb (20.3 kg)' })
+  assertEquals(weight(20.3, 'lb', null), { weight_kg: 20.3, weight_display: '44.8 lb (20.3 kg)' })
+})
+
+test('weight: 0 kg has no pound number, as in the app (PoundWeight.agreeing)', () => {
+  assertEquals(agreeingLb(0, 0), null)
+  assertEquals(agreeingLb(20.41, 45), 45)
+  assertEquals(weight(0, 'lb', 0), { weight_kg: 0, weight_display: '0 lb (0 kg)' })
 })

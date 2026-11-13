@@ -77,16 +77,6 @@ final class ReadmeScreenshotsUITests: XCTestCase {
         settle(0.8)
     }
 
-    /// Scrolls so `target`'s top edge sits `y` points from the top of the screen (within a few points). It
-    /// overshoots by `overshoot` and scrolls back before the final correction.
-    private func position(_ app: XCUIApplication, _ target: XCUIElement, atY y: CGFloat, overshoot: CGFloat = 150) {
-        settle() // a flick from `scroll(_:to:)` may still be coasting
-        nudge(app, by: target.frame.minY - (y - overshoot))
-        nudge(app, by: -overshoot)
-        for _ in 0..<2 where abs(target.frame.minY - y) > 4 { nudge(app, by: target.frame.minY - y) }
-        XCTAssertEqual(target.frame.minY, y, accuracy: 6, "couldn't position \(target)")
-    }
-
     // MARK: Screens
 
     func test01Today() throws {
@@ -120,16 +110,16 @@ final class ReadmeScreenshotsUITests: XCTestCase {
         try capture("03-claude-proposal")
     }
 
-    /// Weekly sets under the recovery card. The strength seed fills the Strength Level card at the bottom, which
-    /// otherwise asks for the owner's sex and birth year.
+    /// Weekly sets under the recovery card, on Body's Muscles section. Weekly sets end the section, so the list is
+    /// scrolled to its end: the card can't be lifted any higher.
     func test04Body() throws {
-        let app = launch(Self.fullHistory + ["-seedStrength"])
+        let app = launch(Self.fullHistory)
         app.tabBars.buttons["Body"].tap()
-        let chest = element(app, "body.weeklySets.chest")
-        scroll(app.collectionViews.firstMatch, to: chest)
-        // The weekly-sets card starts just under the status bar: the weigh-ins above the recovery card can't sit
-        // there, since the clock would be drawn over their text.
-        position(app, chest, atY: 66)
+        app.openBodySection("Muscles")
+        let list = app.collectionViews.firstMatch
+        scroll(list, to: element(app, "body.weeklySets.chest"))
+        list.swipeUp()
+        settle()
         try capture("04-body")
     }
 
@@ -146,6 +136,7 @@ final class ReadmeScreenshotsUITests: XCTestCase {
     func test04cBodyWeight() throws {
         let app = launch(Self.fullHistory)
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
         XCTAssertTrue(element(app, "body.chart").waitForExistence(timeout: 5))
         settle()
         try capture("04c-body-weight")

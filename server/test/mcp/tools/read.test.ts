@@ -304,3 +304,25 @@ test('search_exercises: words ANDed, custom exercises included, limit clamped to
 test('search_exercises: needs at least one criterion', async () => {
   await assertRejects(() => searchExercises(ctx0(), {}), ToolError)
 })
+
+test('get_plan: a pound weight stored as 20.41 kg shows as 45 lb, with weight_lb', async () => {
+  const out = json(await getPlan(await ctx((d) => {
+    d.profile = { ...d.profile!, unit: 'lb' }
+    d.routines[0]!.exercises[0] = { ...d.routines[0]!.exercises[0]!, weight_kg: 20.41, weight_lb: 45 }
+  })))
+  const e = out.routines[0].exercises[0]
+  assertEquals(e.weight_lb, 45)
+  assertEquals(e.weight_display, '45 lb (20.4 kg)')
+})
+
+test('get_workout: a set shows its stored pound number', async () => {
+  const c = await ctx((d) => {
+    d.profile = { ...d.profile!, unit: 'lb' }
+    d.workouts[0]!.workout_entries[0]!.workout_sets[0] = {
+      ...d.workouts[0]!.workout_entries[0]!.workout_sets[0]!, w_kg: 20.41, w_lb: 45,
+    }
+  })
+  const out = json(await getWorkout(c, { id: 'b0b0b0b0-0000-4000-8000-000000000001' }))
+  assertEquals(out.entries[0].sets[0].weight_lb, 45)
+  assertEquals(out.entries[0].sets[0].weight_display, '45 lb (20.4 kg)')
+})

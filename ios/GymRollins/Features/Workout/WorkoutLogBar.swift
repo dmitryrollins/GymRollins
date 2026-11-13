@@ -10,8 +10,8 @@ struct WorkoutLogBar: View {
     /// Commits typed values before anything is logged.
     let commit: () -> Void
     let finish: () -> Void
-    /// Back to the overview for the next exercise.
-    let next: () -> Void
+    /// Replaces this screen with another exercise's (the next one to do).
+    let open: (UUID) -> Void
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -54,10 +54,10 @@ struct WorkoutLogBar: View {
 
     private var primaryButton: some View {
         if sets.allSatisfy(\.done) {
-            let isLast = session.workout.entries.last?.id == entryId
-            return PrimaryGlassButton(title: isLast ? "Finish" : "Next exercise",
-                                      identifier: isLast ? "workout.finish" : "logging.next") {
-                if isLast { finish() } else { next() }
+            let nextId = session.workout.nextEntryToDo(after: entryId)
+            return PrimaryGlassButton(title: nextId == nil ? "Finish" : "Next exercise",
+                                      identifier: nextId == nil ? "workout.finish" : "logging.next") {
+                if let nextId { open(nextId) } else { finish() }
             }
         }
         return PrimaryGlassButton(title: "Log Set", identifier: "logging.logSet", action: logActive)
@@ -68,6 +68,6 @@ struct WorkoutLogBar: View {
     private func logActive() {
         commit()
         guard let active = session.entry(entryId)?.sets.first(where: { !$0.done }) else { return }
-        session.logNextSet(entryId: entryId, weightKg: active.weightKg, reps: active.reps, sec: active.sec)
+        session.logNextSet(entryId: entryId, weight: active.weight, reps: active.reps, sec: active.sec)
     }
 }

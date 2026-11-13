@@ -13,7 +13,7 @@
   "preview_urls": false,
   "vars": {
     "ALLOW_PASSWORD_AUTH": "0",
-    "APPLE_BUNDLE_ID": "com.rollins.gymrollins",
+    "APPLE_BUNDLE_IDS": "com.gymrollins.app,com.rollins.gymrollins",
     // The OAuth issuer and the MCP resource are built from it. Local starts override it with --var.
     "PUBLIC_BASE_URL": "https://api.gymrollins.com"
   },

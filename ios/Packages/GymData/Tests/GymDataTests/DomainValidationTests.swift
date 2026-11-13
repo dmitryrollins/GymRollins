@@ -14,7 +14,7 @@ import Testing
 
     @Test func routineNameLongerThan40IsRejected() throws {
         let repo = RoutineRepository(context: container.mainContext, now: clock)
-        #expect(throws: GymDataError.invalidInput("Routine names can be up to 40 characters.")) {
+        #expect(throws: GymDataError.invalidInput("Workout names can be up to 40 characters.")) {
             try repo.upsert(Routine(name: String(repeating: "a", count: 41), exercises: []))
         }
         #expect(try repo.all().isEmpty)
@@ -23,7 +23,7 @@ import Testing
     @Test func routineWithMoreThan20ExercisesIsRejected() throws {
         let repo = RoutineRepository(context: container.mainContext, now: clock)
         let items = (0..<21).map { RoutineExercise(exerciseId: "e\($0)", sets: 3, reps: 8) }
-        #expect(throws: GymDataError.invalidInput("A routine can have up to 20 exercises.")) {
+        #expect(throws: GymDataError.invalidInput("A workout can have up to 20 exercises.")) {
             try repo.upsert(Routine(name: "Big", exercises: items))
         }
         try repo.upsert(Routine(name: "Just right", exercises: Array(items.prefix(20))))

@@ -42,14 +42,32 @@ enum RecoveryPalette {
     }
 }
 
-/// The front or back figure with each muscle group coloured by recovery. Interactive: every group is one button
-/// ("Chest, 80% recovered") hit-tested on its own shape. Non-interactive (`onSelect` nil): one hidden image.
+/// The front or back figure with each muscle group filled by `fill` (recovery colours by default). Interactive:
+/// every group is one button ("Chest, 80% recovered") hit-tested on its own shape. Non-interactive (`onSelect`
+/// nil): one hidden image, for a caller that labels the map itself.
 struct BodyMapView: View {
     let side: BodySide
-    let snapshot: InsightsSnapshot
     var onSelect: ((MuscleGroup) -> Void)?
+    private let fill: (MuscleGroup) -> Color
+    private let regionLabel: (MuscleGroup) -> String
 
     private let data = BodyMapData.shared
+
+    /// The recovery map: each group coloured by its recovery, limited groups dimmed.
+    init(side: BodySide, snapshot: InsightsSnapshot, onSelect: ((MuscleGroup) -> Void)? = nil) {
+        self.side = side
+        self.onSelect = onSelect
+        fill = { RecoveryPalette.fill(snapshot.recovery(of: $0), limited: snapshot.limited.contains($0)) }
+        regionLabel = snapshot.regionLabel
+    }
+
+    /// A map with its own per-group fill. Interactive regions are labelled with the group's name.
+    init(side: BodySide, onSelect: ((MuscleGroup) -> Void)? = nil, fill: @escaping (MuscleGroup) -> Color) {
+        self.side = side
+        self.onSelect = onSelect
+        self.fill = fill
+        regionLabel = { $0.displayName }
+    }
 
     var body: some View {
         ZStack {
@@ -66,13 +84,12 @@ struct BodyMapView: View {
     @ViewBuilder
     private func region(_ group: MuscleGroup) -> some View {
         let shape = MuscleRegionShape(group: group, side: side)
-        let filled = shape.fill(RecoveryPalette.fill(snapshot.recovery(of: group),
-                                                     limited: snapshot.limited.contains(group)))
+        let filled = shape.fill(fill(group))
         if let onSelect {
             Button { onSelect(group) } label: { filled }
                 .buttonStyle(.plain)
                 .contentShape(shape)
-                .accessibilityLabel(snapshot.regionLabel(group))
+                .accessibilityLabel(regionLabel(group))
                 .accessibilityIdentifier("recovery.region.\(side.rawValue).\(group.rawValue)")
         } else {
             filled

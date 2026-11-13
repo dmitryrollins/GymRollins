@@ -76,6 +76,7 @@ struct ExerciseDetailView: View {
                 OtherNamesCard(entry: names)
             }
         case 1:
+            ExerciseMuscleMap(exercise: ex)
             SolidCard {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Target: \(DisplayName.of(ex.target))").font(.headline)

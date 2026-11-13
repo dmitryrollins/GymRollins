@@ -70,7 +70,7 @@ struct LimitsCheckInCard: View {
                     .accessibilityIdentifier("limits.resumed")
                 PrimaryGlassButton(title: "Open My Plan", identifier: "limits.openPlan", action: openPlan)
             } else {
-                Text("Start light: bring a paused routine back at 60% of its weights.")
+                Text("Start light: bring a paused workout back at 60% of its weights.")
                     .font(.subheadline).foregroundStyle(Theme.textSecondary)
                     .accessibilityIdentifier("limits.resumeIntro")
             }

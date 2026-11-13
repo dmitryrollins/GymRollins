@@ -8,6 +8,7 @@
 // Shares the fixture app/fixtures/plan-changes.json with the Swift tests — see plan-validation.test.ts. The
 // Swift behavior is the reference; keep this file in sync with it by hand, not by re-deriving the rules.
 import { DomainLimits } from './domain-limits.ts'
+import { kgFromLb, weightDisagreement } from './weights.ts'
 
 export type PlanChangeType =
   | 'add-exercise'
@@ -46,6 +47,8 @@ export interface PlanChange {
   repsMin?: number
   sec?: number
   weightKg?: number
+  /** The weight in pounds (plan 38): the number the owner thinks in. With `weightKg`, the two must agree. */
+  weightLb?: number
   minutes?: number
   speed?: number
   incKg?: number
@@ -102,6 +105,8 @@ export const PlanChangeLimits = {
   minutes: { min: 1, max: 300 },
   speed: { min: 0, max: 50 },
   weightKg: { min: 0, max: 500 },
+  /** A pound number for a plan weight (plan 38): 0–500 kg, rounded up. */
+  weightLb: { min: 0, max: 1100 },
   incKg: { min: 0.1, max: 20 },
   position: { min: 0, max: DomainLimits.routineExercisesMax - 1 },
   /** How many days after the owner's date a `today` change may be for (0 = today). */
@@ -394,13 +399,26 @@ class PlanChangeChecker {
     const c = this.change
     this.range(c.sec, 'sec', PlanChangeLimits.sec, false)
     this.range(c.minutes, 'minutes', PlanChangeLimits.minutes, false)
-    this.range(c.weightKg, 'weightKg', PlanChangeLimits.weightKg, false)
+    this.weightFields(false)
     if (!isNil(c.repsMin)) {
       const top = topReps ?? PlanChangeLimits.reps.max
       if (!Number.isFinite(c.repsMin) || c.repsMin < 1 || c.repsMin > top) {
         this.fail('repsMin', 'Must be 1–reps')
       }
     }
+  }
+
+  /**
+   * The weight a change carries: weightKg and/or weightLb, each in range, and the same weight when both are given.
+   * `required` means one of them must be there.
+   */
+  private weightFields(required: boolean): void {
+    const c = this.change
+    this.range(c.weightLb, 'weightLb', PlanChangeLimits.weightLb, false)
+    this.range(c.weightKg, 'weightKg', PlanChangeLimits.weightKg, required && isNil(c.weightLb))
+    if (!Number.isFinite(c.weightKg) || !Number.isFinite(c.weightLb)) return
+    const disagreement = weightDisagreement(c.weightKg, c.weightLb, 'weightKg', 'weightLb')
+    if (disagreement !== null) this.fail('weightLb', disagreement)
   }
 
   // ---- Value edits (per-exercise numeric/policy fields on an existing routine exercise) -------------------
@@ -426,7 +444,7 @@ class PlanChangeChecker {
         break
       case 'weight':
         this.inRoutine(c.exerciseId, 'exerciseId')
-        this.range(c.weightKg, 'weightKg', PlanChangeLimits.weightKg)
+        this.weightFields(true)
         break
       case 'cardio':
         this.inRoutine(c.exerciseId, 'exerciseId')
@@ -662,4 +680,14 @@ export function validateProposal(
   }
 
   return out
+}
+
+/**
+ * The changes as stored: a change with only `weightLb` gets `weightKg` filled in, exactly (pounds × 0.45359237), so
+ * the kg the app does its maths with is never missing. A change with both keeps both. Returns new objects.
+ */
+export function withWeightKg(changes: readonly PlanChange[]): PlanChange[] {
+  return changes.map((c) =>
+    isNil(c.weightKg) && typeof c.weightLb === 'number' ? { ...c, weightKg: kgFromLb(c.weightLb) } : c
+  )
 }

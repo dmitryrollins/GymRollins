@@ -13,4 +13,10 @@ public enum UnitConverter {
     public static func fromKg(_ kg: Double, to unit: WeightUnit) -> Double {
         unit == .kg ? kg : kg / kgPerLb
     }
+
+    /// A set or plan weight in `unit` as shown: in pounds its pound number when it has one that agrees with `kg`
+    /// (`PoundWeight`), else converted from kg; in kg, `kg`.
+    public static func fromKg(_ kg: Double, lb: Double?, to unit: WeightUnit) -> Double {
+        unit == .lb ? (PoundWeight.agreeing(lb, kg: kg) ?? fromKg(kg, to: .lb)) : kg
+    }
 }

@@ -142,7 +142,7 @@ git add wrangler.jsonc && git commit -m "chore(server): the deployed D1 database
 - [ ] `git check-ignore -q server/.dev.vars && echo ignored` prints `ignored`: the local secrets file never reaches git.
 - [ ] `ALLOW_PASSWORD_AUTH` stays `"0"` in `server/wrangler.jsonc`, and no variable in the dashboard overrides it
       (a deploy without `--keep-vars` removes dashboard variables). Email and password sign-in is for local tests only.
-- [ ] `APPLE_BUNDLE_ID` stays `com.rollins.gymrollins`: Apple's id tokens carry it as their audience.
+- [ ] `APPLE_BUNDLE_IDS` lists `com.gymrollins.app` (VIPPIE LLC's app) first, then `com.rollins.gymrollins` (the first builds): Apple's id tokens carry one of them as their audience.
 - [ ] `PUBLIC_BASE_URL` is `<origin>` in `server/wrangler.jsonc`: the OAuth issuer and the MCP resource are built from
       it. No deploy passes `--var`.
 - [ ] `api.gymrollins.com` has no DNS record of its own yet (DNS › Records): the first deploy creates it and its

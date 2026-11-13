@@ -40,6 +40,7 @@ final class AppleHealthUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["health.permission.workouts"].label.contains("Allowed"))
 
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
         let newest = app.descendants(matching: .any)["body.entry.0"]
         XCTAssertTrue(newest.waitForExistence(timeout: 5))
         XCTAssertTrue(newest.label.contains("81.6 kg"), newest.label)
@@ -55,7 +56,8 @@ final class AppleHealthUITests: XCTestCase {
         app.startWorkout()
         app.openExercise("0025")
         app.buttons["logging.logAll"].tapCenter()
-        app.buttons["logging.next"].tapCenter()
+        app.openNextExercise()
+        app.backToOverview()
         app.buttons["workout.finish"].tapCenter()
         XCTAssertTrue(app.buttons["finish.discardEmpty"].waitForExistence(timeout: 3))
         app.buttons["finish.discardEmpty"].tap()

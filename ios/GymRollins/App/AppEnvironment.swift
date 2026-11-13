@@ -72,6 +72,8 @@ final class AppEnvironment {
     let options: LaunchOptions
     /// Local (unsynced) preferences: warm-ups, rest, progression default.
     let defaults: UserDefaults
+    /// Each exercise's own working rest, on this iPhone only (`AppEnvironment+ExerciseRest`).
+    let exerciseRests: ExerciseRestStore
 
     static let log = Logger(subsystem: "com.rollins.gymrollins", category: "app")
     private static let onboardingCompleteKey = "onboardingComplete"
@@ -96,6 +98,8 @@ final class AppEnvironment {
         if Self.startsWithFreshStore(options) {
             Self.clearTodaySwitches(in: defaults)
             defaults.removeObject(forKey: Self.gymLocationCheckedKey)
+            defaults.removeObject(forKey: ExerciseRestStore.key) // UI tests share the simulator's defaults
+            defaults.removeObject(forKey: PlanWeightsLbCleanup.flagKey) // a fresh store's plan hasn't been cleaned
         }
         if options.seedOwner {
             try OwnerSeed.apply(to: context, now: now())
@@ -110,6 +114,7 @@ final class AppEnvironment {
         #if DEBUG
         if options.seedProposal { try DebugProposalSeed.apply(context: context, now: now()) }
         if options.seedTodayProposal { try DebugProposalSeed.applyToday(context: context, now: now()) }
+        if options.seedKgPlanWeight { try DebugPlanWeightSeed.apply(context: context, now: now()) }
         if options.seedAgentWorkout { try DebugAgents.seedWorkout(into: syncStore, now: now()) }
         if options.seedInsights { try DebugInsightsSeed.apply(context: context, now: now()) }
         if options.seedStrength { try DebugStrengthSeed.apply(context: context, now: now()) }
@@ -128,6 +133,7 @@ final class AppEnvironment {
         self.now = now
         self.options = options
         self.defaults = defaults
+        self.exerciseRests = ExerciseRestStore(defaults: defaults)
         self.profiles = ProfileRepository(context: context, now: now)
         self.routines = RoutineRepository(context: context, now: now)
         self.workouts = WorkoutRepository(context: context, now: now)
@@ -166,11 +172,13 @@ final class AppEnvironment {
         self.calories = calories
         self.health = Self.makeHealth(options: options, defaults: defaults, workouts: workouts, body: body,
                                       calories: calories, now: now)
+        cleanUpPlanWeightsOnce()
         restoreSession()
         sync.autoApply = { [weak self] in try self?.autoApplyPulledProposals() ?? 0 }
         autoApplyProposals() // proposals pulled earlier, or seeded, while auto-apply is on
         sync.onRemoteChanges = { [weak self] in
             self?.reloadAll()
+            self?.cleanUpPlanWeightsOnce() // after reloadAll: the pulled profile decides the unit
             self?.syncHealthAfterPull()
         }
         sync.onLocalDataReset = { [weak self] in
@@ -180,7 +188,10 @@ final class AppEnvironment {
             self?.abandonSession()
             self?.reloadAll()
         }
-        sync.onGymDataErased = { [weak self] in self?.removeGymLocalState() }
+        sync.onGymDataErased = { [weak self] in
+            self?.removeGymLocalState()
+            self?.exerciseRests.clear() // this phone's own, like its gyms: kept on sign-out, erased with the account
+        }
         sync.gymPhotoFiles = self.gymPhotos
         wireHealth()
         wireGymSharing()
@@ -238,7 +249,9 @@ final class AppEnvironment {
         health.reset()
         todayPlanStore.clear()
         PlannedSwitchStore(defaults: defaults).clear()
+        LaterDayPlanStore(defaults: defaults).clear()
         removeGymLocalState()
+        exerciseRests.clear()
         onboardingComplete = false
         defaults.set(false, forKey: Self.onboardingCompleteKey)
         reloadAll()
@@ -382,7 +395,13 @@ final class AppEnvironment {
             discard: { try repo.discardActive() },
             // A rest that ran out while the app was gone is over: restoring it would replay the rest-over haptic.
             rest: restStore.load(workoutId: workoutId).flatMap { $0.isFinished(at: now()) ? nil : $0 },
-            persistRest: { restStore.save($0, workoutId: workoutId) })
+            persistRest: { restStore.save($0, workoutId: workoutId) },
+            workingRest: { [weak self] id, defaultSec in
+                self.map { TimeInterval($0.workingRest(exerciseId: id, defaultSec: Int(defaultSec))) } ?? defaultSec
+            },
+            saveWorkingRest: { [weak self] id, seconds, defaultSec in
+                self?.setWorkingRest(Int(seconds), exerciseId: id, defaultSec: Int(defaultSec))
+            })
         session.restEnabled = RestPreferences.restEnabled(defaults)
         if let seconds = ActiveRestDurationStore(defaults: defaults).load(workoutId: workoutId) {
             session.restSeconds = TimeInterval(seconds)

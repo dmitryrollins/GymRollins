@@ -2,14 +2,17 @@ import GymCore
 import GymData
 import SwiftUI
 
-/// Body tab: the 81 → 85 kg goal card with progress/trend, a range-filtered bodyweight chart,
-/// the weigh-in list (swipe to delete), muscle recovery, weekly sets, an "Est. 1RM" card for the most-logged lifts
+/// Body tab: a switch under the title picks one of three sections.
+/// Muscles: muscle recovery and weekly sets. Weight: the 81 → 85 kg goal card with progress/trend, a range-filtered
+/// bodyweight chart and the weigh-in list (swipe to delete). Strength: an "Est. 1RM" card for the most-logged lifts
 /// and strength levels (squat/bench/deadlift).
 struct BodyView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var entries: [BodyweightEntry] = []
     @State private var topLifts: [LiftTrend] = []
     @State private var range: ChartRange = .month
+    /// The section of the switch under the title; kept across launches, Muscles the first time.
+    @AppStorage("bodySection") private var section: BodySection = .muscles
     @State private var showAddWeighIn = false
     /// Exercise id pushed from the strength-level card.
     @State private var strengthHistory: String?
@@ -39,56 +42,15 @@ struct BodyView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         .listRowInsets(Self.rowInsets())
-                    goalCard
+                    sectionPicker
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(Self.rowInsets(top: 4))
-                    if !entries.isEmpty {
-                        rangePicker
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(Self.rowInsets())
-                        BodyweightChart(entries: filteredEntries, goalKg: env.profile.goalWeightKg)
-                            .frame(height: 160)
-                            .accessibilityIdentifier("body.chart")
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(Self.rowInsets())
-                    }
+                        .listRowInsets(Self.rowInsets(top: 4, bottom: 6))
                 }
-                if !entries.isEmpty {
-                    Section {
-                        ForEach(Array(displayEntries.enumerated()), id: \.element.id) { index, entry in
-                            weighInRow(entry, index: index)
-                                .listRowBackground(Color.clear)
-                                .listRowInsets(Self.rowInsets(top: 10, bottom: 10))
-                        }
-                        .onDelete(perform: deleteEntries)
-                    }
-                }
-                Section {
-                    RecoveryCard(identifier: "body.recovery")
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(Self.rowInsets(top: 6, bottom: 6))
-                    WeeklySetsCard()
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(Self.rowInsets(top: 6, bottom: 6))
-                }
-                if !topLifts.isEmpty {
-                    Section {
-                        strengthCard
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(Self.rowInsets())
-                    }
-                }
-                Section {
-                    StrengthLevelCard { strengthHistory = $0 }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(Self.rowInsets(top: 6, bottom: 6))
+                switch section {
+                case .muscles: musclesSection
+                case .weight: weightSections
+                case .strength: strengthSections
                 }
             }
             .listStyle(.plain)
@@ -100,6 +62,83 @@ struct BodyView: View {
                 AddWeighInSheet(defaultKg: defaultWeighInKg, now: env.now(), onSaved: reload)
             }
             .task(id: env.dataRevision) { reload() }
+        }
+    }
+
+    // MARK: Sections
+
+    private var sectionPicker: some View {
+        Picker("Section", selection: $section) {
+            ForEach(BodySection.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("body.section")
+    }
+
+    /// Muscles: recovery map and weekly sets.
+    @ViewBuilder
+    private var musclesSection: some View {
+        Section {
+            RecoveryCard(identifier: "body.recovery")
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(Self.rowInsets(top: 6, bottom: 6))
+            WeeklySetsCard()
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(Self.rowInsets(top: 6, bottom: 6))
+        }
+    }
+
+    /// Weight: the goal card (with its empty/trend text and the add button), range, chart and weigh-in rows.
+    @ViewBuilder
+    private var weightSections: some View {
+        Section {
+            goalCard
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(Self.rowInsets(top: 4))
+            if !entries.isEmpty {
+                rangePicker
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(Self.rowInsets())
+                BodyweightChart(entries: filteredEntries, goalKg: env.profile.goalWeightKg)
+                    .frame(height: 160)
+                    .accessibilityIdentifier("body.chart")
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(Self.rowInsets())
+            }
+        }
+        if !entries.isEmpty {
+            Section {
+                ForEach(Array(displayEntries.enumerated()), id: \.element.id) { index, entry in
+                    weighInRow(entry, index: index)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(Self.rowInsets(top: 10, bottom: 10))
+                }
+                .onDelete(perform: deleteEntries)
+            }
+        }
+    }
+
+    /// Strength: the top lifts' est. 1RM and the strength levels.
+    @ViewBuilder
+    private var strengthSections: some View {
+        if !topLifts.isEmpty {
+            Section {
+                strengthCard
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(Self.rowInsets())
+            }
+        }
+        Section {
+            StrengthLevelCard { strengthHistory = $0 }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(Self.rowInsets(top: 6, bottom: 6))
         }
     }
 
@@ -278,4 +317,19 @@ struct LiftTrend: Identifiable {
     var id: String { exerciseId }
     let currentKg: Double
     let previousKg: Double?
+}
+
+/// The sections of the Body tab's switch. The raw value is what `@AppStorage("bodySection")` keeps.
+enum BodySection: String, CaseIterable, Identifiable {
+    case muscles, weight, strength
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .muscles: "Muscles"
+        case .weight: "Weight"
+        case .strength: "Strength"
+        }
+    }
 }

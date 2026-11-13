@@ -34,8 +34,8 @@ try it, open an issue, or send a pull request.
 
 ## What it does
 
-- **Plan and log workouts.** Routines on a weekly schedule, weight suggestions from a progression engine, plate
-  rounding, rest timer, supersets, and a one-tap "reps left" effort rating.
+- **Plan and log workouts.** A weekly plan you change day by day or for one date, weight suggestions from a progression
+  engine, plate rounding, rest timer, supersets, and a one-tap "reps left" effort rating.
 - **Claude as your coach, via MCP.** Add GymRollins as a custom connector in Claude (OAuth 2.1 with dynamic client
   registration, no API keys to copy). Claude's sign-in page shows a code; you approve it in the app under Settings ›
   Claude › Approve a connection. Claude reads your history and proposes changes; you approve them in the app.

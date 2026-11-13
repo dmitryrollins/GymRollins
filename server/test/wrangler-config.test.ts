@@ -66,7 +66,7 @@ describe('wrangler.jsonc, the deployed Worker', () => {
   it('builds the OAuth issuer and the MCP resource from the https origin, and takes no passwords', () => {
     expect(config.vars).toEqual({
       ALLOW_PASSWORD_AUTH: '0',
-      APPLE_BUNDLE_ID: 'com.rollins.gymrollins',
+      APPLE_BUNDLE_IDS: 'com.gymrollins.app,com.rollins.gymrollins',
       PUBLIC_BASE_URL: ORIGIN,
     })
     expect(`https://${(config.routes as { pattern: string }[])[0].pattern}`).toBe(config.vars.PUBLIC_BASE_URL)

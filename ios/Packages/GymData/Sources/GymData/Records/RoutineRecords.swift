@@ -38,6 +38,9 @@ public final class RoutineExerciseRecord {
     public var repsMin: Int?
     public var sec: Int?
     public var weightKg: Double?
+    /// The pound number `weightKg` was chosen as (plan 38); nil when none was given and for rows written before it
+    /// existed. An optional with no default, so the store migrates lightweight.
+    public var weightLb: Double?
     /// When the plan weight was last set (user edit or applied proposal); drives the "planned" override.
     public var weightSetAt: Date?
     public var modeRaw: String
@@ -47,8 +50,8 @@ public final class RoutineExerciseRecord {
     public var routine: RoutineRecord?
 
     public init(id: UUID, exerciseId: String, position: Int, sets: Int, reps: Int, repsMin: Int?, sec: Int?,
-                weightKg: Double?, weightSetAt: Date?, modeRaw: String, policyRaw: String?, incKg: Double?,
-                supersetGroup: String?) {
+                weightKg: Double?, weightLb: Double? = nil, weightSetAt: Date?, modeRaw: String, policyRaw: String?,
+                incKg: Double?, supersetGroup: String?) {
         self.id = id
         self.exerciseId = exerciseId
         self.position = position
@@ -57,6 +60,7 @@ public final class RoutineExerciseRecord {
         self.repsMin = repsMin
         self.sec = sec
         self.weightKg = weightKg
+        self.weightLb = weightLb
         self.weightSetAt = weightSetAt
         self.modeRaw = modeRaw
         self.policyRaw = policyRaw

@@ -339,7 +339,14 @@ struct TodayPlanStore {
     /// `scheduled` is the routine assigned to today now: a stored scheduled plan for another routine, or a rest-day
     /// suggestion on what has since become a training day, is dropped (the schedule changed; a switch is kept).
     func load(day: String, routines: [Routine], scheduled: UUID?) -> TodayPlan? {
-        guard let plan = load(day: day, routineIds: Set(routines.map(\.id))) else { return nil }
+        load(day: day, routineIds: Set(routines.map(\.id))).flatMap {
+            Self.current($0, routines: routines, scheduled: scheduled)
+        }
+    }
+
+    /// `plan` under the current plan, as `load(day:routines:scheduled:)` describes; also used for a later day's change
+    /// (`LaterDayPlanStore`). Nil when the schedule moved on from it.
+    static func current(_ plan: TodayPlan, routines: [Routine], scheduled: UUID?) -> TodayPlan? {
         switch plan.kind {
         case .scheduled where plan.base?.id != scheduled: return nil
         case .restDaySuggestion where scheduled != nil: return nil

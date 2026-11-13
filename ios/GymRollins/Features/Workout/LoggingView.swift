@@ -3,14 +3,19 @@ import SwiftUI
 
 /// The exercise screen: hero header, chip row (rest/history/plates/swap), progression hint, set timeline ("Reps left?"
 /// under the set just logged), and a floating bottom bar. The same screen serves a running workout (Log All Sets + Log
-/// Set, replaced by the rest bar while resting) and Today's plan before it starts ("plan mode": one Start Workout
-/// button, no clock, `···` is Today's exercise menu). What it shows and edits goes through `ExerciseScreenModel`.
+/// Set, replaced by the rest bar while resting) and the day's plan on Today before it starts ("plan mode": one Start
+/// Workout button on today, no clock, `···` is Today's exercise menu). What it shows and edits goes through
+/// `ExerciseScreenModel`.
 struct LoggingView: View {
     let model: ExerciseScreenModel
     /// Workout mode: finishes the workout (last exercise done).
     var finish: () -> Void = {}
-    /// Plan mode: starts today's workout and opens it on this item.
+    /// Workout mode: swaps this screen for another exercise's (Next exercise).
+    var openEntry: (UUID) -> Void = { _ in }
+    /// Plan mode: starts the day's workout (today only, `canStart`) and opens it on this item.
     var startWorkout: (UUID) -> Void = { _ in }
+    /// Plan mode: false on a later day (it can be edited, not started).
+    var canStart = true
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
 
@@ -25,10 +30,13 @@ struct LoggingView: View {
     @State private var history: [SessionResult] = []
     /// The one focus state for every box on the screen (see `SetTimelineRow`).
     @FocusState private var focus: SetField?
-    /// Text the user has typed but not yet committed, keyed by box. A box without a draft shows
-    /// the current value; drafts are committed when focus leaves the box, on "Done", before
-    /// logging or starting, and when the screen goes away -- never per keystroke.
-    @State private var drafts: [SetField: String] = [:]
+    /// The box being typed in, from its first keystroke until it is left (`SetEdit`): its text, which it shows as
+    /// typed, and the snapshot of the sets the edit started from. One box is edited at a time; every other box shows
+    /// its set's value. Every keystroke is written as it goes; the edit ends when focus leaves the box, on "Done",
+    /// before logging, starting or a structural edit, and when the screen goes away.
+    @State private var edit: SetEdit?
+    /// Bumped when the list starts scrolling or focus moves: closes an open swipe-to-delete button.
+    @State private var swipeCloser = 0
 
     private var exercise: Exercise? { model.exerciseId.flatMap { env.library.exercise($0) } }
 
@@ -53,25 +61,29 @@ struct LoggingView: View {
                         }
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .onScrollPhaseChange { _, phase in
+                        if phase == .interacting { swipeCloser += 1 }
+                    }
                     .onChange(of: focus) { old, new in
+                        swipeCloser += 1
                         if let old { commit(old) }
                         if let new { withAnimation { proxy.scrollTo(new.setId, anchor: .center) } }
                     }
                 }
-                .background(Theme.background)
-                // Hidden while a box is being edited: the bar rides up with the keyboard and
-                // would otherwise sit on top of the lower rows, so a tap meant for a box would
-                // hit the bar's button instead.
+                // Under the keyboard too: otherwise the window's black shows behind the bar above the keys.
+                .background { Theme.background.ignoresSafeArea() }
+                // While a box is being edited the log bar gives way to the keyboard bar: it rides up with
+                // the keyboard and would otherwise sit on top of the lower rows, so a tap meant for a box
+                // would hit the bar's button instead.
                 .safeAreaInset(edge: .bottom) {
-                    if focus == nil { bottomBar(sets) }
-                }
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        // iOS 26's confirm role draws the system's round, tinted checkmark above the keyboard.
-                        Button("Done", systemImage: "checkmark", role: .confirm) { focus = nil }
-                            .tint(Theme.primaryButtonFill)
-                            .accessibilityIdentifier("keyboard.done")
+                    if focus == nil {
+                        bottomBar(sets)
+                    } else {
+                        KeyboardBar(canMovePrevious: canMoveFocus(-1, sets: sets),
+                                    canMoveNext: canMoveFocus(1, sets: sets),
+                                    movePrevious: { moveFocus(-1, sets: sets) },
+                                    moveNext: { moveFocus(1, sets: sets) },
+                                    done: { focus = nil })
                     }
                 }
             } else {
@@ -80,7 +92,7 @@ struct LoggingView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .sheet(isPresented: $showRestSettings) { RestSettingsSheet(model: model) }
+        .sheet(isPresented: $showRestSettings) { RestSettingsSheet(model: model, exercise: exercise) }
         .sheet(isPresented: $showHistory) {
             // `ExerciseHistoryView` doesn't wrap its own `NavigationStack` (nesting one inside
             // Body's existing stack broke that push entry point), so the sheet provides it here.
@@ -102,8 +114,8 @@ struct LoggingView: View {
         .navigationDestination(item: $detailExercise) { ExerciseDetailView(exerciseId: $0) }
         .exercisePreferenceConfirmation($confirmingNever, error: $menuError)
         .onDisappear(perform: commitAll)
-        // Typed text means the old unit: never reinterpret it (valid plan typing is already applied).
-        .onChange(of: env.profile.unit) { _, _ in drafts = [:] }
+        // Typed text means the old unit: never reinterpret it (what it parsed to is already written).
+        .onChange(of: env.profile.unit) { _, _ in edit = nil }
         .task(id: model.id) {
             if case .workout(let session, let entryId) = model { session.select(entryId) }
         }
@@ -195,9 +207,10 @@ struct LoggingView: View {
             let unit = env.profile.unit
             let lastCount = max(last.reps.count, 1)
             let lastReps = last.reps.first ?? 0
-            Text("Last time \(lastCount) \u{00D7} \(lastReps) @ " +
-                 "\(WeightFormatter.format(kg: last.weightKg, unit: unit, includeSecondary: false)). Today " +
-                 "\(WeightFormatter.format(kg: working.weightKg, unit: unit, includeSecondary: false)) \u{00D7} \(working.reps).")
+            let lastLoad = WeightFormatter.format(kg: last.weightKg, lb: last.weightLb, unit: unit, includeSecondary: false)
+            let todayLoad = WeightFormatter.format(kg: working.weightKg, lb: working.weightLb, unit: unit,
+                                                   includeSecondary: false)
+            Text("Last time \(lastCount) \u{00D7} \(lastReps) @ \(lastLoad). Today \(todayLoad) \u{00D7} \(working.reps).")
                 .font(.caption)
                 .foregroundStyle(Theme.success.opacity(0.9))
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -228,8 +241,8 @@ struct LoggingView: View {
                                   mode: mode, unit: unit, isBarbell: isBarbell,
                                   text: { draftBinding($0, set: set) }, focus: $focus, isPlanned: model.isPlan,
                                   onRemove: remove,
-                                  onToggleWarmup: model.canToggleWarmup ? { editSets { model.toggleWarmup(set) } } : nil)
-                        .swipeToDelete(identifier: "logging.set.\(offset).delete", onDelete: remove)
+                                  onToggleWarmup: model.canToggleWarmup ? { editSets { model.toggleWarmup(set) } } : nil,
+                                  swipeCloser: swipeCloser)
                         .id(set.id)
                     if set.id == model.effortPromptSetId(mode: mode) { // optional rating of the set just logged; the rest keeps running
                         SetEffortRow(rir: set.rir) { model.rateSet(set, tapping: $0) }.padding(.leading, 40)
@@ -271,7 +284,7 @@ struct LoggingView: View {
 // MARK: - Hero controls
 
 extension LoggingView {
-    /// The workout clock; before the workout (plan mode) there is none, only "Edited" once today's sets changed.
+    /// The workout clock; before the workout (plan mode) there is none, only "Edited" once the day's sets changed.
     @ViewBuilder
     private var heroStatus: some View {
         switch model {
@@ -362,7 +375,7 @@ extension LoggingView {
     }
 }
 
-// MARK: - Bottom bar, sheets and drafts
+// MARK: - Bottom bar, sheets and typing
 
 extension LoggingView {
     // MARK: Bottom bar
@@ -372,54 +385,72 @@ extension LoggingView {
         switch model {
         case .workout(let session, let entryId):
             WorkoutLogBar(session: session, entryId: entryId, sets: sets, commit: commitAll, finish: finish,
-                          next: { dismiss() })
-        case .plan:
+                          open: openEntry)
+        case .plan where canStart:
             PrimaryGlassButton(title: "Start Workout", identifier: "logging.startWorkout") {
                 commitAll()
                 startWorkout(model.id)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
+        case .plan:
+            EmptyView()
         }
     }
 
-    /// Typed values were for the old exercise's sets: they go with it.
+    /// The edit in progress was on the old exercise's sets: it ends (its typing is already written).
     private func swap(to candidate: Exercise) {
-        drafts = [:]
+        edit = nil
         let history = (try? env.workouts.history(exerciseId: candidate.id, limit: 5)) ?? []
         model.swap(to: candidate, profile: env.profile, history: history, loads: env.gymLoads(candidate.id))
     }
 
     private func resetSets(_ editor: TodayPlanEditor, _ itemId: UUID) {
-        (drafts, focus) = ([:], nil)
+        (edit, focus) = (nil, nil)
         editor.resetSets(itemId)
     }
 
-    // MARK: Drafts
+    // MARK: Typing
 
-    /// Runs a structural edit (add / remove / warm-up) with pending typing applied first.
-    private func editSets(_ edit: () -> Void) { commitAll(); edit() }
+    /// Runs a structural edit (add / remove / warm-up) once the edit in progress has ended.
+    private func editSets(_ change: () -> Void) { commitAll(); change() }
 
-    /// In plan mode every keystroke that parses also goes into today's plan at once (the text stays as typed until
-    /// the box is left), so a workout started meanwhile (from the watch) gets the latest number.
+    /// A box's text: the edit's while it is typed in, else its set's value. Every keystroke is written at once, in one
+    /// save (`ExerciseScreenModel.type`): later sets follow live, text that doesn't parse (a cleared box) puts them back
+    /// as they were, and in plan mode a workout started meanwhile (from the watch) gets the latest number.
     private func draftBinding(_ field: SetField, set: WorkoutSet) -> Binding<String> {
-        Binding(get: { drafts[field] ?? SetFieldFormat.display(field, set: set, unit: env.profile.unit) },
-                set: { typed in
-                    drafts[field] = typed
-                    guard model.isPlan else { return }
-                    let unit = env.profile.unit
-                    model.updateSetCarryingWeight(field.setId) { SetFieldFormat.applying(typed, to: field, set: $0, unit: unit) ?? $0 }
-                })
+        Binding(get: {
+                    if let edit, edit.field == field { return edit.text }
+                    return SetFieldFormat.display(field, set: set, unit: env.profile.unit)
+                },
+                set: { edit = model.type($0, in: field, continuing: edit, unit: env.profile.unit) })
     }
 
-    /// Applies one box's draft (invalid text is dropped, reverting the box).
+    /// Every box on the screen in order: each set top to bottom, within a set the mode's field order.
+    private func orderedFields(_ sets: [WorkoutSet]) -> [SetField] {
+        let mode = SetFieldFormat.mode(exercise: exercise, sets: sets)
+        return sets.flatMap { SetFieldFormat.fields(for: mode, setId: $0.id) }
+    }
+
+    private func canMoveFocus(_ step: Int, sets: [WorkoutSet]) -> Bool {
+        let fields = orderedFields(sets)
+        guard let current = focus, let index = fields.firstIndex(of: current) else { return false }
+        return fields.indices.contains(index + step)
+    }
+
+    /// Previous / next box; the old box is committed by the focus change.
+    private func moveFocus(_ step: Int, sets: [WorkoutSet]) {
+        guard canMoveFocus(step, sets: sets), let current = focus,
+              let index = orderedFields(sets).firstIndex(of: current) else { return }
+        focus = orderedFields(sets)[index + step]
+    }
+
+    /// Ends the box's edit. Its last text is already written (or, when it didn't parse, the sets are back as they
+    /// were), so the box shows its set's value again.
     private func commit(_ field: SetField) {
-        guard let text = drafts.removeValue(forKey: field) else { return }
-        let unit = env.profile.unit
-        model.updateSetCarryingWeight(field.setId) { SetFieldFormat.applying(text, to: field, set: $0, unit: unit) ?? $0 }
+        if edit?.field == field { edit = nil }
     }
 
-    private func commitAll() {
-        drafts.keys.forEach(commit)
-    }
+    /// Ends whichever edit is in progress.
+    private func commitAll() { edit = nil }
 }

@@ -23,11 +23,11 @@ const LOGGED: LoggedWorkout = {
     {
       exercise_id: '0025',
       sets: [
-        { reps: 10, weight_kg: 20, sec: null, dist_m: null, warmup: true },
-        { reps: 8, weight_kg: 63.5, sec: null, dist_m: null, warmup: false },
+        { reps: 10, weight_kg: 20, weight_lb: null, sec: null, dist_m: null, warmup: true },
+        { reps: 8, weight_kg: 63.5, weight_lb: 140, sec: null, dist_m: null, warmup: false },
       ],
     },
-    { exercise_id: '0001', sets: [{ reps: 0, weight_kg: 0, sec: 60, dist_m: 250, warmup: false }] },
+    { exercise_id: '0001', sets: [{ reps: 0, weight_kg: 0, weight_lb: null, sec: 60, dist_m: 250, warmup: false }] },
   ],
 }
 
@@ -81,8 +81,8 @@ describe('a workout an agent adds', () => {
     expect(pulled!.updated_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/)
     expect(pulled!.entries.map((e: Record<string, any>) => [e.exercise_id, e.position])).toEqual([['0025', 0], ['0001', 1]])
     expect(pulled!.entries[0].sets).toMatchObject([
-      { position: 0, w_kg: 20, r: 10, sec: null, dist_m: null, done: true, warmup: true, multiplier: 1 },
-      { position: 1, w_kg: 63.5, r: 8, done: true, warmup: false, multiplier: 1 },
+      { position: 0, w_kg: 20, w_lb: null, r: 10, sec: null, dist_m: null, done: true, warmup: true, multiplier: 1 },
+      { position: 1, w_kg: 63.5, w_lb: 140, r: 8, done: true, warmup: false, multiplier: 1 },
     ])
     expect(pulled!.entries[1].sets).toMatchObject([{ w_kg: 0, r: 0, sec: 60, dist_m: 250, done: true }])
     expect([await countOf('workouts', userId), await kept('workout_entries', userId), await kept('workout_sets', userId)])

@@ -85,11 +85,11 @@ import Testing
     }
 
     @Test func loggedWeightKeepsThePlannedKilogramsWhenUnchanged() {
-        let planned = 61.2 // 134.9 lb: the watch shows (and sends back) a rounded value
-        let shown = UnitConverter.fromKg(planned, to: .lb)
-        #expect(WatchStateMapper.loggedKg(weight: shown, unit: .lb, plannedKg: planned) == planned)
-        #expect(abs(WatchStateMapper.loggedKg(weight: 145, unit: .lb, plannedKg: planned)
+        let planned = PoundWeight(kg: 61.2, lb: nil) // 134.9 lb: the watch shows (and sends back) a rounded value
+        let shown = UnitConverter.fromKg(61.2, to: .lb)
+        #expect(WatchStateMapper.loggedWeight(weight: shown, unit: .lb, planned: planned) == planned)
+        #expect(abs(WatchStateMapper.loggedWeight(weight: 145, unit: .lb, planned: planned).kg
             - UnitConverter.toKg(145, from: .lb)) < 1e-9)
-        #expect(WatchStateMapper.loggedKg(weight: 62.5, unit: .kg, plannedKg: planned) == 62.5)
+        #expect(WatchStateMapper.loggedWeight(weight: 62.5, unit: .kg, planned: planned).kg == 62.5)
     }
 }

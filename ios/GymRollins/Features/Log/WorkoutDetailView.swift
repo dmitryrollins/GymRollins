@@ -197,7 +197,8 @@ struct WorkoutDetailView: View {
     private func setSummaryText(_ set: WorkoutSet, mode: ExerciseMode) -> String {
         switch mode {
         case .reps:
-            return "\(set.reps) \u{00D7} \(WeightFormatter.format(kg: set.weightKg, unit: unit, includeSecondary: false))"
+            let load = WeightFormatter.format(kg: set.weightKg, lb: set.weightLb, unit: unit, includeSecondary: false)
+            return "\(set.reps) \u{00D7} \(load)"
         case .time:
             return DurationFormatter.clock(TimeInterval(set.sec ?? 0))
         case .cardio:

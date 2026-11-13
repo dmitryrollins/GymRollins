@@ -11,11 +11,11 @@ import Testing
         #expect(DomainLimits.routineViolation(routine(name: "Push", exercises: 3)) == nil)
         #expect(DomainLimits.routineViolation(routine(name: String(repeating: "a", count: 40), exercises: 20)) == nil)
         #expect(DomainLimits.routineViolation(routine(name: "  ", exercises: 1))
-            == "Give the routine a name.")
+            == "Give the workout a name.")
         #expect(DomainLimits.routineViolation(routine(name: String(repeating: "a", count: 41), exercises: 1))
-            == "Routine names can be up to 40 characters.")
+            == "Workout names can be up to 40 characters.")
         #expect(DomainLimits.routineViolation(routine(name: "Push", exercises: 21))
-            == "A routine can have up to 20 exercises.")
+            == "A workout can have up to 20 exercises.")
     }
 
     /// The server's storage caps read these numbers (server/test/domain-limits-drift.test.ts checks its copy and its

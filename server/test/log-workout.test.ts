@@ -219,3 +219,16 @@ describe('log_workout and the time a workout takes', () => {
     expect((await pulled(c.appToken)).map((w) => w.added_by)).toEqual(['Muse (agent.meta.ai)', 'Muse (agent.meta.ai)'])
   })
 })
+
+describe('log_workout weight_lb', () => {
+  it('stores the pound number and exact kg, and the phone pulls them as w_lb', async () => {
+    const c = await owner()
+    const { isError, results } = await logWorkout(c.tokens.access_token, [
+      session(6, { exercises: [{ exercise_id: '0025', sets: [{ reps: 8, weight_lb: 45 }, { reps: 8, weight_kg: 20 }] }] }),
+    ])
+    expect(isError).toBe(false)
+    const row = (await pulled(c.appToken)).find((w) => w.id === results[0]!.workout_id)!
+    expect(row.entries[0].sets.map((s: Record<string, unknown>) => [s.w_kg, s.w_lb]))
+      .toEqual([[45 * 0.45359237, 45], [20, null]])
+  })
+})

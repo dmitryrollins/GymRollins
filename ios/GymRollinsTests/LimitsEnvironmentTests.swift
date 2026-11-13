@@ -71,6 +71,9 @@ import Testing
         let weights = Dictionary(uniqueKeysWithValues: legs.exercises.map { ($0.exerciseId, lb($0.weightKg)) })
         let expected: [String: Double] = ["0085": 80, "0043": 80, "0739": 100, "0586": 60, "0585": 65, "0594": 115]
         for (id, light) in expected { #expect(abs((weights[id] ?? 0) - light) < 0.01, "\(id)") }
+        // In lb each is a pound number on the exercise's grid, so it shows as 80 lb and not 79.9.
+        let pounds = Dictionary(uniqueKeysWithValues: legs.exercises.map { ($0.exerciseId, $0.weightLb ?? .nan) })
+        for (id, light) in expected { #expect(pounds[id] == light, "\(id) keeps its pound number") }
         #expect(legs.exercises.allSatisfy { $0.weightSetAt == env.now() })
         #expect(try env.pausedRoutines().isEmpty)
     }

@@ -194,6 +194,55 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Plan screen")
     }
 
+    /// My Plan's week, a day's editor and Saved workouts.
+    func testMyPlanAudit() {
+        let app = launch()
+        app.buttons["today.myPlan"].tap()
+        let monday = app.buttons["plan.day.1"]
+        XCTAssertTrue(monday.waitForExistence(timeout: 5))
+        waitUntilSettled(monday)
+        audit(app, "My Plan")
+        monday.tap()
+        XCTAssertTrue(app.buttons["day.workout"].waitForExistence(timeout: 5))
+        waitUntilSettled(app.buttons["day.workout"])
+        audit(app, "Day editor")
+        app.buttons["Cancel"].tap()
+        let saved = app.buttons["plan.savedWorkouts"]
+        app.scrollToHittable(saved)
+        saved.tap()
+        XCTAssertTrue(app.buttons["plan.addRoutine"].waitForExistence(timeout: 5))
+        waitUntilSettled(app.buttons["plan.addRoutine"])
+        audit(app, "Saved workouts")
+    }
+
+    /// Waits for Today's title between the swipes: two quick swipes once stayed on Sunday.
+    private func waitForTitle(_ app: XCUIApplication, _ text: String,
+                              file: StaticString = #filePath, line: UInt = #line) {
+        let title = app.staticTexts["today.title"].firstMatch
+        let predicate = NSPredicate(format: "label == %@", text)
+        let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: title)], timeout: 5)
+        XCTAssertEqual(result, .completed, "title was '\(title.label)'", file: file, line: line)
+    }
+
+    /// A later day on Today, changed for that date.
+    func testLaterDayAudit() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["today.start"].waitForExistence(timeout: 5))
+        app.scrollViews.firstMatch.swipeLeft()
+        waitForTitle(app, "Tomorrow")
+        app.scrollViews.firstMatch.swipeLeft()
+        waitForTitle(app, "Monday")
+        let menu = app.buttons["today.row.menu.0025"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        menu.tap()
+        let delete = app.buttons["Delete from Workout"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+        XCTAssertTrue(app.buttons["today.backToToday"].waitForExistence(timeout: 5))
+        waitUntilSettled(app.buttons["today.backToToday"])
+        audit(app, "Later day")
+    }
+
     func testWorkoutOverviewAndLoggingAudit() {
         let app = launch()
         app.startWorkout()
@@ -210,7 +259,8 @@ final class AccessibilityAuditUITests: XCTestCase {
         app.startWorkout()
         app.openExercise("0025")
         app.buttons["logging.logAll"].tapCenter()
-        app.buttons["logging.next"].tapCenter()
+        app.openNextExercise()
+        app.backToOverview()
         app.buttons["workout.finish"].tapCenter()
         XCTAssertTrue(app.buttons["finish.discardEmpty"].waitForExistence(timeout: 3))
         app.buttons["finish.discardEmpty"].tap()
@@ -228,6 +278,7 @@ final class AccessibilityAuditUITests: XCTestCase {
     func testBodyAudit() {
         let app = launch(["-seedHistory", "-seedBodyweight"])
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
         XCTAssertTrue(app.buttons["body.addWeighIn"].waitForExistence(timeout: 5))
         audit(app, "Body")
     }

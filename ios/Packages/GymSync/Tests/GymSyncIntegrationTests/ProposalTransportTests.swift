@@ -19,7 +19,7 @@ struct ProposalTransportTests {
             try await transport.decideConnect(code: code, decision: .approve)
         }
 
-        let proposed = try await claude.callTool(tokens.access, "propose_plan_changes", [
+        let proposed = try await claude.callTool(tokens.access, "change_plan", [
             "summary": "Add a Push day",
             "changes": [["id": "c1", "type": "add-routine", "routineId": "new-push", "name": "Push"]],
         ])
@@ -35,7 +35,7 @@ struct ProposalTransportTests {
         try await transport.resolveProposal(id: proposal.id, status: "applied", appliedChangeIds: ["c1"],
                                             at: max(Date(), proposal.createdAt))
         #expect(try await transport.pendingProposals().isEmpty)
-        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposal.id.uuidString.lowercased()])
+        let seen = try await claude.callTool(tokens.access, "get_plan_change", ["id": proposal.id.uuidString.lowercased()])
         #expect(seen.json["status"] as? String == "applied")
         #expect(seen.json["applied_change_ids"] as? [String] == ["c1"])
 
@@ -51,7 +51,7 @@ struct ProposalTransportTests {
         let tokens = try await claude.connect { code in
             try await transport.decideConnect(code: code, decision: .approve)
         }
-        _ = try await claude.callTool(tokens.access, "propose_plan_changes", [
+        _ = try await claude.callTool(tokens.access, "change_plan", [
             "summary": "Add a Pull day",
             "changes": [["id": "c1", "type": "add-routine", "routineId": "new-pull", "name": "Pull"]],
         ])
@@ -65,7 +65,7 @@ struct ProposalTransportTests {
         try await transport.resolveProposal(id: proposal.id, status: "dismissed", appliedChangeIds: [], at: later)
         try await transport.resolveProposal(id: proposal.id, status: "applied", appliedChangeIds: ["c1"],
                                             at: later.addingTimeInterval(-30))
-        let seen = try await claude.callTool(tokens.access, "get_proposal", ["id": proposal.id.uuidString.lowercased()])
+        let seen = try await claude.callTool(tokens.access, "get_plan_change", ["id": proposal.id.uuidString.lowercased()])
         #expect(seen.json["status"] as? String == "dismissed")
         try await user.deleteAccount()
     }

@@ -3,7 +3,8 @@ import GymCore
 import Observation
 
 /// Today's plan before the workout starts: the one copy Today and the plan-mode exercise screen both read and edit.
-/// Every change is a today-only `TodayPlan` edit, saved for the rest of the day (`TodayPlanStore`).
+/// Every change is a `TodayPlan` edit for that one day, kept in its store (`TodayPlanSaving`: today's `TodayPlanStore`,
+/// or a later day's `LaterDayPlanSaver`).
 ///
 /// Exercises without edited sets show what Start Workout would plan (`suggest`). That suggestion is computed once per
 /// load and kept; a recomputed suggestion (after a reload or a history change) reuses the previous set ids row by row,
@@ -15,26 +16,39 @@ final class TodayPlanEditor {
     /// A workout is running (Today started it, or the watch did): today's plan is spent and every edit is ignored, so
     /// a screen still open on it can't write it back.
     @ObservationIgnored var isLocked = false
-    @ObservationIgnored private var store: TodayPlanStore?
+    @ObservationIgnored private var store: (any TodayPlanSaving)?
     @ObservationIgnored private var defaultRestSec: Int
     @ObservationIgnored private var suggest: (RoutineExercise, TodayPlan) -> [WorkoutSet]
+    /// Exercise id and today's rest → the exercise's working rest (its own, else its suggestion).
+    @ObservationIgnored private var workingRest: (String, Int) -> Int
+    /// Exercise id, seconds and today's rest: keeps the exercise's rest for every workout.
+    @ObservationIgnored private var saveWorkingRest: (String, Int, Int) -> Void
     /// Read from view bodies: ignored by observation so filling it never invalidates a view mid-update.
     @ObservationIgnored private var suggestions: [UUID: [WorkoutSet]] = [:]
     /// Set ids of dropped suggestions, by item (reused by the next suggestion for the same exercise).
     @ObservationIgnored private var previousIds: [UUID: (exerciseId: String, ids: [UUID], warmups: [Bool])] = [:]
 
-    init(store: TodayPlanStore? = nil, defaultRestSec: Int = 90,
-         suggest: @escaping (RoutineExercise, TodayPlan) -> [WorkoutSet] = { _, _ in [] }) {
+    /// `suggest` comes first, so a trailing closure still lands on it.
+    init(store: (any TodayPlanSaving)? = nil, defaultRestSec: Int = 90,
+         suggest: @escaping (RoutineExercise, TodayPlan) -> [WorkoutSet] = { _, _ in [] },
+         workingRest: @escaping (String, Int) -> Int = { $1 },
+         saveWorkingRest: @escaping (String, Int, Int) -> Void = { _, _, _ in }) {
         self.store = store
         self.defaultRestSec = defaultRestSec
+        self.workingRest = workingRest
+        self.saveWorkingRest = saveWorkingRest
         self.suggest = suggest
     }
 
-    /// Points the editor at the app's store and planner (Today does this on every reload).
-    func configure(store: TodayPlanStore, defaultRestSec: Int,
+    /// Points the editor at the app's store, per-exercise rests and planner (Today does this on every reload).
+    func configure(store: any TodayPlanSaving, defaultRestSec: Int,
+                   workingRest: @escaping (String, Int) -> Int,
+                   saveWorkingRest: @escaping (String, Int, Int) -> Void,
                    suggest: @escaping (RoutineExercise, TodayPlan) -> [WorkoutSet]) {
         self.store = store
         self.defaultRestSec = defaultRestSec
+        self.workingRest = workingRest
+        self.saveWorkingRest = saveWorkingRest
         self.suggest = suggest
     }
 
@@ -45,7 +59,7 @@ final class TodayPlanEditor {
         self.plan = plan
     }
 
-    /// Applies a today-only change and remembers it for the rest of the day (ignored while locked).
+    /// Applies a change for the day and keeps it in the day's store (ignored while locked).
     func apply(_ new: TodayPlan) {
         guard !isLocked else { return }
         plan = new
@@ -80,6 +94,11 @@ final class TodayPlanEditor {
         let sets = sets(for: itemId)
         guard let index = sets.firstIndex(where: { $0.id == setId }) else { return }
         editSets(itemId, TodaySetEdits.replacing(sets, index: index, with: transform(sets[index])))
+    }
+
+    /// Updates several sets as one edit (one save), each by its own transform (`SetEdit.changes`).
+    func updateSets(_ itemId: UUID, _ transforms: [UUID: (WorkoutSet) -> WorkoutSet]) {
+        editSets(itemId, sets(for: itemId).map { set in transforms[set.id].map { $0(set) } ?? set })
     }
 
     func addSet(_ itemId: UUID) { editSets(itemId, TodaySetEdits.adding(to: sets(for: itemId))) }
@@ -131,14 +150,21 @@ final class TodayPlanEditor {
         apply(plan.deleting(itemId))
     }
 
-    // MARK: Rest (today-wide)
+    // MARK: Rest
 
+    /// Today's default rest: the day's own (stored before rest was per exercise; nothing sets it now), else Settings'.
     var restSec: Int { plan?.restSec ?? defaultRestSec }
 
-    /// Today's rest; the profile default is stored as "none" so a later default change still applies.
-    func setRest(_ seconds: Int) {
-        guard let plan else { return }
-        apply(plan.withRest(seconds == defaultRestSec ? nil : seconds))
+    /// The rest after a working set of the item's exercise: its own, else its suggestion from today's rest.
+    func workingRest(itemId: UUID) -> Int {
+        guard let exerciseId = item(itemId)?.exerciseId else { return restSec }
+        return workingRest(exerciseId, restSec)
+    }
+
+    /// Keeps `seconds` as the item's exercise's rest in every workout (ignored while locked, like every edit).
+    func setWorkingRest(_ seconds: Int, itemId: UUID) {
+        guard !isLocked, let exerciseId = item(itemId)?.exerciseId else { return }
+        saveWorkingRest(exerciseId, seconds, restSec)
     }
 
     private func forget(_ itemId: UUID) {
@@ -152,8 +178,8 @@ final class TodayPlanEditor {
         guard let previous = previousIds.removeValue(forKey: itemId), previous.exerciseId == exerciseId,
               previous.warmups == sets.map(\.warmup) else { return sets }
         return zip(sets, previous.ids).map { set, id in
-            WorkoutSet(id: id, weightKg: set.weightKg, reps: set.reps, sec: set.sec, minutes: set.minutes,
-                       distanceM: set.distanceM, warmup: set.warmup, multiplier: set.multiplier)
+            WorkoutSet(id: id, weightKg: set.weightKg, weightLb: set.weightLb, reps: set.reps, sec: set.sec,
+                       minutes: set.minutes, distanceM: set.distanceM, warmup: set.warmup, multiplier: set.multiplier)
         }
     }
 
@@ -164,11 +190,12 @@ final class TodayPlanEditor {
 }
 
 extension RoutineExercise {
-    /// The same item under another id (Replace keeps the id of the item it replaces).
+    /// The same item under another id (Replace keeps the id of the item it replaces), pound numbers included.
     func withId(_ newId: UUID) -> RoutineExercise {
         RoutineExercise(id: newId, exerciseId: exerciseId, sets: sets, reps: reps, repsMin: repsMin, sec: sec,
-                        weightKg: weightKg, mode: mode, policy: policy, incKg: incKg, supersetGroup: supersetGroup,
-                        weightSetAt: weightSetAt, fixedWeightKg: fixedWeightKg)
+                        weightKg: weightKg, weightLb: weightLb, mode: mode, policy: policy, incKg: incKg,
+                        supersetGroup: supersetGroup, weightSetAt: weightSetAt, fixedWeightKg: fixedWeightKg,
+                        fixedWeightLb: fixedWeightLb)
     }
 }
 

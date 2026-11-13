@@ -42,9 +42,9 @@ enum TodaySetEdits {
     }
 
     /// The routine item that plays back these sets: working set count, reps (or seconds) and the heaviest working
-    /// weight, stamped `now` so it overrides progression next time. Reps inside the item's range keep the range (today's
-    /// target is usually its bottom, set by double progression); reps outside it move the top, and a range bottom above
-    /// the new top is dropped.
+    /// weight with its pound number, stamped `now` so it overrides progression next time. Reps inside the item's range
+    /// keep the range (today's target is usually its bottom, set by double progression); reps outside it move the top,
+    /// and a range bottom above the new top is dropped.
     static func routineItem(_ item: RoutineExercise, from sets: [WorkoutSet], at now: Date) -> RoutineExercise {
         let working = sets.filter { !$0.warmup }
         guard !working.isEmpty else { return item }
@@ -53,14 +53,21 @@ enum TodaySetEdits {
         let withinRange = bottom >= (item.repsMin ?? item.reps) && top <= item.reps
         let reps = withinRange ? item.reps : top
         let sec = item.sec == nil ? nil : working.compactMap(\.sec).max() ?? item.sec
-        let weight = working.map(\.weightKg).max() ?? 0
+        let weight = heaviest(working)
         // The owner saved exactly this load — even when it equals the routine's old value or is zero (bodyweight) while
         // history has heavier sets: store and stamp it so the planned weight wins over progression next time.
         return RoutineExercise(id: item.id, exerciseId: item.exerciseId, sets: min(working.count, maxWorkingSets),
                                reps: reps, repsMin: item.repsMin.flatMap { $0 <= reps ? $0 : nil }, sec: sec,
-                               weightKg: weight, mode: item.mode,
+                               weightKg: weight.kg, weightLb: weight.lb, mode: item.mode,
                                policy: item.policy, incKg: item.incKg, supersetGroup: item.supersetGroup,
                                weightSetAt: now)
+    }
+
+    /// The heaviest set's weight, preferring one with a pound number among sets of the same kg; 0 kg without sets.
+    static func heaviest(_ sets: [WorkoutSet]) -> PoundWeight {
+        let top = sets.map(\.weightKg).max() ?? 0
+        let tied = sets.filter { $0.weightKg == top }
+        return (tied.first { $0.weightLb != nil } ?? tied.first)?.weight ?? PoundWeight(kg: 0, lb: nil)
     }
 
     private static func replacing(_ sets: [WorkoutSet], index: Int,
@@ -68,8 +75,10 @@ enum TodaySetEdits {
         sets.enumerated().map { $0.offset == index ? transform($0.element) : $0.element }
     }
 
+    /// A not-done copy of `set`, weight and pound number included.
     private static func fresh(_ set: WorkoutSet, warmup: Bool, keepId: Bool = false) -> WorkoutSet {
-        WorkoutSet(id: keepId ? set.id : UUID(), weightKg: set.weightKg, reps: set.reps, sec: set.sec,
-                   minutes: set.minutes, distanceM: set.distanceM, warmup: warmup, multiplier: set.multiplier)
+        WorkoutSet(id: keepId ? set.id : UUID(), weightKg: set.weightKg, weightLb: set.weightLb, reps: set.reps,
+                   sec: set.sec, minutes: set.minutes, distanceM: set.distanceM, warmup: warmup,
+                   multiplier: set.multiplier)
     }
 }

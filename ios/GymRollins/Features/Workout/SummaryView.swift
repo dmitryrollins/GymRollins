@@ -163,6 +163,6 @@ struct SummaryView: View {
         let working = entry.sets.filter { !$0.warmup }
         guard let first = working.first else { return "\(entry.sets.count) sets" }
         return "\(working.count) \u{00D7} \(first.reps) \u{00B7} " +
-            WeightFormatter.format(kg: first.weightKg, unit: env.profile.unit, includeSecondary: false)
+            WeightFormatter.format(kg: first.weightKg, lb: first.weightLb, unit: env.profile.unit, includeSecondary: false)
     }
 }

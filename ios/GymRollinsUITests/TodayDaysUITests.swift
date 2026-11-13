@@ -1,6 +1,7 @@
 import XCTest
 
-/// Today shows later days read-only: swipe left for the next day, tap the date for a calendar, Back to today returns.
+/// Today's later days (owner, 2026-11-10): swipe left for the next day, tap the date for a calendar, Back to today
+/// returns. A later day is changed for that date only.
 final class TodayDaysUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -20,7 +21,7 @@ final class TodayDaysUITests: XCTestCase {
         waitForLabel(title(app), "Tomorrow")
         waitForLabel(app.staticTexts["today.summary"].firstMatch, "Rest day", contains: true)
         XCTAssertFalse(app.buttons["today.start"].exists, "a later day can't be started")
-        XCTAssertFalse(app.buttons["today.switch"].exists)
+        XCTAssertTrue(app.buttons["today.switch"].exists, "a later day can be switched")
 
         app.scrollViews.firstMatch.swipeLeft()
         waitForLabel(title(app), "Monday")
@@ -52,5 +53,38 @@ final class TodayDaysUITests: XCTestCase {
         app.buttons["today.date"].tap()
         app.buttons["today.datePicker.today"].tap()
         waitForLabel(title(app), "Today")
+    }
+
+    /// Monday loses Bench Press for that date only: today keeps it, Monday says so, and Reset this day brings it back.
+    func testALaterDayIsChangedForThatDateOnly() {
+        let app = XCUIApplication.launchReady { $0.buttons["today.start"] }
+        app.scrollViews.firstMatch.swipeLeft()
+        waitForLabel(title(app), "Tomorrow")
+        app.scrollViews.firstMatch.swipeLeft()
+        waitForLabel(title(app), "Monday")
+        XCTAssertFalse(app.buttons["today.start"].exists, "a later day can't be started")
+        let bench = app.descendants(matching: .any)["today.row.0025"]
+        XCTAssertTrue(bench.waitForExistence(timeout: 5))
+        app.buttons["today.row.menu.0025"].tap()
+        let delete = app.buttons["Delete from Workout"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+        XCTAssertTrue(bench.waitForNonExistence(timeout: 5))
+        waitForLabel(app.staticTexts["today.summary"].firstMatch, "changed for this day", contains: true)
+
+        app.buttons["today.backToToday"].tapCenter()
+        waitForLabel(title(app), "Today")
+        XCTAssertTrue(bench.waitForExistence(timeout: 5), "today's Push + Arms still has it")
+
+        app.scrollViews.firstMatch.swipeLeft()
+        waitForLabel(title(app), "Tomorrow")
+        app.scrollViews.firstMatch.swipeLeft()
+        waitForLabel(title(app), "Monday")
+        XCTAssertFalse(bench.exists, "Monday kept its change")
+        let reset = app.buttons["today.resetDay"]
+        app.scrollToHittable(reset)
+        reset.tap()
+        XCTAssertTrue(bench.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["today.summary"].firstMatch.label.contains("changed"))
     }
 }

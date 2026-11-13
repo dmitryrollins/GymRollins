@@ -8,8 +8,11 @@ export interface Env {
   /** exercise-photos: GymRollins' own photos and manifest.json, read by anyone through /photos/exercises. */
   EXERCISE_PHOTOS: R2Bucket
   BETTER_AUTH_SECRET: string
-  /** The audience of Apple's id tokens for the app. */
-  APPLE_BUNDLE_ID: string
+  /**
+   * The audiences of Apple's id tokens: the app's bundle ids, comma-separated (`appleBundleIds`). The first is the
+   * current app; the rest are older builds that still sign in.
+   */
+  APPLE_BUNDLE_IDS: string
   /** The address the Worker is reached at: Better Auth's base URL. */
   PUBLIC_BASE_URL: string
   /** "1" turns on email and password sign-in: debug builds and tests only. */

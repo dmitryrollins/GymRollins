@@ -40,7 +40,8 @@ final class SyncUITests: XCTestCase {
         app.buttons["workout.entry.0025"].tap()
         XCTAssertTrue(app.buttons["logging.logAll"].waitForExistence(timeout: 5))
         app.buttons["logging.logAll"].tap()
-        app.buttons["logging.next"].tap()
+        app.openNextExercise()
+        app.backToOverview()
         app.buttons["workout.finish"].tap()
         XCTAssertTrue(app.buttons["finish.discardEmpty"].waitForExistence(timeout: 3))
         app.buttons["finish.discardEmpty"].tap()
@@ -106,6 +107,7 @@ final class SyncUITests: XCTestCase {
         submitCredentials(app, email: email, button: "account.signIn")
         waitForLabel(app.staticTexts["account.status"], "Up to date")
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
         let entry = app.descendants(matching: .any)["body.entry.0"]
         XCTAssertTrue(entry.waitForExistence(timeout: 10))
         XCTAssertTrue(entry.label.contains("81.4"), entry.label)
@@ -274,6 +276,7 @@ final class SyncUITests: XCTestCase {
 
     private func addWeighIn(_ app: XCUIApplication, _ value: String) {
         app.tabBars.buttons["Body"].tap()
+        app.openBodySection("Weight")
         XCTAssertTrue(app.buttons["body.addWeighIn"].waitForExistence(timeout: 5))
         app.buttons["body.addWeighIn"].tap()
         let field = app.textFields["weighin.value"]

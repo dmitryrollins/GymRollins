@@ -50,7 +50,10 @@ struct WorkoutFlowView: View {
                 NavigationStack(path: $path) {
                     WorkoutOverviewView(session: session, finish: finish)
                         .navigationDestination(for: UUID.self) { entryId in
-                            LoggingView(model: .workout(session, entryId: entryId), finish: finish)
+                            // Keyed by the entry: Next exercise replaces the screen in place, and the new one must
+                            // start with its own state (no edit, focus or sheet of the previous exercise).
+                            LoggingView(model: .workout(session, entryId: entryId), finish: finish, openEntry: openEntry)
+                                .id(entryId)
                         }
                         .navigationDestination(for: String.self) { exerciseId in
                             ExerciseDetailView(exerciseId: exerciseId)
@@ -76,6 +79,12 @@ struct WorkoutFlowView: View {
                 }
             }
         }
+    }
+
+    /// Next exercise: replaces the open exercise screen, so Back still leads to the overview.
+    private func openEntry(_ id: UUID) {
+        if !path.isEmpty { path.removeLast() }
+        path.append(id)
     }
 
     /// The direct finish's "end at the last set or now?" question (`FinishSheet` asks it itself).

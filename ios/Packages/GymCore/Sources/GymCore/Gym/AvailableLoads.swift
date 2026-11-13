@@ -3,15 +3,22 @@ import Foundation
 /// A suggested weight and rep target after fitting them to what a listing offers.
 public struct FittedLoad: Sendable, Equatable {
     public let weightKg: Double
+    /// `weightKg`'s pound number (plan 38): the suggestion's own while the fit kept its kg; after a move, the
+    /// listing's when it was made in pounds (`PoundWeight.listing`); nil otherwise.
+    public let weightLb: Double?
     public let reps: Int
     /// The suggestion was heavier than anything available: the heaviest weight is kept and the rep target raised.
     public let atHeaviest: Bool
 
-    public init(weightKg: Double, reps: Int, atHeaviest: Bool = false) {
+    public init(weightKg: Double, weightLb: Double? = nil, reps: Int, atHeaviest: Bool = false) {
         self.weightKg = weightKg
+        self.weightLb = PoundWeight.agreeing(weightLb, kg: weightKg)
         self.reps = reps
         self.atHeaviest = atHeaviest
     }
+
+    /// The fitted weight as kg and pound number.
+    public var weight: PoundWeight { PoundWeight(kg: weightKg, lb: weightLb) }
 }
 
 /// Fits a progression suggestion to a listing's loads (spec §5, Build workout step 8): a weight stack caps and
@@ -31,7 +38,16 @@ public enum AvailableLoads {
     public static let maxRiseKg = 5.0
     public static let maxRiseFraction = 0.25
 
-    public static func fit(weightKg: Double, reps: Int, to loads: ListingLoads) -> FittedLoad {
+    /// `weightKg` and `reps` fitted to `loads`. `weightLb`, the weight's pound number, stays while the kg does; a weight
+    /// the fit moves to has the listing's pound number when the listing was made in pounds (`PoundWeight.listing`).
+    public static func fit(weightKg: Double, weightLb: Double? = nil, reps: Int, to loads: ListingLoads) -> FittedLoad {
+        let fitted = fitKg(weightKg: weightKg, reps: reps, to: loads)
+        let weight = fitted.weightKg == weightKg
+            ? PoundWeight(kg: weightKg, lb: weightLb) : PoundWeight.listing(kg: fitted.weightKg)
+        return FittedLoad(weightKg: weight.kg, weightLb: weight.lb, reps: fitted.reps, atHeaviest: fitted.atHeaviest)
+    }
+
+    private static func fitKg(weightKg: Double, reps: Int, to loads: ListingLoads) -> FittedLoad {
         let unchanged = FittedLoad(weightKg: weightKg, reps: reps)
         guard weightKg > 0 else { return unchanged }
         let allowedRise = max(maxRiseKg, weightKg * maxRiseFraction)
@@ -66,7 +82,7 @@ public enum AvailableLoads {
 public extension Suggestion {
     /// The suggestion on a listing's loads. A timed exercise has no rep target to raise.
     func fitted(to loads: ListingLoads) -> Suggestion {
-        let fitted = AvailableLoads.fit(weightKg: weightKg, reps: reps, to: loads)
-        return Suggestion(weightKg: fitted.weightKg, reps: sec == nil ? fitted.reps : reps, sec: sec, reason: reason)
+        let fitted = AvailableLoads.fit(weightKg: weightKg, weightLb: weightLb, reps: reps, to: loads)
+        return Suggestion(weight: fitted.weight, reps: sec == nil ? fitted.reps : reps, sec: sec, reason: reason)
     }
 }

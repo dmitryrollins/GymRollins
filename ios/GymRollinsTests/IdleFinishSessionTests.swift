@@ -46,6 +46,30 @@ import Testing
         #expect(s.idleFinishSuggestion() == at(21.5))
     }
 
+    /// The rest counted after the last set is its exercise's own (3 min here), not the workout's default (90 s).
+    @Test func theSuggestionAddsTheLastExercisesRest() {
+        let time = Clock(at(0))
+        let workout = Workout(startedAt: start, name: "Home", entries: [
+            WorkoutEntry(exerciseId: "0001", sets: [WorkoutSet(weightKg: 20, reps: 10)]),
+            WorkoutEntry(exerciseId: "0025", sets: [WorkoutSet(weightKg: 60, reps: 5)]),
+            WorkoutEntry(exerciseId: "0002", sets: [WorkoutSet(weightKg: 20, reps: 10)])
+        ])
+        let s = WorkoutSession(
+            workout: workout, clock: WorkoutClock(startedAt: start), restSeconds: 90, warmupRestSeconds: 60,
+            notifier: NoopRestNotifier(), now: { time.now }, persist: { _, _ in }, previousBests: { _ in nil },
+            saveFinished: { _, _ in }, discard: {}, workingRest: { id, defaultSec in id == "0025" ? 180 : defaultSec })
+        for (minute, entry) in [(5.0, 0), (20, 1)] {
+            time.now = at(minute)
+            s.logNextSet(entryId: s.workout.entries[entry].id, weightKg: 20, reps: 10)
+        }
+        time.now = at(107)
+        #expect(s.idleFinishSuggestion() == at(23))
+        time.now = at(108)
+        s.logNextSet(entryId: s.workout.entries[2].id, weightKg: 20, reps: 10) // the default rest's exercise, last
+        time.now = at(200)
+        #expect(s.idleFinishSuggestion() == at(109.5))
+    }
+
     @Test func finishingAtTheSuggestionShortensDurationAndCalories() throws {
         let env = try AppEnvironment(options: LaunchOptions(arguments: ["-uiTesting"]))
         let time = Clock(at(0))

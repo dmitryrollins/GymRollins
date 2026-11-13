@@ -8,8 +8,8 @@ import UIKit
 /// "Bar + Plates" caption under the weight.
 ///
 /// Stateless on purpose: the text shown in each box and keyboard focus are owned by the logging
-/// screen (`text(for:)` returns a binding into its draft dictionary; `focus` is its single
-/// `@FocusState`), so rebuilding this row after a session update can never reset a draft or drop
+/// screen (`text(for:)` returns a binding to its edit in progress, `SetEdit`; `focus` is its single
+/// `@FocusState`), so rebuilding this row after a session update can never reset typing or drop
 /// focus, and merely displaying a set never writes it back.
 struct SetTimelineRow: View {
     let set: WorkoutSet
@@ -25,9 +25,12 @@ struct SetTimelineRow: View {
     var focus: FocusState<SetField?>.Binding
     /// Today's plan before the workout (no done / current status).
     var isPlanned = false
-    /// Long-press menu on the badge (and VoiceOver actions): nil hides the item.
+    /// Long-press menu on the badge (and VoiceOver actions), and swiping the boxes left: nil hides the item and
+    /// turns the swipe off.
     var onRemove: (() -> Void)?
     var onToggleWarmup: (() -> Void)?
+    /// Any change closes the row's open Delete button (the screen scrolled, or a box took focus).
+    var swipeCloser = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -41,6 +44,8 @@ struct SetTimelineRow: View {
                     box(field)
                 }
             }
+            // Only the boxes narrow for the Delete button; the badge and the timeline stay put.
+            .swipeToDelete(identifier: "logging.set.\(index).delete", closing: swipeCloser, onDelete: onRemove)
         }
     }
 
@@ -131,6 +136,7 @@ struct SetTimelineRow: View {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(isActive ? Theme.textPrimary : Theme.divider, lineWidth: isActive ? 1.5 : 1)
                 }
+                .swipeToDeleteTarget() // the Delete button is one box tall, level with the boxes
                 .focused(focus, equals: field)
                 .accessibilityLabel("\(label), \(ordinalName)")
                 .accessibilityIdentifier("logging.set.\(index).\(field.identifierSuffix)")

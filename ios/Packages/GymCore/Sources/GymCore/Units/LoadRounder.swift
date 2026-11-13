@@ -41,12 +41,28 @@ public struct LoadRounder: Sendable, Equatable, Codable {
     public func nearest(_ kg: Double) -> Double { round(kg, .toNearestOrAwayFromZero) }
     public func down(_ kg: Double) -> Double { round(kg, .down) }
 
+    /// `nearest(_:)` with its pound number: in lb the grid value is one (plan 38); in kg, or with no grid, there is none.
+    public func nearestWeight(_ kg: Double) -> PoundWeight { weight(kg, .toNearestOrAwayFromZero) }
+    /// `down(_:)` with its pound number, as `nearestWeight(_:)`.
+    public func downWeight(_ kg: Double) -> PoundWeight { weight(kg, .down) }
+
     private func round(_ kg: Double, _ rule: FloatingPointRoundingRule) -> Double {
         guard step > 0 else { return kg }
+        return UnitConverter.toKg(grid(kg, rule), from: unit)
+    }
+
+    private func weight(_ kg: Double, _ rule: FloatingPointRoundingRule) -> PoundWeight {
+        guard step > 0 else { return PoundWeight(kg: kg, lb: nil) }
+        let value = grid(kg, rule)
+        return PoundWeight(kg: UnitConverter.toKg(value, from: unit), lb: unit == .lb ? value : nil)
+    }
+
+    /// `kg` on the grid, in `unit`.
+    private func grid(_ kg: Double, _ rule: FloatingPointRoundingRule) -> Double {
         let value = UnitConverter.fromKg(kg, to: unit) - offset
         // Snap the quotient to remove kg<->lb round-trip float drift before rounding,
         // so exact ties (e.g. 37.5 / 5 == 7.5) round correctly instead of drifting to 7.499999.
         let quotient = ((value / step) * 1e6).rounded() / 1e6
-        return UnitConverter.toKg(quotient.rounded(rule) * step + offset, from: unit)
+        return quotient.rounded(rule) * step + offset
     }
 }
