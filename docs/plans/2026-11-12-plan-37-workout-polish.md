@@ -125,3 +125,58 @@ The owner also asked to store weights in pounds as well as kilograms, so that a 
 - [ ] Simulator screenshots: the keyboard bar with the pad up, the home screen icon, Body on Muscles, and an exercise's Muscles tab.
 - [ ] Append `## Outcome` and commit `docs: plan 37 outcome`.
 - [ ] A phone install only with the owner's go-ahead, after a Library backup. Not merged, not pushed.
+
+## Outcome (2026-11-12)
+
+**Commits** on `feat-workout-polish`, from `feat-workout-fixes` e228b64:
+
+| Commit | What |
+| --- | --- |
+| d408aa4 | The plan |
+| 7057c66 | Task 1: `KeyboardBar` in the screen's bottom inset replaces the `.keyboard` toolbar; the background reaches under the keys |
+| 32192ef | Task 2: the app icon, option C, drawn by `scripts/make-app-icon.py` |
+| 55b5409 | Plan 38's doc (weights keep their pound number) |
+| 285f78e, merge 713b141 | Task 4: an exercise's Muscles tab shows its muscles on the body map (`ExerciseMuscleMap`) |
+| 806c820, merge 1022739 | Task 3: Body opens on Muscles, with a Muscles · Weight · Strength switch |
+| aba9832 | Review fixes |
+
+**Review:** a reviewer agent checked `git diff feat-workout-fixes..1022739 -- ios scripts`. It found no CRITICAL or HIGH issues. Fixed in aba9832:
+- **MEDIUM:** no test checked where the keyboard bar sits. `SetEditingUITests` now checks that Done sits above the keys (when the software keyboard shows) and that Done closes the bar.
+- **MEDIUM:** the Body test only switched tabs and back, which a plain `@State` would pass too. It now relaunches on `-diskStore` and checks that Weight is still picked.
+- **LOW:** the key showed "Target" for an exercise whose target isn't on the map. It now names only the colours the map uses (`ExerciseMuscleMap.keyRoles`).
+- **LOW:** the keyboard bar's two capsules sit in one `GlassEffectContainer`.
+
+**Left as they are:**
+- **MEDIUM:** when a box takes focus, the bottom inset changes height (log bar to keyboard bar) during the keyboard animation, so `scrollTo` may centre a box near the bottom against the old layout. The simulator didn't show it. Check it on the phone with the last set of a long exercise.
+- **LOW:**
+  - colour is the only cue telling target from secondary on the map; the card under it names both;
+  - switching Body sections rebuilds their cards, which may flash while they load;
+  - `BodyMapView` holds two closures, so SwiftUI redraws its ~20 shapes on every parent update;
+  - no test checks a stored section that isn't valid (it falls back to Muscles).
+
+**Deviations from the plan:**
+- In DEBUG, a `-uiTesting` launch without `-diskStore` forgets `bodySection`, so every UI test starts on Muscles. A `-diskStore` relaunch keeps it, as on a phone.
+- `ExerciseMuscleMap`'s static helpers are `nonisolated`, so unit tests can call them off the main actor. The first test run crashed the test host without this.
+
+**Tests:**
+- Full suite on 1022739, before the review fixes (`scripts/ios-test.sh`, iPhone 17 Pro Max): 1288 tests, 1267 passed, 2 failed, 19 skipped.
+  - `AccessibilityAuditUITests.testAgentsAudit`: text clipped on `agents.host.*` ("Connected from claude.ai"). It fails the same way on e228b64 on the Pro Max, so it predates this plan.
+  - `AccessibilityAuditUITests.testUseWithClaudeAudit`: contrast on `claude.coach.text`. Run alone, it passed 2 of 2, so it's flaky.
+- aba9832 is the same patch as 6090c49 on `feat-weights-lb`. That branch's full suite on 0661e86 (iPhone 17 Pro, plans 37 and 38 together) ran 1327 tests: 1308 passed, 0 failed, 19 skipped.
+
+**Screenshots** (iPhone 17 Pro simulator):
+- **Keyboard bar:** the number pad is up. The chevrons and Done are white glass capsules with nothing behind them and a gap above the keys. There's no black strip.
+- **Muscles tab:** Barbell Bench Press (0025) and Cable Bar Lateral Pulldown (0150). Target muscles are red, secondary ones amber, the "Target · Secondary" key sits under the figures, and the text card is below that.
+- **Body, Muscles:** the switch under the title, the recovery card, and all of weekly sets on one screen, with no scrolling needed.
+- **Body, Weight:** the switch, the goal card with Add weigh-in, the chart and the weigh-ins.
+- **Icon:** the 1024 px render. The built app's `Info.plist` names `AppIcon`, and the bundle has its PNGs and `Assets.car`. The simulator gave no home-screen capture ("Timeout waiting for screen surfaces").
+
+**Found after the review:**
+- `ReadmeScreenshotsUITests.test04Body` failed, so `scripts/readme-screenshots.sh` would have stopped on the missing `04-body`. It lifted weekly sets to just under the status bar, but the Muscles section now ends with weekly sets, so the list can't scroll that far. It now scrolls to the end of the list. The normal suite skips this class, which is why the full run didn't catch it. Its only helper user, `position`, went too.
+- GymData's `DomainValidationTests` expected "routine" in two messages that plan 34 (57e6479) changed to "workout". The test now expects the new wording. GymData: 378 tests pass.
+
+**Not verified:**
+- The keyboard bar on the phone, with the real keyboard.
+- How iOS's dark, tinted and clear looks render the icon.
+- The phone install needs the owner's go-ahead and a Library backup first.
+- Not merged and not pushed.
