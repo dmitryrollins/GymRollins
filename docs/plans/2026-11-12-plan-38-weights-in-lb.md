@@ -143,3 +143,55 @@ Body weight, the bar and plates, listings, calories and the plate sheet are not 
 - [ ] Ask the owner, then apply migration 0012 to the remote D1 and deploy the Worker. Check `/mcp` gives 401 without a token.
 - [ ] Ask the owner, then install on the phone after a Library backup. Compare row counts, and count plan weights that have `weightLb` afterwards.
 - [ ] Append `## Outcome` and commit `docs: plan 38 outcome`.
+
+## Outcome (2026-11-12, before the deploy and the install)
+
+**Commits** on `feat-weights-lb`, from `feat-workout-polish` 55b5409:
+
+| Commit | What |
+| --- | --- |
+| 55b5409 | The plan |
+| 4d96e3c, merge d1b9573 | Task 1: GymCore, GymData and GymSync keep the pound number (`PoundWeight`, `w_lb`, `weight_lb`) |
+| 9f69f4f, merge 0dadfde | Task 3: migration 0012; sync, `change_plan`, `log_workout` and the reads keep the pound number; agents send pounds |
+| 247fe91 | The plan weight's pound range sits in `PlanChangeLimits` on both sides, so the drift test compares it |
+| c7bdc54 | Plan 37's Tasks 3 and 4 merged in |
+| 4b4b276, c49c7ed, merge 4c550ac | Task 2: a 0 kg weight has no pound number; the app shows and keeps the pound number; the one-time plan weight cleanup |
+| 6090c49, 1fa627e, 8e7b95d, merge 0661e86 | Review fixes for plans 37 and 38 |
+| merge 3f6de5a | Plan 37's outcome and two test fixes |
+
+**Review:** a reviewer agent checked `git diff feat-workout-polish...4c550ac`, hardest on the invariant. It found no CRITICAL or HIGH issues and no path that changes `weightKg` and leaves a stale `weightLb`. Fixed:
+- **MEDIUM:** the cleanup flag was set even with no plan to clean. After a reinstall or a new sign-in, the plan arrives with the first pull, after the launch cleanup. Now the flag isn't set while the plan is empty, and the cleanup runs again after pulled changes (`onRemoteChanges`) until it has run (1fa627e, `PlanWeightsAfterPullTests`).
+- **MEDIUM:** one routine that `DomainLimits` refuses stopped the cleanup for the rest, on every launch. Now each routine is saved on its own; one that fails is logged by id and skipped (1fa627e).
+- **MEDIUM, deploy order:** a server without migration 0012 would fail every set sync and `log_workout`, since the new code reads `w_lb`. A phone syncing against the old server would push `w_lb` and could pull its sets back without it. Hence the order: migration, then the Worker, then the phone. An old app against the new server is fine: its sets store `w_lb` as NULL.
+- **LOW:** return-to-training weights now keep their pound number (`LoadRounder.downWeight`, 1fa627e).
+- **LOW:** the server gave a 0 kg set `weight_lb: 0`, unlike the app. `agreeingLb` now returns null for 0 kg (8e7b95d).
+
+**Left as they are (LOW):**
+- The PR line on Summary converts the record's kg (`RecordDetector` carries no pound number). It differs only for off-grid kg sets.
+- There's no test that opens a store written by the previous model. The new attributes are optional with no default, a lightweight migration; the store tests are round trips.
+- In lb, a carried weight with no pound number snaps to the nearest ½ lb, so an old 20 kg set suggests 44 lb. The plan intends this.
+
+**Deviations from the plan:**
+- **The cleanup is gentler than written.** A plan weight whose kg already is a ½ lb number keeps its kg and only gains the pound number. Only the others snap to the exercise's grid. A strict snap would have moved weights chosen in pounds that sit off a coarser grid, such as the 44 lb and 53 lb kettlebells.
+- **A 0 kg weight has no pound number,** in GymCore and on the server, so bodyweight and timed sets never sync `w_lb: 0`.
+- **`PlanChangeLimits.weightLb`** (0–1100) replaces a separate server constant, so `limits-drift.test.ts` compares it with GymCore.
+- **Test seed:** in DEBUG, `-seedKgPlanWeight` seeds a 20.3 kg plan weight with no pound number for `PoundWeightUITests`.
+- **Known gap:** on a device whose store has routines before its first pull (an onboarding template, for example), the cleanup runs on those and sets the flag, so the server's plan pulled afterwards isn't cleaned. This only affects a new device. The owner's phone already has its plan.
+
+**Tests:**
+- Full iOS suite on 0661e86 (`scripts/ios-test.sh`, iPhone 17 Pro): 1327 tests, 1308 passed, 0 failed, 19 skipped.
+- GymCore `swift test`: 610 passed. GymSync: 281 passed.
+- GymData: 383 passed on 3f6de5a. On 0661e86, two `DomainValidationTests` failed because they expected wording that plan 34 changed. They were fixed on plan 37's branch and merged in.
+- Server `npx vitest run`: 797 passed in 57 files. `npx tsc --noEmit` is clean.
+- Privacy scan of `git diff e228b64...feat-weights-lb` and its commit messages found no surname, no account ID, no secret-like values, no 32-hex IDs, no `/Users/` paths and no secret files.
+
+**What the install should change on the phone** (counted on a copy of the plan 36 backup; only counts were read):
+- The profile unit is lb, so the cleanup runs on the first launch.
+- 37 plan weights: 12 off the ½ lb grid, all tenths of a kg from agents, snap to their grid. The other 25 gain their pound number unchanged.
+- Logged history isn't touched: 2131 imported sets and 56 app-logged sets keep kg only and show converted to one decimal.
+
+**Not done yet:**
+- **Deploy** (owner's approval): run `deploy-p38.sh` from the session scratchpad. It prints the D1 bookmark, applies migration 0012 (it should list `0012_weight_lb.sql` alone), deploys the Worker, then checks `/mcp` gives 401 and the well-known endpoint 200.
+- **Phone install** (owner's approval, after the deploy and a Library backup): compare row counts before and after, and count plan weights with a pound number.
+- An agent's `change_plan` with `weightLb` against the live server.
+- Not merged and not pushed.
