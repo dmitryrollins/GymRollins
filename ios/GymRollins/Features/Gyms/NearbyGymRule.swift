@@ -13,7 +13,7 @@ struct GymCoordinate: Sendable, Hashable {
     }
 }
 
-/// A fitness center found on Apple Maps. `placeId` is `MKMapItem.identifier`.
+/// A gym found on Apple Maps (`GymPlaceMatching` says which places count). `placeId` is `MKMapItem.identifier`.
 struct GymPlace: Sendable, Hashable, Identifiable {
     let placeId: String
     let name: String
