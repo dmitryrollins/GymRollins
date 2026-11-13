@@ -15,7 +15,7 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             ALLOW_PASSWORD_AUTH: '1',
             BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret-000001',
-            APPLE_BUNDLE_ID: 'com.rollins.gymrollins',
+            APPLE_BUNDLE_IDS: 'com.gymrollins.app,com.rollins.gymrollins',
             PUBLIC_BASE_URL: 'http://localhost',
             OAUTH_REGISTRATIONS_PER_HOUR: '1000',
           },

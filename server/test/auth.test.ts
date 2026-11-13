@@ -1,11 +1,14 @@
 import { env } from 'cloudflare:workers'
 import { getMigrations } from 'better-auth/db/migration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createAuth, passwordAuthAllowed, SESSION_EXPIRES_IN } from '../src/auth/auth.ts'
+import { appleBundleIds, createAuth, passwordAuthAllowed, SESSION_EXPIRES_IN } from '../src/auth/auth.ts'
 import { appleIdToken, appleKeyPair, mockAppleKeys, sha256Hex } from './apple.ts'
 import { request, signUp } from './helpers.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+/** The app's bundle id (VIPPIE LLC's TestFlight and App Store app), and the one the first builds were signed with. */
+const APP_ID = 'com.gymrollins.app'
+const FIRST_BUILDS_ID = 'com.rollins.gymrollins'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -93,7 +96,7 @@ describe('Sign in with Apple, with the id token the app gets', () => {
   it('signs in with the raw nonce, without an Origin header, and gives a session token', async () => {
     const keys = await mockAppleKeys()
     const idToken = await appleIdToken(keys, {
-      aud: env.APPLE_BUNDLE_ID,
+      aud: APP_ID,
       sub: 'apple-1',
       nonce: await sha256Hex('raw-nonce'),
     })
@@ -107,10 +110,18 @@ describe('Sign in with Apple, with the id token the app gets', () => {
   it('finds the same account on the next sign-in', async () => {
     const keys = await mockAppleKeys()
     const once = async () => {
-      const idToken = await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub: 'apple-2', nonce: await sha256Hex('n') })
+      const idToken = await appleIdToken(keys, { aud: APP_ID, sub: 'apple-2', nonce: await sha256Hex('n') })
       return sessionUser((await signInWithApple(idToken, 'n')).headers.get('set-auth-token')!)
     }
     expect(await once()).toBe(await once())
+  })
+
+  it('signs in from the first builds too, whose bundle id was com.rollins.gymrollins', async () => {
+    const keys = await mockAppleKeys()
+    const idToken = await appleIdToken(keys, { aud: FIRST_BUILDS_ID, sub: 'apple-first', nonce: await sha256Hex('n') })
+    const res = await signInWithApple(idToken, 'n')
+    expect(res.status).toBe(200)
+    expect(await sessionUser(res.headers.get('set-auth-token')!)).toMatch(UUID)
   })
 
   it("refuses another app's token, a wrong nonce and a key Apple never published", async () => {
@@ -118,19 +129,19 @@ describe('Sign in with Apple, with the id token the app gets', () => {
     const claims = { sub: 'apple-3', nonce: await sha256Hex('n') }
     const status = async (idToken: string, nonce: string) => (await signInWithApple(idToken, nonce)).status
     expect(await status(await appleIdToken(keys, { ...claims, aud: 'com.other.app' }), 'n')).toBe(401)
-    expect(await status(await appleIdToken(keys, { ...claims, aud: env.APPLE_BUNDLE_ID }), 'other')).toBe(400)
+    expect(await status(await appleIdToken(keys, { ...claims, aud: APP_ID }), 'other')).toBe(400)
     const stranger = await appleKeyPair()
-    expect(await status(await appleIdToken(stranger, { ...claims, aud: env.APPLE_BUNDLE_ID }), 'n')).toBe(401)
+    expect(await status(await appleIdToken(stranger, { ...claims, aud: APP_ID }), 'n')).toBe(401)
   })
 
   it("refuses the token's own nonce claim sent back as the nonce: anyone with the token could replay it", async () => {
     const keys = await mockAppleKeys()
     const hashed = await sha256Hex('raw-nonce')
     const tokens = [
-      [await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub: 'apple-6', nonce: hashed }), hashed],
+      [await appleIdToken(keys, { aud: APP_ID, sub: 'apple-6', nonce: hashed }), hashed],
       // Apple was given the raw nonce: the claim is the raw value, which Better Auth alone would also take.
-      [await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub: 'apple-6', nonce: 'raw-nonce' }), 'raw-nonce'],
-      [await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub: 'apple-6' }), 'raw-nonce'],
+      [await appleIdToken(keys, { aud: APP_ID, sub: 'apple-6', nonce: 'raw-nonce' }), 'raw-nonce'],
+      [await appleIdToken(keys, { aud: APP_ID, sub: 'apple-6' }), 'raw-nonce'],
       ['not-a-jwt', 'raw-nonce'],
       [`x.${btoa('{"nonce":').replace(/=+$/, '')}.y`, 'raw-nonce'],
     ]
@@ -149,7 +160,7 @@ describe('Sign in with Apple, with the id token the app gets', () => {
     const keys = await mockAppleKeys()
     const sub = `apple-${crypto.randomUUID()}`
     for (let attempt = 0; attempt < 2; attempt++) {
-      const idToken = await appleIdToken(keys, { aud: env.APPLE_BUNDLE_ID, sub, nonce: await sha256Hex(`n${attempt}`) })
+      const idToken = await appleIdToken(keys, { aud: APP_ID, sub, nonce: await sha256Hex(`n${attempt}`) })
       expect((await signInWithApple(idToken, `n${attempt}`)).status).toBe(200)
       const { results } = await env.DB.prepare(
         "SELECT idToken, accessToken, refreshToken FROM account WHERE providerId = 'apple' AND accountId = ?1",
@@ -161,7 +172,7 @@ describe('Sign in with Apple, with the id token the app gets', () => {
   it('refuses a sign-in that leaves the nonce out', async () => {
     const keys = await mockAppleKeys()
     const idToken = await appleIdToken(keys, {
-      aud: env.APPLE_BUNDLE_ID,
+      aud: APP_ID,
       sub: 'apple-4',
       nonce: await sha256Hex('n'),
     })
@@ -208,5 +219,16 @@ describe('Sign in with Apple, with the id token the app gets', () => {
     expect((await request('GET', '/api/auth/callback/apple')).status).toBe(404)
     expect((await request('POST', '/api/auth/link-social', { token, body: { provider: 'apple' } })).status).toBe(404)
     expect((await request('POST', '/api/auth/update-user', { token, body: { name: 'x' } })).status).toBe(404)
+  })
+})
+
+describe('the bundle ids Apple id tokens may carry', () => {
+  it('come from APPLE_BUNDLE_IDS, comma-separated, the current app first', () => {
+    expect(appleBundleIds({ APPLE_BUNDLE_IDS: env.APPLE_BUNDLE_IDS })).toEqual([APP_ID, FIRST_BUILDS_ID])
+    expect(appleBundleIds({ APPLE_BUNDLE_IDS: ' a.b , c.d ,, ' })).toEqual(['a.b', 'c.d'])
+  })
+
+  it('are never none', () => {
+    expect(() => appleBundleIds({ APPLE_BUNDLE_IDS: ' , ' })).toThrow('APPLE_BUNDLE_IDS')
   })
 })

@@ -24,6 +24,17 @@ export function passwordAuthAllowed(env: Env): boolean {
   }
 }
 
+/**
+ * The bundle ids Apple's id tokens may carry, from APPLE_BUNDLE_IDS (comma-separated), the current app first. Sign in
+ * with Apple scopes a user's id to the developer team, so each app id signs in to its own accounts. Throws when the
+ * var names none: no Apple sign-in could work.
+ */
+export function appleBundleIds(env: Pick<Env, 'APPLE_BUNDLE_IDS'>): string[] {
+  const ids = env.APPLE_BUNDLE_IDS.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+  if (ids.length === 0) throw new Error('APPLE_BUNDLE_IDS names no bundle id')
+  return ids
+}
+
 /** The provider tokens Better Auth would keep on an `account` row. */
 const PROVIDER_TOKENS = ['idToken', 'accessToken', 'refreshToken'] as const
 
@@ -37,6 +48,7 @@ function withoutProviderTokens(data: Record<string, unknown>): { data: Record<st
 
 /** Built per request, because the D1 binding only exists on `env`. Better Auth recognises D1 by its shape. */
 export function createAuth(env: Env) {
+  const bundleIds = appleBundleIds(env)
   return betterAuth({
     database: env.DB,
     secret: env.BETTER_AUTH_SECRET,
@@ -50,9 +62,10 @@ export function createAuth(env: Env) {
         // Native Sign in with Apple only: the app sends Apple's id token, whose audience is the app's bundle id, and
         // the raw nonce, whose SHA-256 the token must carry (checked in routes.ts before Better Auth, which would also
         // take the claim itself). There is no web flow, so no Services ID and no client secret.
-        clientId: env.APPLE_BUNDLE_ID,
+        clientId: bundleIds[0],
         clientSecret: 'unused-native-id-token-only',
-        appBundleIdentifier: env.APPLE_BUNDLE_ID,
+        appBundleIdentifier: bundleIds[0],
+        audience: bundleIds,
       },
     },
     // encryptOAuthTokens would leave the id token in plain text (it covers access and refresh tokens only).
