@@ -1,11 +1,12 @@
 import Foundation
 import MapKit
 
-/// Fitness centers on Apple Maps. Both calls throw when Maps can't be reached; callers show a plain line, not an alert.
+/// Gyms on Apple Maps (`GymPlaceMatching` says which places count). Both calls throw when Maps can't be reached;
+/// callers show a plain line, not an alert.
 @MainActor
 protocol GymPlaceSearch {
     func search(query: String, near: GymCoordinate?) async throws -> [GymPlace]
-    /// Fitness centers within 150 m of `coordinate`.
+    /// Gyms within 150 m of `coordinate`.
     func nearby(_ coordinate: GymCoordinate) async throws -> [GymPlace]
 }
 
@@ -40,27 +41,42 @@ struct FakeGymPlaceSearch: GymPlaceSearch {
     }
 }
 
+/// Each call asks Maps twice at once: for fitness centers, and for every place, since some gyms have no category.
 struct MapKitGymPlaceSearch: GymPlaceSearch {
-    private static let filter = MKPointOfInterestFilter(including: [.fitnessCenter])
+    private static let fitnessCenters = MKPointOfInterestFilter(including: [.fitnessCenter])
 
     func search(query: String, near: GymCoordinate?) async throws -> [GymPlace] {
+        async let tagged = Self.searchPlaces(query, near: near, fitnessCentersOnly: true)
+        async let others = Self.searchPlaces(query, near: near, fitnessCentersOnly: false)
+        return try await GymPlaceMatching.searchResults(query: query, fitnessCenters: tagged, others: others)
+    }
+
+    func nearby(_ coordinate: GymCoordinate) async throws -> [GymPlace] {
+        async let tagged = Self.nearbyPlaces(coordinate, fitnessCentersOnly: true)
+        async let others = Self.nearbyPlaces(coordinate, fitnessCentersOnly: false)
+        return try await GymPlaceMatching.nearbyResults(fitnessCenters: tagged, others: others)
+    }
+
+    /// Requests are built here, on the main actor: MapKit's request and filter types aren't Sendable.
+    private static func searchPlaces(_ query: String, near: GymCoordinate?,
+                                     fitnessCentersOnly: Bool) async throws -> [GymPlace] {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
-        request.pointOfInterestFilter = Self.filter
+        request.pointOfInterestFilter = fitnessCentersOnly ? fitnessCenters : nil
         request.resultTypes = .pointOfInterest
         if let near {
             request.region = MKCoordinateRegion(
                 center: CLLocationCoordinate2D(latitude: near.latitude, longitude: near.longitude),
                 latitudinalMeters: 20_000, longitudinalMeters: 20_000)
         }
-        return try await Self.run(request)
+        return try await run(request)
     }
 
-    func nearby(_ coordinate: GymCoordinate) async throws -> [GymPlace] {
+    private static func nearbyPlaces(_ coordinate: GymCoordinate, fitnessCentersOnly: Bool) async throws -> [GymPlace] {
         let center = CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude)
         let request = MKLocalPointsOfInterestRequest(center: center, radius: NearbyGymRule.radiusMeters)
-        request.pointOfInterestFilter = Self.filter
-        return try await Self.run(request)
+        request.pointOfInterestFilter = fitnessCentersOnly ? fitnessCenters : nil
+        return try await run(request)
     }
 
     /// Maps says "not found" when nothing matched: that is no results, not an outage.
