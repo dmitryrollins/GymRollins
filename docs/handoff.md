@@ -4,7 +4,7 @@ Written so a new session on another machine can pick up the work. Plans and thei
 
 ## Branches
 
-Nothing after `main` 7ef0b20 is merged yet. Each branch is built on the one before it:
+PR #3 merged all of these into `main` on 2026-11-13, so work from `main` now. Each branch was built on the one before it:
 
 | Branch | What it adds |
 |---|---|
@@ -12,13 +12,11 @@ Nothing after `main` 7ef0b20 is merged yet. Each branch is built on the one befo
 | `feat-workout-fixes` | Plan 36 (workout screen fixes) |
 | `feat-workout-polish` | Plan 37 (keyboard bar, app icon, Body switch, muscle map) |
 | `feat-weights-lb` | Plan 38 (weights keep their pound number). The owner's phone runs aa2f311 |
-| `feat-testflight` | TestFlight prep under VIPPIE LLC. **Holds everything above: start here** |
-
-One PR from `feat-testflight` into `main` carries plans 34-38 and the TestFlight prep. Run the privacy scan below before opening it.
+| `feat-testflight` | TestFlight prep under VIPPIE LLC, on top of everything above |
 
 ## What's live
 
-- **Server** `api.gymrollins.com`: Worker version 0b30adbf, built from `feat-testflight`. D1 has every migration up to 0012.
+- **Server** `api.gymrollins.com`: Worker version 0b30adbf, the server code now on `main`. D1 has every migration up to 0012.
   - It accepts Sign in with Apple id tokens for both bundle ids (`APPLE_BUNDLE_IDS` in `server/wrangler.jsonc`).
 - **Owner's phone:** `feat-weights-lb` aa2f311, bundle id `com.rollins.gymrollins`, synced with the server.
 
@@ -43,8 +41,7 @@ One PR from `feat-testflight` into `main` carries plans 34-38 and the TestFlight
    - Fix: point the new apple `account` row at the owner's existing user, then delete the empty user.
    - This writes to the production D1. It needs the owner's OK, with a time-travel bookmark taken first.
 3. **Plan 38 check on the phone.** After the owner has opened the app once, count the plan weights that have a pound number in a *copy* of the store. Expect 37: 12 snapped to the grid, 25 that only gained the number.
-4. **Merge to main** (see Branches).
-5. **Older open items:**
+4. **Older open items:**
    - Plan 34 Task 9 (screenshots and Outcome).
    - The website plan 3 questions.
    - Deleting the `STAGING_PASSWORD` secret.
@@ -52,7 +49,7 @@ One PR from `feat-testflight` into `main` carries plans 34-38 and the TestFlight
 
 ## Setting up a new machine
 
-- `git checkout feat-testflight`. Then `cd ios && xcodegen`: the Xcode project and the Info.plists are generated, not committed.
+- Work on `main`, or on a new branch from it. Run `cd ios && xcodegen`: the Xcode project and the Info.plists are generated, not committed.
 - `ios/Config/Local.xcconfig` (gitignored) holds `DEVELOPMENT_TEAM = <team id>`. For a build that updates the phone's existing install, also put `APP_BUNDLE_ID = com.rollins.gymrollins` there, or pass it on the command line.
 - `cd server && npm ci`. Copy `server/.dev.vars` from the old machine by hand: it holds secrets and is never committed or printed.
 - `npx wrangler login` with a login that sees the VIPPIE LLC account. `docs/cloudflare-checklist.md` covers the rest.
