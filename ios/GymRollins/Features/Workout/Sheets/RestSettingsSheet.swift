@@ -36,7 +36,6 @@ struct RestSettingsSheet: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Capsule().fill(Color.white.opacity(0.3)).frame(width: 40, height: 5)
             HStack {
                 DisplayTitle(text: "Rest Timer", size: 28)
                 Spacer()

@@ -99,7 +99,11 @@ struct LoggingView: View {
             if let exerciseId = model.exerciseId { NavigationStack { ExerciseHistoryView(exerciseId: exerciseId) } }
         }
         .sheet(isPresented: $showPlates) {
-            if let sets = model.sets { PlatesSheet(weightKg: plateTargetWeightKg(sets)) }
+            if let sets = model.sets {
+                let targets = PlateTargets.targets(for: sets)
+                PlatesSheet(targets: targets,
+                            current: PlateTargets.current(in: targets, sets: sets, editing: focus?.setId)?.id)
+            }
         }
         .sheet(isPresented: $showSwap) {
             if let exerciseId = model.exerciseId {
@@ -273,12 +277,6 @@ struct LoggingView: View {
     }
 
     private func activeSet(_ sets: [WorkoutSet]) -> WorkoutSet? { sets.first { !$0.done } }
-
-    /// Plate math is most useful for the working weight, not whatever warm-up happens to be next.
-    private func plateTargetWeightKg(_ sets: [WorkoutSet]) -> Double {
-        let working = sets.first { !$0.warmup && !$0.done }
-        return working?.weightKg ?? activeSet(sets)?.weightKg ?? sets.first?.weightKg ?? 0
-    }
 }
 
 // MARK: - Hero controls
