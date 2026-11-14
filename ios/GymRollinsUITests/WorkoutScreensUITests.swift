@@ -14,11 +14,21 @@ final class WorkoutScreensUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["logging.title"].label, "Barbell Bench Press")
         XCTAssertEqual(app.textFields["logging.set.0.weight"].value as? String, "45")
 
+        // The plate calculator opens on the set the owner is on: the first warm-up, the bar alone.
+        app.buttons["logging.chip.plates"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["plates.barOnly"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["plates.target.warmup.1"].isSelected)
+        app.buttons["plates.done"].tap()
+        XCTAssertTrue(app.buttons["plates.done"].waitForNonExistence(timeout: 3))
+
         app.buttons["logging.logSet"].tapCenter()
         XCTAssertTrue(app.buttons["logging.rest.skip"].waitForExistence(timeout: 3))
         app.buttons["logging.rest.skip"].tap()
 
+        // Its row of weights switches to the working sets'.
         app.buttons["logging.chip.plates"].tap()
+        XCTAssertTrue(app.buttons["plates.target.working.1"].waitForExistence(timeout: 3))
+        app.buttons["plates.target.working.1"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["plates.side.45"].waitForExistence(timeout: 3))
     }
 

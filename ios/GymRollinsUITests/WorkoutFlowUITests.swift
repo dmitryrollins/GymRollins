@@ -33,6 +33,8 @@ final class WorkoutFlowUITests: XCTestCase {
 
         // Plate calculator for the 135 lb working weight: 45 lb bar + one 45 lb plate each side
         app.buttons["logging.chip.plates"].tap()
+        XCTAssertTrue(app.buttons["plates.target.working.1"].waitForExistence(timeout: 3))
+        app.buttons["plates.target.working.1"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["plates.side.45"].waitForExistence(timeout: 3))
         // `app.swipeDown()` synthesizes its drag from the whole-app frame, which starts above a
         // `.medium`-height sheet and never reaches its dismiss gesture; anchoring a manual drag to
