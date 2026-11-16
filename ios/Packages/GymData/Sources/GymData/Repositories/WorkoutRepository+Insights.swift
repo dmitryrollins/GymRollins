@@ -18,4 +18,16 @@ extension WorkoutRepository {
         d.propertiesToFetch = [\.startedAt]
         return try context.fetch(d).map(\.startedAt)
     }
+
+    /// The spans of finished, non-deleted workouts that started at or after `since` (all when nil), for attaching
+    /// outside workouts to them (plan 39, rule 6). Entries aren't read.
+    public func finishedSpans(since: Date?) throws -> [WorkoutSpan] {
+        let start = since ?? .distantPast
+        var d = FetchDescriptor<WorkoutRecord>(
+            predicate: #Predicate { $0.deletedAt == nil && !$0.isActive && $0.startedAt >= start })
+        d.propertiesToFetch = [\.id, \.startedAt, \.endedAt]
+        return try context.fetch(d).compactMap { r in
+            r.endedAt.map { WorkoutSpan(id: r.id, start: r.startedAt, end: $0) }
+        }
+    }
 }
