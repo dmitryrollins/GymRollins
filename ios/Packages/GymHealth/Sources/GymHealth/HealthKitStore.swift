@@ -14,6 +14,8 @@ public actor HealthKitStore: HealthStore {
     // Shared with the Apple Watch app, which writes the same metadata on the workouts it records (plan 17).
     static let workoutNameKey = WatchHealthRules.workoutNameKey
     static let exportMarkerKey = WatchHealthRules.exportMarkerKey
+    /// Starts the sync identifier of every workout or weigh-in GymRollins writes (the watch app uses the same).
+    static let syncIdentifierPrefix = "gymrollins."
 
     public init(bundleId: String? = Bundle.main.bundleIdentifier) {
         let available = HKHealthStore.isHealthDataAvailable()
@@ -172,7 +174,14 @@ public actor HealthKitStore: HealthStore {
         let result = try await descriptor.result(for: store)
         let added = result.addedSamples.compactMap(sample)
         let newAnchor = try NSKeyedArchiver.archivedData(withRootObject: result.newAnchor, requiringSecureCoding: true)
-        return HealthBodyChanges(added: added, deleted: result.deletedObjects.map(\.uuid), anchor: newAnchor)
+        return HealthBodyChanges(added: added, deleted: result.deletedObjects.filter { !isOwnDeletion($0) }.map(\.uuid),
+                                           anchor: newAnchor)
+    }
+
+    /// GymRollins' own workout, re-exported or deleted by the app: Health reports that as a deletion too, but there is
+    /// no imported row for it, so it is dropped here instead of waiting in the unmatched list.
+    private func isOwnDeletion(_ object: HKDeletedObject) -> Bool {
+        (object.metadata?[HKMetadataKeySyncIdentifier] as? String)?.hasPrefix(Self.syncIdentifierPrefix) == true
     }
 
     private func sample(_ quantity: HKQuantitySample) -> HealthBodySample? {
@@ -353,7 +362,7 @@ public actor HealthKitStore: HealthStore {
     private func marker(_ externalId: UUID, kind: String) -> [String: Any] {
         [HKMetadataKeyExternalUUID: externalId.uuidString, Self.exportMarkerKey: true,
          WatchHealthRules.writerKey: WatchHealthRules.phoneWriter,
-         HKMetadataKeySyncIdentifier: "gymrollins.\(kind).\(externalId.uuidString)",
+         HKMetadataKeySyncIdentifier: "\(Self.syncIdentifierPrefix)\(kind).\(externalId.uuidString)",
          HKMetadataKeySyncVersion: NSNumber(value: Int64(Date().timeIntervalSince1970 * 1_000))]
     }
 
