@@ -4,6 +4,7 @@ import planChangeSource from '../../ios/Packages/GymCore/Sources/GymCore/Plan/Pl
 import appSchema from '../migrations/0002_app_schema.sql?raw'
 import capsMigration from '../migrations/0005_gyms_photos.sql?raw'
 import accountCaps from '../migrations/0010_account_caps.sql?raw'
+import activityMigration from '../migrations/0013_health_activities.sql?raw'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
 import { PlanChangeLimits } from '../src/shared/plan-validation.ts'
 
@@ -50,6 +51,15 @@ const SCHEMA_CHECKS = [
   `length(note) <= ${L.reportNoteMax}`,
 ]
 
+/** The CHECK text in 0013_health_activities.sql that enforces each activity limit. */
+const ACTIVITY_CHECKS = [
+  `length(kind) BETWEEN 1 AND ${L.activityTextMax}`, `length(source_name) BETWEEN 1 AND ${L.activityTextMax}`,
+  between('duration_s', L.activityDurationS), between('(kcal', L.activityKcal),
+  between('distance_m', L.activityDistanceM),
+  between('avg_hr', L.heartRateBpm), between('max_hr', L.heartRateBpm), between('steps', L.daySteps),
+  between('move_kcal', L.activityKcal), between('exercise_min', L.dayExerciseMin), between('stand_h', L.dayStandH),
+]
+
 /**
  * PlanChange.swift's `enum PlanChangeLimits`, with `(DomainLimits.name - n)` worked out from the Swift
  * values.
@@ -83,6 +93,18 @@ describe('domain limits', () => {
     for (const [max, code] of caps) {
       const trigger = `id <> NEW.id) >= ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
       expect(capsMigration.split(trigger).length - 1, String(code)).toBe(2)
+    }
+  })
+
+  it("keeps the activity tables' CHECKs and caps at the same numbers", () => {
+    for (const check of ACTIVITY_CHECKS) expect(activityMigration, check).toContain(check)
+    const caps = [
+      ['health_activities', DomainLimits.healthActivitiesMax, 'too_many_health_activities'],
+      ['activity_days', DomainLimits.activityDaysMax, 'too_many_activity_days'],
+    ] as const
+    for (const [table, max, code] of caps) {
+      const trigger = `tbl = '${table}'), 0) >= ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
+      expect(activityMigration.split(trigger).length - 1, code).toBe(1)
     }
   })
 

@@ -12,6 +12,8 @@ export type CappedTable =
   | 'exercise_prefs'
   | 'gyms'
   | 'gym_equipment'
+/** Plan 39's tables, counted in health_rows (migrations/0013_health_activities.sql). */
+export type HealthTable = 'health_activities' | 'activity_days'
 /** The two counts a workout save moves itself (src/sync/workouts.ts). */
 export type LoggedTable = 'workout_entries' | 'workout_sets'
 /** Every table account_rows counts. Proposals have a seed of their own (seedProposals). */
@@ -24,7 +26,7 @@ const GENERIC_DUMBBELLS =
   "(SELECT id FROM equipment_items WHERE kind_id = 'dumbbells' AND brand IS NULL AND model IS NULL)"
 
 /** Each table's columns, and their values over json_each: `value` a new key, ?1 the account, ?3 T, ?4 a gym. */
-const FILL: Readonly<Record<CappedTable, { readonly columns: string; readonly values: string }>> = {
+const FILL: Readonly<Record<CappedTable | HealthTable, { readonly columns: string; readonly values: string }>> = {
   workouts: {
     columns: 'id, user_id, started_at, name, client_updated_at, updated_at, deleted_at',
     values: `value, ?1, ?3, 'Seeded', ?3, ?3, ${HALF_DELETED}`,
@@ -56,16 +58,26 @@ const FILL: Readonly<Record<CappedTable, { readonly columns: string; readonly va
       'id, gym_id, item_id, visibility, owner_id, added_by, client_updated_at, created_at, updated_at, deleted_at',
     values: `value, ?4, ${GENERIC_DUMBBELLS}, 'private', ?1, ?1, ?3, ?3, ?3, ?3`,
   },
+  health_activities: {
+    columns: 'user_id, id, kind, started_at, ended_at, duration_s, source_name, from_watch, client_updated_at, ' +
+      'updated_at, deleted_at',
+    values: `?1, value, 'walking', ?3, ?3, 600, 'Seeded', 0, ?3, ?3, ${HALF_DELETED}`,
+  },
+  // One day per row from 2000-01-01, far from the samples' days (2026). Days are never deleted.
+  activity_days: {
+    columns: 'user_id, day, steps, move_kcal, exercise_min, client_updated_at, updated_at',
+    values: "?1, date('2000-01-01', '+' || key || ' days'), 1000, 100, 10, ?3, ?3",
+  },
 }
 
-const newKey = (table: CappedTable) => {
+const newKey = (table: CappedTable | HealthTable) => {
   if (table === 'custom_exercises') return `custom-${crypto.randomUUID()}`
   if (table === 'exercise_prefs') return `ex_${crypto.randomUUID()}`
   return crypto.randomUUID()
 }
 
 /** `count` rows of `table` for the account (listings at one private gym of their own, which counts as a gym). */
-export async function seedRows(table: CappedTable, userId: string, count: number): Promise<void> {
+export async function seedRows(table: CappedTable | HealthTable, userId: string, count: number): Promise<void> {
   const { columns, values } = FILL[table]
   const keys = JSON.stringify(Array.from({ length: count }, () => newKey(table)))
   const insert = env.DB.prepare(`INSERT INTO ${table} (${columns}) SELECT ${values} FROM json_each(?2)`)
@@ -91,14 +103,17 @@ export async function seedProposals(userId: string, count: number, status = 'pen
   return ids
 }
 
+/** The table that keeps each count: account_rows (plan 31), or health_rows for plan 39's tables. */
+const COUNTER: Readonly<Record<string, string>> = { health_activities: 'health_rows', activity_days: 'health_rows' }
+
 const OWNER: Readonly<Record<string, string>> = { gyms: 'owner_id', gym_equipment: 'owner_id' }
 
 /** The account's rows in `table`, deleted ones included; fails when the count kept in account_rows disagrees. */
-export async function countOf(table: CountedTable, userId: string): Promise<number> {
+export async function countOf(table: CountedTable | HealthTable, userId: string): Promise<number> {
   const owner = OWNER[table] ?? 'user_id'
   const row = (await env.DB.prepare(
     `SELECT (SELECT count(*) FROM ${table} WHERE ${owner} = ?1) AS stored, ` +
-      '(SELECT n FROM account_rows WHERE user_id = ?1 AND tbl = ?2) AS kept',
+      `(SELECT n FROM ${COUNTER[table] ?? 'account_rows'} WHERE user_id = ?1 AND tbl = ?2) AS kept`,
   ).bind(userId, table).first<{ stored: number; kept: number | null }>())!
   expect(row.kept ?? 0, `account_rows for ${table}`).toBe(row.stored)
   return row.stored

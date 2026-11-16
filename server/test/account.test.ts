@@ -20,6 +20,7 @@ const OWNED: readonly [string, string][] = [
   ['gym_equipment', 'owner_id'], ['gym_equipment', 'added_by'], ['equipment_items', 'created_by'],
   ['equipment_confirmations', 'user_id'], ['reports', 'reporter_id'], ['user_blocks', 'blocker_id'],
   ['user_blocks', 'blocked_id'], ['gym_unblocks', 'user_id'], ['app_admins', 'user_id'],
+  ['health_activities', 'user_id'], ['activity_days', 'user_id'], ['health_rows', 'user_id'],
 ]
 
 async function rowsNaming(table: string, column: string, userId: string): Promise<number> {
