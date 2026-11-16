@@ -27,6 +27,10 @@ public protocol SyncTransport: Sendable {
     func push(bodyweight: [BodyweightDTO]) async throws -> [RowAck]
     /// `upsert_workout` RPC: replaces the workout and its entries/sets in one transaction.
     func push(workout: WorkoutDTO) async throws -> WorkoutPushResult
+    /// Outside workouts read from Apple Health (plan 39); acks use the row id.
+    func push(healthActivities: [HealthActivityDTO]) async throws -> [RowAck]
+    /// Days of activity; acks use the day (`YYYY-MM-DD`).
+    func push(activityDays: [ActivityDayDTO]) async throws -> [RowAck]
 
     func pullProfile(since: Date?) async throws -> [ProfileDTO]
     func pullCustomExercises(since: Date?) async throws -> [CustomExerciseDTO]
@@ -38,6 +42,8 @@ public protocol SyncTransport: Sendable {
     func pullGymListings(since: Date?) async throws -> [GymListingDTO]
     func pullBodyweight(since: Date?) async throws -> [BodyweightDTO]
     func pullWorkouts(since: Date?) async throws -> [WorkoutDTO]
+    func pullHealthActivities(since: Date?) async throws -> [HealthActivityDTO]
+    func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO]
     /// One workout with its entries and sets (conflict resolution "Keep other"), or nil if absent.
     func fetchWorkout(id: UUID) async throws -> WorkoutDTO?
 
@@ -83,6 +89,12 @@ extension SyncTransport {
     public func uploadPrivatePhoto(_ data: Data, name: String) async throws -> String { throw URLError(.unsupportedURL) }
     public func downloadPrivatePhoto(path: String) async throws -> Data { throw URLError(.unsupportedURL) }
     public func deletePrivatePhoto(path: String) async throws {}
+
+    /// Test doubles that predate plan 39 store no activity (no acks, nothing to pull).
+    public func push(healthActivities: [HealthActivityDTO]) async throws -> [RowAck] { [] }
+    public func push(activityDays: [ActivityDayDTO]) async throws -> [RowAck] { [] }
+    public func pullHealthActivities(since: Date?) async throws -> [HealthActivityDTO] { [] }
+    public func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO] { [] }
 
     /// When Claude last called the MCP server for this user (newest `mcp_audit` row), nil if never.
     public func lastMcpUse() async throws -> Date? { nil }

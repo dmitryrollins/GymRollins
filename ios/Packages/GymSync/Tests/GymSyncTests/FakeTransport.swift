@@ -14,6 +14,8 @@ actor FakeTransport: SyncTransport {
     private(set) var muscleTargets: [String: MuscleTargetDTO] = [:]
     private(set) var bodyweight: [UUID: BodyweightDTO] = [:]
     private(set) var workouts: [UUID: WorkoutDTO] = [:]
+    private(set) var healthActivities: [UUID: HealthActivityDTO] = [:]
+    private(set) var activityDays: [String: ActivityDayDTO] = [:]
     private(set) var proposals: [UUID: ProposalDTO] = [:]
     private var malformedProposals: [UUID: String] = [:]
     private(set) var grants: [UUID] = []
@@ -94,6 +96,10 @@ actor FakeTransport: SyncTransport {
     func seed(exercisePref dto: ExercisePrefDTO) throws { _ = try accept(dto, into: &exercisePrefs, key: dto.exerciseId) }
     func seed(muscleTarget dto: MuscleTargetDTO) throws { _ = try accept(dto, into: &muscleTargets, key: dto.muscle) }
     func seed(bodyweight entry: BodyweightDTO) throws { _ = try accept(entry, into: &bodyweight, key: entry.id) }
+    func seed(healthActivity dto: HealthActivityDTO) throws {
+        _ = try accept(dto, into: &healthActivities, key: dto.id)
+    }
+    func seed(activityDay dto: ActivityDayDTO) throws { _ = try accept(dto, into: &activityDays, key: dto.day) }
     /// Another device's accepted write (it saw the current version): stored whatever the base.
     func seed(profile dto: ProfileDTO) throws { profile = try stamp(dto) }
     func seed(workout: WorkoutDTO) throws {
@@ -176,6 +182,23 @@ actor FakeTransport: SyncTransport {
         }
         return try dtos.compactMap { dto in
             try accept(dto, into: &bodyweight, key: dto.id).map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
+        }
+    }
+
+    func push(healthActivities dtos: [HealthActivityDTO]) throws -> [RowAck] {
+        try gate()
+        try checkRejected(dtos.map(\.id.uuidString))
+        return try dtos.compactMap { dto in
+            try accept(dto, into: &healthActivities, key: dto.id)
+                .map { RowAck(id: $0.id.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
+        }
+    }
+
+    func push(activityDays dtos: [ActivityDayDTO]) throws -> [RowAck] {
+        try gate()
+        try checkRejected(dtos.map(\.day))
+        return try dtos.compactMap { dto in
+            try accept(dto, into: &activityDays, key: dto.day).map { RowAck(id: $0.day, updatedAt: $0.updatedAt!) }
         }
     }
 
@@ -316,6 +339,15 @@ actor FakeTransport: SyncTransport {
         return try pull(Array(workouts.values), since: since)
     }
 
+    func pullHealthActivities(since: Date?) async throws -> [HealthActivityDTO] {
+        await waitIfHeld()
+        return try pull(Array(healthActivities.values), since: since)
+    }
+    func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO] {
+        await waitIfHeld()
+        return try pull(Array(activityDays.values), since: since)
+    }
+
     func fetchWorkout(id: UUID) throws -> WorkoutDTO? {
         try gate()
         return workouts[id]
@@ -414,6 +446,8 @@ extension MuscleTargetDTO: ServerStampedDTO {}
 extension BodyweightDTO: ServerStampedDTO {}
 extension GymDTO: ServerStampedDTO {}
 extension GymListingDTO: ServerStampedDTO {}
+extension HealthActivityDTO: ServerStampedDTO {}
+extension ActivityDayDTO: ServerStampedDTO {}
 extension WorkoutDTO: ServerStampedDTO {
     /// A copy with another `client_updated_at` (the SQL function's `greatest(...)` for forced writes).
     static func restamped(_ dto: WorkoutDTO, clientUpdatedAt: Date) throws -> WorkoutDTO {
