@@ -4,7 +4,7 @@ import GymData
 import GymHealth
 import GymSync
 
-/// Apple Health wiring (plan 15): which store backs `health`, and when it syncs.
+/// Apple Health wiring (plan 15; activity in plan 39): which store backs `health`, and when it syncs.
 extension AppEnvironment {
     /// The real HealthKit store, or (DEBUG `-fakeHealth`) a seeded fake. UI-test launches keep Health's state in a
     /// throwaway defaults suite, so a previous run's "enabled" never leaks into the next.
@@ -20,9 +20,13 @@ extension AppEnvironment {
                                       now: () -> Date) -> (any HealthStore, UserDefaults) {
         #if DEBUG
         let store: any HealthStore = options.fakeHealth
-            ? FakeHealthStore(seed: FakeHealthStore.uiTestSeed(now: now())) : HealthKitStore()
+            ? FakeHealthStore(seed: FakeHealthStore.uiTestSeed(now: now()),
+                              outsideWorkouts: FakeHealthStore.uiTestOutsideWorkouts(now: now()),
+                              days: FakeHealthStore.uiTestActivityDays(now: now(), calendar: .current))
+            : HealthKitStore()
         if options.uiTesting, let suite = UserDefaults(suiteName: "uitest.health") {
             suite.removePersistentDomain(forName: "uitest.health")
+            if options.healthBeforeActivity { seedHealthBeforeActivity(in: suite, now: now()) }
             return (store, suite)
         }
         return (store, defaults)
@@ -31,10 +35,20 @@ extension AppEnvironment {
         #endif
     }
 
+    #if DEBUG
+    /// `-healthBeforeActivity`: Health on, as a build from before plan 39 left it (the activity types never asked).
+    private static func seedHealthBeforeActivity(in suite: UserDefaults, now: Date) {
+        do { try HealthSyncState.saveEnabledBeforeActivity(to: suite, at: now) } catch {
+            log.error("Seed Health state failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+    #endif
+
     /// Called once from `init`, after every stored property is set.
     func wireHealth() {
         calories.library = { [weak self] in self?.library ?? ExerciseLibrary(exercises: []) }
         health.onBodyChanged = { [weak self] in self?.healthImportedWeighIns() }
+        health.onActivityChanged = { [weak self] in self?.healthImportedActivity() }
         // Signed in: import only once a sync round (with its pull) has finished, so the import sees what other devices
         // already imported (or deleted) instead of re-creating it.
         health.canImport = { [weak self] in
@@ -42,12 +56,19 @@ extension AppEnvironment {
             return sync.authState == .signedOut || sync.lastSyncedAt != nil
                 || syncStore.cursor(for: .bodyweight) != nil
         }
+        // The same for outside workouts and days of activity, by their own cursor (plan 39).
+        health.canImportActivity = { [weak self] in
+            guard let self, sync.hasRestoredSession else { return false }
+            return sync.authState == .signedOut || sync.lastSyncedAt != nil
+                || syncStore.cursor(for: .healthActivities) != nil
+        }
         health.owner = { [weak self] in self?.syncStore.ownerUserId?.uuidString ?? "local" }
         sync.onRoundFinished = { [weak self] in
             guard let self else { return }
             health.localDataRestored(lastPull: sync.lastSyncedAt) // no-op unless a pull succeeded after a wipe
-            guard health.isEnabled, health.state.anchor == nil else { return }
-            Task { await self.health.importBody() }
+            guard health.isEnabled else { return }
+            if health.state.anchor == nil { Task { await self.health.importBody() } }
+            if health.state.activityAnchor == nil { Task { await self.health.importActivity() } }
         }
     }
 
@@ -73,6 +94,12 @@ extension AppEnvironment {
     private func healthImportedWeighIns() {
         bumpDataRevision()
         calories.invalidate()
+        sync.localDataChanged()
+    }
+
+    /// Outside workouts or days of activity came from Health: screens reload and they sync to the cloud.
+    private func healthImportedActivity() {
+        bumpDataRevision()
         sync.localDataChanged()
     }
 

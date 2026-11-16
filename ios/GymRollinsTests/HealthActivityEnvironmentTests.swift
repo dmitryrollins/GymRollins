@@ -1,0 +1,62 @@
+import Foundation
+import GymCore
+import GymData
+import GymHealth
+import Testing
+@testable import GymRollins
+
+/// Plan 39 in the app. With `-fakeHealth`, the walk, the strength recording and the 7 days come in when Health is
+/// turned on. The rules resolve them against the workouts on this iPhone, and the two switches hide what they read.
+@MainActor
+@Suite struct HealthActivityEnvironmentTests {
+    private func makeEnv(_ extra: [String] = []) throws -> AppEnvironment {
+        try AppEnvironment(options: LaunchOptions(arguments: ["-uiTesting", "-fakeHealth", "-fixedNow",
+                                                             "2026-09-26T09:00:00Z"] + extra))
+    }
+
+    @Test func turningHealthOnBringsInTheWalkAndSevenDays() async throws {
+        let env = try makeEnv()
+        let revision = env.dataRevision
+        #expect(await env.health.enable())
+        #expect(env.resolvedActivities().shown.map(\.id).contains(FakeHealthStore.uiTestWalkId))
+        #expect(env.recentActivityDays().count == 7)
+        #expect(env.dataRevision > revision, "screens reload")
+        #expect(try env.syncStore.dirtyHealthActivities().count == 2, "both go to the cloud")
+    }
+
+    @Test func theStrengthRecordingAttachesToSeedHistorysWorkout() async throws {
+        let env = try makeEnv(["-seedHistory"])
+        _ = await env.health.enable()
+        let workout = try #require(try env.workouts.recent(limit: 1).first) // 19 Sep, 18:00 UTC
+        #expect(env.measuredActivity(for: workout)?.id == FakeHealthStore.uiTestStrengthId)
+        #expect(!env.resolvedActivities().shown.map(\.id).contains(FakeHealthStore.uiTestStrengthId))
+        #expect(env.countedActivityStarts().count == 1, "the walk counts; the attached recording doesn't")
+    }
+
+    @Test func theSwitchesHideWhatTheyRead() async throws {
+        let env = try makeEnv()
+        _ = await env.health.enable()
+        env.setReadsOutsideWorkouts(false)
+        #expect(env.resolvedActivities().shown.isEmpty)
+        #expect(env.countedActivityStarts().isEmpty)
+        env.setReadsActivityDays(false)
+        #expect(env.recentActivityDays().isEmpty)
+        #expect(try env.activities.activities(since: nil).count == 2, "nothing stored is deleted")
+    }
+
+    @Test func healthTurnedOnBeforePlan39WaitsForTheAsk() async throws {
+        let env = try makeEnv(["-healthBeforeActivity"])
+        #expect(env.health.isEnabled)
+        #expect(env.health.showsActivityCard)
+        await env.syncHealth()
+        #expect(env.recentActivityDays().isEmpty, "nothing is read before the ask")
+        await env.allowHealthActivity()
+        #expect(!env.health.needsActivityPermission)
+        #expect(env.recentActivityDays().count == 7)
+    }
+
+    @Test func aSignedOutLaunchMayImportActivity() throws {
+        let env = try makeEnv() // held: the gate captures the environment weakly
+        #expect(env.health.canImportActivity())
+    }
+}

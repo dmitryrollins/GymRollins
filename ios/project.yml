@@ -65,7 +65,8 @@ targets:
         UIUserInterfaceStyle: Dark
         NSSupportsLiveActivities: true
         NSHealthShareUsageDescription: >-
-          GymRollins reads your weight and body fat from Apple Health to show them on the Body tab.
+          GymRollins reads your weight and body fat for the Body tab, and the workouts other apps save, your steps,
+          Activity rings and heart rate for the Log and Today.
         NSHealthUpdateUsageDescription: >-
           GymRollins saves your finished workouts with their estimated calories, and the weigh-ins you log, to
           Apple Health.
