@@ -63,6 +63,14 @@ final class HealthActivityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["log.settings"].waitForExistence(timeout: 5))
     }
 
+    /// Keeps a screenshot in the result for the owner's review.
+    private func screenshot(_ app: XCUIApplication, _ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     // MARK: Settings
 
     func testSettingsReadsFromHealthWithTwoSwitches() {
@@ -135,5 +143,39 @@ final class HealthActivityUITests: XCTestCase {
         flip(app.switches["health.read.days"], in: app)
         app.tabBars.buttons["Today"].tap()
         XCTAssertFalse(app.buttons["today.activity"].waitForExistence(timeout: 3))
+    }
+
+    // MARK: Log
+
+    func testAWalkShowsInTheLogAndOpensItsDetail() {
+        let app = XCUIApplication.launchReady(["-fakeHealth"])
+        enableHealth(app)
+        openLog(app)
+        let other = app.staticTexts["log.week.otherKcal"]
+        XCTAssertTrue(other.waitForExistence(timeout: 10))
+        XCTAssertEqual(other.label, "+ 180 kcal from other activities (measured)")
+        let card = app.buttons["log.outside.\(walk)"]
+        scrollTo(card, in: app)
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Walk") && card.label.contains("Apple Watch"), card.label)
+        screenshot(app, "log-outside-walk")
+        card.tap()
+        let title = app.staticTexts["outside.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.label, "Walk")
+        XCTAssertEqual(app.staticTexts["outside.avgHr"].label, "102 bpm")
+        XCTAssertEqual(app.staticTexts["outside.healthNote"].label, "Change or delete it in the Health app.")
+        screenshot(app, "outside-walk-detail")
+        app.buttons["outside.back"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+    }
+
+    func testTurningWorkoutsFromOtherAppsOffHidesThem() {
+        let app = XCUIApplication.launchReady(["-fakeHealth"])
+        enableHealth(app)
+        flip(app.switches["health.read.workouts"], in: app)
+        openLog(app)
+        XCTAssertFalse(app.buttons["log.outside.\(walk)"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["log.week.otherKcal"].exists)
     }
 }
