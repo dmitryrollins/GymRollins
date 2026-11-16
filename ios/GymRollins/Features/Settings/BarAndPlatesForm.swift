@@ -4,11 +4,12 @@ import GymData
 
 /// The Bar & Plates fields as typed, in the profile's unit. Values are shown with up to 3 decimals (1.25 stays
 /// 1.25) and parsed with `LocalizedNumber` ("1,25" works); `updatedProfile` is nil when nothing changed, so
-/// opening the screen never writes the profile.
+/// opening the screen never writes the profile. The sled isn't in the profile (`SledWeight`): `updatedSledKg`.
 struct BarAndPlatesForm: Equatable {
     var barText: String
     var dumbbellStepText: String
     var available: Set<Double>
+    var sledText = ""
 
     static let lbPlates: [Double] = [45, 35, 25, 10, 5, 2.5]
     static let kgPlates: [Double] = [25, 20, 15, 10, 5, 2.5, 1.25]
@@ -22,10 +23,11 @@ struct BarAndPlatesForm: Equatable {
         self.available = available
     }
 
-    init(profile: Profile) {
+    init(profile: Profile, sledKg: Double = 0) {
         barText = Self.format(profile.plateInventory.bar)
         dumbbellStepText = Self.format(UnitConverter.fromKg(profile.dumbbellStepKg, to: profile.unit))
         available = Set(profile.plateInventory.plates)
+        sledText = Self.format(UnitConverter.fromKg(sledKg, to: profile.unit))
     }
 
     /// Up to 3 decimals, trailing zeros trimmed: 45 → "45", 1.25 → "1.25", 2.2046 → "2.205".
@@ -34,6 +36,14 @@ struct BarAndPlatesForm: Equatable {
         while text.hasSuffix("0") { text.removeLast() }
         if text.hasSuffix(".") { text.removeLast() }
         return text
+    }
+
+    /// The sled's weight typed in `unit`, in kg; nil when it equals `currentKg`, so opening the screen never saves the
+    /// default. Throws when it isn't a number (zero is fine: a counterbalanced sled).
+    func updatedSledKg(unit: WeightUnit, currentKg: Double) throws(Invalid) -> Double? {
+        guard let sled = LocalizedNumber.parse(sledText), sled >= 0 else { throw .nonPositive }
+        guard abs(UnitConverter.fromKg(currentKg, to: unit) - sled) >= 0.0005 else { return nil }
+        return UnitConverter.toKg(sled, from: unit)
     }
 
     /// The profile with these values, nil when they equal what `profile` already holds; throws when the bar or

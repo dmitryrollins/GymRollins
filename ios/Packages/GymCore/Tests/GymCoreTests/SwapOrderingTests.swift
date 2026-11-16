@@ -21,4 +21,11 @@ import Testing
         #expect(ex("b", "B", target: "x", equipment: "smith machine").isBarbellLoaded)
         #expect(!ex("c", "C", target: "x", equipment: "dumbbell").isBarbellLoaded)
     }
+
+    @Test func sledLoadedEquipment() {
+        #expect(ex("a", "Sled 45° Leg Press", target: "x", equipment: "sled machine").isSledLoaded)
+        #expect(!ex("b", "B", target: "x", equipment: "leverage machine").isSledLoaded)
+        #expect(!ex("c", "C", target: "x", equipment: "barbell").isSledLoaded)
+        #expect(!ex("d", "D", target: "x", equipment: "sled machine").isBarbellLoaded)
+    }
 }

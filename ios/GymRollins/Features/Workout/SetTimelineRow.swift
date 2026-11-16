@@ -4,8 +4,8 @@ import UIKit
 
 /// One row in the logging timeline: a hexagon badge (warm-up "W", working index, or a done check)
 /// and two editable boxes whose kind depends on the exercise mode (reps/weight, seconds/weight, or
-/// minutes/distance). The active set gets floating labels and, for barbell exercises, a
-/// "Bar + Plates" caption under the weight.
+/// minutes/distance). The active set gets floating labels and, for barbell and sled exercises, a
+/// "Bar + Plates" / "Sled + Plates" caption under the weight.
 ///
 /// Stateless on purpose: the text shown in each box and keyboard focus are owned by the logging
 /// screen (`text(for:)` returns a binding to its edit in progress, `SetEdit`; `focus` is its single
@@ -20,7 +20,8 @@ struct SetTimelineRow: View {
     let isActive: Bool
     let mode: ExerciseMode
     let unit: WeightUnit
-    let isBarbell: Bool
+    /// "Bar + Plates" / "Sled + Plates": what the weight is made of, under the active set's weight; nil for the rest.
+    let platesCaption: String?
     let text: (SetField) -> Binding<String>
     var focus: FocusState<SetField?>.Binding
     /// Today's plan before the workout (no done / current status).
@@ -112,7 +113,7 @@ struct SetTimelineRow: View {
 
     private func caption(_ field: SetField) -> String? {
         guard case .weight = field, isActive else { return nil }
-        if isBarbell { return "Bar + Plates" }
+        if let platesCaption { return platesCaption }
         return set.multiplier == 2 ? "Per Arm" : nil
     }
 
