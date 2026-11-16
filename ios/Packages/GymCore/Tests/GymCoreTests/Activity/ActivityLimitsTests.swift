@@ -42,6 +42,31 @@ import Testing
         #expect(DomainLimits.healthActivityViolation(walk(avgCadenceRpm: 251)) != nil)
     }
 
+    /// Review finding L2: a bad optional reading costs that value, not the whole workout.
+    @Test func fittingDropsEachOptionalValueOutsideItsLimitAndKeepsTheRest() {
+        let odd = walk(kcal: 20_001, totalKcal: .nan, distanceM: -1, avgHr: 19, maxHr: 251, avgPowerW: 2_501,
+                       avgCadenceRpm: -1)
+        let fitted = DomainLimits.fitting(odd)
+        #expect(fitted == HealthActivity(id: odd.id, kind: "walking", startedAt: odd.startedAt, endedAt: odd.endedAt,
+                                         durationS: odd.durationS, sourceName: "Apple Watch", fromWatch: true))
+        #expect(DomainLimits.healthActivityViolation(fitted) == nil)
+
+        let partly = DomainLimits.fitting(walk(totalKcal: 20_001, avgCadenceRpm: 300))
+        #expect(partly.totalKcal == nil && partly.avgCadenceRpm == nil)
+        #expect(partly.kcal == 180 && partly.distanceM == 3_400 && partly.avgHr == 102 && partly.maxHr == 121)
+        #expect(partly.avgPowerW == 96)
+
+        let fine = walk()
+        #expect(DomainLimits.fitting(fine) == fine)
+    }
+
+    @Test func fittingLeavesTheRequiredFieldsSoTheyStillRefuseTheWorkout() {
+        #expect(DomainLimits.healthActivityViolation(DomainLimits.fitting(walk(kind: ""))) != nil)
+        #expect(DomainLimits.healthActivityViolation(DomainLimits.fitting(walk(source: ""))) != nil)
+        #expect(DomainLimits.healthActivityViolation(DomainLimits.fitting(walk(minutes: -1))) != nil)
+        #expect(DomainLimits.healthActivityViolation(DomainLimits.fitting(walk(durationS: 90_000, avgHr: 300))) != nil)
+    }
+
     @Test func theNewLimitsAreTheSpecsNumbers() {
         #expect(DomainLimits.activityPowerW == 0...2_500)
         #expect(DomainLimits.activityCadenceRpm == 0...250)

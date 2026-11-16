@@ -64,7 +64,9 @@ Keyed by the **local calendar day** (`YYYY-MM-DD`) it was recorded in: `steps` (
 Mirrored in `DomainLimits` (Swift) and `domain-limits.ts` (with the existing drift test), enforced by D1 CHECKs:
 duration 0–24 h, kcal and total kcal 0–20,000, distance 0–1,000 km, heart rate 20–250, average power 0–2,500 W,
 average cadence 0–250 rpm, steps 0–200,000, exercise 0–1,440 min, stand 0–24 h, kind and source name 1–100
-characters. A sample outside them is skipped on import, not clamped.
+characters. Nothing is clamped. An outside workout whose **optional** value (kcal, total kcal, distance, heart rate,
+power, cadence) is outside its limit is imported without that value (nil); one whose required field (kind, source
+name, start after end, duration) is outside is skipped. A day outside a limit is skipped.
 
 ## 4. Phone
 

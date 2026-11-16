@@ -110,15 +110,30 @@ import Testing
         #expect(rows.map(\.value) == [ride], "pushed with them too")
     }
 
-    @Test func aWorkoutOutsideTheLimitsIsSkipped() async throws {
+    /// Review finding L2: an optional value outside its limit is dropped and the workout kept; only a required field
+    /// outside its limit skips the workout.
+    @Test func anOptionalValueOutsideItsLimitIsDroppedAndTheWorkoutKept() async throws {
         let fx = try HealthFixture()
         let start = fx.now.addingTimeInterval(-day)
-        let broken = HealthOutsideWorkout(activity: HealthActivity(
-            id: UUID(), kind: "walking", startedAt: start, endedAt: start.addingTimeInterval(600), durationS: 600,
-            avgHr: 300, sourceName: "Old App"))
-        fx.store = FakeHealthStore(outsideWorkouts: [broken, outside(fx, daysAgo: 2)])
+        let odd = HealthActivity(id: UUID(), kind: "walking", startedAt: start, endedAt: start.addingTimeInterval(600),
+                                 durationS: 600, kcal: 60, totalKcal: 25_000, distanceM: 800, avgHr: 300, maxHr: 140,
+                                 avgPowerW: 3_000, avgCadenceRpm: 90, sourceName: "Old App")
+        let tooLong = HealthActivity(id: UUID(), kind: "walking", startedAt: start,
+                                     endedAt: start.addingTimeInterval(600), durationS: 90_000, sourceName: "Old App")
+        let nameless = HealthActivity(id: UUID(), kind: "walking", startedAt: start,
+                                      endedAt: start.addingTimeInterval(600), durationS: 600, avgHr: 300,
+                                      sourceName: "")
+        let fine = outside(fx, daysAgo: 2)
+        fx.store = FakeHealthStore(outsideWorkouts: [odd, tooLong, nameless].map { HealthOutsideWorkout(activity: $0) }
+            + [fine])
         _ = await fx.makeSync().enable()
-        #expect(try fx.activities.activities(since: nil).count == 1)
+        #expect(try fx.activities.activities(since: nil).map(\.id) == [odd.id, fine.activity.id])
+        #expect(try fx.activities.activity(odd.id)
+            == HealthActivity(id: odd.id, kind: "walking", startedAt: start, endedAt: start.addingTimeInterval(600),
+                              durationS: 600, kcal: 60, distanceM: 800, maxHr: 140, avgCadenceRpm: 90,
+                              sourceName: "Old App"))
+        #expect(try !fx.activities.hasRecord(id: tooLong.id), "a required field outside its limit skips it")
+        #expect(try !fx.activities.hasRecord(id: nameless.id))
     }
 
     @Test func aDeletionInHealthLeavesATombstoneThatSyncs() async throws {

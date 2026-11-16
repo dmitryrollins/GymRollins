@@ -113,8 +113,9 @@ public enum DomainLimits {
         return nil
     }
 
-    /// Why an outside workout read from Health can't be stored, or nil. One that doesn't fit is skipped on import, never
-    /// clamped.
+    /// Why an outside workout read from Health can't be stored, or nil. Nothing is clamped: the import first drops
+    /// each optional value outside its limit (`fitting`), so only a required field (kind, source name, times,
+    /// duration) can still keep the workout out.
     public static func healthActivityViolation(_ a: HealthActivity) -> String? {
         if !(1...activityTextMax).contains(a.kind.count) { return "Kind must be 1–\(activityTextMax) characters." }
         if !(1...activityTextMax).contains(a.sourceName.count) {
@@ -133,6 +134,23 @@ public enum DomainLimits {
             return "Average cadence must be 0–250 rpm."
         }
         return nil
+    }
+
+    /// The outside workout with each optional value outside its limit dropped (nil, never clamped): a bad calorie,
+    /// distance, heart-rate, power or cadence reading costs that value, not the workout (review finding L2). The
+    /// required fields stay as they are, for `healthActivityViolation` to judge.
+    public static func fitting(_ a: HealthActivity) -> HealthActivity {
+        HealthActivity(id: a.id, kind: a.kind, startedAt: a.startedAt, endedAt: a.endedAt, durationS: a.durationS,
+                       kcal: within(a.kcal, activityKcal), totalKcal: within(a.totalKcal, activityKcal),
+                       distanceM: within(a.distanceM, activityDistanceM), avgHr: within(a.avgHr, heartRateBpm),
+                       maxHr: within(a.maxHr, heartRateBpm), avgPowerW: within(a.avgPowerW, activityPowerW),
+                       avgCadenceRpm: within(a.avgCadenceRpm, activityCadenceRpm), sourceName: a.sourceName,
+                       fromWatch: a.fromWatch)
+    }
+
+    /// The value when the range holds it (NaN never does), else nil.
+    private static func within<T: Comparable>(_ value: T?, _ range: ClosedRange<T>) -> T? {
+        value.flatMap { range.contains($0) ? $0 : nil }
     }
 
     /// Why a day of activity can't be stored, or nil. Like an outside workout, one that doesn't fit is skipped.

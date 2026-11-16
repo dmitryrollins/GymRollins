@@ -46,9 +46,11 @@ extension HealthSync {
             }
         }
         for item in changes.added {
-            guard try isOutside(item), DomainLimits.healthActivityViolation(item.activity) == nil else { continue }
+            // An optional value outside its limit is dropped; only a required field outside its limit skips it.
+            let activity = DomainLimits.fitting(item.activity)
+            guard try isOutside(item), DomainLimits.healthActivityViolation(activity) == nil else { continue }
             // The workout's own end as the edit time, so a newer deletion from another device still wins.
-            if try activities.add(item.activity, editedAt: min(item.activity.endedAt, now())) { changed = true }
+            if try activities.add(activity, editedAt: min(activity.endedAt, now())) { changed = true }
         }
         let kept = Array(unmatched.suffix(Self.maxUnmatchedActivityDeletions))
         // Health answers a denied read with nothing: until a first workout came in, an empty batch isn't remembered, so
