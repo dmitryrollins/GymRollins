@@ -16,10 +16,9 @@ struct AppleHealthSettingsView: View {
         Form {
             if health.isAvailable {
                 toggleSection
-                if health.isEnabled {
-                    permissionsSection
-                    readingSection
-                }
+                if health.isEnabled { permissionsSection }
+                // Shown with Health off too: what was read before still shows, and these hide it (review M2).
+                readingSection
                 aboutSection
             } else {
                 Section {
@@ -86,7 +85,8 @@ struct AppleHealthSettingsView: View {
     }
 
     /// What the app reads from Health besides weight (plan 39). Off stops that import and hides it in the app; nothing
-    /// already in the cloud is deleted.
+    /// already in the cloud is deleted. With Health off nothing new is read, but what was read still shows until its
+    /// switch hides it.
     private var readingSection: some View {
         Section {
             if health.needsActivityPermission {
@@ -105,7 +105,9 @@ struct AppleHealthSettingsView: View {
         } footer: {
             Text("Walks, runs and classes your Apple Watch or other apps record show in the Log and count toward your "
                  + "streak. Steps, move, exercise and stand show on Today. Turning one off hides it here; nothing "
-                 + "already in the cloud is deleted.")
+                 + "already in the cloud is deleted."
+                 + (health.isEnabled ? "" : " While Apple Health is off nothing new is read, and these still hide "
+                    + "what was read before."))
         }
     }
 

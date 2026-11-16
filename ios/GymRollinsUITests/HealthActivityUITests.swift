@@ -85,6 +85,25 @@ final class HealthActivityUITests: XCTestCase {
         XCTAssertEqual(workouts.value as? String, "0")
     }
 
+    /// Review M2: with Health off, what was read still shows, so the two switches stay to hide it.
+    func testWithHealthOffTheSwitchesStillHideWhatWasRead() {
+        let app = XCUIApplication.launchReady(["-fakeHealth"])
+        enableHealth(app)
+        flip(app.switches["health.toggle"], in: app)
+        let workouts = app.switches["health.read.workouts"]
+        scrollTo(workouts, in: app)
+        XCTAssertTrue(workouts.waitForExistence(timeout: 3), "the switch stays with Health off")
+        XCTAssertTrue(app.switches["health.read.days"].exists)
+        openLog(app)
+        let card = app.buttons["log.outside.\(walk)"]
+        scrollTo(card, in: app)
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "what was read stays visible")
+        openHealthSettings(app)
+        flip(app.switches["health.read.workouts"], in: app)
+        openLog(app)
+        XCTAssertFalse(app.buttons["log.outside.\(walk)"].waitForExistence(timeout: 3))
+    }
+
     func testSettingsAsksForActivityWhenHealthWasOnBefore() {
         let app = XCUIApplication.launchReady(["-fakeHealth", "-healthBeforeActivity"])
         openHealthSettings(app)
