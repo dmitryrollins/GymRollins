@@ -48,3 +48,29 @@ Covered by `RepositoryTests.entriesCacheMatchesRowsAndFallsBack` and the existin
   plan + history) and decoding the bundled 1,324-exercise library, so it overstates a Release launch on a device.
   Not optimized in this pass; candidates if the device number also misses: decode `exercises.json` off the main
   thread / lazily after first frame, and defer non-UI seeding work.
+
+## Today and Library taps (2026-11-16)
+
+The owner saw about half of the taps on Today and Library answer late (iPhone 14 Pro Max, ~160 workouts, 2,900
+sets). The main thread was busy with work that ran on every layout, reload or refresh. Measured with
+`ResponsivenessTimingTests` (app, Debug, iPhone 17 Pro simulator, median of 20; 160 workouts of 6 × 3 sets with the
+bench in 100, and 500 outside workouts) and `HistoryTimingTests` (GymData, release, Mac):
+
+| Work | Before | After | Fix |
+|---|---:|---:|---|
+| 10 muscle badges' paths at 31 pt (every Library/Today layout) | 54 ms | **1.5 ms** | silhouette and group paths built once in source units, then only scaled (`BodyMapData`; load 23 ms once) |
+| Recovery card's two figures | 10.4 ms | **0.1 ms** | same |
+| `history(staple, limit: 5)` (GymData, release) | 13.9 ms | **1.1 ms** | read `limit` workouts at a time until enough (`WorkoutRepository`) |
+| History for a 7-item plan (app) | 109 ms | **6.8 ms** | same, and Today keeps it until the workouts change (`TodayHistoryCache`) |
+| Library body pass (3 searches + body parts) | 6.2 ms | **0.5 ms** | one search per pass; facets and search keys built with the library |
+| `insights()` (Today calls it twice per refresh) | 86 ms | **0.1 ms** reused, 21 ms in a new minute, 83 ms once per data change | `InsightsMemo` on `AppEnvironment` |
+| Today after a sync that brought rows | 394 ms | **103 ms** | all of the above |
+| Today back in the foreground, nothing changed | ~190 ms | **33 ms** | all of the above |
+
+What's left per data change is resolving the outside workouts (`ActivityRules.resolve`, 500 × 160: 47 ms Debug,
+11 ms release on the Mac); rule 7's same-session check is quadratic. `ResponsivenessUITests` taps Today's and
+Library's rows with 160 workouts (every tap must open its screen) and attaches a Library screenshot.
+
+Run: `scripts/test-perf.sh data` (GymData), and for the app harness
+`TEST_RUNNER_GYM_PERF=1 scripts/ios-test.sh -only-testing:GymRollinsTests/ResponsivenessTimingTests`, then
+`xcresulttool export attachments --path <xcresult> --output-path <dir>` (each test attaches `timings.txt`).
