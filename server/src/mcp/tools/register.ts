@@ -130,7 +130,8 @@ export const TOOL_SPECS = [
     description:
       "The app's insights: recovery % per muscle group (16 groups) from recent hard sets, which groups are " +
       "fresh, hard sets per muscle this week (Mon–Sun in time_zone, default UTC) against the owner's weekly " +
-      'target ranges, and the weekly workout streak. Use it to pick muscles to train or to judge weekly volume. ' +
+      'target ranges, and the weekly workout streak (outside workouts from Apple Health count while the owner lets ' +
+      'agents read activity). Use it to pick muscles to train or to judge weekly volume. ' +
       'Only works if the owner allowed agents to read workouts and the plan.',
     input: schemas.insights,
     annotations: READ,
