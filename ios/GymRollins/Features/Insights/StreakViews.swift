@@ -119,13 +119,8 @@ struct SummaryInsightsSection: View {
     private func load() {
         let current = env.insights()
         snapshot = current
-        let week = TrainingWeek.interval(containing: workout.startedAt, calendar: env.insightsCalendar)
         do {
-            let others = try env.workouts.finished(since: week.start).filter { $0.id != workout.id }
-            completedWeek = StreakCalculator.completesWeeklyGoal(otherDates: others.map(\.startedAt),
-                                                                 finished: workout.startedAt,
-                                                                 goal: env.profile.trainingDays,
-                                                                 calendar: env.insightsCalendar)
+            completedWeek = try env.completesWeeklyGoal(workout)
         } catch {
             AppEnvironment.log.error("Weekly goal check failed: \(error.localizedDescription, privacy: .public)")
             completedWeek = false

@@ -13,12 +13,13 @@ extension AppEnvironment {
         "\(dataRevision)-\(planRevision)-\(profile.trainingDays)-\(profile.limits)"
     }
 
-    /// Recovery, weekly sets and streak as of now. Falls back to an empty snapshot (logged) if the store fails.
+    /// Recovery, weekly sets and streak as of now; the streak counts the outside workouts that count (plan 39). Falls
+    /// back to an empty snapshot (logged) if the store fails.
     func insights() -> InsightsSnapshot {
         do {
             let since = now().addingTimeInterval(-Double(InsightsSnapshot.windowDays) * 86_400)
             return InsightsSnapshot.make(recent: try workouts.finished(since: since),
-                                         startDates: try workouts.finishedStartDates(),
+                                         startDates: try workouts.finishedStartDates() + countedActivityStarts(),
                                          targets: try muscleTargets.all(), profile: profile, library: library,
                                          now: now(), calendar: insightsCalendar)
         } catch {
@@ -34,6 +35,16 @@ extension AppEnvironment {
             Self.log.error("Recent workouts load failed: \(error.localizedDescription, privacy: .public)")
             return []
         }
+    }
+
+    /// True when finishing `workout` brought its week to the weekly goal. The outside workouts that count are workout
+    /// days of that week too (plan 39, decision 5).
+    func completesWeeklyGoal(_ workout: Workout) throws -> Bool {
+        let week = TrainingWeek.interval(containing: workout.startedAt, calendar: insightsCalendar)
+        let others = try workouts.finished(since: week.start).filter { $0.id != workout.id }.map(\.startedAt)
+        return StreakCalculator.completesWeeklyGoal(otherDates: others + countedActivityStarts(),
+                                                    finished: workout.startedAt, goal: profile.trainingDays,
+                                                    calendar: insightsCalendar)
     }
 
     /// Saves a weekly target and schedules a sync.
