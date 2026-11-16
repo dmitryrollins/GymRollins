@@ -37,6 +37,18 @@ public final class WorkoutRepository {
         try record(id).flatMap { $0.deletedAt == nil ? $0.value : nil }
     }
 
+    /// The ids among `ids` that have a workout on this iPhone, live, running or deleted (a tombstone): what
+    /// `workout(_:)` and `isDeleted(_:)` tell together, for a whole batch in one fetch (per `IdBatches.size` ids).
+    public func recordedIds(among ids: Set<UUID>) throws -> Set<UUID> {
+        var found = Set<UUID>()
+        for batch in IdBatches.of(ids) {
+            var d = FetchDescriptor<WorkoutRecord>(predicate: #Predicate { batch.contains($0.id) })
+            d.propertiesToFetch = [\.id]
+            found.formUnion(try context.fetch(d).map(\.id))
+        }
+        return found
+    }
+
     /// The agent that added this workout (plan 32), or nil: the owner's own, deleted, or not on this iPhone.
     public func addedBy(_ id: UUID) throws -> String? {
         try record(id).flatMap { $0.deletedAt == nil ? $0.addedBy : nil }

@@ -31,28 +31,25 @@ extension HealthSync {
     }
 
     /// Applies one anchored batch: deletions first (earlier ones whose row has since come from the cloud too), then
-    /// new outside workouts. True when a row changed.
+    /// new outside workouts. Each step is one fetch and one save for the whole batch (review finding M3: this runs on
+    /// the main actor, and a first read can bring two years of workouts). True when a row changed.
     private func importOutsideWorkouts(run: Int) async throws -> Bool {
         let start = state.activityImportStart ?? now().addingTimeInterval(-Self.importWindow)
         let changes = try await store.outsideWorkoutChanges(since: start, anchor: state.activityAnchor)
         guard run == generation, isEnabled, state.readsOutsideWorkouts else { return false }
-        var changed = false
-        var unmatched: [UUID] = []
-        for id in state.unmatchedActivityDeletions + changes.deleted {
-            if try activities.delete(id) {
-                changed = true
-            } else if try !activities.hasRecord(id: id) {
-                unmatched.append(id)
-            }
-        }
-        for item in changes.added {
+        let deletions = try activities.delete(state.unmatchedActivityDeletions + changes.deleted)
+        let ours = try workouts.recordedIds(among: Set(changes.added.compactMap(\.externalId)))
+        let time = now()
+        let incoming = changes.added.compactMap { item -> HealthActivity? in
+            guard isOutside(item, gymRollinsIds: ours) else { return nil }
             // An optional value outside its limit is dropped; only a required field outside its limit skips it.
             let activity = DomainLimits.fitting(item.activity)
-            guard try isOutside(item), DomainLimits.healthActivityViolation(activity) == nil else { continue }
-            // The workout's own end as the edit time, so a newer deletion from another device still wins.
-            if try activities.add(activity, editedAt: min(activity.endedAt, now())) { changed = true }
+            return DomainLimits.healthActivityViolation(activity) == nil ? activity : nil
         }
-        let kept = Array(unmatched.suffix(Self.maxUnmatchedActivityDeletions))
+        // The workout's own end as the edit time, so a newer deletion from another device still wins.
+        let added = try activities.add(incoming, editedAt: { min($0.endedAt, time) })
+        let changed = !deletions.deleted.isEmpty || !added.isEmpty
+        let kept = Array(deletions.missing.suffix(Self.maxUnmatchedActivityDeletions))
         // Health answers a denied read with nothing: until a first workout came in, an empty batch isn't remembered, so
         // the next run reads the whole window again once access is granted.
         let nothingYet = state.activityAnchor == nil && changes.added.isEmpty
@@ -66,12 +63,12 @@ extension HealthSync {
         return changed
     }
 
-    /// Not GymRollins' own: no export metadata or GymRollins bundle (the store tells), and no external id that is a
-    /// GymRollins workout here, live or deleted.
-    private func isOutside(_ item: HealthOutsideWorkout) throws -> Bool {
+    /// Not GymRollins' own: no export metadata or GymRollins bundle (the store tells), and no external id among
+    /// `gymRollinsIds`, the batch's external ids that are a GymRollins workout here (live, running or deleted).
+    private func isOutside(_ item: HealthOutsideWorkout, gymRollinsIds: Set<UUID>) -> Bool {
         guard !item.writtenByGymRollins else { return false }
         guard let id = item.externalId else { return true }
-        return try workouts.workout(id) == nil && !workouts.isDeleted(id)
+        return !gymRollinsIds.contains(id)
     }
 
     /// Reads from 6 days before the last read's day (two years back the first time) through today, and writes the
@@ -86,13 +83,11 @@ extension HealthSync {
         let days = try await store.activityDays(from: max(resume ?? earliest, earliest), through: today,
                                                 calendar: calendar)
         guard run == generation, isEnabled, state.readsActivityDays else { return false }
-        var changed = false
-        for day in days where DomainLimits.activityDayViolation(day) == nil {
-            if try activities.save(day: day) { changed = true }
-        }
+        // One fetch and one save for the whole range (review finding M3), however many days a first read brings.
+        let written = try activities.save(days: days.filter { DomainLimits.activityDayViolation($0) == nil })
         // The same for days: a first read that returned nothing (maybe denied) isn't remembered.
         if !days.isEmpty || state.activityDaysReadAt != nil { update { $0.activityDaysReadAt = time } }
-        return changed
+        return !written.isEmpty
     }
 
     // MARK: Asking and the switches
