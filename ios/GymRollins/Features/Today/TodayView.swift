@@ -49,6 +49,8 @@ struct TodayView: View {
     @State private var showDatePicker = false
     /// Save Changes on a workout that is on other days too: those days, while the question is open.
     @State private var savingShared: [Int] = []
+    /// The last 7 days of activity (plan 39), read with each reload and whenever the data changes.
+    @State private var activityDays: [ActivityDay] = []
 
     /// Onboarding's "Build me a 4-day upper/lower plan…" prompt: the copyable text offered before "Ask Claude to
     /// build one" pushes the connection screen.
@@ -131,6 +133,7 @@ struct TodayView: View {
                 historyCache = [:]
                 editor.invalidateSuggestions()
                 refreshModel()
+                activityDays = env.recentActivityDays()
             }
             .onChange(of: editor.plan) { _, _ in refreshModel() }
             // A workout started elsewhere (the watch) while the exercise screen was open on today's plan: that plan is
@@ -205,6 +208,7 @@ struct TodayView: View {
         if let pendingProposal { proposalChip(pendingProposal) }
         SyncStatusBanner()
         RecoveryCard(identifier: "today.recovery")
+        TodayActivitySection(days: activityDays)
     }
 
     /// A later day back to the week: the owner's change and an agent's switch for that date go.
@@ -352,6 +356,7 @@ struct TodayView: View {
         // The plan may have changed underneath (My Plan, sync, a new day): the exercise screen shows the new plan
         // (and closes if its exercise is gone).
         historyCache = [:]
+        activityDays = env.recentActivityDays()
         let env = self.env
         editor.isLocked = env.session != nil
         let gym = env.todayGymContext()

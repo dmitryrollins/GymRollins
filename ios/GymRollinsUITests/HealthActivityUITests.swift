@@ -86,4 +86,54 @@ final class HealthActivityUITests: XCTestCase {
         allow.tap()
         wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: allow)], timeout: 10)
     }
+
+    // MARK: Today
+
+    func testTodayShowsTodaysStepsAndTheLastSevenDays() {
+        let app = XCUIApplication.launchReady(["-fakeHealth"])
+        enableHealth(app)
+        app.tabBars.buttons["Today"].tap()
+        let row = app.buttons["today.activity"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        scrollTo(row, in: app)
+        XCTAssertTrue(row.label.contains("4,210 steps"), row.label)
+        row.tap()
+        let days = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'activity.day.'"))
+        XCTAssertTrue(days.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(days.count, 7)
+        app.buttons["activity.week.done"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+    }
+
+    func testTheOneTimeCardAsksThenGoes() {
+        let app = XCUIApplication.launchReady(["-fakeHealth", "-healthBeforeActivity"])
+        let allow = app.buttons["today.activityCard.allow"]
+        XCTAssertTrue(allow.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["today.activity"].exists, "nothing is read before the ask")
+        scrollTo(allow, in: app)
+        allow.tap()
+        XCTAssertTrue(app.buttons["today.activity"].waitForExistence(timeout: 10))
+        XCTAssertFalse(allow.exists)
+    }
+
+    func testNotNowHidesTheCardForGood() {
+        let app = XCUIApplication.launchReady(["-fakeHealth", "-healthBeforeActivity"])
+        let notNow = app.buttons["today.activityCard.notNow"]
+        XCTAssertTrue(notNow.waitForExistence(timeout: 10))
+        scrollTo(notNow, in: app)
+        notNow.tap()
+        XCTAssertFalse(app.buttons["today.activityCard.allow"].waitForExistence(timeout: 2))
+        app.tabBars.buttons["Log"].tap()
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertFalse(app.buttons["today.activityCard.allow"].waitForExistence(timeout: 2))
+    }
+
+    func testTurningStepsOffHidesTheRow() {
+        let app = XCUIApplication.launchReady(["-fakeHealth"])
+        enableHealth(app)
+        flip(app.switches["health.read.days"], in: app)
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertFalse(app.buttons["today.activity"].waitForExistence(timeout: 3))
+    }
 }
