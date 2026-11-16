@@ -178,8 +178,8 @@ public actor HealthKitStore: HealthStore {
                                            anchor: newAnchor)
     }
 
-    /// GymRollins' own workout, re-exported or deleted by the app: Health reports that as a deletion too, but there is
-    /// no imported row for it, so it is dropped here instead of waiting in the unmatched list.
+    /// GymRollins' own workout or weigh-in, re-exported or deleted by the app: Health reports that as a deletion too,
+    /// but there is no imported row for it, so it is dropped here instead of waiting in an unmatched list.
     private func isOwnDeletion(_ object: HKDeletedObject) -> Bool {
         (object.metadata?[HKMetadataKeySyncIdentifier] as? String)?.hasPrefix(Self.syncIdentifierPrefix) == true
     }
@@ -229,7 +229,8 @@ public actor HealthKitStore: HealthStore {
         let result = try await descriptor.result(for: store)
         let newAnchor = try NSKeyedArchiver.archivedData(withRootObject: result.newAnchor, requiringSecureCoding: true)
         return HealthOutsideWorkoutChanges(added: result.addedSamples.map(outsideWorkout),
-                                           deleted: result.deletedObjects.map(\.uuid), anchor: newAnchor)
+                                           deleted: result.deletedObjects.filter { !isOwnDeletion($0) }.map(\.uuid),
+                                           anchor: newAnchor)
     }
 
     private func outsideWorkout(_ workout: HKWorkout) -> HealthOutsideWorkout {
