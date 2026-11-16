@@ -34,35 +34,99 @@ export const SAME_SESSION_SHARE = 0.8
 export const COUNTING_MINIMUM_S = 600
 
 const ms = (iso: string): number => Date.parse(iso)
-const length = (start: string, end: string): number => Math.max(0, ms(end) - ms(start))
-
-/** Milliseconds two spans share. */
-function overlap(aStart: string, aEnd: string, bStart: string, bEnd: string): number {
-  return Math.max(0, Math.min(ms(aEnd), ms(bEnd)) - Math.max(ms(aStart), ms(bStart)))
-}
 
 const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
+/** An outside workout with its timestamps parsed once. */
+interface Timed<T extends ActivitySpan> {
+  item: T
+  start: number
+  end: number
+  len: number
+}
+
+const timed = <T extends ActivitySpan>(item: T): Timed<T> => {
+  const start = ms(item.started_at)
+  const end = ms(item.ended_at)
+  return { item, start, end, len: Math.max(0, end - start) }
+}
+
+/** Workout spans sorted by start, with the running maximum of their ends (for skipping spans already over). */
+interface WorkoutIndex {
+  spans: { span: WorkoutSpan; start: number; end: number; len: number }[]
+  maxEnd: number[]
+}
+
+function indexWorkouts(workouts: readonly WorkoutSpan[]): WorkoutIndex {
+  const spans = workouts
+    .map((span) => {
+      const start = ms(span.started_at)
+      const end = ms(span.ended_at)
+      return { span, start, end, len: Math.max(0, end - start) }
+    })
+    .sort((a, b) => a.start - b.start)
+  const maxEnd: number[] = []
+  let running = -Infinity
+  for (const s of spans) {
+    running = Math.max(running, s.end)
+    maxEnd.push(running)
+  }
+  return { spans, maxEnd }
+}
+
+/** First index in a sorted numeric sequence whose value is > x (values read through `at`). */
+function firstAbove(n: number, at: (i: number) => number, x: number): number {
+  let lo = 0
+  let hi = n
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (at(mid) > x) hi = mid
+    else lo = mid + 1
+  }
+  return lo
+}
+
 /** Rule 6's workout: the largest overlap reaching ATTACH_SHARE of the shorter, then the earliest, the lowest id. */
-function workoutFor(a: ActivitySpan, workouts: readonly WorkoutSpan[]): WorkoutSpan | null {
-  let best: { span: WorkoutSpan; shared: number } | null = null
-  for (const span of workouts) {
-    const shared = overlap(a.started_at, a.ended_at, span.started_at, span.ended_at)
-    const shorter = Math.min(length(a.started_at, a.ended_at), length(span.started_at, span.ended_at))
+function workoutFor(a: Timed<ActivitySpan>, index: WorkoutIndex): WorkoutSpan | null {
+  let best: { span: WorkoutSpan; start: number; shared: number } | null = null
+  const { spans, maxEnd } = index
+  for (let i = firstAbove(spans.length, (k) => maxEnd[k], a.start); i < spans.length; i++) {
+    const w = spans[i]
+    if (w.start >= a.end) break
+    const shared = Math.max(0, Math.min(a.end, w.end) - Math.max(a.start, w.start))
+    const shorter = Math.min(a.len, w.len)
     if (shared <= 0 || shared < ATTACH_SHARE * shorter) continue
     const better = best === null || shared > best.shared ||
-      (shared === best.shared && (ms(span.started_at) < ms(best.span.started_at) ||
-        (ms(span.started_at) === ms(best.span.started_at) && byId(span.id, best.span.id) < 0)))
-    if (better) best = { span, shared }
+      (shared === best.shared && (w.start < best.start || (w.start === best.start && byId(w.span.id, best.span.id) < 0)))
+    if (better) best = { span: w.span, start: w.start, shared }
   }
   return best?.span ?? null
 }
 
-function sameSession(a: ActivitySpan, b: ActivitySpan): boolean {
-  if (a.kind !== b.kind) return false
-  const shared = overlap(a.started_at, a.ended_at, b.started_at, b.ended_at)
-  const shorter = Math.min(length(a.started_at, a.ended_at), length(b.started_at, b.ended_at))
-  return shared > 0 && shared >= SAME_SESSION_SHARE * shorter
+function sameSession(a: Timed<ActivitySpan>, b: Timed<ActivitySpan>): boolean {
+  const shared = Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start))
+  return shared > 0 && shared >= SAME_SESSION_SHARE * Math.min(a.len, b.len)
+}
+
+/** Kept copies of one kind, sorted by start, so a candidate only meets the ones that can overlap it. */
+class KeptOfKind {
+  private readonly list: Timed<ActivitySpan>[] = []
+  private longest = 0
+
+  overlapsSession(a: Timed<ActivitySpan>): boolean {
+    // A kept copy overlapping `a` starts after a.start - longest and before a.end.
+    const from = firstAbove(this.list.length, (i) => this.list[i].start, a.start - this.longest - 1)
+    for (let i = from; i < this.list.length && this.list[i].start < a.end; i++) {
+      if (sameSession(this.list[i], a)) return true
+    }
+    return false
+  }
+
+  add(a: Timed<ActivitySpan>): void {
+    const at = firstAbove(this.list.length, (i) => this.list[i].start, a.start)
+    this.list.splice(at, 0, a)
+    this.longest = Math.max(this.longest, a.len)
+  }
 }
 
 /** The copy kept of a session: the Apple Watch's, then the longer (active time), the earlier start, the lower id. */
@@ -84,19 +148,28 @@ export function resolveActivities<T extends ActivitySpan>(
   activities: readonly T[],
   workouts: readonly WorkoutSpan[],
 ): Resolved<T> {
+  const index = indexWorkouts(workouts)
   const attached: { activity: T; workout_id: string }[] = []
-  const free: T[] = []
-  for (const activity of activities) {
-    const span = workoutFor(activity, workouts)
+  const free: Timed<T>[] = []
+  for (const record of activities.map(timed)) {
+    const span = workoutFor(record, index)
     if (span === null) {
-      free.push(activity)
+      free.push(record)
     } else {
-      attached.push({ activity, workout_id: span.id })
+      attached.push({ activity: record.item, workout_id: span.id })
     }
   }
+  const keptByKind = new Map<string, KeptOfKind>()
   const kept: T[] = []
-  for (const activity of [...free].sort(preferred)) {
-    if (!kept.some((k) => sameSession(k, activity))) kept.push(activity)
+  for (const record of free.sort((a, b) => preferred(a.item, b.item))) {
+    let ofKind = keptByKind.get(record.item.kind)
+    if (ofKind === undefined) {
+      ofKind = new KeptOfKind()
+      keptByKind.set(record.item.kind, ofKind)
+    }
+    if (ofKind.overlapsSession(record)) continue
+    ofKind.add(record)
+    kept.push(record.item)
   }
   return {
     shown: kept.sort(newestFirst),
