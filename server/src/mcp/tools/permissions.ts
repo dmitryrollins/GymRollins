@@ -5,7 +5,7 @@
 import type { Db } from '../db.ts'
 import { ToolError } from './result.ts'
 
-export type ReadSwitch = 'workouts' | 'body' | 'plan' | 'gyms'
+export type ReadSwitch = 'workouts' | 'body' | 'plan' | 'gyms' | 'activity'
 
 /** The switches as the app names them in Settings › AI agents. */
 const SWITCH_NAMES: Readonly<Record<ReadSwitch, string>> = {
@@ -13,6 +13,7 @@ const SWITCH_NAMES: Readonly<Record<ReadSwitch, string>> = {
   body: 'Read bodyweight',
   plan: 'Read your plan and profile',
   gyms: 'Gyms',
+  activity: 'Read activity from Apple Health',
 }
 
 /** “A”, “A” and “B”, or “A”, “B” and “C”. */

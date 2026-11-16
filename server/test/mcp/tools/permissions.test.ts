@@ -45,6 +45,7 @@ describe('the words', () => {
     expect(notAllowed(['workouts', 'body', 'plan'])).toContain(
       '“Read workouts and sets”, “Read bodyweight” and “Read your plan and profile”',
     )
+    expect(notAllowed(['activity'])).toContain('“Read activity from Apple Health”')
     expect(withheld(['body'], 'Bodyweight')).toBe(
       'Bodyweight withheld: the owner has turned off “Read bodyweight” for agents in the GymRollins app ' +
         '(Settings › AI agents).',

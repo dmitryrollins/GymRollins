@@ -24,6 +24,8 @@ export interface Profile {
   mcp_auto_apply: boolean
   /** Add workouts (plan 32); absent counts as off, its default. */
   mcp_log_workouts?: boolean
+  /** Read activity from Apple Health (plan 39); absent counts as on, its default. */
+  mcp_read_activity?: boolean
   /** Strength levels only; never returned by get_profile. */
   sex?: 'male' | 'female' | null
   birth_year?: number | null
@@ -110,6 +112,47 @@ export interface BodyweightRow {
   measured_at: string
   w_kg: number
   bf_pct: number | null
+}
+
+/** `health_activities` (plan 39): a workout another app saved to Apple Health, as the phone imported it. */
+export interface HealthActivityRow {
+  id: string
+  kind: string
+  started_at: string
+  ended_at: string
+  duration_s: number
+  kcal: number | null
+  distance_m: number | null
+  avg_hr: number | null
+  max_hr: number | null
+  source_name: string
+  from_watch: boolean
+}
+
+/** `activity_days` (plan 39): one local day's steps, move, exercise and stand (null without an Apple Watch). */
+export interface ActivityDayRow {
+  day: string
+  steps: number
+  move_kcal: number
+  exercise_min: number
+  stand_h: number | null
+}
+
+/** A finished workout's span, for rule 6 (src/shared/activity.ts). */
+export interface WorkoutSpanRow {
+  id: string
+  started_at: string
+  ended_at: string
+}
+
+/** The owner's read switches for agents (Settings › AI agents). */
+export interface ReadPermissions {
+  plan: boolean
+  workouts: boolean
+  body: boolean
+  gyms: boolean
+  /** Read activity from Apple Health (plan 39). */
+  activity: boolean
 }
 
 export interface ExerciseRow {
@@ -237,11 +280,23 @@ export interface Db {
   /** The newest non-deleted weigh-in measured at or before `until`, or null. */
   latestBodyweight(until: string): Promise<BodyweightRow | null>
   /** The owner's MCP read flags (public.mcp_flag), readable even while RLS hides the profile. */
-  readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }>
+  readPermissions(): Promise<ReadPermissions>
   /** "Apply changes without asking", answered even when "Read your plan and profile" hides the profile. */
   autoApply(): Promise<boolean>
   /** `started_at` of every non-deleted workout, newest first (all of them, paged). */
   workoutDates(): Promise<string[]>
+  /**
+   * Outside workouts (plan 39) that aren't deleted and started at or after `since` (all when absent), oldest first, at
+   * most the account's cap; empty while mcp_read_activity is off.
+   */
+  healthActivities(since?: string): Promise<HealthActivityRow[]>
+  /** Days of activity on or after `fromDay` (YYYY-MM-DD), oldest first; empty while mcp_read_activity is off. */
+  activityDays(fromDay: string): Promise<ActivityDayRow[]>
+  /**
+   * The spans of finished workouts that aren't deleted and started at or after `since` (all when absent), whatever
+   * mcp_read_workouts says: rule 6 only learns that a GymRollins session was there.
+   */
+  workoutSpans(since?: string): Promise<WorkoutSpanRow[]>
   /** The owner's stored weekly targets (groups without a row use the defaults). */
   muscleTargets(): Promise<MuscleTargetRow[]>
   /** Library + the owner's custom exercises; every word of `query` must appear in the name. */

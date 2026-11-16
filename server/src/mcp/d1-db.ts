@@ -6,12 +6,14 @@
 import { agentLabel } from '../claude/hosts.ts'
 import { claudeReadsPrivateListing, claudeReadsPublicListing } from '../gyms/visibility.ts'
 import { ApiError, constraintMessage, raisedCode } from '../http/errors.ts'
+import { DomainLimits } from '../shared/domain-limits.ts'
 import { AGENT_WORKOUT_CAPS, CLAUDE_CAPS } from '../sync/caps.ts'
 import { RowError } from '../sync/columns.ts'
 import { inJson } from '../sync/sql.ts'
 import { normalizeTimestamp, NOW_SQL } from '../sync/time.ts'
 import { addWorkout } from '../sync/workouts.ts'
 import type {
+  ActivityDayRow,
   BodyweightRow,
   Db,
   EntryRow,
@@ -22,16 +24,19 @@ import type {
   ExerciseSession,
   GymListingRow,
   GymRow,
+  HealthActivityRow,
   LoggedWorkout,
   MuscleTargetRow,
   Profile,
   ProposalRow,
+  ReadPermissions,
   RoutineRow,
   ScheduleRow,
   SetRow,
   WorkoutAdded,
   WorkoutQuery,
   WorkoutRow,
+  WorkoutSpanRow,
 } from './db.ts'
 import { ToolError } from './tools/result.ts'
 
@@ -59,6 +64,8 @@ export interface Permissions {
   autoApply: boolean
   /** Add workouts (plan 32): off by default, so off without a profile too. */
   logWorkouts: boolean
+  /** Read activity from Apple Health (plan 39): on by default, so on without a profile too. */
+  activity: boolean
 }
 
 type Raw = Record<string, unknown>
@@ -178,7 +185,7 @@ export class D1Db implements Db {
   allowed(): Promise<Permissions> {
     this.permissions ??= this.db.prepare(
       'SELECT mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, mcp_propose, mcp_auto_apply, ' +
-        'mcp_log_workouts ' +
+        'mcp_log_workouts, mcp_read_activity ' +
         'FROM profiles WHERE user_id = ?1',
     ).bind(this.userId).first<Raw>().then((p) => ({
       plan: p ? bool(p.mcp_read_plan) : true,
@@ -188,13 +195,14 @@ export class D1Db implements Db {
       propose: p ? bool(p.mcp_propose) : true,
       autoApply: p ? bool(p.mcp_auto_apply) : false,
       logWorkouts: p ? bool(p.mcp_log_workouts) : false,
+      activity: p ? bool(p.mcp_read_activity) : true,
     }))
     return this.permissions
   }
 
-  async readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }> {
-    const { plan, workouts, body, gyms } = await this.allowed()
-    return { plan, workouts, body, gyms }
+  async readPermissions(): Promise<ReadPermissions> {
+    const { plan, workouts, body, gyms, activity } = await this.allowed()
+    return { plan, workouts, body, gyms, activity }
   }
 
   /** "Apply changes without asking", answered even when "Read your plan and profile" hides the profile. */
@@ -208,7 +216,7 @@ export class D1Db implements Db {
       'SELECT unit, height_cm, goal_weight_kg, goal_date, training_days, experience, limits, limits_until, ' +
         'deload_pct, rest_sec, mcp_read_plan, mcp_read_workouts, mcp_read_body, mcp_read_gyms, ' +
         'mcp_propose, ' +
-        'mcp_auto_apply, mcp_log_workouts, sex, birth_year FROM profiles WHERE user_id = ?1',
+        'mcp_auto_apply, mcp_log_workouts, mcp_read_activity, sex, birth_year FROM profiles WHERE user_id = ?1',
       this.userId,
     )
     if (!p) return null
@@ -221,6 +229,7 @@ export class D1Db implements Db {
       mcp_propose: bool(p.mcp_propose),
       mcp_auto_apply: bool(p.mcp_auto_apply),
       mcp_log_workouts: bool(p.mcp_log_workouts),
+      mcp_read_activity: bool(p.mcp_read_activity),
     } as Profile
   }
 
@@ -367,6 +376,42 @@ export class D1Db implements Db {
       MAX_DATE_ROWS,
     )
     return rows.map((r) => r.started_at)
+  }
+
+  /** Through health_activities_user_started. At most the account's cap (DomainLimits.healthActivitiesMax). */
+  async healthActivities(since?: string): Promise<HealthActivityRow[]> {
+    if (!(await this.allowed()).activity) return []
+    const binds: unknown[] = [this.userId, DomainLimits.healthActivitiesMax]
+    const after = since ? ` AND started_at >= ?${binds.push(stamp(since))}` : ''
+    const rows = await this.all(
+      'SELECT id, kind, started_at, ended_at, duration_s, kcal, distance_m, avg_hr, max_hr, source_name, from_watch ' +
+        `FROM health_activities WHERE user_id = ?1 AND deleted_at IS NULL${after} ORDER BY started_at, id LIMIT ?2`,
+      ...binds,
+    )
+    return rows.map((r) => ({ ...r, from_watch: bool(r.from_watch) }) as HealthActivityRow)
+  }
+
+  /** Through the primary key (user_id, day). At most the account's cap (DomainLimits.activityDaysMax). */
+  async activityDays(fromDay: string): Promise<ActivityDayRow[]> {
+    if (!(await this.allowed()).activity) return []
+    return await this.all<ActivityDayRow>(
+      'SELECT day, steps, move_kcal, exercise_min, stand_h FROM activity_days WHERE user_id = ?1 AND day >= ?2 ' +
+        'ORDER BY day LIMIT ?3',
+      this.userId,
+      fromDay,
+      DomainLimits.activityDaysMax,
+    )
+  }
+
+  /** Through workouts_user_started. At most the account's 10,000 workouts (DomainLimits.workoutsMax). */
+  async workoutSpans(since?: string): Promise<WorkoutSpanRow[]> {
+    const binds: unknown[] = [this.userId, DomainLimits.workoutsMax]
+    const after = since ? ` AND started_at >= ?${binds.push(stamp(since))}` : ''
+    return await this.all<WorkoutSpanRow>(
+      'SELECT id, started_at, ended_at FROM workouts WHERE user_id = ?1 AND deleted_at IS NULL ' +
+        `AND ended_at IS NOT NULL${after} ORDER BY started_at, id LIMIT ?2`,
+      ...binds,
+    )
   }
 
   async muscleTargets(): Promise<MuscleTargetRow[]> {

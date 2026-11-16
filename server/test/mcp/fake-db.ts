@@ -3,6 +3,7 @@
 import ownerText from './testdata/owner.json?raw'
 import { normalizeTimestamp } from '../../src/sync/time.ts'
 import type {
+  ActivityDayRow,
   BodyweightRow,
   Db,
   ExercisePrefRow,
@@ -12,15 +13,18 @@ import type {
   ExerciseSession,
   GymListingRow,
   GymRow,
+  HealthActivityRow,
   LoggedWorkout,
   MuscleTargetRow,
   Profile,
   ProposalRow,
+  ReadPermissions,
   RoutineRow,
   ScheduleRow,
   WorkoutAdded,
   WorkoutQuery,
   WorkoutRow,
+  WorkoutSpanRow,
 } from '../../src/mcp/db.ts'
 
 /**
@@ -60,6 +64,9 @@ export interface FakeData {
   gyms?: FakeGym[]
   listings?: FakeListing[]
   requirements?: ExerciseRequirementRow[]
+  /** Outside workouts and days of activity (plan 39). */
+  activities?: HealthActivityRow[]
+  days?: ActivityDayRow[]
 }
 
 
@@ -142,13 +149,14 @@ export class FakeDb implements Db {
   }
 
   /** Like public.mcp_flag: the stored flag, true when no profile was saved. */
-  readPermissions(): Promise<{ plan: boolean; workouts: boolean; body: boolean; gyms: boolean }> {
+  readPermissions(): Promise<ReadPermissions> {
     const p = this.data.profile
     return Promise.resolve({
       plan: p?.mcp_read_plan ?? true,
       workouts: p?.mcp_read_workouts ?? true,
       body: p?.mcp_read_body ?? true,
       gyms: p?.mcp_read_gyms ?? true,
+      activity: p?.mcp_read_activity ?? true,
     })
   }
 
@@ -189,6 +197,30 @@ export class FakeDb implements Db {
     return Promise.resolve(
       this.data.workouts.map((w) => w.started_at).sort((a, b) => time(b) - time(a)).slice(0, 1000),
     )
+  }
+
+  /** Like D1Db: hidden while mcp_read_activity is off; oldest first. */
+  healthActivities(since?: string): Promise<HealthActivityRow[]> {
+    if (this.data.profile?.mcp_read_activity === false) return Promise.resolve([])
+    const rows = (this.data.activities ?? [])
+      .filter((a) => (since ? time(a.started_at) >= time(since) : true))
+      .sort((a, b) => time(a.started_at) - time(b.started_at))
+    return Promise.resolve(rows)
+  }
+
+  activityDays(fromDay: string): Promise<ActivityDayRow[]> {
+    if (this.data.profile?.mcp_read_activity === false) return Promise.resolve([])
+    const rows = (this.data.days ?? []).filter((d) => d.day >= fromDay).sort((a, b) => a.day.localeCompare(b.day))
+    return Promise.resolve(rows)
+  }
+
+  /** Like D1Db: finished workouts whatever mcp_read_workouts says. */
+  workoutSpans(since?: string): Promise<WorkoutSpanRow[]> {
+    const rows = this.data.workouts
+      .filter((w) => w.ended_at !== null && (since ? time(w.started_at) >= time(since) : true))
+      .sort((a, b) => time(a.started_at) - time(b.started_at))
+      .map((w) => ({ id: w.id, started_at: w.started_at, ended_at: w.ended_at ?? w.started_at }))
+    return Promise.resolve(rows)
   }
 
   muscleTargets(): Promise<MuscleTargetRow[]> {
