@@ -7481,3 +7481,74 @@ Each of these needs the owner's go-ahead. The implementing agent doesn't run the
    - On the owner's phone: back up the Library first, install, open Today, tap **Allow** on the card, and check that the Log shows the week's outside workouts.
    - Builds before 4 ignore the new tables and the new profile column.
 3. **Release notes.** Update the website privacy policy and the App Store privacy answers (the text in `docs/release-readiness.md`): Health activity is stored in the cloud and is readable by connected agents while "Read activity from Apple Health" is on.
+
+## Outcome (2026-11-16)
+
+**Commits** on `feat-health-activities`, from main 6ce667a:
+
+| Commits | What |
+| --- | --- |
+| c192d78 | Spec and plan |
+| c0acc8d, 9f556a3, 7bf385f | Tasks 1–3: the GymCore kinds, their limits mirrored on the server, rules 6 and 7 on the shared fixture |
+| cdc721c, b47fc73, 07b4325 | Tasks 4–6: storage, the two sync kinds, GymSync's push and pull |
+| f57b9da, cf5fd6b, 715f507 | Tasks 7–9: the HealthStore reads, the outside-workout import, days of activity and the one-time ask |
+| d831a9a, 99cb11c, 70264b4, da4cd91, 48ceeaa, 65e83bc | Tasks 10–14: migration 0013, rules 6 and 7 in TypeScript, the MCP read switch, `get_activity`, the streak and the agents' instructions |
+| 2260083, 27781b7, 3351e93, 88206b2 | Tasks 15–18: the agents' switch and coach prompt, the app wiring and test seeds, Settings, Today |
+| 6599ddd, 1047c2f, d318a99, 55ed479 | Fixes from the Health import review: an empty first read (access denied, granted later) isn't remembered; another account re-imports; Health replacing GymRollins' own workout is neither a deletion nor an outside workout |
+| 6e82b9a, b8d8e20, e7a5241 | Tasks 19–21: the Log, the measured block, the streak and the weekly goal |
+| 9d53fed | Task 22: release notes, build 1.0 (4) |
+| e7f224d, bc956be, f9c4697, 3c512c0, dd49445, 35fc006, 154c9c7 | Slow taps on Today and Library (the owner's report, below) |
+| 52c5e0b, 3913575, 8dc1eae, 7f1890f, 697ffeb | Fixes from the whole-branch review: M4, L2, M3, M2, L1 |
+| 4f31c83 | Average power, average cadence and total calories (the owner's pick) |
+| babb42c, e805630 | The Apple Fitness look, and spec §4.1 |
+
+**Review of the whole branch** (a reviewer agent read `git diff main...HEAD`). No CRITICAL or HIGH findings. Fixed:
+- **M1:** every insights and Log reload fetched and resolved the whole outside-workout history on the main actor. Now `InsightsMemo` keeps the insights and the resolved activities until the data, the reading switches, the row counts, the time zone or the minute change (35fc006).
+- **M2:** with Apple Health off, Settings hid the two reading switches, so what was already read couldn't be hidden. They now stay, with a footer sentence saying so (7f1890f).
+- **M3:** the import saved once per row. A first import of 40 workouts and 30 days went from 70 saves to 2, with ids fetched in groups of 500 (8dc1eae).
+- **M4:** the server resolved rules 6 and 7 with `Date.parse` inside a nested loop. It now parses each time once and skips spans that can't overlap (52c5e0b).
+- **L1:** an outside workout's detail didn't reload. It now reloads with the data and says "This workout was removed from Health." when Health deleted it (697ffeb).
+- **L2:** one out-of-range optional value (a heart rate, say) dropped the whole outside workout. Now only that value is left out (`DomainLimits.fitting(_:)`, 3913575).
+
+Accepted as they are:
+- **L3:** the days are re-read while no outside workout exists. It's one small statistics query per run.
+- **L4:** an error in the outside-workout read skips the days read in the same run. The next run reads both.
+
+**Added at the owner's request during the build:**
+- **Power, cadence, total calories.** Outside workouts keep `avgPowerW` (cycling power, else running power), `avgCadenceRpm` (cycling cadence) and `totalKcal` (active plus resting energy; empty when active energy is missing). They're in GymCore, GymData, GymSync, migration 0013 (edited in place: it had never been applied), the server limits with their drift test, and `get_activity`. Workouts imported before this change don't gain them, because the anchored query doesn't re-read them; no plan 39 build had shipped.
+- **The Apple Fitness look** for the activity screens only (spec §4.1): values coloured by metric in SF Pro Rounded with the unit in uppercase after them ("1.40MI", "138W"), the detail's big faint symbol and "Workout Details" grid in Fitness' order, the Log card's round icon. All colours keep 4.5:1 on the card and the background. The new `testHealthActivityAudit` found two clipping bugs, both fixed.
+- **Slow taps on Today and Library** (Debug build, simulator; `docs/testing/performance.md`):
+
+  | What | Before | After |
+  | --- | --- | --- |
+  | Today's reload after a sync | 394 ms | 103 ms |
+  | Today's reload on returning to the app | ~190 ms | 33 ms |
+  | 10 muscle badges | 54 ms | 1.5 ms |
+  | Insights, reused | 86 ms | 0.1 ms |
+
+  The causes were the muscle badge building its paths on every row, Today reading each exercise's whole history on every reload, the Library computing its search results three times per pass, and each insights card computing the insights again. The Log has no badges, which is why it stayed fast.
+
+**Deviations from the plan:**
+- The detail's title is the Health kind ("Cycling"), not Fitness' "Indoor Cycle": `OutsideWorkoutKind` has no indoor flag.
+- Digits are proportional, not monospaced: these values don't tick, and tabular digits left a gap after every 1.
+- The detail's date and source are on two lines, and the Log card's kind name wraps, because the audit found them clipped at large sizes.
+- The ride with power and cadence is seeded in the app (`AppEnvironment.uiTestRide`), not in GymHealth's fake store.
+- The insights memo is keyed by the minute, not the day, and `countedActivityStarts` isn't bounded to the import window: a bound would drop old outside workouts from the longest streak.
+- `ActivityRules.resolve` is unchanged. It takes about 80 ms in Debug with 500 made-up outside workouts, once per data change, and it must keep matching the server's fixture.
+
+**Tests:**
+- GymCore 630, GymData 418, GymSync 291, GymHealth 117, GymWatchLink 63: all passed.
+- Server `npx vitest run`: 853 passed in 62 files. `npx tsc --noEmit` is clean.
+- Whole app suite on the code of e7a5241, before the speed fixes and the restyle: 1384 tests, 1359 passed, 19 skipped, 6 failed. The 5 `SharedWorkoutUITests` link tests fail the same way on main; the sixth was the `AccessibilityAuditUITests` flake below.
+- After the restyle: the app unit target and the UI suites HealthActivity, Log, TodayDays, TodayFlex, TodayPlanScreen, TodayScope, Settings, AppleHealth, AccessibilityAudit and WorkoutScreens: 1209 passed, 5 skipped, 1 failed (`testAgentsAudit`; alone it passed once and failed once).
+- `testAgentsAudit` is the known contrast flake on a glass edge. The new "Read activity from Apple Health" row is a plain `Toggle` like its neighbours, but its label and footer aren't on the audit's measured-label list (`agentSwitchLabels`), so the audit samples them. Adding them is a two-line change, not made here.
+- Privacy scan of `git diff main...HEAD` and its commit messages: no surname, no account id, no `/Users/` paths beyond this plan's own rule text, no 32-hex ids, no secret-like values, no symlinks, no attribution trailers. gitleaks found no leaks in the 43 commits.
+
+**Owner steps done:**
+- 2026-11-16, on the owner's "Server, then upload": D1 bookmark saved (kept locally), migration 0013 applied remote (14 statements), Worker deployed as version df0ec800 (previous 0b30adbf). D1 before and after: 1 user, 159 workouts, 2927 sets, 6 routines, 30 weigh-ins; the new tables empty, `mcp_read_activity` on. `/mcp` 401, well-known 200, the two new sync routes 401 (404 before).
+- Builds before 4 work against this server: they don't call the new routes, and a profile they push without `mcp_read_activity` keeps it on (the column's fallback is true).
+
+**Not verified:**
+- Real HealthKit reads on a device, including power and cadence from a gym bike through the Watch.
+- The live MCP tool list (17 tools) and `get_activity` with a real agent's token.
+- Build 4 isn't uploaded yet.
