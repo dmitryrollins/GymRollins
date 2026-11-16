@@ -46,6 +46,43 @@ import Testing
         #expect(sync.state.activityAnchor != nil)
     }
 
+    @Test func anotherAccountForgetsTheImportProgressSoItGetsTheHistoryToo() async throws {
+        let fx = try HealthFixture()
+        let walk = outside(fx, daysAgo: 3)
+        fx.store = FakeHealthStore(outsideWorkouts: [walk], days: [ActivityDay(
+            day: ActivityDay.key(for: fx.now.addingTimeInterval(-day), calendar: .current), steps: 5_000,
+            moveKcal: 300, exerciseMin: 30, standH: 10)])
+        let sync = fx.makeSync()
+        var owner = "A"
+        sync.owner = { owner }
+        _ = await sync.enable()
+        #expect(sync.state.activityAnchor != nil && sync.state.activityDaysReadAt != nil)
+        sync.localDataWasReset()
+        try fx.wipeLocalData()
+        owner = "B"
+        sync.localDataRestored(lastPull: fx.now.addingTimeInterval(1))
+        #expect(sync.state.activityAnchor == nil && sync.state.activityImportStart == nil)
+        #expect(sync.state.activityDaysReadAt == nil && sync.state.unmatchedActivityDeletions.isEmpty)
+        fx.advance()
+        await sync.importActivity()
+        #expect(try fx.activities.activities(since: nil) == [walk.activity])
+    }
+
+    @Test func theSameAccountKeepsTheImportProgress() async throws {
+        let fx = try HealthFixture()
+        fx.store = FakeHealthStore(outsideWorkouts: [outside(fx, daysAgo: 3)], days: [ActivityDay(
+            day: ActivityDay.key(for: fx.now.addingTimeInterval(-day), calendar: .current), steps: 5_000,
+            moveKcal: 300, exerciseMin: 30, standH: 10)])
+        let sync = fx.makeSync()
+        sync.owner = { "A" }
+        _ = await sync.enable()
+        sync.localDataWasReset()
+        try fx.wipeLocalData()
+        sync.localDataRestored(lastPull: fx.now.addingTimeInterval(1))
+        #expect(sync.state.activityAnchor != nil && sync.state.activityImportStart != nil)
+        #expect(sync.state.activityDaysReadAt != nil)
+    }
+
     @Test func gymRollinsOwnWorkoutsNeverComeIn() async throws {
         let fx = try HealthFixture()
         let exported = try fx.finishWorkout(startOffset: -2 * day)

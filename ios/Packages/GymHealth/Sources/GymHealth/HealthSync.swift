@@ -150,8 +150,8 @@ public final class HealthSync {
     }
 
     /// The owner's data is back (first sync round after the wipe). Same owner: the ledgers stand, so anything still
-    /// missing was deleted elsewhere and leaves Health. Another owner: the ledgers are forgotten (never deleted —
-    /// those workouts belong to the other account).
+    /// missing was deleted elsewhere and leaves Health. Another owner: the ledgers and the activity import progress are
+    /// forgotten (nothing deleted — those workouts belong to the other account).
     public func localDataRestored(lastPull: Date?) {
         guard state.awaitingRestore, let lastPull, lastPull >= state.awaitingRestoreSince ?? .distantFuture else {
             return
@@ -161,6 +161,11 @@ public final class HealthSync {
             if $0.ledgerOwner != owner {
                 $0.workouts = [:]
                 $0.weighIns = [:]
+                // The new account has none of the Health history the old one imported: read it all again.
+                $0.activityAnchor = nil
+                $0.activityImportStart = nil
+                $0.activityDaysReadAt = nil
+                $0.unmatchedActivityDeletions = []
             }
             $0.ledgerOwner = owner
             $0.awaitingRestore = false
