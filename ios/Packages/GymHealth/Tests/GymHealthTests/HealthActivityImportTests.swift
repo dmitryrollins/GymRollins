@@ -31,6 +31,21 @@ import Testing
         #expect(rows.first?.clientUpdatedAt == recent.activity.endedAt, "the workout's own end is its edit time")
     }
 
+    @Test func anEmptyFirstReadKeepsTheAnchorUnsetSoLaterAccessImportsTheHistory() async throws {
+        let fx = try HealthFixture()
+        fx.store = FakeHealthStore()
+        let sync = fx.makeSync()
+        _ = await sync.enable()
+        #expect(sync.state.activityAnchor == nil, "a denied read looks like an empty one")
+        #expect(sync.state.activityImportStart == nil)
+        let walk = outside(fx, daysAgo: 365)
+        await fx.store.addOutsideWorkout(walk)
+        fx.advance()
+        await sync.importActivity()
+        #expect(try fx.activities.activities(since: nil) == [walk.activity])
+        #expect(sync.state.activityAnchor != nil)
+    }
+
     @Test func gymRollinsOwnWorkoutsNeverComeIn() async throws {
         let fx = try HealthFixture()
         let exported = try fx.finishWorkout(startOffset: -2 * day)

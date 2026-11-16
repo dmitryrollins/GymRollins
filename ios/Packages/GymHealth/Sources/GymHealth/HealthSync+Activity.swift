@@ -51,9 +51,14 @@ extension HealthSync {
             if try activities.add(item.activity, editedAt: min(item.activity.endedAt, now())) { changed = true }
         }
         let kept = Array(unmatched.suffix(Self.maxUnmatchedActivityDeletions))
+        // Health answers a denied read with nothing: until a first workout came in, an empty batch isn't remembered, so
+        // the next run reads the whole window again once access is granted.
+        let nothingYet = state.activityAnchor == nil && changes.added.isEmpty
         update {
-            $0.activityAnchor = changes.anchor
-            $0.activityImportStart = start
+            if !nothingYet {
+                $0.activityAnchor = changes.anchor
+                $0.activityImportStart = start
+            }
             $0.unmatchedActivityDeletions = kept
         }
         return changed
@@ -83,7 +88,8 @@ extension HealthSync {
         for day in days where DomainLimits.activityDayViolation(day) == nil {
             if try activities.save(day: day) { changed = true }
         }
-        update { $0.activityDaysReadAt = time }
+        // The same for days: a first read that returned nothing (maybe denied) isn't remembered.
+        if !days.isEmpty || state.activityDaysReadAt != nil { update { $0.activityDaysReadAt = time } }
         return changed
     }
 

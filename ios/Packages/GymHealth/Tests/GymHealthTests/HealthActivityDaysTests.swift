@@ -20,6 +20,7 @@ import Testing
 
     @Test func theFirstReadCoversTwoYearsAndLaterOnesTheLastWeek() async throws {
         let fx = try HealthFixture()
+        fx.store = FakeHealthStore(days: [day(fx, daysAgo: 1, steps: 8_000)])
         let sync = fx.makeSync()
         _ = await sync.enable()
         let first = try #require(await fx.store.dayReads.first)
@@ -32,6 +33,20 @@ import Testing
         let next = try #require(await fx.store.dayReads.last)
         #expect(next.from == calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: enabledAt)))
         #expect(next.through == calendar.startOfDay(for: fx.now))
+    }
+
+    @Test func anEmptyFirstReadIsNotRememberedSoTheNextOneStartsTwoYearsBack() async throws {
+        let fx = try HealthFixture()
+        fx.store = FakeHealthStore()
+        let sync = fx.makeSync()
+        _ = await sync.enable()
+        #expect(sync.state.activityDaysReadAt == nil, "a denied read looks like an empty one")
+        fx.advance(86_400)
+        await sync.importActivity()
+        let reads = await fx.store.dayReads
+        let earliest = calendar.startOfDay(for: fx.now.addingTimeInterval(-HealthSync.importWindow))
+        #expect(reads.count == 2)
+        #expect(reads.last?.from == earliest)
     }
 
     @Test func onlyNewOrChangedDaysAreWrittenAgain() async throws {
