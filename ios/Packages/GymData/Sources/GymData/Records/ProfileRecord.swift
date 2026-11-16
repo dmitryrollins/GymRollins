@@ -29,6 +29,8 @@ public final class ProfileRecord {
     public var mcpAutoApply: Bool
     /// Plan 32's Add workouts: agents may add past workouts. A store from before it opens with the default.
     public var mcpLogWorkouts: Bool = false
+    /// Plan 39's "Read activity from Apple Health" for agents. A store from before it opens with the default, on.
+    public var mcpReadActivity: Bool = true
     /// `ProfileSex` raw value; nil until the owner sets it (strength levels only).
     public var sexRaw: String?
     public var birthYear: Int?

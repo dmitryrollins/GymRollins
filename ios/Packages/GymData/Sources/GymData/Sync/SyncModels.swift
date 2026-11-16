@@ -90,6 +90,7 @@ public struct ProfileSnapshot: Sendable, Equatable {
     public var mcpPropose = true
     public var mcpAutoApply = false
     public var mcpLogWorkouts = false
+    public var mcpReadActivity = true
     public var sex: ProfileSex?
     public var birthYear: Int?
 

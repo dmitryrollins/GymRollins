@@ -29,7 +29,7 @@ extension Profile {
              barKg: Double? = nil, plateInventory: PlateInventory? = nil, dumbbellStepKg: Double? = nil,
              mcpReadWorkouts: Bool? = nil, mcpReadBody: Bool? = nil, mcpReadPlan: Bool? = nil,
              mcpReadGyms: Bool? = nil, mcpPropose: Bool? = nil, mcpAutoApply: Bool? = nil,
-             mcpLogWorkouts: Bool? = nil) -> Profile {
+             mcpLogWorkouts: Bool? = nil, mcpReadActivity: Bool? = nil) -> Profile {
         Profile(unit: unit ?? self.unit, restSec: restSec ?? self.restSec,
                warmupRestSec: warmupRestSec ?? self.warmupRestSec, heightCm: heightCm, goalWeightKg: goalWeightKg,
                goalDate: goalDate, trainingDays: trainingDays, experience: experience, limits: limits, limitsUntil: limitsUntil,
@@ -39,7 +39,8 @@ extension Profile {
                mcpReadWorkouts: mcpReadWorkouts ?? self.mcpReadWorkouts, mcpReadBody: mcpReadBody ?? self.mcpReadBody,
                mcpReadPlan: mcpReadPlan ?? self.mcpReadPlan,
                mcpReadGyms: mcpReadGyms ?? self.mcpReadGyms, mcpPropose: mcpPropose ?? self.mcpPropose,
-               mcpAutoApply: mcpAutoApply ?? self.mcpAutoApply, mcpLogWorkouts: mcpLogWorkouts ?? self.mcpLogWorkouts)
+               mcpAutoApply: mcpAutoApply ?? self.mcpAutoApply, mcpLogWorkouts: mcpLogWorkouts ?? self.mcpLogWorkouts,
+               mcpReadActivity: mcpReadActivity ?? self.mcpReadActivity)
     }
 }
 

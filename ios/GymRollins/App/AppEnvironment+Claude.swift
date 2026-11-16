@@ -49,11 +49,12 @@ extension AppEnvironment {
     func clearLastApplied() { setLastApplied(nil) }
 
     /// Saves what agents may do (synced with the profile); turning auto-apply on applies what's pending now.
+    /// `readActivity` (plan 39) stays as it is when nil.
     func saveMcpPermissions(readWorkouts: Bool, readBody: Bool, readPlan: Bool, readGyms: Bool, propose: Bool,
-                            autoApply: Bool, logWorkouts: Bool) throws {
+                            autoApply: Bool, logWorkouts: Bool, readActivity: Bool? = nil) throws {
         try profiles.setMcpPermissions(readWorkouts: readWorkouts, readBody: readBody, readPlan: readPlan,
                                        readGyms: readGyms, propose: propose, autoApply: autoApply,
-                                       logWorkouts: logWorkouts)
+                                       logWorkouts: logWorkouts, readActivity: readActivity)
         reloadProfile()
         sync.localDataChanged()
         if autoApply { autoApplyProposals() }
@@ -67,7 +68,7 @@ extension AppEnvironment {
     @discardableResult
     func disconnectClaude() async throws -> Int {
         try saveMcpPermissions(readWorkouts: false, readBody: false, readPlan: false, readGyms: false, propose: false,
-                               autoApply: false, logWorkouts: false)
+                               autoApply: false, logWorkouts: false, readActivity: false)
         do { try await sync.pushProfileNow() } catch {
             Self.log.error("Push Claude permissions failed: \(String(describing: error), privacy: .public)")
             throw ClaudeDisconnectError.permissionsNotSaved

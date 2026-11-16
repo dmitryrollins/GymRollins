@@ -162,7 +162,7 @@ struct ProfileSetupView: View {
                               dumbbellStepKg: current.dumbbellStepKg, mcpReadWorkouts: current.mcpReadWorkouts,
                               mcpReadBody: current.mcpReadBody, mcpReadPlan: current.mcpReadPlan,
                               mcpReadGyms: current.mcpReadGyms, mcpPropose: current.mcpPropose, mcpAutoApply: current.mcpAutoApply,
-                              mcpLogWorkouts: current.mcpLogWorkouts)
+                              mcpLogWorkouts: current.mcpLogWorkouts, mcpReadActivity: current.mcpReadActivity)
             .withLimits(limits, until: hasLimitsDate ? GoalDate.normalized(limitsUntil) : nil)
         do {
             try env.profiles.save(profile)

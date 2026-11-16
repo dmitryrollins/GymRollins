@@ -27,6 +27,8 @@ public struct Profile: Codable, Sendable, Equatable {
     public let mcpAutoApply: Bool
     /// Agents may add past workouts to the history (`log_workout`, plan 32); off by default.
     public let mcpLogWorkouts: Bool
+    /// Agents may read what was read from Apple Health (`get_activity` and the streak, plan 39); on by default.
+    public let mcpReadActivity: Bool
     /// Optional; only picks the strength-level comparison table. `ProfileRepository.save` never writes it (see
     /// `setStrengthProfile`), so screens that rebuild a profile can't clear it.
     public let sex: ProfileSex?
@@ -39,7 +41,7 @@ public struct Profile: Codable, Sendable, Equatable {
                 barKg: Double = 20.411656, plateInventory: PlateInventory = .standardLb,
                 dumbbellStepKg: Double = 1.133981, mcpReadWorkouts: Bool = true, mcpReadBody: Bool = true,
                 mcpReadPlan: Bool = true, mcpReadGyms: Bool = true, mcpPropose: Bool = true,
-                mcpAutoApply: Bool = false, mcpLogWorkouts: Bool = false, sex: ProfileSex? = nil,
+                mcpAutoApply: Bool = false, mcpLogWorkouts: Bool = false, mcpReadActivity: Bool = true, sex: ProfileSex? = nil,
                 birthYear: Int? = nil) {
         self.unit = unit
         self.restSec = restSec
@@ -62,6 +64,7 @@ public struct Profile: Codable, Sendable, Equatable {
         self.mcpPropose = mcpPropose
         self.mcpAutoApply = mcpAutoApply
         self.mcpLogWorkouts = mcpLogWorkouts
+        self.mcpReadActivity = mcpReadActivity
         self.sex = sex
         self.birthYear = birthYear
     }
@@ -75,7 +78,8 @@ public struct Profile: Codable, Sendable, Equatable {
                        deloadPct: deloadPct, barKg: barKg, plateInventory: plateInventory,
                        dumbbellStepKg: dumbbellStepKg, mcpReadWorkouts: mcpReadWorkouts, mcpReadBody: mcpReadBody,
                        mcpReadPlan: mcpReadPlan, mcpReadGyms: mcpReadGyms, mcpPropose: mcpPropose,
-                       mcpAutoApply: mcpAutoApply, mcpLogWorkouts: mcpLogWorkouts, sex: sex, birthYear: birthYear)
+                       mcpAutoApply: mcpAutoApply, mcpLogWorkouts: mcpLogWorkouts, mcpReadActivity: mcpReadActivity,
+                       sex: sex, birthYear: birthYear)
     }
 
     /// Rounder for barbell-style loads in the user's unit: totals loadable from the bar and the enabled plates

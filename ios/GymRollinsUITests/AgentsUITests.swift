@@ -95,6 +95,18 @@ final class AgentsUITests: XCTestCase {
         XCTAssertEqual(add.value as? String, "1")
     }
 
+    /// Plan 39: agents read the activity from Apple Health unless the owner turns it off here.
+    func testReadActivityIsOnUntilTurnedOff() {
+        openAgents([])
+        let toggle = app.switches["agents.perm.readActivity"]
+        scrollTo(toggle) // the Form is lazy: the row exists once it's on screen
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(toggle.label.contains("Read activity from Apple Health"), toggle.label)
+        XCTAssertEqual(toggle.value as? String, "1")
+        flip(toggle)
+        XCTAssertEqual(toggle.value as? String, "0")
+    }
+
     func testTheSectionsAreWordedForAnyAgent() {
         openAgents(["-seedProposal"])
         XCTAssertTrue(text("Connected agents").waitForExistence(timeout: 5))

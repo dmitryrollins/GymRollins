@@ -28,6 +28,8 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
     public let mcpAutoApply: Bool
     /// Plan 32's Add workouts (`mcp_log_workouts`): agents may add past workouts.
     public let mcpLogWorkouts: Bool
+    /// Plan 39's "Read activity from Apple Health" (`mcp_read_activity`).
+    public let mcpReadActivity: Bool
     /// `male` / `female` or null (strength levels only).
     public let sex: String?
     public let birthYear: Int?
@@ -45,10 +47,11 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         case sex, birthYear = "birth_year"
         case mcpAutoApply = "mcp_auto_apply", clientUpdatedAt = "client_updated_at", updatedAt = "updated_at"
         case mcpLogWorkouts = "mcp_log_workouts"
+        case mcpReadActivity = "mcp_read_activity"
     }
 
-    /// Synthesized decoding, except that a row without `mcp_read_gyms` reads as on and one without `mcp_log_workouts`
-    /// as off, each column's default.
+    /// Synthesized decoding, except that a row without `mcp_read_gyms` or `mcp_read_activity` reads as on and one
+    /// without `mcp_log_workouts` as off, each column's default.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         unit = try c.decode(String.self, forKey: .unit)
@@ -72,6 +75,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         mcpPropose = try c.decode(Bool.self, forKey: .mcpPropose)
         mcpAutoApply = try c.decode(Bool.self, forKey: .mcpAutoApply)
         mcpLogWorkouts = try c.decodeIfPresent(Bool.self, forKey: .mcpLogWorkouts) ?? false
+        mcpReadActivity = try c.decodeIfPresent(Bool.self, forKey: .mcpReadActivity) ?? true
         sex = try c.decodeIfPresent(String.self, forKey: .sex)
         birthYear = try c.decodeIfPresent(Int.self, forKey: .birthYear)
         clientUpdatedAt = try c.decode(Date.self, forKey: .clientUpdatedAt)
@@ -101,6 +105,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         mcpPropose = p.mcpPropose
         mcpAutoApply = p.mcpAutoApply
         mcpLogWorkouts = p.mcpLogWorkouts
+        mcpReadActivity = p.mcpReadActivity
         sex = p.sex?.rawValue
         birthYear = p.birthYear
         clientUpdatedAt = row.clientUpdatedAt
@@ -130,6 +135,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         p.mcpPropose = mcpPropose
         p.mcpAutoApply = mcpAutoApply
         p.mcpLogWorkouts = mcpLogWorkouts
+        p.mcpReadActivity = mcpReadActivity
         p.sex = sex.flatMap(ProfileSex.init(rawValue:))
         p.birthYear = birthYear
         return SyncRow(value: p, clientUpdatedAt: clientUpdatedAt, serverUpdatedAt: updatedAt)
@@ -160,6 +166,7 @@ public struct ProfileDTO: Codable, Sendable, Equatable, ServerStamped {
         try c.encode(mcpPropose, forKey: .mcpPropose)
         try c.encode(mcpAutoApply, forKey: .mcpAutoApply)
         try c.encode(mcpLogWorkouts, forKey: .mcpLogWorkouts)
+        try c.encode(mcpReadActivity, forKey: .mcpReadActivity)
         try c.encode(sex, forKey: .sex)
         try c.encode(birthYear, forKey: .birthYear)
         try c.encode(clientUpdatedAt, forKey: .clientUpdatedAt)

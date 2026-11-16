@@ -26,6 +26,7 @@ public final class ProfileRepository {
                        dumbbellStepKg: r.dumbbellStepKg, mcpReadWorkouts: r.mcpReadWorkouts, mcpReadBody: r.mcpReadBody,
                        mcpReadPlan: r.mcpReadPlan, mcpReadGyms: r.mcpReadGyms, mcpPropose: r.mcpPropose,
                        mcpAutoApply: r.mcpAutoApply, mcpLogWorkouts: r.mcpLogWorkouts,
+                       mcpReadActivity: r.mcpReadActivity,
                        sex: r.sexRaw.flatMap(ProfileSex.init(rawValue:)), birthYear: r.birthYear)
     }
 
@@ -63,6 +64,7 @@ public final class ProfileRepository {
         r.mcpPropose = p.mcpPropose
         r.mcpAutoApply = p.mcpAutoApply
         r.mcpLogWorkouts = p.mcpLogWorkouts
+        r.mcpReadActivity = p.mcpReadActivity
         r.updatedAt = now()
         r.dirty = true
         try context.save()
@@ -87,9 +89,11 @@ public final class ProfileRepository {
         try context.save()
     }
 
-    /// Updates only what agents may do (no other field is rewritten), creating the profile if needed.
+    /// Updates only what agents may do (no other field is rewritten), creating the profile if needed. `readActivity`
+    /// (plan 39) stays as it is when nil.
     public func setMcpPermissions(readWorkouts: Bool, readBody: Bool, readPlan: Bool, readGyms: Bool,
-                                  propose: Bool, autoApply: Bool, logWorkouts: Bool) throws {
+                                  propose: Bool, autoApply: Bool, logWorkouts: Bool,
+                                  readActivity: Bool? = nil) throws {
         let r = try record() ?? {
             let new = ProfileRecord(now: now())
             context.insert(new)
@@ -102,6 +106,7 @@ public final class ProfileRepository {
         r.mcpPropose = propose
         r.mcpAutoApply = autoApply
         r.mcpLogWorkouts = logWorkouts
+        if let readActivity { r.mcpReadActivity = readActivity }
         r.updatedAt = now()
         r.dirty = true
         try context.save()

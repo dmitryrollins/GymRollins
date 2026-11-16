@@ -16,9 +16,10 @@ struct ClaudeConnectionView: View {
         var propose = true
         var autoApply = false
         var logWorkouts = false
+        var readActivity = true
 
         static let none = Permissions(readWorkouts: false, readBody: false, readPlan: false, readGyms: false,
-                                      propose: false, autoApply: false, logWorkouts: false)
+                                      propose: false, autoApply: false, logWorkouts: false, readActivity: false)
     }
 
     @Environment(AppEnvironment.self) private var env
@@ -124,6 +125,8 @@ struct ClaudeConnectionView: View {
             Toggle("Read your plan and profile", isOn: $permissions.readPlan)
                 .accessibilityIdentifier("claude.perm.readPlan")
             Toggle("Gyms", isOn: $permissions.readGyms).accessibilityIdentifier("claude.perm.readGyms")
+            Toggle("Read activity from Apple Health", isOn: $permissions.readActivity)
+                .accessibilityIdentifier("agents.perm.readActivity")
             Toggle(isOn: $permissions.logWorkouts) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Add workouts")
@@ -142,6 +145,9 @@ struct ClaudeConnectionView: View {
                 Text("Agents can read gyms you've synced or shared. \"This phone only\" gyms stay on your phone, so "
                      + "agents can't see them.")
                     .accessibilityIdentifier("claude.gymsNote")
+                Text("Activity is what GymRollins reads from Apple Health: workouts from other apps and your daily "
+                     + "steps, move, exercise and stand.")
+                    .accessibilityIdentifier("agents.readActivityNote")
                 Text("A workout an agent adds goes straight into your history, marked with the agent's name. You can "
                      + "edit or delete it like any other.")
                     .accessibilityIdentifier("agents.logWorkoutsNote")
@@ -188,7 +194,7 @@ struct ClaudeConnectionView: View {
     private static func permissions(_ p: Profile) -> Permissions {
         Permissions(readWorkouts: p.mcpReadWorkouts, readBody: p.mcpReadBody, readPlan: p.mcpReadPlan,
                     readGyms: p.mcpReadGyms, propose: p.mcpPropose, autoApply: p.mcpAutoApply,
-                    logWorkouts: p.mcpLogWorkouts)
+                    logWorkouts: p.mcpLogWorkouts, readActivity: p.mcpReadActivity)
     }
 
     private func save(_ new: Permissions) {
@@ -196,7 +202,7 @@ struct ClaudeConnectionView: View {
         do {
             try env.saveMcpPermissions(readWorkouts: new.readWorkouts, readBody: new.readBody, readPlan: new.readPlan,
                                        readGyms: new.readGyms, propose: new.propose, autoApply: new.autoApply,
-                                       logWorkouts: new.logWorkouts)
+                                       logWorkouts: new.logWorkouts, readActivity: new.readActivity)
             error = nil
         } catch {
             AppEnvironment.log.error("Save agent permissions failed: \(error.localizedDescription, privacy: .public)")
