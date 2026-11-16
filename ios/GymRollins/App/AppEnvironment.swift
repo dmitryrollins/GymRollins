@@ -55,6 +55,9 @@ final class AppEnvironment {
     private(set) var todayPlanRevision = 0
     /// Bumps whenever workouts or weigh-ins are written so Log/Body screens reload.
     private(set) var dataRevision = 0
+    /// The insights and resolved outside workouts until their data may have changed (`AppEnvironment+Insights`). Not
+    /// observed: filling it from a view's refresh never invalidates a view.
+    @ObservationIgnored var insightsMemo = InsightsMemo()
     /// Bumps whenever the current gym or its equipment changes, for screens that show them.
     private(set) var gymRevision = 0
     /// Why the server refused a report or a block the user made, until the gym screen has shown it.

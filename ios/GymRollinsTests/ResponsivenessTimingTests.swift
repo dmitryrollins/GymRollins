@@ -153,6 +153,32 @@ struct ResponsivenessTimingTests {
         let items = try seedOwnerSizedData(env)
         median("env.resolvedActivities() (500 outside, 160 workouts)") { _ = env.resolvedActivities() }
         median("env.insights()") { _ = env.insights() }
+        median("env.insights(), data changed (memo emptied)") {
+            env.bumpDataRevision()
+            _ = env.insights()
+        }
+        median("env.insights(), a new minute (outside workouts reused)") {
+            env.insightsMemo.snapshot = nil
+            _ = env.insights()
+        }
+        median("env.insightsDataKey() (two counts)") { _ = env.insightsDataKey() }
+        // Its parts.
+        try median("  activities.activities(since: nil) (fetch 500)") { _ = try env.activities.activities(since: nil) }
+        try median("  workouts.finishedSpans(since: nil)") { _ = try env.workouts.finishedSpans(since: nil) }
+        let outside = try env.activities.activities(since: nil)
+        let spans = try env.workouts.finishedSpans(since: nil)
+        median("  ActivityRules.resolve (500 × 160)") { _ = ActivityRules.resolve(outside, workouts: spans) }
+        try median("  workouts.finishedStartDates()") { _ = try env.workouts.finishedStartDates() }
+        let since = env.now().addingTimeInterval(-Double(InsightsSnapshot.windowDays) * 86_400)
+        try median("  workouts.finished(since: 28 days)") { _ = try env.workouts.finished(since: since) }
+        try median("  muscleTargets.all()") { _ = try env.muscleTargets.all() }
+        let recent = try env.workouts.finished(since: since)
+        let starts = try env.workouts.finishedStartDates()
+        let targets = try env.muscleTargets.all()
+        median("  InsightsSnapshot.make") {
+            _ = InsightsSnapshot.make(recent: recent, startDates: starts, targets: targets, profile: env.profile,
+                                      library: env.library, now: env.now(), calendar: env.insightsCalendar)
+        }
         try median("history(limit: 5) per plan item (\(items.count) items)") {
             for id in items { _ = try env.workouts.history(exerciseId: id, limit: 5) }
         }
@@ -166,6 +192,41 @@ struct ResponsivenessTimingTests {
                 for id in items { _ = try env.workouts.history(exerciseId: id, limit: 5) }
                 _ = env.recentActivityDays()
             }
+            for _ in 0..<2 {
+                env.insightsMemo = InsightsMemo() // nothing was reused
+                _ = env.insights()
+            }
+        }
+        // The same now: the sync's data revision empties the history cache and the memo; the onChange handler reads
+        // each item's history once and `reload()` reuses it; the second card reuses the first card's snapshot.
+        let history = TodayHistoryCache()
+        try median("Today refresh after a sync (now)") {
+            env.bumpDataRevision()
+            history.invalidate()
+            _ = try env.todaysPlan()
+            for _ in 0..<2 {
+                for id in items { _ = history.sessions(id, in: env.workouts) }
+                _ = env.recentActivityDays()
+            }
+            _ = env.insights()
+            _ = env.insights()
+        }
+        // Back to the app with nothing changed, in a new minute: before, Today re-read every history and both cards
+        // recomputed everything; now the histories stay and the outside workouts are reused.
+        try median("Today back to the app, nothing changed (as before)") {
+            _ = try env.todaysPlan()
+            for id in items { _ = try env.workouts.history(exerciseId: id, limit: 5) }
+            _ = env.recentActivityDays()
+            for _ in 0..<2 {
+                env.insightsMemo = InsightsMemo()
+                _ = env.insights()
+            }
+        }
+        try median("Today back to the app, nothing changed (now)") {
+            env.insightsMemo.snapshot = nil
+            _ = try env.todaysPlan()
+            for id in items { _ = history.sessions(id, in: env.workouts) }
+            _ = env.recentActivityDays()
             _ = env.insights()
             _ = env.insights()
         }

@@ -12,16 +12,27 @@ import GymHealth
 /// A switch that's off only hides its data here: what is stored stays, on this iPhone and in the cloud.
 extension AppEnvironment {
     /// Outside workouts that started at or after `since` (all when nil), resolved against the GymRollins workouts
-    /// around them; none while "Workouts from other apps" is off. Falls back to none (logged) if the store fails.
+    /// around them; none while "Workouts from other apps" is off. All of them are kept until their data may have
+    /// changed (`InsightsMemo`). Falls back to none (logged, not kept) if the store fails.
     func resolvedActivities(since: Date? = nil) -> ResolvedActivities {
         guard health.state.readsOutsideWorkouts else { return .none }
+        guard since == nil else { return loadResolvedActivities(since: since) ?? .none }
+        let key = insightsDataKey()
+        if let key, let memo = insightsMemo.resolved, memo.key == key { return memo.value }
+        guard let resolved = loadResolvedActivities(since: nil) else { return .none }
+        if let key { insightsMemo.resolved = (key, resolved) }
+        return resolved
+    }
+
+    /// `resolvedActivities(since:)` read from the store; nil (logged) if it fails.
+    private func loadResolvedActivities(since: Date?) -> ResolvedActivities? {
         do {
             // A GymRollins workout that started up to a day earlier can still overlap the first outside workout.
             let spans = try workouts.finishedSpans(since: since?.addingTimeInterval(-86_400))
             return ActivityRules.resolve(try activities.activities(since: since), workouts: spans)
         } catch {
             Self.log.error("Load outside workouts failed: \(error.localizedDescription, privacy: .public)")
-            return .none
+            return nil
         }
     }
 

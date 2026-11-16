@@ -25,6 +25,11 @@ public final class ActivityRepository {
         return try context.fetch(d).map(\.value)
     }
 
+    /// How many live outside workouts there are (a cheap check that one was added or deleted).
+    public func liveCount() throws -> Int {
+        try context.fetchCount(FetchDescriptor<HealthActivityRecord>(predicate: #Predicate { $0.deletedAt == nil }))
+    }
+
     /// The live outside workout with this id.
     public func activity(_ id: UUID) throws -> HealthActivity? {
         try record(id).flatMap { $0.deletedAt == nil ? $0.value : nil }

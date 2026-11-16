@@ -89,5 +89,16 @@ import Testing
         #expect(try workouts.finishedSpans(since: nil)
             == [WorkoutSpan(id: kept.id, start: start, end: start.addingTimeInterval(3_600))])
         #expect(try workouts.finishedSpans(since: clock.now).isEmpty)
+        #expect(try workouts.finishedCount() == 1, "not the running or the deleted one")
+    }
+
+    @Test func theLiveCountLeavesOutTombstones() throws {
+        #expect(try repo.liveCount() == 0)
+        let first = walk(daysAgo: 1), second = walk(daysAgo: 2)
+        try repo.add(first, editedAt: clock.now)
+        try repo.add(second, editedAt: clock.now)
+        #expect(try repo.liveCount() == 2)
+        try repo.delete(first.id)
+        #expect(try repo.liveCount() == 1)
     }
 }
