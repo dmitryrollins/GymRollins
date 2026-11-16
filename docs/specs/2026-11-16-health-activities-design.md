@@ -83,21 +83,126 @@ name, start after end, duration) is outside is skipped. A day outside a limit is
   activity", with **Allow** (asks Health, then imports) and **Not now**. Settings › Apple Health has the same ask.
 - **Settings › Apple Health** gets a "Reading from Health" section: **Workouts from other apps** and **Steps &
   activity**, both on by default while Health is on. Turning one off stops that import and hides that data in the
-  app; nothing already in the cloud is deleted.
+  app; nothing already in the cloud is deleted. The section stays with Health off: nothing new is read then, but
+  what was read before still shows, so its switch must still hide it.
 - **Storage.** Two new SwiftData models and repositories in GymData; two new sync kinds (pushed after workouts),
   wired everywhere a kind is registered (store tracking, account reset, ownership, server move, debug transports,
   sync status names).
 - **Log.** Outside workouts that aren't attached appear in the history between GymRollins workouts as compact
   read-only cards: kind icon, name ("Walk"; titles come from the kind, there's no indoor/outdoor field), date · duration, distance, kcal, source. A tap opens a detail
-  screen with the same facts plus average/max heart rate and "Change or delete it in the Health app." The week strip
+  screen with the same facts plus average/max heart rate and "Change or delete it in the Health app." The detail
+  reloads when the app's data changes; once Health deleted the workout it says "This workout was removed from
+  Health." Both are drawn in the look of §4.1. The week strip
   counts their minutes in a lighter shade. The kcal line follows decision 10.
-- **GymRollins workout detail.** With an attached outside workout: "Apple Watch measured 412 kcal · avg 128 bpm ·
-  max 162 bpm" under the calorie card.
+- **GymRollins workout detail.** With an attached outside workout: what the Apple Watch measured (412 kcal, avg 128
+  bpm, max 162 bpm) under the calorie card, as §4.1's measured block.
 - **Today.** An Activity row with today's steps, move kcal and exercise minutes; a tap shows the last 7 days. Hidden
   when Steps & activity is off or there's no data for the last 7 days.
 - **Streak and weekly goal** count outside workouts per decision 5.
 - **Purpose string.** `NSHealthShareUsageDescription` says the app reads workouts from other apps, steps, activity
   and heart rate, besides weight and body fat.
+
+### 4.1 Look: Apple Fitness style (owner's request, 2026-11-16)
+
+The owner sent the Fitness app's Indoor Cycle summary and asked for the activity screens to look like it. The
+screens it covers are:
+
+- the outside-workout card in the Log;
+- its detail;
+- the measured block on a GymRollins workout;
+- Today's Activity row;
+- the 7-day sheet;
+- the one-time permission card.
+
+The rest of the app keeps its own look. The pieces live in `DesignSystem/MetricStyle.swift` (`Theme.Metric`,
+`MetricValueText`, `MetricCell`, `MetricGrid`, `MetricRow`, `MetricIcon`), and `ActivityText` builds each value as a
+`MetricReading` (key, label, value, unit, spoken text, colour token), so the formatting is unit-tested.
+
+**Metrics are coloured by kind.** Each value is drawn in its metric's colour: SF Pro Rounded, semibold. Its unit
+follows in the same colour, uppercase, about 60 % of the value's size, with no space ("2.26KM", "40KCAL", "138W",
+"62RPM", "0:05:08"). Digits stay proportional, as in Fitness' summary: these values don't tick, and tabular digits
+left a gap after every 1 ("1 38W"). The label above it is plain body text in `Theme.textPrimary` ("Workout Time",
+"Active Calories").
+
+Tokens are `Theme.Metric`. Every colour keeps at least 4.5:1 contrast on both `Theme.card` and `Theme.background`
+(checked with a script; the lowest is `calories`, 5.6:1 on the card), so the accessibility audit passes even for the
+small units.
+
+| Token | Use | Value |
+|---|---|---|
+| `workout` | the kind icon and the headline metric (the list row's big number, the line under the detail title) | 0xB6F23A, Fitness' green-yellow |
+| `workoutFill` | the round icon's fill, a dark tint of `workout` (10:1 with it) | 0x26330F |
+| `time` | Workout Time | 0xF6E23B, yellow |
+| `distance` | Distance | 0x40A8F5, blue |
+| `calories` | Active Calories, Total Calories, Move | 0xFF4F6D, pink-red (Apple's 0xFA114F is under 4.5:1) |
+| `heartRate` | Avg. / Max Heart Rate | 0xFF6961, coral red |
+| `power` | Avg. Power | 0xB6F23A, green-yellow |
+| `cadence` | Avg. Cadence | 0x5EE0E6, cyan |
+| `steps` | Steps | 0xA98BFF, violet |
+| `exercise` | Exercise | 0xA6F23A, ring green |
+| `stand` | Stand | 0x3FE6EF, ring cyan |
+
+**Units.** These are KM/MI (per the profile, two decimals as in Fitness), KCAL (not Apple's CAL: the app says kcal
+everywhere), W, RPM, BPM, MIN and HRS. Time is H:MM:SS ("0:05:08"). Steps have no unit; the label says it.
+
+For VoiceOver, each cell is one element whose label is the metric and whose value speaks the unit in full, for
+example "Distance, 2.26 kilometres", "Active Calories, 40 kilocalories" or "Workout Time, 5 minutes 8 seconds".
+Today's row and a day of the 7-day sheet read as one element ("Activity", "Steps 4,210, Move 210 kilocalories, …"),
+and the Log card as one button ("Cycling, 2.26 kilometres, Thu 24 Sep, 5 min, LifeFitness"). Values use text styles
+(`.system(.title, design: .rounded, weight: .semibold)` and smaller) so they scale with Dynamic Type. At accessibility
+sizes the 2-column grids become 1 column.
+
+**Detail (Fitness' summary).**
+
+- The glass back button stays.
+- Behind the header sits the kind's symbol, very large and faint (8 % white), like the big bike in Fitness. It has a
+  fixed size: it's decoration.
+- The title is the kind's name in large bold SF. Titles come from the kind, and the kind has no indoor/outdoor field,
+  so the owner's ride reads "Cycling", not Fitness' "Indoor Cycle".
+- Under it is the headline metric in `workout` colour: the distance, else active kcal, else the time.
+- Under that, in secondary text, is the date and time range ("November 15, 2026, 16:02–16:07", in the phone's date
+  and time format), and under it the source, after `applewatch` when it was recorded on a Watch. Fitness puts both on
+  one line; here the source has its own, and the watch is its own element read "Apple Watch": inside the text, the
+  symbol's spoken name made the line's label longer than the line, and the accessibility audit flagged it as clipped.
+- A **"Workout Details"** header (title3 bold, no chevron: nothing opens from it) sits over one card holding a
+  2-column grid, in Fitness' order:
+  - Workout Time | Distance
+  - Active Calories | Total Calories
+  - Avg. Power | Avg. Cadence
+  - Avg. Heart Rate | Max Heart Rate
+
+  Missing values are left out and the grid flows on.
+- The footnote "Change or delete it in the Health app." comes last.
+- It reloads when the app's data changes. With the row gone or a tombstone, the screen shows "This workout was removed
+  from Health." instead.
+
+**Log card (Fitness' workout list row).**
+
+- On the left, the kind icon in `workout` colour inside a 44 pt circle filled with `workoutFill`.
+- Next to it, the kind's name in subheadline secondary, and under it the headline metric (title2 rounded, `workout`
+  colour).
+- On the right, the date ("Thu 24 Sep"), with the duration and source under it ("5 min · LifeFitness"), in footnote
+  secondary. At accessibility sizes they go under the metric.
+- It's still read-only and opens the detail. It no longer has the outline: the round icon sets it apart from a
+  GymRollins workout.
+
+**Measured block on a GymRollins workout.** A card under the calorie card: "Apple Watch measured" (the source's name,
+with `applewatch` when a Watch recorded it) over a compact 2-column grid of the same cells: Active Calories, Avg.
+Heart Rate, Max Heart Rate, plus Avg. Power when there is one.
+
+**Today's Activity row.** It's a card titled "Activity" with a chevron. Below the title is one row of cells: Steps,
+Move (KCAL), Exercise (MIN), and Stand (HRS) only when a Watch counted it. When the row doesn't fit whole (large text)
+it becomes the 2-column grid, and 1 column at accessibility sizes. It hides as before.
+
+**7-day sheet.** Each day is the date over the same row of cells, at a smaller size.
+
+**Permission card.** It uses the round icon (`applewatch` in `workout` colour) instead of the plain label icon. Its
+text and buttons stay the same.
+
+**UI-test data.** `-fakeHealth` also seeds an Indoor Cycle shaped like the owner's ride (synthetic: LifeFitness,
+recorded on a Watch, 5 min 8 s, 2,260 m, 40 of 48 kcal, 138 W, 62 rpm, avg 128 and max 151 bpm) on the Thursday
+before `-fixedNow`. It's added in the app (`AppEnvironment.uiTestRide`), next to GymHealth's seed. Under 10 minutes, it
+doesn't count toward the streak or the weekly goal; the week's measured kcal becomes 220.
 
 ## 5. Server
 
@@ -131,5 +236,6 @@ name, start after end, duration) is outside is skipped. A day outside a limit is
 - GymSync: DTO round trips, push/pull through `FakeTransport`.
 - Server (vitest): the two entities in the generic sync tests, CHECK limits, account deletion, caps, `get_activity`,
   the switch, the streak, and the tool count.
-- UI (`-fakeHealth`): a walk in Log and its detail, the attached measured line, steps on Today and the 7-day sheet,
-  the two switches, the one-time card.
+- UI (`-fakeHealth`): a walk in Log and its detail, the ride's power, cadence and total calories, the attached
+  measured block, steps on Today and the 7-day sheet, the two switches (also with Health off), the one-time card, and
+  an accessibility audit of the activity screens.
