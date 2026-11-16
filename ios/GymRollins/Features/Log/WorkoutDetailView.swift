@@ -76,14 +76,7 @@ struct WorkoutDetailView: View {
                 statGrid(workout)
                 CalorieCard(estimate: env.calories.estimate(workout), healthStatus: env.health.exportStatus(for: workout),
                             prefix: "detail")
-                if let measured, let line = ActivityText.measuredLine(measured) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "applewatch").accessibilityHidden(true)
-                        Text(line).accessibilityIdentifier("detail.measured")
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(Theme.textSecondary)
-                }
+                if let measured { MeasuredActivityBlock(activity: measured) }
                 exerciseList(workout)
             }
             .padding(.horizontal, Theme.gutter)

@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Today's one-time ask (plan 39), for people who turned Apple Health on before the app read activity. Allow asks
 /// Health for the new types and reads them. Not now hides the card for good, and Settings › Apple Health still asks.
+/// The Watch sits in the round icon of the activity screens (§4.1).
 struct ActivityPermissionCard: View {
     let asking: Bool
     let allow: () -> Void
@@ -9,8 +10,10 @@ struct ActivityPermissionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Bring in your Apple Watch activity", systemImage: "applewatch")
-                .font(.headline).foregroundStyle(Theme.textPrimary)
+            HStack(spacing: 12) {
+                MetricIcon(symbol: "applewatch")
+                Text("Bring in your Apple Watch activity").font(.headline).foregroundStyle(Theme.textPrimary)
+            }
             Text("Walks, runs and classes from your Apple Watch and other apps show in the Log and count toward your "
                  + "streak. Your steps and Activity rings show here.")
                 .font(.footnote).foregroundStyle(Theme.textSecondary)

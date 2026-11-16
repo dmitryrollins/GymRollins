@@ -21,7 +21,8 @@ extension AppEnvironment {
         #if DEBUG
         let store: any HealthStore = options.fakeHealth
             ? FakeHealthStore(seed: FakeHealthStore.uiTestSeed(now: now()),
-                              outsideWorkouts: FakeHealthStore.uiTestOutsideWorkouts(now: now()),
+                              outsideWorkouts: FakeHealthStore.uiTestOutsideWorkouts(now: now())
+                                  + [uiTestRide(now: now())],
                               days: FakeHealthStore.uiTestActivityDays(now: now(), calendar: .current))
             : HealthKitStore()
         if options.uiTesting, let suite = UserDefaults(suiteName: "uitest.health") {
@@ -36,6 +37,19 @@ extension AppEnvironment {
     }
 
     #if DEBUG
+    /// Plan 39's look (§4.1): an Indoor Cycle on a LifeFitness bike, recorded with an Apple Watch, on the Thursday
+    /// before `-fixedNow` (16:02 UTC). Synthetic values shaped like the owner's ride: 5 min 8 s, 2.26 km, 40 of 48
+    /// kcal, 138 W, 62 rpm. Under 10 minutes, so it doesn't count toward the streak or the weekly goal.
+    static let uiTestRideId = UUID(uuidString: "00000000-0000-4000-8000-00000000a003")!
+
+    static func uiTestRide(now: Date) -> HealthOutsideWorkout {
+        let start = now.addingTimeInterval(-2 * 86_400 + 7 * 3_600 + 120)
+        return HealthOutsideWorkout(activity: HealthActivity(
+            id: uiTestRideId, kind: "cycling", startedAt: start, endedAt: start.addingTimeInterval(308), durationS: 308,
+            kcal: 40, totalKcal: 48, distanceM: 2_260, avgHr: 128, maxHr: 151, avgPowerW: 138, avgCadenceRpm: 62,
+            sourceName: "LifeFitness", fromWatch: true))
+    }
+
     /// `-healthBeforeActivity`: Health on, as a build from before plan 39 left it (the activity types never asked).
     private static func seedHealthBeforeActivity(in suite: UserDefaults, now: Date) {
         do { try HealthSyncState.saveEnabledBeforeActivity(to: suite, at: now) } catch {

@@ -1,7 +1,8 @@
 import GymCore
 import SwiftUI
 
-/// The last 7 days of activity (plan 39), newest first, from Today's Activity row. Days without data aren't listed.
+/// The last 7 days of activity (plan 39), newest first, from Today's Activity row: each day's date over the same row
+/// of cells as Today's, smaller (§4.1). Days without data aren't listed.
 struct ActivityWeekSheet: View {
     /// Oldest first, as `AppEnvironment.recentActivityDays` gives them.
     let days: [ActivityDay]
@@ -10,11 +11,15 @@ struct ActivityWeekSheet: View {
     var body: some View {
         NavigationStack {
             List(days.reversed()) { day in
-                VStack(alignment: .leading, spacing: 2) {
+                let metrics = ActivityText.dayMetrics(day)
+                VStack(alignment: .leading, spacing: 6) {
                     Text(Self.title(day)).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
-                    Text(ActivityText.dayLine(day)).font(.footnote).foregroundStyle(Theme.textSecondary)
+                    MetricRow(readings: metrics, size: .small, prefix: "activity.cell.\(day.day)")
                 }
-                .accessibilityElement(children: .combine)
+                .padding(.vertical, 4)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Self.title(day))
+                .accessibilityValue(ActivityText.spokenSummary(metrics))
                 .accessibilityIdentifier("activity.day.\(day.day)")
                 .listRowBackground(Theme.card)
             }
