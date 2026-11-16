@@ -45,6 +45,15 @@ export const DomainLimits = {
   privateGymsMax: 100,
   privateListingsMax: 1_000,
   gymActiveListingsMax: 300,
+  // Apple Health activities: outside workouts and days of activity (migrations/0013_health_activities.sql)
+  activityDurationS: { min: 0, max: 86_400 },
+  activityKcal: { min: 0, max: 20_000 },
+  activityDistanceM: { min: 0, max: 1_000_000 },
+  heartRateBpm: { min: 20, max: 250 },
+  daySteps: { min: 0, max: 200_000 },
+  dayExerciseMin: { min: 0, max: 1_440 },
+  dayStandH: { min: 0, max: 24 },
+  activityTextMax: 100,
   // Storage per account, deleted rows included (migrations/0010_account_caps.sql)
   workoutsMax: 10_000,
   bodyweightsMax: 20_000,
@@ -55,6 +64,9 @@ export const DomainLimits = {
   exercisePrefsMax: 2_000,
   privateGymsTotalMax: 500,
   privateListingsTotalMax: 5_000,
+  // Kept in health_rows, not account_rows (migrations/0013_health_activities.sql)
+  healthActivitiesMax: 20_000,
+  activityDaysMax: 5_000,
   // Exercises and sets logged per account, deleted workouts included (src/sync/workouts.ts keeps the counts)
   accountEntriesMax: 50_000,
   accountSetsMax: 250_000,

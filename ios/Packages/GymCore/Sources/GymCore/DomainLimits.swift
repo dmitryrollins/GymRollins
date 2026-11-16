@@ -44,6 +44,16 @@ public enum DomainLimits {
     public static let privateGymsMax = 100
     public static let privateListingsMax = 1_000
     public static let gymActiveListingsMax = 300
+    // Apple Health activities: outside workouts and days of activity (server/migrations/0013_health_activities.sql)
+    public static let activityDurationS: ClosedRange<Double> = 0...86_400
+    public static let activityKcal: ClosedRange<Double> = 0...20_000
+    public static let activityDistanceM: ClosedRange<Double> = 0...1_000_000
+    public static let heartRateBpm: ClosedRange<Int> = 20...250
+    public static let daySteps: ClosedRange<Int> = 0...200_000
+    public static let dayExerciseMin: ClosedRange<Int> = 0...1_440
+    public static let dayStandH: ClosedRange<Int> = 0...24
+    /// An outside workout's kind slug and source name.
+    public static let activityTextMax = 100
     // Storage per account, deleted rows included (server/migrations/0010_account_caps.sql)
     public static let workoutsMax = 10_000
     public static let bodyweightsMax = 20_000
@@ -54,6 +64,9 @@ public enum DomainLimits {
     public static let exercisePrefsMax = 2_000
     public static let privateGymsTotalMax = 500
     public static let privateListingsTotalMax = 5_000
+    // Kept in health_rows, not account_rows (server/migrations/0013_health_activities.sql)
+    public static let healthActivitiesMax = 20_000
+    public static let activityDaysMax = 5_000
     // Exercises and sets logged per account, deleted workouts included (server/src/sync/workouts.ts keeps the counts)
     public static let accountEntriesMax = 50_000
     public static let accountSetsMax = 250_000
@@ -95,6 +108,32 @@ public enum DomainLimits {
         if let fat, !bodyFatPct.contains(fat) {
             return "Enter a body fat between \(Int(bodyFatPct.lowerBound)) and \(Int(bodyFatPct.upperBound))%"
         }
+        return nil
+    }
+
+    /// Why an outside workout read from Health can't be stored, or nil. One that doesn't fit is skipped on import, never
+    /// clamped.
+    public static func healthActivityViolation(_ a: HealthActivity) -> String? {
+        if !(1...activityTextMax).contains(a.kind.count) { return "Kind must be 1–\(activityTextMax) characters." }
+        if !(1...activityTextMax).contains(a.sourceName.count) {
+            return "Source names can be 1–\(activityTextMax) characters."
+        }
+        if a.endedAt < a.startedAt { return "A workout can't end before it starts." }
+        if !activityDurationS.contains(a.durationS) { return "Duration must be 0–24 hours." }
+        if let kcal = a.kcal, !activityKcal.contains(kcal) { return "Calories must be 0–20,000 kcal." }
+        if let distance = a.distanceM, !activityDistanceM.contains(distance) { return "Distance must be 0–1,000 km." }
+        if [a.avgHr, a.maxHr].contains(where: { $0.map { !heartRateBpm.contains($0) } ?? false }) {
+            return "Heart rate must be 20–250 bpm."
+        }
+        return nil
+    }
+
+    /// Why a day of activity can't be stored, or nil. Like an outside workout, one that doesn't fit is skipped.
+    public static func activityDayViolation(_ d: ActivityDay) -> String? {
+        if !daySteps.contains(d.steps) { return "Steps must be 0–200,000." }
+        if !activityKcal.contains(d.moveKcal) { return "Move must be 0–20,000 kcal." }
+        if !dayExerciseMin.contains(d.exerciseMin) { return "Exercise must be 0–1,440 minutes." }
+        if let stand = d.standH, !dayStandH.contains(stand) { return "Stand must be 0–24 hours." }
         return nil
     }
 
