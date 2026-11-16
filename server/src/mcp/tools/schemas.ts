@@ -117,6 +117,12 @@ export const schemas = {
   }),
   trainingSummary: z.object({ weeks: z.number().int().min(1).optional().describe('1–12, default 4') }),
   bodyweight: z.object({ since: isoDate.optional().describe('Default: 12 weeks ago') }),
+  activity: z.object({
+    days: z.number().int().min(1).max(84).optional().describe('1–84, default 28'),
+    time_zone: z.string().min(1).max(64).optional().describe(
+      'IANA time zone for the days and the Monday–Sunday weeks, e.g. Europe/Warsaw. Default: UTC',
+    ),
+  }),
   insights: z.object({
     time_zone: z.string().min(1).max(64).optional().describe(
       'IANA time zone for the Monday–Sunday week, e.g. Europe/Warsaw. Default: UTC',

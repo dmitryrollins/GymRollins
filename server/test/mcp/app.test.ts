@@ -48,7 +48,7 @@ test('POST without or with a bad token → 401 with the metadata pointer', async
   }
 })
 
-test('initialize and tools/list: 16 tools with titles and annotations', async () => {
+test('initialize and tools/list: 17 tools with titles and annotations', async () => {
   const { app, clientIds } = await setup()
   const init = await readRpc(await app(rpcRequest(URL_MCP, initializeBody(), TOKEN)))
   assertEquals(init.result.serverInfo.name, 'gymrollins')
@@ -61,7 +61,7 @@ test('initialize and tools/list: 16 tools with titles and annotations', async ()
     description: string
     annotations: Record<string, boolean>
   }[]
-  assertEquals(tools.length, 16)
+  assertEquals(tools.length, 17)
   const writes = ['change_plan', 'log_bodyweight', 'log_workout']
   for (const t of tools) {
     assert(t.title && t.description.length > 20, t.name)
