@@ -42,23 +42,18 @@ public final class WorkoutRepository {
         try record(id).flatMap { $0.deletedAt == nil ? $0.addedBy : nil }
     }
 
-    /// Progression data points for one exercise, newest first.
+    /// Progression data points for one exercise, newest first (sessions without a done working set give none).
     ///
-    /// Fetches only the `WorkoutEntryRecord`s for this exercise (rather than every finished
-    /// workout), so cost scales with how often the exercise was performed instead of with total
-    /// workout history.
+    /// Reads only the newest workouts with this exercise, a page at a time, until `limit` points exist: Today asks
+    /// for 5 per plan item on every reload, and decoding every workout with a staple lift took ~14 ms each time.
     public func history(exerciseId: String, limit: Int) throws -> [SessionResult] {
-        try finishedEntries(exerciseId: exerciseId)
-            .lazy
-            .compactMap { SessionHistory.result(for: $0.entry, date: $0.date) }
-            .prefix(limit)
-            .map { $0 }
+        try finishedEntries(exerciseId: exerciseId, limit: limit) { SessionHistory.result(for: $1, date: $0) }
     }
 
     /// Whole entries (every set) for one exercise from finished workouts, newest first, with the
     /// workout's start date. Used for set-level trends such as e1RM and best set.
     public func sessions(exerciseId: String, limit: Int) throws -> [(date: Date, entry: WorkoutEntry)] {
-        Array(try finishedEntries(exerciseId: exerciseId).prefix(limit))
+        try finishedEntries(exerciseId: exerciseId, limit: limit) { (date: $0, entry: $1) }
     }
 
     /// All-time bests for PR detection, or nil if never performed.
@@ -141,22 +136,56 @@ public final class WorkoutRepository {
     /// workout). The filter and sort run in SQL on the workout rows and entries come from their `entriesData` cache,
     /// so no entry/set rows are materialized (see `WorkoutRecord.entriesData`).
     private func finishedEntries(exerciseId: String) throws -> [(date: Date, entry: WorkoutEntry)] {
-        let descriptor = FetchDescriptor<WorkoutRecord>(
+        try context.fetch(finishedDescriptor(exerciseId: exerciseId)).compactMap { workout in
+            Self.entry(of: workout, exerciseId: exerciseId).map { (date: workout.startedAt, entry: $0) }
+        }
+    }
+
+    /// The first `limit` values `keep` makes of this exercise's entries, newest workout first, reading the workouts
+    /// `limit` at a time. Each page continues from the oldest start read so far and leaves out the workouts already
+    /// read, so workouts that started at the same moment are each read once even across pages.
+    private func finishedEntries<Value>(exerciseId: String, limit: Int,
+                                        keep: (_ date: Date, _ entry: WorkoutEntry) -> Value?) throws -> [Value] {
+        guard limit > 0 else { return [] }
+        var values: [Value] = []
+        var read: [UUID] = []
+        var oldest = Date.distantFuture
+        while values.count < limit {
+            var descriptor = finishedDescriptor(exerciseId: exerciseId, startedAtOrBefore: oldest, excluding: read)
+            descriptor.fetchLimit = limit
+            let page = try context.fetch(descriptor)
+            for workout in page {
+                read.append(workout.id)
+                guard values.count < limit, let entry = Self.entry(of: workout, exerciseId: exerciseId),
+                      let value = keep(workout.startedAt, entry) else { continue }
+                values.append(value)
+            }
+            guard page.count == limit, let last = page.last else { break }
+            oldest = last.startedAt
+        }
+        return values
+    }
+
+    /// Finished, non-deleted workouts with this exercise, newest first; `startedAtOrBefore` and `excluding` page
+    /// through them.
+    private func finishedDescriptor(exerciseId: String, startedAtOrBefore latest: Date = .distantFuture,
+                                    excluding read: [UUID] = []) -> FetchDescriptor<WorkoutRecord> {
+        FetchDescriptor<WorkoutRecord>(
             predicate: #Predicate { workout in
-                workout.deletedAt == nil && !workout.isActive
-                    && workout.entries.contains { $0.exerciseId == exerciseId }
+                workout.deletedAt == nil && !workout.isActive && workout.startedAt <= latest
+                    && !read.contains(workout.id) && workout.entries.contains { $0.exerciseId == exerciseId }
             },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
-        // One session per workout: entries of the same exercise within a workout (e.g. the exercise in two
-        // supersets) are merged, so progression never sees them as separate, shorter sessions.
-        return try context.fetch(descriptor).compactMap { workout in
-            let entries = workout.entryValues.filter { $0.exerciseId == exerciseId }
-            guard let first = entries.first else { return nil }
-            let merged = entries.count == 1 ? first
-                : WorkoutEntry(id: first.id, exerciseId: exerciseId, sets: entries.flatMap(\.sets), note: first.note,
-                               supersetGroup: first.supersetGroup, gymListingId: first.gymListingId)
-            return (date: workout.startedAt, entry: merged)
-        }
+    }
+
+    /// The workout's entry for this exercise. One session per workout: entries of the same exercise within a workout
+    /// (e.g. the exercise in two supersets) are merged, so progression never sees them as separate, shorter sessions.
+    private static func entry(of workout: WorkoutRecord, exerciseId: String) -> WorkoutEntry? {
+        let entries = workout.entryValues.filter { $0.exerciseId == exerciseId }
+        guard let first = entries.first else { return nil }
+        return entries.count == 1 ? first
+            : WorkoutEntry(id: first.id, exerciseId: exerciseId, sets: entries.flatMap(\.sets), note: first.note,
+                           supersetGroup: first.supersetGroup, gymListingId: first.gymListingId)
     }
 
     private func record(_ id: UUID) throws -> WorkoutRecord? {
