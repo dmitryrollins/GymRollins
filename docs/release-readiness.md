@@ -108,7 +108,11 @@ weren't folded into the fixes above.
   out via TestFlight only or straight to review.
 - **Privacy policy text review** — Settings already has a Privacy/About section
   (`03ed477`), but the actual policy copy (what's collected, Claude's access scope, data
-  deletion) needs the owner's sign-off before it's user-facing/App-Store-facing.
+  deletion) needs the owner's sign-off before it's user-facing/App-Store-facing. Since plan 39 it must also say that
+  Apple Health activity (workouts other apps saved, steps, move, exercise and stand, and those workouts' heart rate)
+  is stored in the cloud with the account, and that connected agents can read it while "Read activity from Apple
+  Health" is on. The App Store privacy answers change the same way: Health & Fitness data, linked to the user, not
+  used for tracking.
 
 ## Device build
 
