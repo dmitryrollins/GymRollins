@@ -102,7 +102,8 @@ struct LoggingView: View {
             if let sets = model.sets {
                 let targets = PlateTargets.targets(for: sets)
                 PlatesSheet(targets: targets,
-                            current: PlateTargets.current(in: targets, sets: sets, editing: focus?.setId)?.id)
+                            current: PlateTargets.current(in: targets, sets: sets, editing: focus?.setId)?.id,
+                            sledKg: sledKg)
             }
         }
         .sheet(isPresented: $showSwap) {
@@ -226,9 +227,21 @@ struct LoggingView: View {
 
     // MARK: Set timeline
 
+    /// What the weight is made of, under the active set's weight: a bar or a sled, plus plates.
+    private var platesCaption: String? {
+        guard let exercise else { return nil }
+        if exercise.isBarbellLoaded { return "Bar + Plates" }
+        return exercise.isSledLoaded ? "Sled + Plates" : nil
+    }
+
+    /// The empty sled the plate calculator loads, for a sled exercise.
+    private var sledKg: Double? {
+        guard exercise?.isSledLoaded ?? false else { return nil }
+        return SledWeight.kg(env.defaults, unit: env.profile.unit)
+    }
+
     private func setsSection(_ sets: [WorkoutSet]) -> some View {
         let unit = env.profile.unit
-        let isBarbell = exercise?.isBarbellLoaded ?? false
         let mode = SetFieldFormat.mode(exercise: exercise, sets: sets)
         let activeId = activeSet(sets)?.id
         let ordinals = SetOrdinal.ordinals(for: sets)
@@ -242,7 +255,7 @@ struct LoggingView: View {
                 ForEach(Array(sets.enumerated()), id: \.element.id) { offset, set in
                     let remove: (() -> Void)? = model.canRemoveSet(set) ? { editSets { model.removeSet(set) } } : nil
                     SetTimelineRow(set: set, index: offset, ordinal: ordinals[offset], isActive: set.id == activeId,
-                                  mode: mode, unit: unit, isBarbell: isBarbell,
+                                  mode: mode, unit: unit, platesCaption: platesCaption,
                                   text: { draftBinding($0, set: set) }, focus: $focus, isPlanned: model.isPlan,
                                   onRemove: remove,
                                   onToggleWarmup: model.canToggleWarmup ? { editSets { model.toggleWarmup(set) } } : nil,

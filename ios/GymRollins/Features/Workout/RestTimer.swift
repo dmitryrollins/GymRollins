@@ -55,19 +55,27 @@ enum RestNotificationSchedule {
     }
 }
 
-/// Local notification when rest ends (app in background). Asks for permission on first use; the
-/// delay is computed only after that (possibly slow) prompt, against the app's clock.
+/// Local notification when rest ends (app in background): what buzzes a locked phone. Asks for permission on first
+/// use; the delay is computed only after that (possibly slow) prompt, against the app's clock. The Live Activity
+/// already says the rest is over, so the delivered card doesn't stay: the next rest, +30s, Skip (also from the Live
+/// Activity's buttons, which run in the app) and opening the app clear it.
 @MainActor
 struct UserNotificationRestNotifier: RestNotifier {
     let now: () -> Date
     let soundEnabled: () -> Bool
-    private let id = "rest-timer"
+    private static let id = "rest-timer"
     private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "rest")
 
+    /// Removes a delivered "Rest over" card.
+    static func clearDelivered() {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+    }
+
     func schedule(endsAt: Date) {
+        Self.clearDelivered()
         guard RestNotificationSchedule.interval(endsAt: endsAt, now: now()) != nil else { return }
         let center = UNUserNotificationCenter.current()
-        let id = self.id
+        let id = Self.id
         Task {
             do {
                 _ = try await center.requestAuthorization(options: [.alert, .sound])
@@ -83,6 +91,7 @@ struct UserNotificationRestNotifier: RestNotifier {
     }
 
     func cancel() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.id])
+        Self.clearDelivered()
     }
 }

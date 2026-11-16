@@ -7,4 +7,8 @@ public extension Exercise {
     /// True for barbell-type equipment (barbell increments and rounding); false for dumbbells, machines, cables,
     /// bodyweight and the rest.
     var isBarbellLoaded: Bool { Self.barbellLoadedEquipment.contains(equipment) }
+
+    /// True for a plate-loaded sled (45° leg press, hack squat, calf press): its plates go on a sled whose own weight
+    /// counts, the way a barbell's bar does.
+    var isSledLoaded: Bool { equipment == "sled machine" }
 }

@@ -2,8 +2,9 @@ import GymCore
 import GymData
 import SwiftUI
 
-/// Bar weight, which of the unit's standard plates are on hand (toggled per size), and the dumbbell step —
-/// all in the profile's current unit; storage stays kg (`ProfileRepository` converts).
+/// Bar weight, the leg press sled's empty weight (`SledWeight`, on this phone), which of the unit's standard plates are
+/// on hand (toggled per size), and the dumbbell step — all in the profile's current unit; storage stays kg
+/// (`ProfileRepository` converts).
 struct BarAndPlatesView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var form = BarAndPlatesForm(barText: "", dumbbellStepText: "", available: [])
@@ -19,6 +20,15 @@ struct BarAndPlatesView: View {
                 TextField("Bar weight (\(unit.rawValue))", text: $form.barText)
                     .keyboardType(.decimalPad)
                     .accessibilityIdentifier("settings.bar.weight")
+            }
+            Section {
+                TextField("Sled weight (\(unit.rawValue))", text: $form.sledText)
+                    .keyboardType(.decimalPad)
+                    .accessibilityIdentifier("settings.sled.weight")
+            } header: {
+                Text("Leg press sled")
+            } footer: {
+                Text("The empty sled of a 45° leg press or hack squat. The plate calculator counts it like the bar.")
             }
             Section("Plates available per side") {
                 ForEach(standardPlates, id: \.self) { plate in
@@ -52,7 +62,7 @@ struct BarAndPlatesView: View {
 
     private func load() {
         guard !loaded else { return }
-        form = BarAndPlatesForm(profile: env.profile)
+        form = BarAndPlatesForm(profile: env.profile, sledKg: SledWeight.kg(env.defaults, unit: unit))
         loaded = true
     }
 
@@ -60,16 +70,16 @@ struct BarAndPlatesView: View {
     private func save() {
         guard loaded else { return }
         do {
-            guard let updated = try form.updatedProfile(from: env.profile) else {
-                error = nil
-                return
+            let sledKg = try form.updatedSledKg(unit: unit, currentKg: SledWeight.kg(env.defaults, unit: unit))
+            if let updated = try form.updatedProfile(from: env.profile) {
+                try env.profiles.save(updated)
+                env.reloadProfile()
+                env.planChanged()
             }
-            try env.profiles.save(updated)
-            env.reloadProfile()
-            env.planChanged()
+            if let sledKg { SledWeight.save(kg: sledKg, env.defaults) }
             error = nil
         } catch is BarAndPlatesForm.Invalid {
-            error = "Enter a bar weight and dumbbell step greater than zero."
+            error = "Enter a bar weight and dumbbell step above zero, and a sled weight of zero or more."
         } catch {
             AppEnvironment.log.error("Save bar/plates failed: \(error.localizedDescription, privacy: .public)")
             self.error = "Couldn't save. Please try again."

@@ -3,15 +3,19 @@ import SwiftUI
 
 /// Plate math for one of the exercise's weights. It opens on the set the owner is on (`PlateTargets.current`), and a
 /// row of the exercise's other weights switches to them. Below: the weight in the profile unit, one side of the bar
-/// with each plate's number written on it, in its size's color (`PlateColor`), and a "load each side" list.
+/// with each plate's number written on it, in its size's color (`PlateColor`), and a "load each side" list. A sled's
+/// plates go on top of the empty sled (`sledKg`) instead of the bar.
 struct PlatesSheet: View {
     let targets: [PlateTarget]
+    /// The empty sled's weight for a plate-loaded sled (`Exercise.isSledLoaded`); nil for a bar.
+    let sledKg: Double?
     @State private var selectedId: PlateTarget.ID?
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
 
-    init(targets: [PlateTarget], current: PlateTarget.ID?) {
+    init(targets: [PlateTarget], current: PlateTarget.ID?, sledKg: Double? = nil) {
         self.targets = targets
+        self.sledKg = sledKg
         _selectedId = State(initialValue: current)
     }
 
@@ -20,8 +24,14 @@ struct PlatesSheet: View {
     private var weightKg: Double { selected?.weightKg ?? 0 }
     private var unit: WeightUnit { env.profile.unit }
     private var other: WeightUnit { unit == .kg ? .lb : .kg }
-    private var inventoryUnit: WeightUnit { env.profile.plateInventory.unit }
-    private var load: PlateLoad { PlateCalculator.load(targetKg: weightKg, inventory: env.profile.plateInventory) }
+    /// The profile's plates, on the bar or on the sled.
+    private var inventory: PlateInventory {
+        sledKg.map { SledWeight.inventory(env.profile.plateInventory, sledKg: $0) } ?? env.profile.plateInventory
+    }
+    private var inventoryUnit: WeightUnit { inventory.unit }
+    private var load: PlateLoad { PlateCalculator.load(targetKg: weightKg, inventory: inventory) }
+    /// What the plates go on: "bar" or "sled".
+    private var base: String { sledKg == nil ? "bar" : "sled" }
 
     var body: some View {
         ScrollView {
@@ -82,7 +92,7 @@ struct PlatesSheet: View {
                 .foregroundStyle(Theme.textPrimary)
                 .accessibilityIdentifier("plates.weight")
             Text("\(number(weightKg, in: other)) \(other.rawValue) \u{00B7} " +
-                 "\(WeightFormatter.number(env.profile.plateInventory.bar)) \(inventoryUnit.rawValue) bar")
+                 "\(WeightFormatter.number(inventory.bar)) \(inventoryUnit.rawValue) \(base)")
                 .font(.footnote)
                 .foregroundStyle(Theme.textSecondary)
         }
@@ -115,7 +125,7 @@ struct PlatesSheet: View {
         }
         .frame(height: 116)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(load.perSide.isEmpty ? "Bar only" : "Each side: " + load.perSide.map {
+        .accessibilityLabel(load.perSide.isEmpty ? "\(base.capitalized) only" : "Each side: " + load.perSide.map {
             "\(WeightFormatter.number($0)) \(inventoryUnit.rawValue)"
         }.joined(separator: ", "))
     }
@@ -145,7 +155,7 @@ struct PlatesSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionLabel(text: "Load each side")
             if load.perSide.isEmpty {
-                Text("Bar only, no plates")
+                Text("\(base.capitalized) only, no plates")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.textSecondary)
                     .accessibilityIdentifier("plates.barOnly")

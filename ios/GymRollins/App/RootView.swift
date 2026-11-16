@@ -48,6 +48,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             env.sync.setActive(phase == .active)
             if phase == .active {
+                UserNotificationRestNotifier.clearDelivered()
                 Task { await env.syncHealth() }
                 Task { await env.runShareOutbox() }
             }
