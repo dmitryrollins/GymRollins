@@ -2,12 +2,13 @@ import GymCore
 import SwiftUI
 
 /// An outside workout (plan 39), pushed from its Log card. It shows what Health measured, with average and maximum
-/// heart rate. Nothing can be edited here: Health is the source of truth, so it says where to change it.
+/// heart rate. Nothing can be edited here: Health is the source of truth, so it says where to change it. It reloads
+/// whenever the app's data changes, and says so once Health deleted it.
 struct OutsideWorkoutDetailView: View {
     let activityId: UUID
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
-    @State private var activity: HealthActivity?
+    @State private var lookup: OutsideWorkoutLookup?
 
     var body: some View {
         ScrollView {
@@ -19,7 +20,14 @@ struct OutsideWorkoutDetailView: View {
                         .accessibilityIdentifier("outside.back")
                     Spacer()
                 }
-                if let activity { content(activity) }
+                switch lookup {
+                case .shown(let activity): content(activity)
+                case .removed:
+                    Text("This workout was removed from Health.")
+                        .font(.body).foregroundStyle(Theme.textSecondary)
+                        .accessibilityIdentifier("outside.removed")
+                case nil: EmptyView()
+                }
             }
             .padding(.horizontal, Theme.gutter)
             .padding(.top, 8)
@@ -27,7 +35,7 @@ struct OutsideWorkoutDetailView: View {
         }
         .background(Theme.background)
         .toolbar(.hidden, for: .navigationBar)
-        .task(id: activityId) { load() }
+        .task(id: env.dataRevision) { load() }
     }
 
     @ViewBuilder
@@ -72,8 +80,6 @@ struct OutsideWorkoutDetailView: View {
     }
 
     private func load() {
-        do { activity = try env.activities.activity(activityId) } catch {
-            AppEnvironment.log.error("Load outside workout failed: \(error.localizedDescription, privacy: .public)")
-        }
+        if let found = env.outsideWorkout(activityId) { lookup = found }
     }
 }

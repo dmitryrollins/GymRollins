@@ -36,6 +36,15 @@ extension AppEnvironment {
         }
     }
 
+    /// An outside workout's detail: the live row, or `.removed` once Health deleted it (a tombstone) or it isn't here
+    /// at all. Nil (logged) if the store fails, so the screen keeps what it shows.
+    func outsideWorkout(_ id: UUID) -> OutsideWorkoutLookup? {
+        do { return try activities.activity(id).map(OutsideWorkoutLookup.shown) ?? .removed } catch {
+            Self.log.error("Load outside workout failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
     /// Start times of the outside workouts that count toward the streak and the weekly goal (decision 5).
     func countedActivityStarts() -> [Date] {
         resolvedActivities().counted.map(\.startedAt)
@@ -81,4 +90,11 @@ extension AppEnvironment {
         await health.allowActivity()
         bumpDataRevision()
     }
+}
+
+/// What an outside workout's detail shows (plan 39).
+enum OutsideWorkoutLookup: Equatable {
+    case shown(HealthActivity)
+    /// Health deleted it: "This workout was removed from Health."
+    case removed
 }

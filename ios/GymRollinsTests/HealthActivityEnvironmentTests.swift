@@ -33,6 +33,20 @@ import Testing
         #expect(env.countedActivityStarts().count == 1, "the walk counts; the attached recording doesn't")
     }
 
+    @Test func theDetailSaysWhenHealthRemovedTheWorkout() async throws {
+        let env = try makeEnv()
+        _ = await env.health.enable()
+        let walk = FakeHealthStore.uiTestWalkId
+        guard case .shown(let shown) = env.outsideWorkout(walk) else {
+            Issue.record("the walk isn't shown")
+            return
+        }
+        #expect(shown.id == walk)
+        try env.activities.delete(walk)
+        #expect(env.outsideWorkout(walk) == .removed, "a tombstone")
+        #expect(env.outsideWorkout(UUID()) == .removed, "no row at all")
+    }
+
     @Test func theSwitchesHideWhatTheyRead() async throws {
         let env = try makeEnv()
         _ = await env.health.enable()
