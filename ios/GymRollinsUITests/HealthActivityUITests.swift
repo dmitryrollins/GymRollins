@@ -178,4 +178,20 @@ final class HealthActivityUITests: XCTestCase {
         XCTAssertFalse(app.buttons["log.outside.\(walk)"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["log.week.otherKcal"].exists)
     }
+
+    // MARK: Workout detail
+
+    func testAnAppleWatchRecordingDuringAWorkoutShowsOnItAndNotOnItsOwn() {
+        let app = XCUIApplication.launchReady(["-fakeHealth", "-seedHistory"])
+        enableHealth(app)
+        openLog(app)
+        let workouts = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'log.workout.'"))
+        XCTAssertTrue(workouts.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["log.outside.\(strength)"].exists, "attached: not listed on its own")
+        workouts.firstMatch.tap() // Sat 19 Sep, the newest seeded workout
+        let measured = app.staticTexts["detail.measured"]
+        XCTAssertTrue(measured.waitForExistence(timeout: 5))
+        XCTAssertEqual(measured.label, "Apple Watch measured 412 kcal \u{00B7} avg 128 bpm \u{00B7} max 162 bpm")
+        screenshot(app, "workout-measured")
+    }
 }

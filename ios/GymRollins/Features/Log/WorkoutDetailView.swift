@@ -14,6 +14,8 @@ struct WorkoutDetailView: View {
     @State private var recordCount = 0
     /// The agent that added this workout (plan 32), read with it; nil for the owner's own.
     @State private var addedBy: String?
+    /// What Apple Health measured during this workout (plan 39, rule 6), read with it; nil when nothing is attached.
+    @State private var measured: HealthActivity?
     @State private var editing = false
     @State private var drafts: [SetField: String] = [:]
     /// Edited "Reps left?" ratings by set id (a nil value clears the rating), applied on Save.
@@ -74,6 +76,14 @@ struct WorkoutDetailView: View {
                 statGrid(workout)
                 CalorieCard(estimate: env.calories.estimate(workout), healthStatus: env.health.exportStatus(for: workout),
                             prefix: "detail")
+                if let measured, let line = ActivityText.measuredLine(measured) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "applewatch").accessibilityHidden(true)
+                        Text(line).accessibilityIdentifier("detail.measured")
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                }
                 exerciseList(workout)
             }
             .padding(.horizontal, Theme.gutter)
@@ -265,6 +275,7 @@ struct WorkoutDetailView: View {
         workout = try? env.workouts.workout(workoutId)
         recordCount = (try? env.workouts.records(for: workoutId).count) ?? 0
         addedBy = try? env.workouts.addedBy(workoutId)
+        measured = workout.flatMap { env.measuredActivity(for: $0) }
     }
 
     private func startEditing() {
