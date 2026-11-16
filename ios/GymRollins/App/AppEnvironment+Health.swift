@@ -9,10 +9,11 @@ extension AppEnvironment {
     /// The real HealthKit store, or (DEBUG `-fakeHealth`) a seeded fake. UI-test launches keep Health's state in a
     /// throwaway defaults suite, so a previous run's "enabled" never leaks into the next.
     static func makeHealth(options: LaunchOptions, defaults: UserDefaults, workouts: WorkoutRepository,
-                           body: BodyRepository, calories: CalorieService, now: @escaping () -> Date) -> HealthSync {
+                           body: BodyRepository, activities: ActivityRepository, calories: CalorieService,
+                           now: @escaping () -> Date) -> HealthSync {
         let (store, healthDefaults) = healthBackend(options: options, defaults: defaults, now: now)
-        return HealthSync(store: store, workouts: workouts, body: body, defaults: healthDefaults,
-                          estimate: { calories.estimate($0) }, now: now)
+        return HealthSync(store: store, workouts: workouts, body: body, activities: activities,
+                          defaults: healthDefaults, estimate: { calories.estimate($0) }, now: now)
     }
 
     private static func healthBackend(options: LaunchOptions, defaults: UserDefaults,

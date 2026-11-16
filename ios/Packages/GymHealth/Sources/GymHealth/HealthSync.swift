@@ -35,24 +35,29 @@ public final class HealthSync {
     @ObservationIgnored let store: any HealthStore
     @ObservationIgnored let workouts: WorkoutRepository
     @ObservationIgnored let body: BodyRepository
+    @ObservationIgnored let activities: ActivityRepository
     @ObservationIgnored let now: () -> Date
     @ObservationIgnored let calendar: Calendar
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let estimate: @MainActor (Workout) -> CalorieEstimate?
     /// Weigh-ins were added, changed or removed by an import (the app reloads and syncs them).
     @ObservationIgnored public var onBodyChanged: @MainActor () -> Void
+    /// Outside workouts or days of activity were added, changed or deleted by an import (plan 39).
+    @ObservationIgnored public var onActivityChanged: @MainActor () -> Void = {}
     @ObservationIgnored private var tail: Task<Void, Never>?
     /// Bumped by `disable`, `reset` and `localDataWasReset`: a run that started under an older generation stops
     /// at its next suspension point instead of writing into (or about) data that was just cleared.
     @ObservationIgnored private(set) var generation = 0
     static let log = Logger(subsystem: "com.rollins.gymrollins", category: "health")
 
-    public init(store: any HealthStore, workouts: WorkoutRepository, body: BodyRepository, defaults: UserDefaults,
+    public init(store: any HealthStore, workouts: WorkoutRepository, body: BodyRepository,
+                activities: ActivityRepository, defaults: UserDefaults,
                 estimate: @escaping @MainActor (Workout) -> CalorieEstimate?, now: @escaping () -> Date = Date.init,
                 calendar: Calendar = .current, onBodyChanged: @escaping @MainActor () -> Void = {}) {
         self.store = store
         self.workouts = workouts
         self.body = body
+        self.activities = activities
         self.defaults = defaults
         self.estimate = estimate
         self.now = now
@@ -64,6 +69,9 @@ public final class HealthSync {
     /// False while importing would race the first cloud pull (signed in, weigh-ins never pulled yet): an import then
     /// could re-create weigh-ins another device already has or deleted. The import waits for the next run.
     @ObservationIgnored public var canImport: @MainActor () -> Bool = { true }
+
+    /// The same for outside workouts and days of activity (plan 39): false while their first cloud pull is pending.
+    @ObservationIgnored public var canImportActivity: @MainActor () -> Bool = { true }
 
     /// Who owns the local data (account id, or "local" when signed out); scopes the export ledgers.
     @ObservationIgnored public var owner: @MainActor () -> String? = { nil }
@@ -108,6 +116,7 @@ public final class HealthSync {
             $0.enabled = true
             $0.enabledAt = $0.enabledAt ?? now()
             $0.ledgerOwner = $0.ledgerOwner ?? owner
+            $0.activityPermissionsAsked = true // the request covers the activity types (plan 39)
         }
         lastError = nil
         await refreshPermissions()
@@ -185,6 +194,7 @@ public final class HealthSync {
     public func sync() async {
         await serialized { [self] in
             await runImport()
+            await runActivityImport()
             await runExport()
         }
     }
@@ -196,6 +206,11 @@ public final class HealthSync {
 
     public func importBody() async {
         await serialized { [self] in await runImport() }
+    }
+
+    /// Outside workouts and days of activity only (plan 39), e.g. once the first cloud pull unblocks them.
+    public func importActivity() async {
+        await serialized { [self] in await runActivityImport() }
     }
 
     private func serialized(_ work: @escaping @MainActor () async -> Void) async {

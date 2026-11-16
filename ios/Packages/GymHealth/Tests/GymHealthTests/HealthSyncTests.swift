@@ -13,6 +13,7 @@ final class HealthFixture {
     var now = Date(timeIntervalSince1970: 1_790_000_000) // Mon 21 Sep 2026, 13:33 UTC
     var store: FakeHealthStore
     var bodyChanges = 0
+    var activityChanges = 0
 
     init(store: FakeHealthStore = FakeHealthStore()) throws {
         container = try GymStore.container(inMemory: true)
@@ -25,13 +26,19 @@ final class HealthFixture {
     var workouts: WorkoutRepository { WorkoutRepository(context: container.mainContext, now: { [unowned self] in now }) }
     var body: BodyRepository { BodyRepository(context: container.mainContext, now: { [unowned self] in now }) }
 
+    var activities: ActivityRepository {
+        ActivityRepository(context: container.mainContext, now: { [unowned self] in now })
+    }
+
     func makeSync() -> HealthSync {
-        HealthSync(store: store, workouts: workouts, body: body, defaults: defaults,
-                   estimate: { workout in
-                       CalorieEstimator.estimate(workout: workout, exercise: { _ in nil }, bodyWeightKg: 80,
-                                                 table: HealthFixture.table)
-                   },
-                   now: { [unowned self] in now }, onBodyChanged: { [unowned self] in bodyChanges += 1 })
+        let sync = HealthSync(store: store, workouts: workouts, body: body, activities: activities, defaults: defaults,
+                              estimate: { workout in
+                                  CalorieEstimator.estimate(workout: workout, exercise: { _ in nil }, bodyWeightKg: 80,
+                                                            table: HealthFixture.table)
+                              },
+                              now: { [unowned self] in now }, onBodyChanged: { [unowned self] in bodyChanges += 1 })
+        sync.onActivityChanged = { [unowned self] in activityChanges += 1 }
+        return sync
     }
 
     static let table = METTable(source: METSource(title: "t", citation: "c", url: "u", retrieved: "r", terms: []),
