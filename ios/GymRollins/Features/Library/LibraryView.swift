@@ -12,11 +12,9 @@ struct LibraryView: View {
     @State private var bodyPart: String?
     @State private var createRequest: CreateRequest?
 
-    private var results: [Exercise] {
-        env.library.search(query: query, bodyPart: bodyPart)
-    }
-
     var body: some View {
+        // Searched once per body pass: the empty state, the count and the rows all read it.
+        let results = env.library.search(query: query, bodyPart: bodyPart)
         NavigationStack {
             ScrollView {
                 // Lazy stack: the library has 1000+ entries, so rows must only be realized near

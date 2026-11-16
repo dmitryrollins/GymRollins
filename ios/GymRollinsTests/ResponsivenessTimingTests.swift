@@ -136,6 +136,10 @@ struct ResponsivenessTimingTests {
             for _ in 0..<3 { _ = library.search(query: "", bodyPart: nil) }
             _ = library.bodyParts
         }
+        median("Library body pass now: one search + bodyParts") {
+            _ = library.search(query: "", bodyPart: nil)
+            _ = library.bodyParts
+        }
         median("library.search(query: \"\")") { _ = library.search(query: "", bodyPart: nil) }
         median("library.search(query: \"press\")") { _ = library.search(query: "press", bodyPart: nil) }
         median("library.bodyParts") { _ = library.bodyParts }
