@@ -46,6 +46,51 @@ public struct HealthSyncState: Codable, Sendable, Equatable {
         set { watchAcksStorage = newValue.isEmpty ? nil : newValue }
     }
 
+    // Plan 39: reading activity from Health. Plain optionals, or optional storage like `watchClaimsStorage`, so a state
+    // saved before plan 39 still decodes: a decode failure resets the whole state, turning Health off and dropping the
+    // export ledgers.
+
+    /// Anchored-query position for outside workouts, and the start date that query uses.
+    public var activityAnchor: Data?
+    public var activityImportStart: Date?
+    /// When days of activity were last read: the next read starts 6 days before that day (the first reads 2 years).
+    public var activityDaysReadAt: Date?
+    /// Outside workouts deleted in Health whose row wasn't on this iPhone yet (e.g. signed out): applied when the row
+    /// comes back from the cloud. Capped like `unmatchedDeletions`; use `unmatchedActivityDeletions`.
+    public var unmatchedActivityDeletionsStorage: [UUID]?
+    /// Settings › Apple Health › "Workouts from other apps" and "Steps & activity", on unless turned off.
+    public var readsOutsideWorkoutsStorage: Bool?
+    public var readsActivityDaysStorage: Bool?
+    /// Health was asked for the activity types (by `enable()` or `allowActivity()`); nothing is read before.
+    public var activityPermissionsAskedStorage: Bool?
+    /// Today's one-time card was answered "Not now".
+    public var activityCardDismissedStorage: Bool?
+
+    public var unmatchedActivityDeletions: [UUID] {
+        get { unmatchedActivityDeletionsStorage ?? [] }
+        set { unmatchedActivityDeletionsStorage = newValue.isEmpty ? nil : newValue }
+    }
+
+    public var readsOutsideWorkouts: Bool {
+        get { readsOutsideWorkoutsStorage ?? true }
+        set { readsOutsideWorkoutsStorage = newValue ? nil : false }
+    }
+
+    public var readsActivityDays: Bool {
+        get { readsActivityDaysStorage ?? true }
+        set { readsActivityDaysStorage = newValue ? nil : false }
+    }
+
+    public var activityPermissionsAsked: Bool {
+        get { activityPermissionsAskedStorage ?? false }
+        set { activityPermissionsAskedStorage = newValue ? true : nil }
+    }
+
+    public var activityCardDismissed: Bool {
+        get { activityCardDismissedStorage ?? false }
+        set { activityCardDismissedStorage = newValue ? true : nil }
+    }
+
     public init() {}
 
     public struct PendingBodyFat: Codable, Sendable, Equatable {
@@ -64,5 +109,14 @@ public struct HealthSyncState: Codable, Sendable, Equatable {
 
     func save(to defaults: UserDefaults) throws {
         defaults.set(try JSONEncoder().encode(self), forKey: Self.key)
+    }
+
+    /// DEBUG `-healthBeforeActivity` (UI tests): what a build from before plan 39 saved with Health on, so Today
+    /// offers the one-time activity card.
+    public static func saveEnabledBeforeActivity(to defaults: UserDefaults, at date: Date) throws {
+        var state = HealthSyncState()
+        state.enabled = true
+        state.enabledAt = date
+        try state.save(to: defaults)
     }
 }

@@ -45,8 +45,10 @@ public actor HealthKitStore: HealthStore {
 
     public func requestAuthorization() async throws {
         let share = Set(HealthDataType.allCases.map(Self.sampleType))
-        // Workouts are read only to find the Apple Watch's copy of a GymRollins workout (plan 17).
-        let read: Set<HKObjectType> = [Self.bodyMass, Self.bodyFat, Self.workout]
+        // Workouts are read to find the Apple Watch's copy of a GymRollins workout (plan 17) and, with the activity
+        // types, to bring in what other apps record (plan 39). The system only asks for types never asked.
+        var read: Set<HKObjectType> = [Self.bodyMass, Self.bodyFat, Self.workout]
+        read.formUnion(Self.activityReadTypes)
         try await healthStore().requestAuthorization(toShare: share, read: read)
     }
 
@@ -189,6 +191,144 @@ public actor HealthKitStore: HealthStore {
         default:
             return nil
         }
+    }
+
+    // MARK: Activity (plan 39)
+
+    private static let steps = HKQuantityType(.stepCount)
+    private static let heartRate = HKQuantityType(.heartRate)
+    private static let exerciseTime = HKQuantityType(.appleExerciseTime)
+    /// Walking/running, cycling and swimming: a workout has the one that fits its kind.
+    private static let distances = [HKQuantityType(.distanceWalkingRunning), HKQuantityType(.distanceCycling),
+                                    HKQuantityType(.distanceSwimming)]
+
+    /// What the activity import reads: step count, active energy and heart rate and distance (each workout's
+    /// statistics), exercise time and Activity summaries. Never in `HealthDataType`, the write list.
+    static var activityReadTypes: Set<HKObjectType> {
+        var types: Set<HKObjectType> = [steps, heartRate, exerciseTime, energy, HKObjectType.activitySummaryType()]
+        for distance in distances { types.insert(distance) }
+        return types
+    }
+
+    public func outsideWorkoutChanges(since start: Date, anchor: Data?) async throws -> HealthOutsideWorkoutChanges {
+        let store = try healthStore()
+        let previous = try anchor.flatMap {
+            try NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: $0)
+        }
+        let descriptor = HKAnchoredObjectQueryDescriptor(
+            predicates: [.workout(HKQuery.predicateForSamples(withStart: start, end: nil))], anchor: previous)
+        let result = try await descriptor.result(for: store)
+        let newAnchor = try NSKeyedArchiver.archivedData(withRootObject: result.newAnchor, requiringSecureCoding: true)
+        return HealthOutsideWorkoutChanges(added: result.addedSamples.map(outsideWorkout),
+                                           deleted: result.deletedObjects.map(\.uuid), anchor: newAnchor)
+    }
+
+    private func outsideWorkout(_ workout: HKWorkout) -> HealthOutsideWorkout {
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        let heart = workout.statistics(for: Self.heartRate)
+        let distance = Self.distances.lazy
+            .compactMap { workout.statistics(for: $0)?.sumQuantity()?.doubleValue(for: .meter()) }.first
+        let activity = HealthActivity(
+            id: workout.uuid, kind: Self.kindSlug(workout.workoutActivityType), startedAt: workout.startDate,
+            endedAt: workout.endDate, durationS: workout.duration,
+            kcal: workout.statistics(for: Self.energy)?.sumQuantity()?.doubleValue(for: .kilocalorie()),
+            distanceM: distance,
+            avgHr: heart?.averageQuantity().map { Int($0.doubleValue(for: bpm).rounded()) },
+            maxHr: heart?.maximumQuantity().map { Int($0.doubleValue(for: bpm).rounded()) },
+            sourceName: workout.sourceRevision.source.name,
+            fromWatch: workout.sourceRevision.productType?.hasPrefix("Watch") == true
+                || workout.device?.model == "Watch")
+        let external = (workout.metadata?[HKMetadataKeyExternalUUID] as? String).flatMap(UUID.init(uuidString:))
+        return HealthOutsideWorkout(activity: activity, externalId: external, writtenByGymRollins: isOwn(workout))
+    }
+
+    /// Written by GymRollins: the export metadata (the phone's and the watch app's), or this app's or the watch app's
+    /// bundle as the source.
+    private func isOwn(_ workout: HKWorkout) -> Bool {
+        if workout.metadata?[Self.exportMarkerKey] != nil || workout.metadata?[WatchHealthRules.writerKey] != nil {
+            return true
+        }
+        guard let bundleId else { return false }
+        let source = workout.sourceRevision.source.bundleIdentifier
+        return source == bundleId || source == "\(bundleId).watchkitapp"
+    }
+
+    /// Steps from the merged daily statistics (never summed samples: those double count iPhone + Watch), move,
+    /// exercise and stand from the Activity summary. Stand is nil on a day whose summary has no stand goal (no watch).
+    public func activityDays(from start: Date, through end: Date, calendar: Calendar) async throws -> [ActivityDay] {
+        let store = try healthStore()
+        let first = calendar.startOfDay(for: start)
+        let last = calendar.startOfDay(for: end)
+        guard first <= last, let after = calendar.date(byAdding: .day, value: 1, to: last) else { return [] }
+        let stepsQuery = HKStatisticsCollectionQueryDescriptor(
+            predicate: .quantitySample(type: Self.steps,
+                                       predicate: HKQuery.predicateForSamples(withStart: first, end: after)),
+            options: .cumulativeSum, anchorDate: first, intervalComponents: DateComponents(day: 1))
+        var steps: [String: Int] = [:]
+        for statistics in try await stepsQuery.result(for: store).statistics() {
+            guard let sum = statistics.sumQuantity() else { continue }
+            steps[ActivityDay.key(for: statistics.startDate, calendar: calendar)] =
+                Int(sum.doubleValue(for: .count()).rounded())
+        }
+        var from = calendar.dateComponents([.era, .year, .month, .day], from: first)
+        var through = calendar.dateComponents([.era, .year, .month, .day], from: last)
+        from.calendar = calendar
+        through.calendar = calendar
+        let summaries = try await HKActivitySummaryQueryDescriptor(
+            predicate: HKQuery.predicate(forActivitySummariesBetweenStart: from, end: through)).result(for: store)
+        var rings: [String: HKActivitySummary] = [:]
+        for summary in summaries {
+            guard let date = calendar.date(from: summary.dateComponents(for: calendar)) else { continue }
+            rings[ActivityDay.key(for: date, calendar: calendar)] = summary
+        }
+        return Set(steps.keys).union(rings.keys).sorted().map { key in
+            let ring = rings[key]
+            let standGoal = ring?.standHoursGoal?.doubleValue(for: .count()) ?? 0
+            return ActivityDay(day: key, steps: steps[key] ?? 0,
+                               moveKcal: ring?.activeEnergyBurned.doubleValue(for: .kilocalorie()) ?? 0,
+                               exerciseMin: Int((ring?.appleExerciseTime.doubleValue(for: .minute()) ?? 0).rounded()),
+                               standH: standGoal > 0
+                                   ? ring.map { Int($0.appleStandHours.doubleValue(for: .count()).rounded()) } : nil)
+        }
+    }
+
+    /// The `OutsideWorkoutKind` slug of a HealthKit workout type (plan 39); `other` for a type GymRollins doesn't name.
+    public static func kindSlug(_ type: HKWorkoutActivityType) -> String {
+        let kind: OutsideWorkoutKind = switch type {
+        case .walking, .wheelchairWalkPace: .walking
+        case .running, .wheelchairRunPace: .running
+        case .cycling, .handCycling: .cycling
+        case .highIntensityIntervalTraining: .hiit
+        case .yoga: .yoga
+        case .swimming: .swimming
+        case .traditionalStrengthTraining: .traditionalStrength
+        case .functionalStrengthTraining: .functionalStrength
+        case .elliptical: .elliptical
+        case .rowing: .rowing
+        case .hiking: .hiking
+        case .cardioDance, .socialDance, .barre: .dance
+        case .coreTraining: .core
+        case .pilates: .pilates
+        case .cooldown, .preparationAndRecovery: .cooldown
+        case .stairClimbing, .stairs, .stepTraining: .stairs
+        case .jumpRope: .jumpRope
+        case .mixedCardio: .mixedCardio
+        case .crossTraining: .crossTraining
+        case .flexibility: .flexibility
+        case .mindAndBody, .taiChi: .mindAndBody
+        case .tennis: .tennis
+        case .soccer: .soccer
+        case .basketball: .basketball
+        case .boxing: .boxing
+        case .kickboxing: .kickboxing
+        case .martialArts: .martialArts
+        case .climbing: .climbing
+        case .downhillSkiing, .crossCountrySkiing: .skiing
+        case .snowboarding: .snowboarding
+        case .golf: .golf
+        default: .other
+        }
+        return kind.rawValue
     }
 
     // MARK: Helpers

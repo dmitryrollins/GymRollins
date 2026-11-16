@@ -1,4 +1,5 @@
 import Foundation
+import GymCore
 
 /// In-memory Health with HealthKit's semantics (only this app's own data can be deleted, reads are anchored), for
 /// package tests and the DEBUG `-fakeHealth` launch flag.
@@ -34,9 +35,16 @@ public actor FakeHealthStore: HealthStore {
     private var failReads = false
     private var failOptionalDeletes = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    /// Workouts in "Health" from any source, with the change sequence they were added at (plan 39).
+    private var outside: [(seq: Int, workout: HealthOutsideWorkout)] = []
+    private var outsideDeletions: [(seq: Int, uuid: UUID)] = []
+    private var activity: [String: ActivityDay] = [:]
+    /// Every `activityDays` call's range, in order.
+    public private(set) var dayReads: [(from: Date, through: Date)] = []
 
     public init(isAvailable: Bool = true, grantOnRequest: [HealthDataType: HealthPermission]? = nil,
-                seed: [HealthBodySample] = []) {
+                seed: [HealthBodySample] = [], outsideWorkouts: [HealthOutsideWorkout] = [],
+                days: [ActivityDay] = []) {
         self.isAvailable = isAvailable
         self.grantOnRequest = grantOnRequest
             ?? Dictionary(uniqueKeysWithValues: HealthDataType.allCases.map { ($0, .authorized) })
@@ -44,6 +52,11 @@ public actor FakeHealthStore: HealthStore {
             seq += 1
             samples.append((seq, sample))
         }
+        for workout in outsideWorkouts {
+            seq += 1
+            outside.append((seq, workout))
+        }
+        for day in days { activity[day.day] = day }
     }
 
     /// Three Withings weigh-ins (one with body fat) before `now`, for UI tests.
@@ -55,6 +68,40 @@ public actor FakeHealthStore: HealthStore {
             HealthBodySample(kind: .bodyFat, value: 15.2, date: now.addingTimeInterval(-8 * day), sourceName: "Withings"),
             HealthBodySample(kind: .bodyMass, value: 81.6, date: now.addingTimeInterval(-1 * day), sourceName: "Withings"),
         ]
+    }
+
+    /// Plan 39's UI-test activity: yesterday's Apple Watch walk, and an Apple Watch strength recording during
+    /// `-seedHistory`'s workout a week before `now` (18:00 UTC, 58 minutes), which attaches to it.
+    public static let uiTestWalkId = UUID(uuidString: "00000000-0000-4000-8000-00000000a001")!
+    public static let uiTestStrengthId = UUID(uuidString: "00000000-0000-4000-8000-00000000a002")!
+
+    public static func uiTestOutsideWorkouts(now: Date) -> [HealthOutsideWorkout] {
+        let walk = now.addingTimeInterval(-26 * 3_600)
+        let strength = now.addingTimeInterval(-7 * 86_400 + 9 * 3_600 + 120)
+        return [
+            HealthOutsideWorkout(activity: HealthActivity(
+                id: uiTestWalkId, kind: "walking", startedAt: walk, endedAt: walk.addingTimeInterval(2_700),
+                durationS: 2_700, kcal: 180, distanceM: 3_400, avgHr: 102, maxHr: 121, sourceName: "Apple Watch",
+                fromWatch: true)),
+            HealthOutsideWorkout(activity: HealthActivity(
+                id: uiTestStrengthId, kind: "traditional_strength", startedAt: strength,
+                endedAt: strength.addingTimeInterval(3_180), durationS: 3_180, kcal: 412, avgHr: 128, maxHr: 162,
+                sourceName: "Apple Watch", fromWatch: true)),
+        ]
+    }
+
+    /// Seven days of activity ending on `now`'s day in `calendar` (the first values are today's).
+    public static func uiTestActivityDays(now: Date, calendar: Calendar) -> [ActivityDay] {
+        let values: [(steps: Int, move: Double, exercise: Int, stand: Int)] = [
+            (4_210, 210, 18, 6), (8_532, 410, 34, 11), (10_250, 520, 41, 12), (6_120, 300, 22, 10),
+            (12_004, 610, 55, 12), (7_450, 350, 28, 11), (9_876, 480, 39, 12),
+        ]
+        return values.enumerated().compactMap { offset, value in
+            calendar.date(byAdding: .day, value: -offset, to: now).map {
+                ActivityDay(day: ActivityDay.key(for: $0, calendar: calendar), steps: value.steps,
+                            moveKcal: value.move, exerciseMin: value.exercise, standH: value.stand)
+            }
+        }
     }
 
     // MARK: Test controls
@@ -104,6 +151,23 @@ public actor FakeHealthStore: HealthStore {
     }
 
     public func bodySamples() -> [HealthBodySample] { samples.map(\.sample) }
+
+    /// Another app (the Workout app, Strava) saves a workout.
+    public func addOutsideWorkout(_ workout: HealthOutsideWorkout) {
+        seq += 1
+        outside.append((seq, workout))
+    }
+
+    /// The user deletes a workout in the Health app.
+    public func deleteOutsideWorkout(_ id: UUID) {
+        guard outside.contains(where: { $0.workout.activity.id == id }) else { return }
+        outside.removeAll { $0.workout.activity.id == id }
+        seq += 1
+        outsideDeletions.append((seq, id))
+    }
+
+    /// Health's totals for a day (late Apple Watch data changes them).
+    public func setDay(_ day: ActivityDay) { activity[day.day] = day }
 
     // MARK: HealthStore
 
@@ -196,6 +260,24 @@ public actor FakeHealthStore: HealthStore {
         let added = samples.filter { $0.seq > from && $0.sample.date >= start }.map(\.sample)
         let deleted = anchor == nil ? [] : deletions.filter { $0.seq > from }.map(\.uuid)
         return HealthBodyChanges(added: added, deleted: deleted, anchor: Data("\(seq)".utf8))
+    }
+
+    public func outsideWorkoutChanges(since start: Date, anchor: Data?) async throws -> HealthOutsideWorkoutChanges {
+        await passGate()
+        if failReads { throw Failure(message: "Reading failed") }
+        let from = anchor.flatMap { Int(String(decoding: $0, as: UTF8.self)) } ?? 0
+        let added = outside.filter { $0.seq > from && $0.workout.activity.startedAt >= start }.map(\.workout)
+        let deleted = anchor == nil ? [] : outsideDeletions.filter { $0.seq > from }.map(\.uuid)
+        return HealthOutsideWorkoutChanges(added: added, deleted: deleted, anchor: Data("\(seq)".utf8))
+    }
+
+    public func activityDays(from start: Date, through end: Date, calendar: Calendar) async throws -> [ActivityDay] {
+        await passGate()
+        if failReads { throw Failure(message: "Reading failed") }
+        dayReads.append((start, end))
+        let first = ActivityDay.key(for: start, calendar: calendar)
+        let last = ActivityDay.key(for: end, calendar: calendar)
+        return activity.values.filter { $0.day >= first && $0.day <= last }.sorted { $0.day < $1.day }
     }
 
     // MARK: Private
