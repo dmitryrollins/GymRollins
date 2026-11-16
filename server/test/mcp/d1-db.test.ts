@@ -253,9 +253,24 @@ describe("Claude's reads", () => {
     const owner = await seedOwner()
     const db = new D1Db(DB, owner.userId, 'claude')
     expect(await db.healthActivities()).toMatchObject([
-      { kind: 'walking', duration_s: 2700, from_watch: true, kcal: null, source_name: 'Apple Watch' },
+      {
+        kind: 'walking', duration_s: 2700, from_watch: true, kcal: null, avg_power_w: null, avg_cadence_rpm: null,
+        total_kcal: null, source_name: 'Apple Watch',
+      },
     ])
     expect(await db.healthActivities('2026-11-06T00:00:00.000Z')).toEqual([])
+    await run(
+      'INSERT INTO health_activities (id, user_id, kind, started_at, ended_at, duration_s, kcal, avg_power_w, ' +
+        'avg_cadence_rpm, total_kcal, source_name, from_watch, client_updated_at, updated_at) VALUES (?1, ?2, ' +
+        "'cycling', '2026-11-06T17:00:00.000000Z', '2026-11-06T17:13:30.000000Z', 810, 40, 138, 62, 48, " +
+        "'Apple Watch', 1, ?3, ?3)",
+      crypto.randomUUID(),
+      owner.userId,
+      T,
+    )
+    expect(await db.healthActivities('2026-11-06T00:00:00.000Z')).toMatchObject([
+      { kind: 'cycling', kcal: 40, avg_power_w: 138, avg_cadence_rpm: 62, total_kcal: 48 },
+    ])
     expect(await db.activityDays('2026-11-05')).toEqual([
       { day: '2026-11-05', steps: 8532, move_kcal: 410, exercise_min: 34, stand_h: null },
     ])

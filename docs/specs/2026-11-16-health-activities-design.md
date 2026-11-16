@@ -29,6 +29,7 @@ plan around it (no heavy legs the day after a long run).
 | 12 | Import window: **2 years** on first import (as for weight). Afterwards: workouts incrementally (anchored query, deletions included); days **re-read for the last 7 days** on every sync, written only when a value changed. | Watch data lands late; a week covers it without re-pushing old days. |
 | 13 | No background delivery: imports run when the app launches or comes to the foreground, after enabling, and after a cloud pull (as today). | YAGNI; the agents read the server, which is as fresh as the last app open. |
 | 14 | Not in this plan: heart-rate graphs, routes and maps, sleep, editing outside workouts, adding them to the JSON/CSV exports, writing anything new to Health. | Scope. |
+| 15 | Average power, average cadence and total calories are kept too (owner's choice 2026-11-16, after the Fitness summary of a LifeFitness ride); shown only when the workout has them. | An Indoor Cycle recorded by the Apple Watch with GymKit shows Avg. Power 138 W, Avg. Cadence 62 RPM, Active 40 kcal and Total 48 kcal in Apple Fitness. |
 
 ## 3. Data
 
@@ -41,8 +42,11 @@ plan around it (no heavy legs the day after a long run).
 | `startedAt`, `endedAt` | timestamps | |
 | `durationS` | real | HealthKit's duration (pauses excluded). |
 | `kcal` | real? | The workout's active energy statistic. |
+| `totalKcal` | real? | Active plus resting energy (Apple Fitness's "Total"): `kcal` plus the workout's `basalEnergyBurned` sum. Nil when the resting energy (or the active) is missing, and nil when it would come out below `kcal`. |
 | `distanceM` | real? | Walking/running, cycling or swimming distance, whichever the workout has. |
 | `avgHr`, `maxHr` | int? | From the workout's heart-rate statistics. |
+| `avgPowerW` | int? | Watts: the workout's average `cyclingPower`, else its average `runningPower`. Nil without either (no power meter, GymKit equipment or Watch run). |
+| `avgCadenceRpm` | int? | The workout's average `cyclingCadence`, in revolutions per minute. Nil without it. |
 | `sourceName` | text | The source's name as Health shows it ("Apple Watch", "Strava"). |
 | `fromWatch` | bool | Recorded on an Apple Watch (device model), for rule 7. |
 | `deletedAt` | timestamp? | Tombstone when it left Health. |
@@ -58,15 +62,17 @@ Keyed by the **local calendar day** (`YYYY-MM-DD`) it was recorded in: `steps` (
 ### 3.3 Limits
 
 Mirrored in `DomainLimits` (Swift) and `domain-limits.ts` (with the existing drift test), enforced by D1 CHECKs:
-duration 0–24 h, kcal 0–20,000, distance 0–1,000 km, heart rate 20–250, steps 0–200,000, exercise 0–1,440 min,
-stand 0–24 h, kind and source name 1–100 characters. A sample outside them is skipped on import, not clamped.
+duration 0–24 h, kcal and total kcal 0–20,000, distance 0–1,000 km, heart rate 20–250, average power 0–2,500 W,
+average cadence 0–250 rpm, steps 0–200,000, exercise 0–1,440 min, stand 0–24 h, kind and source name 1–100
+characters. A sample outside them is skipped on import, not clamped.
 
 ## 4. Phone
 
 - **Reading from Health.** `HealthStore` gains read methods: outside workouts changed since an anchor (added + deleted)
-  and day totals for a date range. `HealthKitStore` asks to read step count, active energy, exercise time,
-  heart rate, the distance types and Activity summaries (besides what it reads now). Read types are **not** added to
-  `HealthDataType` (that enum is the write list; its summary would never say "Connected" again).
+  and day totals for a date range. `HealthKitStore` asks to read step count, active and resting energy, exercise
+  time, heart rate, the distance types, cycling and running power, cycling cadence and Activity summaries (besides
+  what it reads now). Read types are **not** added to `HealthDataType` (that enum is the write list; its summary
+  would never say "Connected" again).
 - **State.** New `HealthSyncState` fields (activity anchor, import start, the two reading switches, whether the new
   permissions were asked) use the optional-storage pattern, so an old saved state still decodes. (A decode failure
   resets the whole state, which would turn Health off and drop the export ledgers.)
@@ -102,8 +108,9 @@ stand 0–24 h, kind and source name 1–100 characters. A sample outside them i
 - **Sync**: both tables join the generic table sync (`ENTITIES`), last write wins; they join `OWNED` for account
   deletion and the per-entity sync tests.
 - **MCP**: `get_activity` (read, behind `mcp_read_activity`): `days` 1–84 (default 28) → outside workouts after
-  rules 6–7 (newest first, at most 60; each with kind, start, duration, distance, kcal, avg HR, source, and
-  `during_workout_id` when attached) and per-day and per-week totals. `get_training_insights`' streak counts outside
+  rules 6–7 (newest first, at most 60; each with kind, start, duration, distance, kcal, `total_kcal`, avg and max
+  HR, `avg_power_w`, `avg_cadence_rpm`, source, and `during_workout_id` when attached; an optional field only when
+  the workout has it) and per-day and per-week totals. `get_training_insights`' streak counts outside
   workouts per decision 5. `SERVER_INSTRUCTIONS` and the app's coach prompt mention `get_activity` (check it before
   planning hard leg or conditioning days). The tool list grows from 16 to 17.
 

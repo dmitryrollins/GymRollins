@@ -125,6 +125,12 @@ export interface HealthActivityRow {
   distance_m: number | null
   avg_hr: number | null
   max_hr: number | null
+  /** Watts: the workout's average cycling power, else its average running power. */
+  avg_power_w: number | null
+  /** The workout's average cycling cadence, in revolutions per minute. */
+  avg_cadence_rpm: number | null
+  /** Active plus resting energy, as Apple Fitness's "Total": null when Health had no resting energy for it. */
+  total_kcal: number | null
   source_name: string
   from_watch: boolean
 }

@@ -97,6 +97,19 @@ import Testing
         #expect(try fx.activities.activities(since: nil).map(\.id) == [otherApps.activity.id])
     }
 
+    @Test func aRideComesInWithItsPowerCadenceAndTotalCalories() async throws {
+        let fx = try HealthFixture()
+        let start = fx.now.addingTimeInterval(-day)
+        let ride = HealthActivity(id: UUID(), kind: "cycling", startedAt: start, endedAt: start.addingTimeInterval(810),
+                                  durationS: 810, kcal: 40, totalKcal: 48, avgHr: 118, maxHr: 141, avgPowerW: 138,
+                                  avgCadenceRpm: 62, sourceName: "Apple Watch", fromWatch: true)
+        fx.store = FakeHealthStore(outsideWorkouts: [HealthOutsideWorkout(activity: ride)])
+        _ = await fx.makeSync().enable()
+        #expect(try fx.activities.activities(since: nil) == [ride])
+        let rows = try SyncStore(context: fx.container.mainContext, defaults: fx.defaults).dirtyHealthActivities()
+        #expect(rows.map(\.value) == [ride], "pushed with them too")
+    }
+
     @Test func aWorkoutOutsideTheLimitsIsSkipped() async throws {
         let fx = try HealthFixture()
         let start = fx.now.addingTimeInterval(-day)

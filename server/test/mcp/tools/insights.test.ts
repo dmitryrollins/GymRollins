@@ -42,8 +42,8 @@ function bench(id: string, start: string, sets: number): WorkoutRow {
 function outside(id: string, start: string, minutes: number, kind = 'walking'): HealthActivityRow {
   return {
     id, kind, started_at: start, ended_at: new Date(Date.parse(start) + minutes * 60_000).toISOString(),
-    duration_s: minutes * 60, kcal: null, distance_m: null, avg_hr: null, max_hr: null, source_name: 'Apple Watch',
-    from_watch: true,
+    duration_s: minutes * 60, kcal: null, distance_m: null, avg_hr: null, max_hr: null, avg_power_w: null,
+    avg_cadence_rpm: null, total_kcal: null, source_name: 'Apple Watch', from_watch: true,
   }
 }
 

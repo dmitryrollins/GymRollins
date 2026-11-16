@@ -18,6 +18,40 @@ import Testing
         #expect(!paused.countsAsWorkout, "under 10 minutes of active time, whatever the span")
         #expect(!paused.fromWatch)
         #expect(paused.kcal == nil && paused.distanceM == nil && paused.avgHr == nil && paused.maxHr == nil)
+        #expect(paused.avgPowerW == nil && paused.avgCadenceRpm == nil && paused.totalKcal == nil)
+    }
+
+    @Test func aRideKeepsItsPowerCadenceAndTotalCalories() throws {
+        let ride = HealthActivity(id: UUID(), kind: "cycling", startedAt: start, endedAt: start.addingTimeInterval(810),
+                                  durationS: 810, kcal: 40, totalKcal: 48, avgHr: 118, maxHr: 141, avgPowerW: 138,
+                                  avgCadenceRpm: 62, sourceName: "Apple Watch", fromWatch: true)
+        #expect(ride.avgPowerW == 138 && ride.avgCadenceRpm == 62 && ride.totalKcal == 48)
+        let back = try JSONDecoder().decode(HealthActivity.self, from: JSONEncoder().encode(ride))
+        #expect(back == ride)
+    }
+
+    @Test func anOutsideWorkoutSavedBeforeTheNewFieldsStillDecodes() throws {
+        let walk = HealthActivity(id: UUID(), kind: "walking", startedAt: start, endedAt: start.addingTimeInterval(60),
+                                  durationS: 60, kcal: 5, sourceName: "Strava")
+        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(walk)) as? [String: Any])
+        for key in ["avgPowerW", "avgCadenceRpm", "totalKcal"] { object[key] = nil }
+        let old = try JSONSerialization.data(withJSONObject: object)
+        #expect(try JSONDecoder().decode(HealthActivity.self, from: old) == walk)
+    }
+
+    /// Apple Fitness's "Total": active plus resting energy, only when Health has both and the sum makes sense.
+    @Test(arguments: [
+        (40.0, 8.0, 48.0), (40.0, 0.0, 40.0), (0.0, 12.5, 12.5),
+    ] as [(Double, Double, Double)])
+    func totalCaloriesAreActivePlusResting(active: Double, basal: Double, total: Double) {
+        #expect(HealthActivity.totalKcal(active: active, basal: basal) == total)
+    }
+
+    @Test func totalCaloriesNeedBothAndNeverComeOutBelowTheActive() {
+        #expect(HealthActivity.totalKcal(active: 40, basal: nil) == nil, "no resting energy in Health")
+        #expect(HealthActivity.totalKcal(active: nil, basal: 8) == nil, "resting alone isn't a total")
+        #expect(HealthActivity.totalKcal(active: nil, basal: nil) == nil)
+        #expect(HealthActivity.totalKcal(active: 40, basal: -5) == nil, "below the active kcal")
     }
 
     @Test func aDayIsKeyedByItsLocalCalendarDay() throws {

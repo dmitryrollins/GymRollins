@@ -26,6 +26,34 @@ describe('outside workouts', () => {
     expect((await pulled(token, 'health-activities'))[0]?.deleted_at).toBe(T2)
   })
 
+  it("keep a ride's average power, average cadence and total kcal", async () => {
+    const { token } = await signUp()
+    const ride = {
+      ...SAMPLES['health-activities'](), kind: 'cycling', distance_m: null, kcal: 40, avg_power_w: 138,
+      avg_cadence_rpm: 62, total_kcal: 48,
+    }
+    expect((await push(token, 'health-activities', [ride])).status).toBe(200)
+    expect((await pulled(token, 'health-activities'))[0])
+      .toMatchObject({ avg_power_w: 138, avg_cadence_rpm: 62, total_kcal: 48, kcal: 40 })
+  })
+
+  it.each([
+    ['avg_power_w', 2500, 2501],
+    ['avg_cadence_rpm', 250, 251],
+    ['total_kcal', 20000, 20001],
+  ])('take %s from 0 through %i and refuse %i or below 0', async (column, max, over) => {
+    const { token } = await signUp()
+    for (const fits of [0, max]) {
+      const res = await push(token, 'health-activities', [{ ...SAMPLES['health-activities'](), [column]: fits }])
+      expect(res.status, `${column} = ${fits}`).toBe(200)
+    }
+    for (const bad of [-1, over]) {
+      const res = await push(token, 'health-activities', [{ ...SAMPLES['health-activities'](), [column]: bad }])
+      expect(res.status, `${column} = ${bad}`).toBe(422)
+      expect((await res.json<{ error: { code: string } }>()).error.code).toBe('row_rejected')
+    }
+  })
+
   it('refuse one that ends before it starts', async () => {
     const { token } = await signUp()
     const res = await push(token, 'health-activities', [

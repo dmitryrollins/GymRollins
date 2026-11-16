@@ -49,6 +49,8 @@ public enum DomainLimits {
     public static let activityKcal: ClosedRange<Double> = 0...20_000
     public static let activityDistanceM: ClosedRange<Double> = 0...1_000_000
     public static let heartRateBpm: ClosedRange<Int> = 20...250
+    public static let activityPowerW: ClosedRange<Int> = 0...2_500
+    public static let activityCadenceRpm: ClosedRange<Int> = 0...250
     public static let daySteps: ClosedRange<Int> = 0...200_000
     public static let dayExerciseMin: ClosedRange<Int> = 0...1_440
     public static let dayStandH: ClosedRange<Int> = 0...24
@@ -121,9 +123,14 @@ public enum DomainLimits {
         if a.endedAt < a.startedAt { return "A workout can't end before it starts." }
         if !activityDurationS.contains(a.durationS) { return "Duration must be 0–24 hours." }
         if let kcal = a.kcal, !activityKcal.contains(kcal) { return "Calories must be 0–20,000 kcal." }
+        if let total = a.totalKcal, !activityKcal.contains(total) { return "Total calories must be 0–20,000 kcal." }
         if let distance = a.distanceM, !activityDistanceM.contains(distance) { return "Distance must be 0–1,000 km." }
         if [a.avgHr, a.maxHr].contains(where: { $0.map { !heartRateBpm.contains($0) } ?? false }) {
             return "Heart rate must be 20–250 bpm."
+        }
+        if let power = a.avgPowerW, !activityPowerW.contains(power) { return "Average power must be 0–2,500 W." }
+        if let cadence = a.avgCadenceRpm, !activityCadenceRpm.contains(cadence) {
+            return "Average cadence must be 0–250 rpm."
         }
         return nil
     }

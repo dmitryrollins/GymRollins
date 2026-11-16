@@ -30,6 +30,19 @@ import Testing
         #expect(next.deleted == [recent.activity.id])
     }
 
+    @Test func aRideComesWithItsPowerCadenceAndTotalCalories() async throws {
+        let start = now.addingTimeInterval(-3_600)
+        let ride = HealthOutsideWorkout(activity: HealthActivity(
+            id: UUID(), kind: "cycling", startedAt: start, endedAt: start.addingTimeInterval(810), durationS: 810,
+            kcal: 40, totalKcal: 48, avgHr: 118, maxHr: 141, avgPowerW: 138, avgCadenceRpm: 62,
+            sourceName: "Apple Watch", fromWatch: true))
+        let store = FakeHealthStore(outsideWorkouts: [ride])
+        let read = try await store.outsideWorkoutChanges(since: .distantPast, anchor: nil).added
+        #expect(read.map(\.activity) == [ride.activity])
+        #expect(read.first?.activity.avgPowerW == 138 && read.first?.activity.avgCadenceRpm == 62)
+        #expect(read.first?.activity.totalKcal == 48)
+    }
+
     @Test func daysComeByCalendarDayOldestFirst() async throws {
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = try #require(TimeZone(identifier: "UTC"))

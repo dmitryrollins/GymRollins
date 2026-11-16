@@ -51,6 +51,31 @@ import Testing
         #expect(try f.store.dirtyHealthActivities().isEmpty)
     }
 
+    @Test func aRidesPowerCadenceAndTotalCaloriesArePushedAndPulled() throws {
+        defer { f.tearDown() }
+        let start = f.clock.now.addingTimeInterval(-3_600)
+        let ride = HealthActivity(id: UUID(), kind: "cycling", startedAt: start, endedAt: start.addingTimeInterval(810),
+                                  durationS: 810, kcal: 40, totalKcal: 48, avgHr: 118, maxHr: 141, avgPowerW: 138,
+                                  avgCadenceRpm: 62, sourceName: "Apple Watch", fromWatch: true)
+        try activities.add(ride, editedAt: ride.endedAt)
+        #expect(try f.store.dirtyHealthActivities().map(\.value) == [ride])
+        #expect(try activities.activity(ride.id) == ride)
+
+        let remeasured = HealthActivity(id: ride.id, kind: "cycling", startedAt: start,
+                                        endedAt: start.addingTimeInterval(810), durationS: 810, kcal: 41,
+                                        totalKcal: 50, avgPowerW: 140, avgCadenceRpm: 64, sourceName: "Apple Watch",
+                                        fromWatch: true)
+        try f.store.applyRemote(healthActivities: [SyncRow(value: remeasured,
+                                                           clientUpdatedAt: f.clock.now.addingTimeInterval(60),
+                                                           serverUpdatedAt: f.clock.now)])
+        #expect(try activities.activity(ride.id) == remeasured)
+        let other = HealthActivity(id: UUID(), kind: "cycling", startedAt: start, endedAt: start.addingTimeInterval(60),
+                                   durationS: 60, totalKcal: 9, avgPowerW: 101, sourceName: "Zwift")
+        try f.store.applyRemote(healthActivities: [SyncRow(value: other, clientUpdatedAt: f.clock.now,
+                                                           serverUpdatedAt: f.clock.now)])
+        #expect(try activities.activity(other.id) == other, "a pulled row that's new here keeps them too")
+    }
+
     @Test func aNewerPulledRowWinsAndAnOlderOneDoesNot() throws {
         defer { f.tearDown() }
         try activities.save(day: day)

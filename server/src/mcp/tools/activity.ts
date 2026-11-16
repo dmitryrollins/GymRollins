@@ -43,8 +43,11 @@ function listed(a: HealthActivityRow, duringWorkoutId: string | undefined): Reco
     duration_min: Math.round(a.duration_s / 60),
     distance_km: a.distance_m === null ? null : round(a.distance_m / 1000, 2),
     kcal: a.kcal === null ? null : Math.round(a.kcal),
+    total_kcal: a.total_kcal === null ? null : Math.round(a.total_kcal),
     avg_hr: a.avg_hr,
     max_hr: a.max_hr,
+    avg_power_w: a.avg_power_w,
+    avg_cadence_rpm: a.avg_cadence_rpm,
     source: a.source_name,
     during_workout_id: duringWorkoutId ?? null,
   })

@@ -38,6 +38,41 @@ import Testing
         #expect(back.deletedAt == t0)
     }
 
+    @Test func aRidesPowerCadenceAndTotalCaloriesTravelSnakeCased() throws {
+        defer { f.tearDown() }
+        let start = f.clock.now.addingTimeInterval(-3_600)
+        let ride = HealthActivity(id: UUID(), kind: "cycling", startedAt: start, endedAt: start.addingTimeInterval(810),
+                                  durationS: 810, kcal: 40, totalKcal: 48.5, avgHr: 118, maxHr: 141, avgPowerW: 138,
+                                  avgCadenceRpm: 62, sourceName: "Apple Watch", fromWatch: true)
+        let row = SyncRow(value: ride, clientUpdatedAt: t0)
+        let body = String(decoding: try SyncJSON.encoder.encode(HealthActivityDTO(row)), as: UTF8.self)
+        for key in [#""avg_power_w":138"#, #""avg_cadence_rpm":62"#, #""total_kcal":48.5"#] {
+            #expect(body.contains(key), "\(key) in \(body)")
+        }
+        #expect(try wire(HealthActivityDTO(row)).toDomain().value == ride)
+
+        let walkBody = String(decoding: try SyncJSON.encoder.encode(HealthActivityDTO(SyncRow(value: walk(),
+                                                                                               clientUpdatedAt: t0))),
+                              as: UTF8.self)
+        for key in [#""avg_power_w":null"#, #""avg_cadence_rpm":null"#, #""total_kcal":null"#] {
+            #expect(walkBody.contains(key), "\(key) in \(walkBody)")
+        }
+    }
+
+    @Test func aRowWithoutTheNewKeysDecodesThemAsNil() throws {
+        defer { f.tearDown() }
+        let walk = walk()
+        let data = try SyncJSON.encoder.encode(HealthActivityDTO(SyncRow(value: walk, clientUpdatedAt: t0)))
+        var json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        for key in ["avg_power_w", "avg_cadence_rpm", "total_kcal"] { json[key] = nil }
+        json["updated_at"] = SyncDate.format(t0)
+        let old = try SyncJSON.decoder.decode(HealthActivityDTO.self,
+                                              from: JSONSerialization.data(withJSONObject: json))
+        let back = old.toDomain().value
+        #expect(back == walk)
+        #expect(back.avgPowerW == nil && back.avgCadenceRpm == nil && back.totalKcal == nil)
+    }
+
     @Test func aDayTravelsWithItsKeyAndANullStand() throws {
         defer { f.tearDown() }
         let row = SyncRow(value: day, clientUpdatedAt: t0)

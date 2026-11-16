@@ -170,6 +170,7 @@ export const ENTITIES: Readonly<Record<string, Entity>> = {
     columns: [
       col('id', 'uuid'), col('kind', 'text'), col('started_at', 'ts'), col('ended_at', 'ts'), col('duration_s', 'real'),
       opt('kcal', 'real'), opt('distance_m', 'real'), opt('avg_hr', 'int'), opt('max_hr', 'int'),
+      opt('avg_power_w', 'int'), opt('avg_cadence_rpm', 'int'), opt('total_kcal', 'real'),
       col('source_name', 'text'), col('from_watch', 'bool'), edited, deleted,
     ],
   },

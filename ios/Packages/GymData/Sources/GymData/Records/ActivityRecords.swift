@@ -3,7 +3,8 @@ import GymCore
 import SwiftData
 
 /// An outside workout read from Apple Health (plan 39). The id is the HealthKit workout's UUID. A deletion in Health
-/// leaves a tombstone, which keeps the import from bringing the workout back.
+/// leaves a tombstone, which keeps the import from bringing the workout back. Average power, average cadence and total
+/// calories came after the first plan 39 builds: optional, so SwiftData's lightweight migration adds them as nil.
 @Model
 public final class HealthActivityRecord {
     @Attribute(.unique) public var id: UUID
@@ -12,9 +13,12 @@ public final class HealthActivityRecord {
     public var endedAt: Date
     public var durationS: Double
     public var kcal: Double?
+    public var totalKcal: Double?
     public var distanceM: Double?
     public var avgHr: Int?
     public var maxHr: Int?
+    public var avgPowerW: Int?
+    public var avgCadenceRpm: Int?
     public var sourceName: String
     public var fromWatch: Bool
     public var updatedAt: Date
@@ -29,9 +33,12 @@ public final class HealthActivityRecord {
         self.endedAt = activity.endedAt
         self.durationS = activity.durationS
         self.kcal = activity.kcal
+        self.totalKcal = activity.totalKcal
         self.distanceM = activity.distanceM
         self.avgHr = activity.avgHr
         self.maxHr = activity.maxHr
+        self.avgPowerW = activity.avgPowerW
+        self.avgCadenceRpm = activity.avgCadenceRpm
         self.sourceName = activity.sourceName
         self.fromWatch = activity.fromWatch
         self.updatedAt = now
@@ -40,7 +47,8 @@ public final class HealthActivityRecord {
 
     public var value: HealthActivity {
         HealthActivity(id: id, kind: kind, startedAt: startedAt, endedAt: endedAt, durationS: durationS, kcal: kcal,
-                       distanceM: distanceM, avgHr: avgHr, maxHr: maxHr, sourceName: sourceName, fromWatch: fromWatch)
+                       totalKcal: totalKcal, distanceM: distanceM, avgHr: avgHr, maxHr: maxHr, avgPowerW: avgPowerW,
+                       avgCadenceRpm: avgCadenceRpm, sourceName: sourceName, fromWatch: fromWatch)
     }
 
     /// Takes every field of `activity` (the id stays).
@@ -50,9 +58,12 @@ public final class HealthActivityRecord {
         endedAt = activity.endedAt
         durationS = activity.durationS
         kcal = activity.kcal
+        totalKcal = activity.totalKcal
         distanceM = activity.distanceM
         avgHr = activity.avgHr
         maxHr = activity.maxHr
+        avgPowerW = activity.avgPowerW
+        avgCadenceRpm = activity.avgCadenceRpm
         sourceName = activity.sourceName
         fromWatch = activity.fromWatch
     }

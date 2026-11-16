@@ -8,16 +8,22 @@ import Testing
     private let start = ISO8601DateFormatter().date(from: "2026-09-25T07:00:00Z")!
 
     private func walk(kind: String = "walking", minutes: Double = 45, durationS: Double? = nil, kcal: Double? = 180,
-                      distanceM: Double? = 3_400, avgHr: Int? = 102, maxHr: Int? = 121,
-                      source: String = "Apple Watch") -> HealthActivity {
+                      totalKcal: Double? = 231, distanceM: Double? = 3_400, avgHr: Int? = 102, maxHr: Int? = 121,
+                      avgPowerW: Int? = 96, avgCadenceRpm: Int? = 62, source: String = "Apple Watch") -> HealthActivity {
         HealthActivity(id: UUID(), kind: kind, startedAt: start, endedAt: start.addingTimeInterval(minutes * 60),
-                       durationS: durationS ?? minutes * 60, kcal: kcal, distanceM: distanceM, avgHr: avgHr,
-                       maxHr: maxHr, sourceName: source, fromWatch: true)
+                       durationS: durationS ?? minutes * 60, kcal: kcal, totalKcal: totalKcal, distanceM: distanceM,
+                       avgHr: avgHr, maxHr: maxHr, avgPowerW: avgPowerW, avgCadenceRpm: avgCadenceRpm,
+                       sourceName: source, fromWatch: true)
     }
 
     @Test func aWalkFits() {
         #expect(DomainLimits.healthActivityViolation(walk()) == nil)
-        #expect(DomainLimits.healthActivityViolation(walk(kcal: nil, distanceM: nil, avgHr: nil, maxHr: nil)) == nil)
+        #expect(DomainLimits.healthActivityViolation(walk(kcal: nil, totalKcal: nil, distanceM: nil, avgHr: nil,
+                                                          maxHr: nil, avgPowerW: nil, avgCadenceRpm: nil)) == nil)
+        #expect(DomainLimits.healthActivityViolation(walk(kcal: 20_000, totalKcal: 20_000, avgPowerW: 2_500,
+                                                          avgCadenceRpm: 250)) == nil)
+        #expect(DomainLimits.healthActivityViolation(walk(kcal: 0, totalKcal: 0, avgPowerW: 0, avgCadenceRpm: 0))
+            == nil)
     }
 
     @Test func anOutsideWorkoutOutsideALimitIsRefused() {
@@ -30,6 +36,16 @@ import Testing
         #expect(DomainLimits.healthActivityViolation(walk(distanceM: 1_000_001)) != nil)
         #expect(DomainLimits.healthActivityViolation(walk(avgHr: 19)) != nil)
         #expect(DomainLimits.healthActivityViolation(walk(maxHr: 251)) != nil)
+        #expect(DomainLimits.healthActivityViolation(walk(totalKcal: 20_001)) != nil)
+        #expect(DomainLimits.healthActivityViolation(walk(avgPowerW: 2_501)) != nil)
+        #expect(DomainLimits.healthActivityViolation(walk(avgPowerW: -1)) != nil)
+        #expect(DomainLimits.healthActivityViolation(walk(avgCadenceRpm: 251)) != nil)
+    }
+
+    @Test func theNewLimitsAreTheSpecsNumbers() {
+        #expect(DomainLimits.activityPowerW == 0...2_500)
+        #expect(DomainLimits.activityCadenceRpm == 0...250)
+        #expect(DomainLimits.activityKcal == 0...20_000, "total kcal shares the kcal limit")
     }
 
     @Test func aDayFitsUnlessAValueIsOutOfRange() {

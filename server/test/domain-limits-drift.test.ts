@@ -56,7 +56,8 @@ const ACTIVITY_CHECKS = [
   `length(kind) BETWEEN 1 AND ${L.activityTextMax}`, `length(source_name) BETWEEN 1 AND ${L.activityTextMax}`,
   between('duration_s', L.activityDurationS), between('(kcal', L.activityKcal),
   between('distance_m', L.activityDistanceM),
-  between('avg_hr', L.heartRateBpm), between('max_hr', L.heartRateBpm), between('steps', L.daySteps),
+  between('avg_hr', L.heartRateBpm), between('max_hr', L.heartRateBpm), between('avg_power_w', L.activityPowerW),
+  between('avg_cadence_rpm', L.activityCadenceRpm), between('total_kcal', L.activityKcal), between('steps', L.daySteps),
   between('move_kcal', L.activityKcal), between('exercise_min', L.dayExerciseMin), between('stand_h', L.dayStandH),
 ]
 

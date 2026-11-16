@@ -384,7 +384,8 @@ export class D1Db implements Db {
     const binds: unknown[] = [this.userId, DomainLimits.healthActivitiesMax]
     const after = since ? ` AND started_at >= ?${binds.push(stamp(since))}` : ''
     const rows = await this.all(
-      'SELECT id, kind, started_at, ended_at, duration_s, kcal, distance_m, avg_hr, max_hr, source_name, from_watch ' +
+      'SELECT id, kind, started_at, ended_at, duration_s, kcal, distance_m, avg_hr, max_hr, avg_power_w, ' +
+        'avg_cadence_rpm, total_kcal, source_name, from_watch ' +
         `FROM health_activities WHERE user_id = ?1 AND deleted_at IS NULL${after} ORDER BY started_at, id LIMIT ?2`,
       ...binds,
     )

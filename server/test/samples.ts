@@ -55,8 +55,9 @@ export const SAMPLES: Readonly<Record<string, () => Row>> = {
   // an outside workout and a day of activity as HealthActivityDTO and ActivityDayDTO encode them (plan 39)
   'health-activities': () => ({
     id: appUUID(), kind: 'walking', started_at: '2026-11-06T07:00:00.000000Z', ended_at: '2026-11-06T07:45:00.000000Z',
-    duration_s: 2700, kcal: 180, distance_m: 3400, avg_hr: 102, max_hr: 121, source_name: 'Apple Watch',
-    from_watch: true, client_updated_at: T1, deleted_at: null,
+    duration_s: 2700, kcal: 180, distance_m: 3400, avg_hr: 102, max_hr: 121, avg_power_w: null,
+    avg_cadence_rpm: null, total_kcal: 231, source_name: 'Apple Watch', from_watch: true, client_updated_at: T1,
+    deleted_at: null,
   }),
   'activity-days': () => ({
     day: nextDay(), steps: 8532, move_kcal: 410, exercise_min: 34, stand_h: null, client_updated_at: T1,

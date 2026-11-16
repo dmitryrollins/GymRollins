@@ -13,8 +13,8 @@ function outside(id: string, kind: string, start: string, minutes: number,
   extra: Partial<HealthActivityRow> = {}): HealthActivityRow {
   return {
     id, kind, started_at: start, ended_at: new Date(Date.parse(start) + minutes * 60_000).toISOString(),
-    duration_s: minutes * 60, kcal: null, distance_m: null, avg_hr: null, max_hr: null, source_name: 'Strava',
-    from_watch: false, ...extra,
+    duration_s: minutes * 60, kcal: null, distance_m: null, avg_hr: null, max_hr: null, avg_power_w: null,
+    avg_cadence_rpm: null, total_kcal: null, source_name: 'Strava', from_watch: false, ...extra,
   }
 }
 
@@ -68,6 +68,23 @@ describe('get_activity', () => {
     ])
     expect(out.outside_workouts_total).toBe(3)
     expect(out.method).toContain('never add the two')
+  })
+
+  it("gives a ride's average power, average cadence and total kcal, only when the workout has them", async () => {
+    const ride = await ctx((d) => {
+      d.activities = [
+        outside('r1', 'cycling', '2026-09-25T17:00:00.000000Z', 13.5,
+          { kcal: 40.4, avg_power_w: 138, avg_cadence_rpm: 62, total_kcal: 47.6, source_name: 'Apple Watch' }),
+        outside('r2', 'running', '2026-09-24T07:00:00.000000Z', 30, { avg_power_w: 241 }),
+      ]
+    })
+    expect(json(await getActivity(ride, {})).outside_workouts).toEqual([
+      {
+        kind: 'cycling', started_at: '2026-09-25T17:00:00.000000Z', duration_min: 14, kcal: 40, total_kcal: 48,
+        avg_power_w: 138, avg_cadence_rpm: 62, source: 'Apple Watch',
+      },
+      { kind: 'running', started_at: '2026-09-24T07:00:00.000000Z', duration_min: 30, avg_power_w: 241, source: 'Strava' },
+    ])
   })
 
   it('totals each day and each Monday–Sunday week, leaving attached workouts out', async () => {

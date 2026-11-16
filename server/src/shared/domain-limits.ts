@@ -50,6 +50,8 @@ export const DomainLimits = {
   activityKcal: { min: 0, max: 20_000 },
   activityDistanceM: { min: 0, max: 1_000_000 },
   heartRateBpm: { min: 20, max: 250 },
+  activityPowerW: { min: 0, max: 2_500 },
+  activityCadenceRpm: { min: 0, max: 250 },
   daySteps: { min: 0, max: 200_000 },
   dayExerciseMin: { min: 0, max: 1_440 },
   dayStandH: { min: 0, max: 24 },

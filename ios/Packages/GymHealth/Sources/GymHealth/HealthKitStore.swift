@@ -207,15 +207,23 @@ public actor HealthKitStore: HealthStore {
     private static let steps = HKQuantityType(.stepCount)
     private static let heartRate = HKQuantityType(.heartRate)
     private static let exerciseTime = HKQuantityType(.appleExerciseTime)
+    /// Resting energy: with the active energy, a workout's total (Apple Fitness's "Total").
+    private static let basalEnergy = HKQuantityType(.basalEnergyBurned)
+    private static let cyclingCadence = HKQuantityType(.cyclingCadence)
     /// Walking/running, cycling and swimming: a workout has the one that fits its kind.
     private static let distances = [HKQuantityType(.distanceWalkingRunning), HKQuantityType(.distanceCycling),
                                     HKQuantityType(.distanceSwimming)]
+    /// Cycling power first (a ride from a power meter or GymKit equipment), else running power (a run on an Apple
+    /// Watch).
+    private static let powers = [HKQuantityType(.cyclingPower), HKQuantityType(.runningPower)]
 
-    /// What the activity import reads: step count, active energy and heart rate and distance (each workout's
-    /// statistics), exercise time and Activity summaries. Never in `HealthDataType`, the write list.
+    /// What the activity import reads: step count, active and resting energy, heart rate, distance, power and cycling
+    /// cadence (each workout's statistics), exercise time and Activity summaries. Never in `HealthDataType`, the
+    /// write list.
     static var activityReadTypes: Set<HKObjectType> {
-        var types: Set<HKObjectType> = [steps, heartRate, exerciseTime, energy, HKObjectType.activitySummaryType()]
-        for distance in distances { types.insert(distance) }
+        var types: Set<HKObjectType> = [steps, heartRate, exerciseTime, energy, basalEnergy, cyclingCadence,
+                                        HKObjectType.activitySummaryType()]
+        for quantity in distances + powers { types.insert(quantity) }
         return types
     }
 
@@ -233,23 +241,36 @@ public actor HealthKitStore: HealthStore {
                                            anchor: newAnchor)
     }
 
+    /// The outside workout as its statistics have it. A value the workout has no statistic for (no power meter, no
+    /// resting energy) stays nil.
     private func outsideWorkout(_ workout: HKWorkout) -> HealthOutsideWorkout {
-        let bpm = HKUnit.count().unitDivided(by: .minute())
+        let perMinute = HKUnit.count().unitDivided(by: .minute())
         let heart = workout.statistics(for: Self.heartRate)
         let distance = Self.distances.lazy
             .compactMap { workout.statistics(for: $0)?.sumQuantity()?.doubleValue(for: .meter()) }.first
+        let power = Self.powers.lazy
+            .compactMap { workout.statistics(for: $0)?.averageQuantity()?.doubleValue(for: .watt()) }.first
+        let active = workout.statistics(for: Self.energy)?.sumQuantity()?.doubleValue(for: .kilocalorie())
+        let basal = workout.statistics(for: Self.basalEnergy)?.sumQuantity()?.doubleValue(for: .kilocalorie())
         let activity = HealthActivity(
             id: workout.uuid, kind: Self.kindSlug(workout.workoutActivityType), startedAt: workout.startDate,
-            endedAt: workout.endDate, durationS: workout.duration,
-            kcal: workout.statistics(for: Self.energy)?.sumQuantity()?.doubleValue(for: .kilocalorie()),
-            distanceM: distance,
-            avgHr: heart?.averageQuantity().map { Int($0.doubleValue(for: bpm).rounded()) },
-            maxHr: heart?.maximumQuantity().map { Int($0.doubleValue(for: bpm).rounded()) },
+            endedAt: workout.endDate, durationS: workout.duration, kcal: active,
+            totalKcal: HealthActivity.totalKcal(active: active, basal: basal), distanceM: distance,
+            avgHr: Self.whole(heart?.averageQuantity()?.doubleValue(for: perMinute)),
+            maxHr: Self.whole(heart?.maximumQuantity()?.doubleValue(for: perMinute)),
+            avgPowerW: Self.whole(power),
+            avgCadenceRpm: Self.whole(workout.statistics(for: Self.cyclingCadence)?.averageQuantity()?
+                .doubleValue(for: perMinute)),
             sourceName: workout.sourceRevision.source.name,
             fromWatch: workout.sourceRevision.productType?.hasPrefix("Watch") == true
                 || workout.device?.model == "Watch")
         let external = (workout.metadata?[HKMetadataKeyExternalUUID] as? String).flatMap(UUID.init(uuidString:))
         return HealthOutsideWorkout(activity: activity, externalId: external, writtenByGymRollins: isOwn(workout))
+    }
+
+    /// Rounded to a whole number; nil for nil, NaN, infinity or a value no `Int` holds.
+    private static func whole(_ value: Double?) -> Int? {
+        value.flatMap { Int(exactly: $0.rounded()) }
     }
 
     /// Written by GymRollins: the export metadata (the phone's and the watch app's), or this app's or the watch app's
