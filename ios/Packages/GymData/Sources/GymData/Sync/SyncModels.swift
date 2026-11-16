@@ -4,7 +4,7 @@ import GymCore
 /// The synced aggregates, in push order (dependencies first).
 public enum SyncEntity: String, CaseIterable, Sendable {
     case profile, customExercises, exercisePreferences, routines, weekSchedule, muscleTargets, gyms, gymListings,
-        bodyweight, workouts, proposals
+        bodyweight, workouts, healthActivities, activityDays, proposals
 }
 
 /// One aggregate crossing the sync boundary.

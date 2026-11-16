@@ -17,6 +17,8 @@ extension BodyweightRecord: SyncTracked {}
 extension WorkoutRecord: SyncTracked {}
 extension GymRecord: SyncTracked {}
 extension GymListingRecord: SyncTracked {}
+extension HealthActivityRecord: SyncTracked {}
+extension ActivityDayRecord: SyncTracked {}
 
 /// The only sync-facing API over SwiftData: dirty rows out, remote rows in, and pull cursors.
 ///
@@ -65,6 +67,8 @@ public final class SyncStore {
         case .workouts: return try UUID(uuidString: id).flatMap { try workoutRecord($0) }
         case .gyms: return try UUID(uuidString: id).flatMap { try anyGymRecord($0) }
         case .gymListings: return try UUID(uuidString: id).flatMap { try anyListingRecord($0) }
+        case .healthActivities: return try UUID(uuidString: id).flatMap { try healthActivityRecord($0) }
+        case .activityDays: return try activityDayRecord(id)
         case .proposals: return nil // resolutions are marked synced by markProposalSynced
         }
     }
@@ -109,6 +113,8 @@ public final class SyncStore {
         try deleteAll(ExercisePreferenceRecord.self)
         try deleteAll(ProfileRecord.self)
         try deleteAll(ProposalRecord.self)
+        try deleteAll(HealthActivityRecord.self)
+        try deleteAll(ActivityDayRecord.self)
         try context.save()
         SyncEntity.allCases.forEach { defaults.removeObject(forKey: Self.cursorKey($0)) }
         forgetOwnershipAndFailures()
