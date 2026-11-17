@@ -7541,6 +7541,7 @@ Accepted as they are:
 - Server `npx vitest run`: 853 passed in 62 files. `npx tsc --noEmit` is clean.
 - Whole app suite on the code of e7a5241, before the speed fixes and the restyle: 1384 tests, 1359 passed, 19 skipped, 6 failed. The 5 `SharedWorkoutUITests` link tests fail the same way on main; the sixth was the `AccessibilityAuditUITests` flake below.
 - After the restyle: the app unit target and the UI suites HealthActivity, Log, TodayDays, TodayFlex, TodayPlanScreen, TodayScope, Settings, AppleHealth, AccessibilityAudit and WorkoutScreens: 1209 passed, 5 skipped, 1 failed (`testAgentsAudit`; alone it passed once and failed once).
+- Whole app suite on the final code (e805630): 1411 tests, 1383 passed, 22 skipped, 6 failed. The same 5 `SharedWorkoutUITests` link tests as on main, and `testAgentsAudit`, which this time timed out ("Audit failed to complete in time") rather than failing on contrast.
 - `testAgentsAudit` is the known contrast flake on a glass edge. The new "Read activity from Apple Health" row is a plain `Toggle` like its neighbours, but its label and footer aren't on the audit's measured-label list (`agentSwitchLabels`), so the audit samples them. Adding them is a two-line change, not made here.
 - Privacy scan of `git diff main...HEAD` and its commit messages: no surname, no account id, no `/Users/` paths beyond this plan's own rule text, no 32-hex ids, no secret-like values, no symlinks, no attribution trailers. gitleaks found no leaks in the 43 commits.
 
