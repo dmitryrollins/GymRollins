@@ -7552,4 +7552,4 @@ Accepted as they are:
 **Not verified:**
 - Real HealthKit reads on a device, including power and cadence from a gym bike through the Watch.
 - The live MCP tool list (17 tools) and `get_activity` with a real agent's token.
-- Build 4 isn't uploaded yet.
+- Build 1.0 (4), from 1a66936, was uploaded to TestFlight on 2026-11-16 with an App Store Connect API key, and App Store Connect marked it VALID. It hasn't been installed on a phone yet.
