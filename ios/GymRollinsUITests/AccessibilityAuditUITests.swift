@@ -353,6 +353,50 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "AI agents: disconnect one")
     }
 
+    /// Plan 39 §4.1: the activity screens in Apple Fitness' colours (Today's Activity row, the 7-day sheet, the Log's
+    /// outside-workout cards and the ride's detail). Their first audit: every metric colour is meant to pass 4.5:1.
+    func testHealthActivityAudit() {
+        let app = launch(["-fakeHealth"])
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tapCenter()
+        let health = app.buttons["settings.health"]
+        let tabBar = app.tabBars.firstMatch
+        for _ in 0..<10 where !(health.isHittable && (!tabBar.exists || health.frame.maxY < tabBar.frame.minY)) {
+            app.swipeUp()
+        }
+        health.tapCenter()
+        let toggle = app.switches["health.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        let inner = toggle.switches.firstMatch
+        if inner.exists { inner.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
+        XCTAssertTrue(app.descendants(matching: .any)["health.status"].waitForExistence(timeout: 10))
+
+        app.tabBars.buttons["Today"].tap()
+        let row = app.buttons["today.activity"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        for _ in 0..<8 where !row.isHittable { app.swipeUp() }
+        waitUntilSettled(row)
+        audit(app, "Today: Activity")
+        row.tap()
+        let done = app.buttons["activity.week.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        waitUntilSettled(done)
+        audit(app, "Last 7 days")
+        done.tap()
+
+        app.tabBars.buttons["Log"].tap()
+        if !app.buttons["log.settings"].waitForExistence(timeout: 2) { app.tabBars.buttons["Log"].tap() }
+        let ride = app.buttons["log.outside.00000000-0000-4000-8000-00000000A003"]
+        for _ in 0..<8 where !ride.isHittable { app.swipeUp() }
+        waitUntilSettled(ride)
+        audit(app, "Log: outside workouts")
+        ride.tap()
+        let title = app.staticTexts["outside.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        waitUntilSettled(title)
+        audit(app, "Outside workout")
+    }
+
     /// Plan 32: the workout screen with "Added by Muse". This is the screen's first audit: an issue on any element other
     /// than `detail.addedBy` predates this plan (Step 2 says what to do).
     func testWorkoutAddedByAnAgentAudit() {

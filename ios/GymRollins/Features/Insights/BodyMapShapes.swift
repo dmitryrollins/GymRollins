@@ -11,6 +11,10 @@ enum BodySide: String, CaseIterable, Identifiable {
 /// The body figure: `Resources/body-map.json`, extracted by `scripts/build-body-map.mjs` from
 /// HichamELBSI/react-native-body-highlighter (MIT License, pinned commit; docs/licenses/body-highlighter.md). Paths
 /// are parsed once, in the source's view-box coordinates.
+///
+/// The figure's drawn shapes (each side's silhouette and each muscle group's regions) are built once too, in source
+/// units, and only scaled into a rect when SwiftUI asks: every exercise row's badge asks on every layout, and the
+/// silhouette's stroke and boolean unions cost milliseconds each time.
 struct BodyMapData: Sendable {
     struct Region: Sendable {
         let id: String
@@ -24,9 +28,43 @@ struct BodyMapData: Sendable {
     let viewBoxes: [BodySide: CGRect]
     /// The body's edge per side (without head, hands and feet, which are neutral regions).
     let outlines: [BodySide: Path]
+    /// Per side, in source units: the outline with its rim, plus the neutral regions, as one shape.
+    private let silhouettes: [BodySide: Path]
+    /// Per side, in source units: each muscle group's regions as one path.
+    private let groupPaths: [BodySide: [MuscleGroup: Path]]
 
     /// Width of the silhouette's rim around the muscles, in source units.
     static let rimWidth: CGFloat = 14
+
+    init(regions: [Region], viewBoxes: [BodySide: CGRect], outlines: [BodySide: Path]) {
+        self.regions = regions
+        self.viewBoxes = viewBoxes
+        self.outlines = outlines
+        var silhouettes: [BodySide: Path] = [:]
+        var groupPaths: [BodySide: [MuscleGroup: Path]] = [:]
+        for side in BodySide.allCases {
+            var neutral = Path()
+            var groups: [MuscleGroup: Path] = [:]
+            for region in regions where region.side == side {
+                if let group = region.group {
+                    groups[group, default: Path()].addPath(region.path)
+                } else {
+                    neutral.addPath(region.path)
+                }
+            }
+            groupPaths[side] = groups
+            silhouettes[side] = outlines[side].map { Self.silhouette(outline: $0, neutral: neutral) }
+        }
+        self.silhouettes = silhouettes
+        self.groupPaths = groupPaths
+    }
+
+    /// The outline, a rim of `rimWidth` around it and the neutral regions as one shape. A uniform scale afterwards
+    /// gives the same shape as stroking the scaled outline with the scaled rim.
+    private static func silhouette(outline: Path, neutral: Path) -> Path {
+        let rim = outline.strokedPath(StrokeStyle(lineWidth: rimWidth, lineJoin: .round))
+        return Path(outline.cgPath.union(rim.cgPath).union(neutral.cgPath))
+    }
 
     private struct File: Decodable {
         struct Row: Decodable { let id, view, path: String }
@@ -83,20 +121,20 @@ struct BodyMapData: Sendable {
         return MuscleGroup.allCases.filter(present.contains)
     }
 
-    /// Source units → points: `box` (default: the side's view box) scaled into `rect` (centred, aspect kept).
-    private func transform(side: BodySide, box: CGRect?, in rect: CGRect) -> (CGAffineTransform, scale: CGFloat) {
+    /// Source units → points: `box` (default: the side's view box) scaled into `rect` (centred, aspect kept). The
+    /// scale is uniform, so a shape built in source units only needs this applied.
+    private func transform(side: BodySide, box: CGRect?, in rect: CGRect) -> CGAffineTransform {
         let box = box ?? viewBox(side)
         let scale = min(rect.width / box.width, rect.height / box.height)
-        let transform = CGAffineTransform(translationX: rect.minX + (rect.width - box.width * scale) / 2,
-                                          y: rect.minY + (rect.height - box.height * scale) / 2)
+        return CGAffineTransform(translationX: rect.minX + (rect.width - box.width * scale) / 2,
+                                 y: rect.minY + (rect.height - box.height * scale) / 2)
             .scaledBy(x: scale, y: scale)
             .translatedBy(x: -box.minX, y: -box.minY)
-        return (transform, scale)
     }
 
     /// The union of the matching regions, scaled into `rect` (`box`: a part of the figure to zoom into).
     func path(side: BodySide, box: CGRect? = nil, in rect: CGRect, where include: (Region) -> Bool) -> Path {
-        let (transform, _) = transform(side: side, box: box, in: rect)
+        let transform = transform(side: side, box: box, in: rect)
         var out = Path()
         for region in regions where region.side == side && include(region) {
             out.addPath(region.path, transform: transform)
@@ -104,13 +142,15 @@ struct BodyMapData: Sendable {
         return out
     }
 
-    /// The whole body as one shape: the outline with a rim around it, plus the neutral regions, scaled into `rect`.
+    /// One muscle group's regions on `side`, scaled into `rect` (built once; see the type's note).
+    func path(group: MuscleGroup, side: BodySide, box: CGRect? = nil, in rect: CGRect) -> Path {
+        groupPaths[side]?[group]?.applying(transform(side: side, box: box, in: rect)) ?? Path()
+    }
+
+    /// The whole body as one shape: the outline with a rim around it, plus the neutral regions, scaled into `rect`
+    /// (built once; see the type's note).
     func silhouette(side: BodySide, box: CGRect? = nil, in rect: CGRect) -> Path {
-        let (transform, scale) = transform(side: side, box: box, in: rect)
-        guard let outline = outlines[side]?.applying(transform) else { return Path() }
-        let rim = outline.strokedPath(StrokeStyle(lineWidth: Self.rimWidth * scale, lineJoin: .round))
-        let neutral = path(side: side, box: box, in: rect) { $0.group == nil }
-        return Path(outline.cgPath.union(rim.cgPath).union(neutral.cgPath))
+        silhouettes[side]?.applying(transform(side: side, box: box, in: rect)) ?? Path()
     }
 }
 
@@ -146,7 +186,7 @@ struct MuscleRegionShape: Shape {
     let side: BodySide
     var box: CGRect?
     var data: BodyMapData = .shared
-    func path(in rect: CGRect) -> Path { data.path(side: side, box: box, in: rect) { $0.group == group } }
+    func path(in rect: CGRect) -> Path { data.path(group: group, side: side, box: box, in: rect) }
 }
 
 /// The neutral body under the coloured muscles: outline, rim, head, hands and feet.

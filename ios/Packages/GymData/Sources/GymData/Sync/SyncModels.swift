@@ -4,7 +4,7 @@ import GymCore
 /// The synced aggregates, in push order (dependencies first).
 public enum SyncEntity: String, CaseIterable, Sendable {
     case profile, customExercises, exercisePreferences, routines, weekSchedule, muscleTargets, gyms, gymListings,
-        bodyweight, workouts, proposals
+        bodyweight, workouts, healthActivities, activityDays, proposals
 }
 
 /// One aggregate crossing the sync boundary.
@@ -90,6 +90,7 @@ public struct ProfileSnapshot: Sendable, Equatable {
     public var mcpPropose = true
     public var mcpAutoApply = false
     public var mcpLogWorkouts = false
+    public var mcpReadActivity = true
     public var sex: ProfileSex?
     public var birthYear: Int?
 

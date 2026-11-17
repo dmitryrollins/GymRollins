@@ -17,6 +17,8 @@ final class AppEnvironment {
     let routines: RoutineRepository
     let workouts: WorkoutRepository
     let body: BodyRepository
+    /// Outside workouts and days of activity read from Apple Health (plan 39).
+    let activities: ActivityRepository
     let customExercises: CustomExerciseRepository
     let proposals: ProposalRepository
     let exercisePrefs: ExercisePreferenceRepository
@@ -53,6 +55,9 @@ final class AppEnvironment {
     private(set) var todayPlanRevision = 0
     /// Bumps whenever workouts or weigh-ins are written so Log/Body screens reload.
     private(set) var dataRevision = 0
+    /// The insights and resolved outside workouts until their data may have changed (`AppEnvironment+Insights`). Not
+    /// observed: filling it from a view's refresh never invalidates a view.
+    @ObservationIgnored var insightsMemo = InsightsMemo()
     /// Bumps whenever the current gym or its equipment changes, for screens that show them.
     private(set) var gymRevision = 0
     /// Why the server refused a report or a block the user made, until the gym screen has shown it.
@@ -138,6 +143,7 @@ final class AppEnvironment {
         self.routines = RoutineRepository(context: context, now: now)
         self.workouts = WorkoutRepository(context: context, now: now)
         self.body = BodyRepository(context: context, now: now)
+        self.activities = ActivityRepository(context: context, now: now)
         self.customExercises = CustomExerciseRepository(context: context, now: now)
         self.proposals = ProposalRepository(context: context, now: now)
         self.exercisePrefs = ExercisePreferenceRepository(context: context, now: now)
@@ -171,7 +177,7 @@ final class AppEnvironment {
         let calories = CalorieService(library: { [bundledLibrary] in bundledLibrary }, body: body)
         self.calories = calories
         self.health = Self.makeHealth(options: options, defaults: defaults, workouts: workouts, body: body,
-                                      calories: calories, now: now)
+                                      activities: activities, calories: calories, now: now)
         cleanUpPlanWeightsOnce()
         restoreSession()
         sync.autoApply = { [weak self] in try self?.autoApplyPulledProposals() ?? 0 }

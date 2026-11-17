@@ -100,7 +100,7 @@ describe('the D1 schema', () => {
 
   it.each([
     'workouts_cap', 'bodyweight_cap', 'routines_cap', 'custom_exercises_cap', 'exercise_prefs_cap', 'proposals_cap',
-    'gyms_total_cap', 'gym_equipment_total_cap',
+    'gyms_total_cap', 'gym_equipment_total_cap', 'health_activities_cap', 'activity_days_cap',
   ])("%s finds the row and the account's count through primary keys, never by counting", async (name) => {
     const { sql } = (await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?1")
       .bind(name).first<{ sql: string }>())!

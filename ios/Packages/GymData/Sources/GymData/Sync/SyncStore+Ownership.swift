@@ -50,6 +50,8 @@ extension SyncStore {
             || context.fetchCount(FetchDescriptor<MuscleTargetRecord>()) > 0
             || context.fetchCount(FetchDescriptor<BodyweightRecord>()) > 0
             || context.fetchCount(FetchDescriptor<WorkoutRecord>()) > 0
+            || context.fetchCount(FetchDescriptor<HealthActivityRecord>()) > 0
+            || context.fetchCount(FetchDescriptor<ActivityDayRecord>()) > 0
             || hasSyncedGymData()
     }
 

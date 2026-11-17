@@ -24,6 +24,9 @@ export const ACCOUNT_CAPS: Readonly<Record<string, string>> = {
     'preferences on one account. This one stays on this iPhone.',
   too_many_gyms_total: full(DomainLimits.privateGymsTotalMax, 'gyms'),
   too_many_listings_total: full(DomainLimits.privateListingsTotalMax, 'equipment listings'),
+  too_many_health_activities: full(DomainLimits.healthActivitiesMax, 'outside workouts'),
+  too_many_activity_days: `You've reached the limit of ${grouped(DomainLimits.activityDaysMax)} days of activity on ` +
+    'one account. This one stays on this iPhone.',
   too_many_logged_exercises:
     full(DomainLimits.accountEntriesMax, 'exercises logged', 'deleted workouts', 'This workout'),
   too_many_logged_sets: full(DomainLimits.accountSetsMax, 'sets logged', 'deleted workouts', 'This workout'),

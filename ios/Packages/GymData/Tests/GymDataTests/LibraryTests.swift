@@ -25,6 +25,30 @@ import Testing
         #expect(lib.equipment == ["barbell", "cable", "dumbbell"])
     }
 
+    /// An empty or blank query keeps every exercise (in library order) that passes the filters.
+    @Test func anEmptyQueryKeepsEveryExercise() {
+        let lib = ExerciseLibrary(exercises: Self.sample, otherNames: Self.otherNames)
+        #expect(lib.search(query: "").map(\.id) == ["0025", "0314", "0198"])
+        #expect(lib.search(query: "   ").map(\.id) == ["0025", "0314", "0198"])
+        #expect(lib.search(query: "", bodyPart: "chest", equipment: "barbell").map(\.id) == ["0025"])
+        #expect(lib.search(query: "", bodyPart: "legs").isEmpty)
+    }
+
+    /// Spaces are ignored inside a name's words ("pull down" finds "pulldown") and inside other-language names, and
+    /// a merged library recomputes its facets.
+    @Test func spacesInsideNamesAndFacetsAfterMerging() {
+        let lib = ExerciseLibrary(exercises: Self.sample, otherNames: ["0314": ["Schräg Bank Drücken"]])
+        #expect(lib.search(query: "pull down").map(\.id) == ["0198"])
+        #expect(lib.search(query: "cablepull").map(\.id) == ["0198"])
+        #expect(lib.search(query: "schragbank").map(\.id) == ["0314"])
+        let custom = Exercise(id: "custom-1", name: "band walk", bodyPart: "upper legs", equipment: "band",
+                              target: "abductors", isCustom: true)
+        let merged = lib.merging(custom: [custom])
+        #expect(merged.bodyParts == ["back", "chest", "upper legs"])
+        #expect(merged.equipment == ["band", "barbell", "cable", "dumbbell"])
+        #expect(merged.search(query: "").map(\.id) == ["custom-1", "0025", "0314", "0198"])
+    }
+
     @Test func mergingCustomExercises() {
         let custom = Exercise(id: "custom-1", name: "handle band squat to press", bodyPart: "upper legs",
                               equipment: "band", target: "quads", isCustom: true)

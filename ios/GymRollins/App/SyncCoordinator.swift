@@ -399,6 +399,8 @@ final class SyncCoordinator {
                 + waiting(.gymListings, try store.dirtyGymListings(), key: { $0.value.id.uuidString })
                 + waiting(.bodyweight, try store.dirtyBodyweight(), key: { $0.value.id.uuidString })
                 + waiting(.workouts, try store.dirtyWorkouts(), key: { $0.value.workout.id.uuidString })
+                + waiting(.healthActivities, try store.dirtyHealthActivities(), key: { $0.value.id.uuidString })
+                + waiting(.activityDays, try store.dirtyActivityDays(), key: { $0.value.day })
             syncFailures = store.syncFailures()
         } catch {
             Self.log.error("Count pending changes failed: \(error.localizedDescription, privacy: .public)")

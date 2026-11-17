@@ -113,8 +113,12 @@ struct LaunchOptions {
     /// DEBUG/UI-test only (`-seedAgentWorkout`): a past workout Muse added, stored as a pull stores it (`DebugAgents`).
     let seedAgentWorkout: Bool
     /// DEBUG/UI-test only (`-fakeHealth`): Apple Health is an in-memory `FakeHealthStore` seeded with three Withings
-    /// weigh-ins, so the Health flows can be tested on the simulator without HealthKit.
+    /// weigh-ins and plan 39's walk, strength recording and seven days of activity, so the Health flows can be tested
+    /// on the simulator without HealthKit.
     let fakeHealth: Bool
+    /// DEBUG/UI-test only (`-healthBeforeActivity`): Health starts on, as a build from before plan 39 left it, so Today
+    /// offers the one-time "Bring in your Apple Watch activity" card.
+    let healthBeforeActivity: Bool
     /// DEBUG/UI-test only (`-workoutStartedMinutesAgo N`): new workouts start N minutes before "now", so a workout
     /// finished under `-fixedNow` has a duration (and a calorie estimate).
     let workoutStartedMinutesAgo: Double?
@@ -155,6 +159,7 @@ struct LaunchOptions {
         #if DEBUG
         forgetSession = arguments.contains("-forgetSession")
         fakeHealth = arguments.contains("-fakeHealth")
+        healthBeforeActivity = arguments.contains("-healthBeforeActivity")
         workoutStartedMinutesAgo = arguments.firstIndex(of: "-workoutStartedMinutesAgo")
             .flatMap { arguments.indices.contains($0 + 1) ? Double(arguments[$0 + 1]) : nil }
             .map { min(max($0, 0), 600) }
@@ -184,6 +189,7 @@ struct LaunchOptions {
         #else
         forgetSession = false
         fakeHealth = false
+        healthBeforeActivity = false
         workoutStartedMinutesAgo = nil
         seedProposal = false
         seedTodayProposal = false

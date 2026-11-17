@@ -11,7 +11,7 @@ import { signUp } from '../helpers.ts'
 const T = '2026-11-07T10:00:00.000000Z'
 const DB = env.DB
 
-type Toggle = 'mcp_read_plan' | 'mcp_read_workouts' | 'mcp_read_body' | 'mcp_read_gyms' | 'mcp_propose'
+type Toggle = 'mcp_read_plan' | 'mcp_read_workouts' | 'mcp_read_body' | 'mcp_read_gyms' | 'mcp_read_activity' | 'mcp_propose'
 
 interface Owner {
   userId: string
@@ -109,6 +109,20 @@ async function seedOwner(): Promise<Owner> {
     userId,
     T,
   )
+  await run(
+    'INSERT INTO health_activities (id, user_id, kind, started_at, ended_at, duration_s, source_name, from_watch, ' +
+      "client_updated_at, updated_at) VALUES (?1, ?2, 'walking', '2026-11-05T07:00:00.000000Z', " +
+      "'2026-11-05T07:45:00.000000Z', 2700, 'Apple Watch', 1, ?3, ?3)",
+    crypto.randomUUID(),
+    userId,
+    T,
+  )
+  await run(
+    'INSERT INTO activity_days (user_id, day, steps, move_kcal, exercise_min, client_updated_at, updated_at) ' +
+      "VALUES (?1, '2026-11-05', 8532, 410, 34, ?2, ?2)",
+    userId,
+    T,
+  )
   const privateGym = await insertGym({ visibility: 'private', owner: userId })
   await insertListing({ gym: privateGym, item: await genericItem(), visibility: 'private', owner: userId })
   const publicGym = await insertGym({ visibility: 'public', createdBy: userId })
@@ -146,6 +160,8 @@ async function snapshot(o: Owner): Promise<Record<string, unknown>> {
     performedExerciseIds: [...await db.performedExerciseIds(['0025'])],
     bodyweight: await db.bodyweight(),
     latestBodyweight: await db.latestBodyweight('2026-11-08T00:00:00.000Z'),
+    healthActivities: await db.healthActivities(),
+    activityDays: await db.activityDays('2026-11-01'),
     privateGyms: await db.privateGyms(10),
     myPublicGyms: await db.myPublicGyms(10),
     privateListings: await db.gymListings(o.privateGym, 10),
@@ -222,6 +238,7 @@ describe("Claude's reads", () => {
     ],
     mcp_read_body: ['bodyweight', 'latestBodyweight'],
     mcp_read_gyms: ['myPublicGyms', 'privateGyms', 'privateListings', 'publicListings'],
+    mcp_read_activity: ['activityDays', 'healthActivities'],
     mcp_propose: [],
   }
 
@@ -231,6 +248,52 @@ describe("Claude's reads", () => {
     await toggle(owner.userId, column as Toggle, false)
     expect(changed(all, await snapshot(owner))).toEqual(hidden)
   })
+
+  it("reads the owner's outside workouts and days, and the switch, while activity reading is on", async () => {
+    const owner = await seedOwner()
+    const db = new D1Db(DB, owner.userId, 'claude')
+    expect(await db.healthActivities()).toMatchObject([
+      {
+        kind: 'walking', duration_s: 2700, from_watch: true, kcal: null, avg_power_w: null, avg_cadence_rpm: null,
+        total_kcal: null, source_name: 'Apple Watch',
+      },
+    ])
+    expect(await db.healthActivities('2026-11-06T00:00:00.000Z')).toEqual([])
+    await run(
+      'INSERT INTO health_activities (id, user_id, kind, started_at, ended_at, duration_s, kcal, avg_power_w, ' +
+        'avg_cadence_rpm, total_kcal, source_name, from_watch, client_updated_at, updated_at) VALUES (?1, ?2, ' +
+        "'cycling', '2026-11-06T17:00:00.000000Z', '2026-11-06T17:13:30.000000Z', 810, 40, 138, 62, 48, " +
+        "'Apple Watch', 1, ?3, ?3)",
+      crypto.randomUUID(),
+      owner.userId,
+      T,
+    )
+    expect(await db.healthActivities('2026-11-06T00:00:00.000Z')).toMatchObject([
+      { kind: 'cycling', kcal: 40, avg_power_w: 138, avg_cadence_rpm: 62, total_kcal: 48 },
+    ])
+    expect(await db.activityDays('2026-11-05')).toEqual([
+      { day: '2026-11-05', steps: 8532, move_kcal: 410, exercise_min: 34, stand_h: null },
+    ])
+    expect(await db.activityDays('2026-11-06')).toEqual([])
+    expect((await db.readPermissions()).activity).toBe(true)
+  })
+
+  it("reads finished workouts' spans whatever the workouts switch says: rule 6 only learns a session was there",
+    async () => {
+      const owner = await seedOwner()
+      const finished = crypto.randomUUID()
+      await run(
+        'INSERT INTO workouts (id, user_id, started_at, ended_at, name, client_updated_at, updated_at) ' +
+          "VALUES (?1, ?2, '2026-11-05T17:00:00.000000Z', '2026-11-05T18:00:00.000000Z', 'Pull', ?3, ?3)",
+        finished,
+        owner.userId,
+        T,
+      )
+      await toggle(owner.userId, 'mcp_read_workouts', false)
+      expect(await new D1Db(DB, owner.userId, 'claude').workoutSpans()).toEqual([
+        { id: finished, started_at: '2026-11-05T17:00:00.000000Z', ended_at: '2026-11-05T18:00:00.000000Z' },
+      ])
+    })
 
   it("gyms off keeps public listings but stops calling any of them the owner's", async () => {
     const owner = await seedOwner()

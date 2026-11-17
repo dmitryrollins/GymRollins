@@ -8,6 +8,7 @@ public enum GymStore {
         ProposalRecord.self, MuscleTargetRecord.self, ExercisePreferenceRecord.self,
         GymRecord.self, EquipmentItemRecord.self, GymListingRecord.self,
         ShareOutboxRecord.self,
+        HealthActivityRecord.self, ActivityDayRecord.self,
     ]
 
     public static func container(inMemory: Bool, url: URL? = nil) throws -> ModelContainer {

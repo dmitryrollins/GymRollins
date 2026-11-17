@@ -1,8 +1,9 @@
 import { test } from 'vitest'
 import { assert, assertEquals, assertRejects } from '../../assert.ts'
-import type { WorkoutRow } from '../../../src/mcp/db.ts'
+import type { HealthActivityRow, WorkoutRow } from '../../../src/mcp/db.ts'
 import { FakeDb, loadOwnerData } from '../fake-db.ts'
 import { getTrainingInsights } from '../../../src/mcp/tools/insights.ts'
+import { withheld } from '../../../src/mcp/tools/permissions.ts'
 import { ToolError, type ToolResult } from '../../../src/mcp/tools/result.ts'
 
 const NOW = new Date('2026-09-26T09:00:00Z')
@@ -35,6 +36,14 @@ function bench(id: string, start: string, sets: number): WorkoutRow {
         })),
       ],
     }],
+  }
+}
+
+function outside(id: string, start: string, minutes: number, kind = 'walking'): HealthActivityRow {
+  return {
+    id, kind, started_at: start, ended_at: new Date(Date.parse(start) + minutes * 60_000).toISOString(),
+    duration_s: minutes * 60, kcal: null, distance_m: null, avg_hr: null, max_hr: null, avg_power_w: null,
+    avg_cadence_rpm: null, total_kcal: null, source_name: 'Apple Watch', from_watch: true,
   }
 }
 
@@ -152,4 +161,35 @@ test('get_training_insights: no profile and no history → defaults, all fresh',
   assertEquals(out.streak.goal_days_per_week, 4)
   assertEquals(out.streak.current_weeks, 0)
   assertEquals(out.limits_note, '')
+})
+
+test('get_training_insights: outside workouts of 10 minutes or more count as workout days (plan 39)', async () => {
+  const out = json(
+    await getTrainingInsights(
+      await ctx((d) => {
+        d.activities = [
+          outside('a1', '2026-09-23T07:00:00.000Z', 45), // Wed: a day of its own
+          outside('a2', '2026-09-24T07:00:00.000Z', 5), // Thu: too short to count
+          outside('a3', '2026-09-21T17:05:00.000Z', 50, 'traditional_strength'), // during w1 on Mon: that session
+        ]
+      }),
+      {},
+    ),
+  )
+  assertEquals(out.streak.this_week_days, 3)
+  assertEquals(out.withheld, undefined)
+})
+
+test('get_training_insights: with activity reading off, the streak counts GymRollins workouts and says so', async () => {
+  const out = json(
+    await getTrainingInsights(
+      await ctx((d) => {
+        d.profile = { ...d.profile!, mcp_read_activity: false }
+        d.activities = [outside('a1', '2026-09-23T07:00:00.000Z', 45)]
+      }),
+      {},
+    ),
+  )
+  assertEquals(out.streak.this_week_days, 2)
+  assertEquals(out.withheld, [withheld(['activity'], 'Outside workouts in the streak')])
 })

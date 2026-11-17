@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
 import { ACCOUNT_CAPS } from '../src/sync/caps.ts'
-import { type CappedTable, countOf, kept, type LoggedTable, seedCount, seedRows } from './cap-fixtures.ts'
+import { type CappedTable, countOf, type HealthTable, kept, type LoggedTable, seedCount, seedRows } from './cap-fixtures.ts'
 import { insertUser } from './gym-fixtures.ts'
 import { request, signUp } from './helpers.ts'
 import { appUUID, KEY, type Row, SAMPLES, sampleNeeds, T1, T2, type WorkoutJSON, workoutSample } from './samples.ts'
@@ -41,36 +41,50 @@ describe('the words', () => {
         'This workout stays on this iPhone.',
     )
     expect(Object.keys(ACCOUNT_CAPS).sort()).toEqual([
-      'too_many_body_weights', 'too_many_custom_exercises', 'too_many_exercise_prefs', 'too_many_gyms_total',
-      'too_many_listings_total', 'too_many_logged_exercises', 'too_many_logged_sets', 'too_many_pending_proposals',
-      'too_many_proposals', 'too_many_routines', 'too_many_workouts',
+      'too_many_activity_days', 'too_many_body_weights', 'too_many_custom_exercises', 'too_many_exercise_prefs',
+      'too_many_gyms_total', 'too_many_health_activities', 'too_many_listings_total', 'too_many_logged_exercises',
+      'too_many_logged_sets', 'too_many_pending_proposals', 'too_many_proposals', 'too_many_routines',
+      'too_many_workouts',
     ])
   })
 })
 
 interface Synced {
   readonly entity: string
-  readonly table: CappedTable
+  readonly table: CappedTable | HealthTable
+  /** The column KEY's value is in. */
+  readonly key: 'id' | 'day'
   readonly max: number
   readonly code: string
 }
 
 const SYNCED: Synced[] = [
-  { entity: 'bodyweight', table: 'bodyweight', max: DomainLimits.bodyweightsMax, code: 'too_many_body_weights' },
-  { entity: 'routines', table: 'routines', max: DomainLimits.routinesMax, code: 'too_many_routines' },
   {
-    entity: 'custom-exercises', table: 'custom_exercises', max: DomainLimits.customExercisesMax,
+    entity: 'bodyweight', table: 'bodyweight', key: 'id', max: DomainLimits.bodyweightsMax,
+    code: 'too_many_body_weights',
+  },
+  { entity: 'routines', table: 'routines', key: 'id', max: DomainLimits.routinesMax, code: 'too_many_routines' },
+  {
+    entity: 'custom-exercises', table: 'custom_exercises', key: 'id', max: DomainLimits.customExercisesMax,
     code: 'too_many_custom_exercises',
+  },
+  {
+    entity: 'health-activities', table: 'health_activities', key: 'id', max: DomainLimits.healthActivitiesMax,
+    code: 'too_many_health_activities',
+  },
+  {
+    entity: 'activity-days', table: 'activity_days', key: 'day', max: DomainLimits.activityDaysMax,
+    code: 'too_many_activity_days',
   },
 ]
 
-describe.each(SYNCED)('$entity', ({ entity, table, max, code }) => {
+describe.each(SYNCED)('$entity', ({ entity, table, key, max, code }) => {
   const fresh = () => SAMPLES[entity]()
 
   /** The stored row's edit time, or undefined when the row isn't stored. */
   async function storedEdit(row: Row, userId: string): Promise<string | undefined> {
-    const stored = await env.DB.prepare(`SELECT client_updated_at FROM ${table} WHERE id = ?1`)
-      .bind(KEY[entity](row, userId)).first<{ client_updated_at: string }>()
+    const stored = await env.DB.prepare(`SELECT client_updated_at FROM ${table} WHERE ${key} = ?1 AND user_id = ?2`)
+      .bind(KEY[entity](row, userId), userId).first<{ client_updated_at: string }>()
     return stored?.client_updated_at
   }
 
@@ -142,9 +156,9 @@ describe('exercise preferences', () => {
 })
 
 const PRIVATE: Synced[] = [
-  { entity: 'gyms', table: 'gyms', max: DomainLimits.privateGymsTotalMax, code: 'too_many_gyms_total' },
+  { entity: 'gyms', table: 'gyms', key: 'id', max: DomainLimits.privateGymsTotalMax, code: 'too_many_gyms_total' },
   {
-    entity: 'gym-listings', table: 'gym_equipment', max: DomainLimits.privateListingsTotalMax,
+    entity: 'gym-listings', table: 'gym_equipment', key: 'id', max: DomainLimits.privateListingsTotalMax,
     code: 'too_many_listings_total',
   },
 ]

@@ -31,7 +31,20 @@ extension SyncEngine {
         try await pushBatch(.bodyweight, rows: try store.dirtyBodyweight(), key: { $0.value.id.uuidString }, send: {
             try await self.transport.push(bodyweight: $0.map(BodyweightDTO.init))
         })
-        return try await pushWorkouts(only: nil, force: false)
+        let stale = try await pushWorkouts(only: nil, force: false)
+        try await pushActivity()
+        return stale
+    }
+
+    /// Outside workouts and days of activity (plan 39), after the workouts.
+    private func pushActivity() async throws {
+        try await pushBatch(.healthActivities, rows: try store.dirtyHealthActivities(),
+                            key: { $0.value.id.uuidString }, send: {
+            try await self.transport.push(healthActivities: $0.map(HealthActivityDTO.init))
+        })
+        try await pushBatch(.activityDays, rows: try store.dirtyActivityDays(), key: { $0.value.day }, send: {
+            try await self.transport.push(activityDays: $0.map(ActivityDayDTO.init))
+        })
     }
 
     private func pushProfile() async throws {
@@ -171,6 +184,12 @@ extension SyncEngine {
         var conflicts = Set<UUID>()
         try await pull(.workouts, fetch: { try await self.transport.pullWorkouts(since: $0) }, apply: {
             conflicts = Set(try self.store.applyRemote(workouts: $0.map { $0.toDomain() }))
+        })
+        try await pull(.healthActivities, fetch: { try await self.transport.pullHealthActivities(since: $0) }, apply: {
+            try self.store.applyRemote(healthActivities: $0.map { $0.toDomain() })
+        })
+        try await pull(.activityDays, fetch: { try await self.transport.pullActivityDays(since: $0) }, apply: {
+            try self.store.applyRemote(activityDays: $0.map { $0.toDomain() })
         })
         if transport.servesProposals { try await pullProposals() }
         return conflicts

@@ -71,4 +71,21 @@ import Testing
         #expect(try await env.disconnectClaude() == 0)
         #expect(!env.profile.mcpLogWorkouts)
     }
+
+    /// Plan 39: "Read activity from Apple Health" is on until the owner turns it off; a save that doesn't name it keeps
+    /// it, and Disconnect all turns it off.
+    @Test func readActivityIsOnUntilTurnedOffAndDisconnectTurnsItOff() async throws {
+        let env = try makeEnv()
+        #expect(env.profile.mcpReadActivity)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
+                                   autoApply: false, logWorkouts: false, readActivity: false)
+        #expect(!env.profile.mcpReadActivity)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
+                                   autoApply: false, logWorkouts: true)
+        #expect(!env.profile.mcpReadActivity && env.profile.mcpLogWorkouts)
+        try env.saveMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
+                                   autoApply: false, logWorkouts: false, readActivity: true)
+        #expect(try await env.disconnectClaude() == 0)
+        #expect(!env.profile.mcpReadActivity)
+    }
 }

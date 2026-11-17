@@ -15,6 +15,7 @@ import {
   listWorkouts,
   searchExercises,
 } from './read.ts'
+import { getActivity } from './activity.ts'
 import { getGymEquipment, listGyms } from './gyms.ts'
 import { getTrainingInsights } from './insights.ts'
 import { getStrengthLevels } from './strength.ts'
@@ -129,7 +130,8 @@ export const TOOL_SPECS = [
     description:
       "The app's insights: recovery % per muscle group (16 groups) from recent hard sets, which groups are " +
       "fresh, hard sets per muscle this week (Mon–Sun in time_zone, default UTC) against the owner's weekly " +
-      'target ranges, and the weekly workout streak. Use it to pick muscles to train or to judge weekly volume. ' +
+      'target ranges, and the weekly workout streak (outside workouts from Apple Health count while the owner lets ' +
+      'agents read activity). Use it to pick muscles to train or to judge weekly volume. ' +
       'Only works if the owner allowed agents to read workouts and the plan.',
     input: schemas.insights,
     annotations: READ,
@@ -180,6 +182,20 @@ export const TOOL_SPECS = [
     input: schemas.bodyweight,
     annotations: READ,
     run: (ctx, a) => getBodyweight(ctx, a),
+  }),
+  spec({
+    name: 'get_activity',
+    title: 'Get activity from Apple Health',
+    description:
+      "The owner's activity outside GymRollins, from Apple Health, for the last `days` days (1–84, default 28): " +
+      'workouts other apps or the Apple Watch recorded (walks, runs, rides, classes), newest first and at most 60, ' +
+      'and steps, move kcal, exercise minutes and stand hours per day and per Monday–Sunday week in time_zone ' +
+      '(default UTC). A workout recorded during a GymRollins workout carries during_workout_id: it is that session, ' +
+      'measured. Copies of one session from two apps are listed once. Check it before planning hard leg or ' +
+      'conditioning days. Only works if the owner allowed agents to read activity from Apple Health.',
+    input: schemas.activity,
+    annotations: READ,
+    run: (ctx, a) => getActivity(ctx, a),
   }),
   spec({
     name: 'search_exercises',

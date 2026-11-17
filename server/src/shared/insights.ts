@@ -312,7 +312,7 @@ export function assertTimeZone(tz: string): void {
 const DAY_MS = 24 * HOUR
 
 /** The civil date (yyyy-mm-dd, as a UTC-midnight epoch) of `t` in `tz`. */
-function civilDay(t: number, tz: string): number {
+export function civilDay(t: number, tz: string): number {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
     year: 'numeric',

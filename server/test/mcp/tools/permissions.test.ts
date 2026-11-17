@@ -1,6 +1,7 @@
 // What a tool says when the owner turned a switch off (owner, 2026-11-09): an agent is told which switch is off and
 // that this isn't an empty result, instead of getting no rows and taking the history for empty.
 import { describe, expect, it } from 'vitest'
+import { getActivity } from '../../../src/mcp/tools/activity.ts'
 import { getTrainingInsights } from '../../../src/mcp/tools/insights.ts'
 import { listGyms } from '../../../src/mcp/tools/gyms.ts'
 import {
@@ -19,7 +20,7 @@ import { getStrengthLevels } from '../../../src/mcp/tools/strength.ts'
 import { FakeDb, loadOwnerData } from '../fake-db.ts'
 
 const NOW = new Date('2026-09-26T12:00:00Z')
-type Switch = 'mcp_read_workouts' | 'mcp_read_body' | 'mcp_read_plan' | 'mcp_read_gyms'
+type Switch = 'mcp_read_workouts' | 'mcp_read_body' | 'mcp_read_plan' | 'mcp_read_gyms' | 'mcp_read_activity'
 
 async function ctx(...off: Switch[]) {
   const data = await loadOwnerData()
@@ -45,6 +46,7 @@ describe('the words', () => {
     expect(notAllowed(['workouts', 'body', 'plan'])).toContain(
       '“Read workouts and sets”, “Read bodyweight” and “Read your plan and profile”',
     )
+    expect(notAllowed(['activity'])).toContain('“Read activity from Apple Health”')
     expect(withheld(['body'], 'Bodyweight')).toBe(
       'Bodyweight withheld: the owner has turned off “Read bodyweight” for agents in the GymRollins app ' +
         '(Settings › AI agents).',
@@ -53,6 +55,10 @@ describe('the words', () => {
 })
 
 describe('a tool whose switch is off', () => {
+  it('get_activity refuses while reading activity is off', async () => {
+    await expect(getActivity(await ctx('mcp_read_activity'), {})).rejects.toThrow(notAllowed(['activity']))
+  })
+
   it('refuses instead of answering with nothing', async () => {
     const workoutsOff = await ctx('mcp_read_workouts')
     await expect(listWorkouts(workoutsOff, {})).rejects.toThrow(notAllowed(['workouts']))
@@ -81,7 +87,7 @@ describe('a tool that still answers in part', () => {
     const out = json(await getProfile(await ctx('mcp_read_plan', 'mcp_read_body')))
     expect(out).toEqual({
       profile: withheld(['plan'], 'The profile'),
-      permissions: { read_plan: false, read_workouts: true, read_body: false, read_gyms: true, auto_apply: false },
+      permissions: { read_plan: false, read_workouts: true, read_body: false, read_gyms: true, read_activity: true, auto_apply: false },
     })
   })
 

@@ -152,6 +152,36 @@ public struct HealthBodyChanges: Sendable, Equatable {
     }
 }
 
+/// A workout in Health from any source, as the activity import reads it (plan 39). The import keeps only outside
+/// workouts: not `writtenByGymRollins`, and not carrying a GymRollins workout's id as its external id.
+public struct HealthOutsideWorkout: Sendable, Equatable {
+    public let activity: HealthActivity
+    /// `HKMetadataKeyExternalUUID`, when the writer set one (GymRollins' own copies carry their workout's id).
+    public let externalId: UUID?
+    /// GymRollins wrote it: its export metadata (`GymRollinsExport`, `GymRollinsWriter`), or the app's or the watch
+    /// app's bundle.
+    public let writtenByGymRollins: Bool
+
+    public init(activity: HealthActivity, externalId: UUID? = nil, writtenByGymRollins: Bool = false) {
+        self.activity = activity
+        self.externalId = externalId
+        self.writtenByGymRollins = writtenByGymRollins
+    }
+}
+
+/// One anchored read of Health's workouts (plan 39): added and deleted since `anchor`, and the anchor to resume from.
+public struct HealthOutsideWorkoutChanges: Sendable, Equatable {
+    public let added: [HealthOutsideWorkout]
+    public let deleted: [UUID]
+    public let anchor: Data?
+
+    public init(added: [HealthOutsideWorkout], deleted: [UUID], anchor: Data?) {
+        self.added = added
+        self.deleted = deleted
+        self.anchor = anchor
+    }
+}
+
 /// The seam around HealthKit: `HealthKitStore` on device, `FakeHealthStore` in tests and `-fakeHealth` UI tests.
 public protocol HealthStore: Sendable {
     /// False on devices without Health (some iPads) and on the Mac: nothing else may be called then.
@@ -172,4 +202,10 @@ public protocol HealthStore: Sendable {
     func deleteWeighIn(externalId: UUID, withBodyFat: Bool) async throws
     /// Body mass and body fat samples dated on/after `start`, added or deleted since `anchor` (all when nil).
     func bodyChanges(since start: Date, anchor: Data?) async throws -> HealthBodyChanges
+    /// Workouts from every source that started on/after `start`, added or deleted since `anchor` (all when nil;
+    /// deletions only with an anchor), each with its energy, distance and heart rate statistics (plan 39).
+    func outsideWorkoutChanges(since start: Date, anchor: Data?) async throws -> HealthOutsideWorkoutChanges
+    /// Each day of `calendar` from `start` through `end` that has any data: steps from Health's merged statistics,
+    /// and move, exercise and stand from the day's Activity summary (plan 39). Oldest first.
+    func activityDays(from start: Date, through end: Date, calendar: Calendar) async throws -> [ActivityDay]
 }

@@ -73,6 +73,14 @@ public struct ApiSyncTransport: SyncTransport {
         try await Self.mappingRejections { try await api.post("/v1/sync/workouts", workout) }
     }
 
+    public func push(healthActivities: [HealthActivityDTO]) async throws -> [RowAck] {
+        try await push(healthActivities, to: "health-activities")
+    }
+
+    public func push(activityDays: [ActivityDayDTO]) async throws -> [RowAck] {
+        try await push(activityDays, to: "activity-days")
+    }
+
     // MARK: Pull
 
     public func pullProfile(since: Date?) async throws -> [ProfileDTO] {
@@ -105,6 +113,14 @@ public struct ApiSyncTransport: SyncTransport {
 
     public func pullWorkouts(since: Date?) async throws -> [WorkoutDTO] {
         try await pull("workouts", tiebreak: "id", pageSize: workoutPageSize, since: since)
+    }
+
+    public func pullHealthActivities(since: Date?) async throws -> [HealthActivityDTO] {
+        try await pull("health-activities", tiebreak: "id", since: since)
+    }
+
+    public func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO] {
+        try await pull("activity-days", tiebreak: "day", since: since)
     }
 
     public func fetchWorkout(id: UUID) async throws -> WorkoutDTO? {

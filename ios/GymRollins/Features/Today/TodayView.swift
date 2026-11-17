@@ -32,9 +32,9 @@ struct TodayView: View {
     @State private var openItem: UUID?
     /// The exercise the workout opens on when it was started from the exercise screen.
     @State private var startEntry: UUID?
-    /// Recent sessions per exercise, read once per reload: edits on the exercise screen rebuild the rows and must not
-    /// query the workout history each time.
-    @State private var historyCache: [String: [SessionResult]] = [:]
+    /// Recent sessions per exercise, read once until the workout data changes: edits on the exercise screen, a new
+    /// plan, gym or day rebuild the rows and must not query the workout history each time.
+    @State private var history = TodayHistoryCache()
     /// The current gym's matcher and photos, read once per reload: set edits rebuild the rows and must not read the store.
     @State private var gymContext: TodayGymContext?
     /// The gym the phone is at, read once per reload (`env.currentGym` reads the store on every call).
@@ -49,6 +49,8 @@ struct TodayView: View {
     @State private var showDatePicker = false
     /// Save Changes on a workout that is on other days too: those days, while the question is open.
     @State private var savingShared: [Int] = []
+    /// The last 7 days of activity (plan 39), read with each reload and whenever the data changes.
+    @State private var activityDays: [ActivityDay] = []
 
     /// Onboarding's "Build me a 4-day upper/lower plan…" prompt: the copyable text offered before "Ask Claude to
     /// build one" pushes the connection screen.
@@ -128,9 +130,10 @@ struct TodayView: View {
             }
             // A finished workout changes the history the suggestions come from.
             .onChange(of: env.dataRevision) { _, _ in
-                historyCache = [:]
+                history.invalidate()
                 editor.invalidateSuggestions()
                 refreshModel()
+                activityDays = env.recentActivityDays()
             }
             .onChange(of: editor.plan) { _, _ in refreshModel() }
             // A workout started elsewhere (the watch) while the exercise screen was open on today's plan: that plan is
@@ -205,6 +208,7 @@ struct TodayView: View {
         if let pendingProposal { proposalChip(pendingProposal) }
         SyncStatusBanner()
         RecoveryCard(identifier: "today.recovery")
+        TodayActivitySection(days: activityDays)
     }
 
     /// A later day back to the week: the owner's change and an agent's switch for that date go.
@@ -350,9 +354,10 @@ struct TodayView: View {
 
     private func reload() {
         // The plan may have changed underneath (My Plan, sync, a new day): the exercise screen shows the new plan
-        // (and closes if its exercise is gone).
-        historyCache = [:]
+        // (and closes if its exercise is gone). The history cache stays: only a data change empties it.
+        activityDays = env.recentActivityDays()
         let env = self.env
+        let history = self.history
         editor.isLocked = env.session != nil
         let gym = env.todayGymContext()
         gymContext = gym
@@ -374,7 +379,7 @@ struct TodayView: View {
                              saveWorkingRest: { env.setWorkingRest($1, exerciseId: $0, defaultSec: $2) }) { item, plan in
                 SessionPlanner.entry(for: item, policy: item.policy ?? plan.base?.policy ?? .double, profile: env.profile,
                                      exercise: env.library.exercise(item.exerciseId),
-                                     history: (try? env.workouts.history(exerciseId: item.exerciseId, limit: 5)) ?? [],
+                                     history: history.sessions(item.exerciseId, in: env.workouts),
                                      autoWarmups: WarmupPreferences.autoWarmupsEnabled(env.defaults),
                                      loads: gym?.preferring(plan.builtListings).loads(for: item.exerciseId)).sets
             }
@@ -390,15 +395,11 @@ struct TodayView: View {
 
     private func refreshModel() {
         guard let plan else { return }
-        let cache = plan.exercises.reduce(into: historyCache) { cache, item in
-            if cache[item.exerciseId] == nil {
-                cache[item.exerciseId] = (try? env.workouts.history(exerciseId: item.exerciseId, limit: 5)) ?? []
-            }
-        }
-        if cache.count != historyCache.count { historyCache = cache }
         let gym = gymContext
+        let (history, workouts) = (self.history, env.workouts)
         let made = TodayModel.make(plan: plan, profile: env.profile, library: env.library,
-                                   history: { cache[$0] ?? [] }, gym: gym, loads: { gym?.loads(for: $0) })
+                                   history: { history.sessions($0, in: workouts) }, gym: gym,
+                                   loads: { gym?.loads(for: $0) })
         if day.isToday {
             model = made
         } else {

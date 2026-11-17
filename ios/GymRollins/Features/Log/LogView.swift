@@ -2,12 +2,17 @@ import GymCore
 import GymData
 import SwiftUI
 
-/// Log tab: a solid week-activity strip (minutes per day) and the past-workouts list, lazily
-/// paged 50 at a time. Tapping a card pushes `WorkoutDetailView`; the gear button pushes the account screen
-/// (Settings in plan 07). Pull to refresh syncs.
+/// Log tab: a solid week-activity strip (minutes per day, outside workouts' in a lighter shade), the week's calories,
+/// and the history: GymRollins workouts lazily paged 50 at a time, with the outside workouts from Apple Health between
+/// them (plan 39). Tapping a card pushes `WorkoutDetailView` or `OutsideWorkoutDetailView`; the gear button pushes the
+/// account screen (Settings in plan 07). Pull to refresh syncs.
 struct LogView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var workouts: [Workout] = []
+    /// Outside workouts shown on their own (rules 6 and 7), newest first.
+    @State private var outside: [HealthActivity] = []
+    /// The history: `workouts` with `outside` between them.
+    @State private var items: [LogItem] = []
     @State private var recordCounts: [UUID: Int] = [:]
     @State private var limit = 50
     @State private var showSettings = false
@@ -20,8 +25,17 @@ struct LogView: View {
     private static let dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
     private static func spokenDay(_ day: WeekActivity.Day) -> String {
-        let activity = day.minutes > 0 ? "\(day.minutes) minutes trained" : "no workout"
-        return [dayNames[day.weekday - 1], day.isToday ? "today" : nil, activity].compactMap { $0 }.joined(separator: ", ")
+        let trained = day.minutes > 0 ? "\(day.minutes) minutes trained" : nil
+        let other = day.outsideMinutes > 0 ? "\(day.outsideMinutes) minutes of other activity" : nil
+        let none = trained == nil && other == nil ? "no workout" : nil
+        return [dayNames[day.weekday - 1], day.isToday ? "today" : nil, trained, other, none].compactMap { $0 }
+            .joined(separator: ", ")
+    }
+
+    /// A day with a GymRollins workout is the solid accent; a day with only outside workouts a lighter shade of it.
+    private static func fill(_ day: WeekActivity.Day) -> Color {
+        if day.minutes > 0 { return Theme.accent.opacity(0.85) }
+        return day.outsideMinutes > 0 ? Theme.accent.opacity(0.35) : Theme.cardInner
     }
 
     var body: some View {
@@ -43,6 +57,7 @@ struct LogView: View {
             .background(Theme.background)
             .refreshable { await env.sync.syncNow() }
             .navigationDestination(for: UUID.self) { WorkoutDetailView(workoutId: $0) }
+            .navigationDestination(for: OutsideWorkoutLink.self) { OutsideWorkoutDetailView(activityId: $0.id) }
             .navigationDestination(isPresented: $showSettings) {
                 SettingsView()
             }
@@ -69,7 +84,7 @@ struct LogView: View {
     }
 
     private var weekStrip: some View {
-        let week = WeekActivity(workouts: workouts, containing: env.now())
+        let week = WeekActivity(workouts: workouts, outside: outside, containing: env.now())
         return SolidCard {
             HStack(spacing: 4) {
                 ForEach(week.days) { day in
@@ -78,16 +93,17 @@ struct LogView: View {
                             .foregroundStyle(day.isToday ? Theme.textPrimary : Theme.textSecondary)
                         ZStack {
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(day.minutes > 0 ? Theme.accent.opacity(0.85) : Theme.cardInner)
+                                .fill(Self.fill(day))
                             if day.isToday {
                                 RoundedRectangle(cornerRadius: 8)
                                     .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 1.5, dash: [3]))
                             }
-                            if day.minutes > 0 {
-                                Text(DurationFormatter.minutes(TimeInterval(day.minutes * 60)))
+                            if day.minutes + day.outsideMinutes > 0 {
+                                Text(DurationFormatter.minutes(TimeInterval((day.minutes + day.outsideMinutes) * 60)))
                                     .font(.caption2.weight(.bold))
-                                    // Dark on the accent fill: white on it measured below 4.5:1 (audit: contrast).
-                                    .foregroundStyle(Theme.background)
+                                    // Dark on the solid accent: white on it measured below 4.5:1 (audit: contrast).
+                                    // The lighter shade is dark enough for the light text.
+                                    .foregroundStyle(day.minutes > 0 ? Theme.background : Theme.textPrimary)
                                     .minimumScaleFactor(0.7)
                                     .lineLimit(1)
                             }
@@ -110,10 +126,12 @@ struct LogView: View {
         }
     }
 
-    /// "≈ 1,240 kcal this week (estimated)" under the strip, with the method sheet.
+    /// "≈ 1,240 kcal this week (estimated)" under the strip, with the method sheet, and apart from it what Health
+    /// measured for the week's outside workouts (decision 10: never added to the estimate).
     @ViewBuilder
     private var weekCalories: some View {
         let total = env.calories.weekTotal(of: workouts, containing: env.now())
+        let other = ActivityText.weekKcal(outside, containing: env.now())
         if total > 0 {
             HStack {
                 Text("\(CalorieText.kcal(total)) this week (estimated)")
@@ -127,20 +145,32 @@ struct LogView: View {
             }
             .sheet(isPresented: $showCalorieInfo) { CalorieInfoSheet(estimate: nil) }
         }
+        if other > 0 {
+            Text(ActivityText.otherKcalLine(other))
+                .font(.footnote.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+                .accessibilityIdentifier("log.week.otherKcal")
+        }
     }
 
     @ViewBuilder
     private var pastWorkouts: some View {
-        if workouts.isEmpty {
+        if items.isEmpty {
             emptyState
         } else {
             LazyVStack(spacing: 8) {
-                ForEach(workouts) { workout in
-                    WorkoutCard(workout: workout, recordCount: recordCounts[workout.id] ?? 0, unit: env.profile.unit,
-                               library: env.library)
-                        .onAppear {
-                            if workout.id == workouts.last?.id { loadMore() }
+                ForEach(items) { item in
+                    Group {
+                        switch item {
+                        case .workout(let workout):
+                            WorkoutCard(workout: workout, recordCount: recordCounts[workout.id] ?? 0,
+                                        unit: env.profile.unit, library: env.library)
+                        case .outside(let activity):
+                            OutsideWorkoutCard(activity: activity, unit: env.profile.unit)
                         }
+                    }
+                    .onAppear {
+                        if item.id == items.last?.id { loadMore() }
+                    }
                 }
             }
         }
@@ -171,6 +201,8 @@ struct LogView: View {
     private func reload() {
         workouts = (try? env.workouts.recent(limit: limit)) ?? []
         recordCounts = (try? env.workouts.recordCounts(ids: workouts.map(\.id))) ?? [:]
+        outside = env.resolvedActivities().shown
+        items = LogTimeline.merge(workouts: workouts, outside: outside, complete: workouts.count < limit)
     }
 
     /// `LazyVStack` still calls `onAppear` for the last row on every reload pass while it's the

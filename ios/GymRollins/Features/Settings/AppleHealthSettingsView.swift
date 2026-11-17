@@ -2,7 +2,9 @@ import GymHealth
 import SwiftUI
 import UIKit
 
-/// Settings → Apple Health: the opt-in toggle, what is shared, per-type write permission and "Open Settings".
+/// Settings → Apple Health: the opt-in toggle, what is shared, per-type write permission and "Open Settings". Since
+/// plan 39 also what is read from Health: workouts from other apps and steps & activity, each with its switch, and the
+/// ask for those types when Health was turned on before the app read them.
 struct AppleHealthSettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
@@ -15,6 +17,8 @@ struct AppleHealthSettingsView: View {
             if health.isAvailable {
                 toggleSection
                 if health.isEnabled { permissionsSection }
+                // Shown with Health off too: what was read before still shows, and these hide it (review M2).
+                readingSection
                 aboutSection
             } else {
                 Section {
@@ -43,7 +47,8 @@ struct AppleHealthSettingsView: View {
             }
         } footer: {
             Text("Saves each finished workout with its estimated calories and the weigh-ins you log here. Reads your "
-                 + "weight and body fat from Health into the Body tab.")
+                 + "weight and body fat into the Body tab, and the workouts other apps record and your daily activity "
+                 + "into the Log and Today.")
         }
     }
 
@@ -79,6 +84,33 @@ struct AppleHealthSettingsView: View {
         }
     }
 
+    /// What the app reads from Health besides weight (plan 39). Off stops that import and hides it in the app; nothing
+    /// already in the cloud is deleted. With Health off nothing new is read, but what was read still shows until its
+    /// switch hides it.
+    private var readingSection: some View {
+        Section {
+            if health.needsActivityPermission {
+                Button("Allow Reading Your Activity") { allowActivity() }
+                    .disabled(working)
+                    .accessibilityIdentifier("health.activity.allow")
+            }
+            Toggle("Workouts from other apps", isOn: Binding(get: { health.state.readsOutsideWorkouts },
+                                                            set: { env.setReadsOutsideWorkouts($0) }))
+                .accessibilityIdentifier("health.read.workouts")
+            Toggle("Steps & activity", isOn: Binding(get: { health.state.readsActivityDays },
+                                                    set: { env.setReadsActivityDays($0) }))
+                .accessibilityIdentifier("health.read.days")
+        } header: {
+            Text("Reading from Health")
+        } footer: {
+            Text("Walks, runs and classes your Apple Watch or other apps record show in the Log and count toward your "
+                 + "streak. Steps, move, exercise and stand show on Today. Turning one off hides it here; nothing "
+                 + "already in the cloud is deleted."
+                 + (health.isEnabled ? "" : " While Apple Health is off nothing new is read, and these still hide "
+                    + "what was read before."))
+        }
+    }
+
     private var aboutSection: some View {
         Section {
             if let date = health.state.lastImportAt {
@@ -105,6 +137,15 @@ struct AppleHealthSettingsView: View {
                 health.disable()
             }
         })
+    }
+
+    /// Asks Health for the activity types (the sheet lists only those never asked), then reads them.
+    private func allowActivity() {
+        working = true
+        Task {
+            await env.allowHealthActivity()
+            working = false
+        }
     }
 }
 

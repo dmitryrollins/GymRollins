@@ -57,6 +57,11 @@ const edited = col('client_updated_at', 'ts')
  * is stored as off, the column's default, instead of refusing the profile.
  */
 const logWorkouts: Column = { name: 'mcp_log_workouts', kind: 'bool', fallback: false }
+/**
+ * Plan 39's "Read activity from Apple Health" switch, on by default. An app from before it sends none, and the Worker
+ * is deployed first, so a missing value is stored as on, the column's default, instead of refusing the profile.
+ */
+const readActivity: Column = { name: 'mcp_read_activity', kind: 'bool', fallback: true }
 const deleted = opt('deleted_at', 'ts')
 
 /** A day's routine must be the caller's (Postgres: the foreign key plus RLS's with check). Tombstones count. */
@@ -94,7 +99,7 @@ export const ENTITIES: Readonly<Record<string, Entity>> = {
       col('limits', 'text'), opt('limits_until', 'date'), col('deload_pct', 'real'), col('bar_kg', 'real'),
       col('plates_kg', 'json'), col('dumbbell_step_kg', 'real'), col('mcp_read_workouts', 'bool'),
       col('mcp_read_body', 'bool'), col('mcp_read_plan', 'bool'), col('mcp_read_gyms', 'bool'),
-      col('mcp_propose', 'bool'), col('mcp_auto_apply', 'bool'), logWorkouts, opt('sex', 'text'),
+      col('mcp_propose', 'bool'), col('mcp_auto_apply', 'bool'), logWorkouts, readActivity, opt('sex', 'text'),
       opt('birth_year', 'int'), edited,
     ],
   },
@@ -154,6 +159,30 @@ export const ENTITIES: Readonly<Record<string, Entity>> = {
       client_updated_at: `CASE WHEN ${HEALTH_DELETION} ` +
         'THEN max(excluded.client_updated_at, bodyweight.client_updated_at) ELSE excluded.client_updated_at END',
     },
+  },
+  // Plan 39: read from Apple Health on the phone; only its import writes them, so plain last-write-wins. Keyed by the
+  // account too (migrations/0013_health_activities.sql): one iPhone's Health may be read into two accounts.
+  'health-activities': {
+    table: 'health_activities',
+    conflict: ['user_id', 'id'],
+    ackKey: 'id',
+    tiebreak: { column: 'id', kind: 'text' },
+    columns: [
+      col('id', 'uuid'), col('kind', 'text'), col('started_at', 'ts'), col('ended_at', 'ts'), col('duration_s', 'real'),
+      opt('kcal', 'real'), opt('distance_m', 'real'), opt('avg_hr', 'int'), opt('max_hr', 'int'),
+      opt('avg_power_w', 'int'), opt('avg_cadence_rpm', 'int'), opt('total_kcal', 'real'),
+      col('source_name', 'text'), col('from_watch', 'bool'), edited, deleted,
+    ],
+  },
+  'activity-days': {
+    table: 'activity_days',
+    conflict: ['user_id', 'day'],
+    ackKey: 'day',
+    tiebreak: { column: 'day', kind: 'text' },
+    columns: [
+      col('day', 'date'), col('steps', 'int'), col('move_kcal', 'real'), col('exercise_min', 'int'),
+      opt('stand_h', 'int'), edited,
+    ],
   },
   gyms: {
     table: 'gyms',

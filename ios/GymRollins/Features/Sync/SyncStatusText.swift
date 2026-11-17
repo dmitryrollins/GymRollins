@@ -121,6 +121,8 @@ enum SyncStatusText {
         case .gymListings: "Equipment"
         case .bodyweight: "Weigh-in"
         case .workouts: "Workout"
+        case .healthActivities: "Outside workout"
+        case .activityDays: "Day of activity"
         case .proposals: "Claude proposal"
         }
     }
@@ -138,6 +140,8 @@ enum SyncStatusText {
         case .gymListings: "equipment listings"
         case .bodyweight: "weigh-ins"
         case .workouts: "workouts"
+        case .healthActivities: "outside workouts"
+        case .activityDays: "days of activity"
         case .proposals: "Claude proposals"
         }
     }

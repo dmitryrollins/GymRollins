@@ -28,7 +28,10 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
   // With "Read your plan and profile" off, the profile is withheld, not unsaved: say so, with the read switches.
   // Either way the agent learns whether its changes apply without a review (the instructions tell it to check).
   if ((await switchedOff(db, 'plan')).length > 0) {
-    const [{ plan, workouts, body, gyms }, autoApply] = await Promise.all([db.readPermissions(), db.autoApply()])
+    const [{ plan, workouts, body, gyms, activity }, autoApply] = await Promise.all([
+      db.readPermissions(),
+      db.autoApply(),
+    ])
     return ok({
       profile: withheld(['plan'], 'The profile'),
       permissions: {
@@ -36,6 +39,7 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
         read_workouts: workouts,
         read_body: body,
         read_gyms: gyms,
+        read_activity: activity,
         auto_apply: autoApply,
       },
     })
@@ -68,6 +72,7 @@ export async function getProfile({ db }: ToolCtx): Promise<ToolResult> {
       read_workouts: p.mcp_read_workouts,
       read_body: p.mcp_read_body,
       read_gyms: p.mcp_read_gyms,
+      read_activity: p.mcp_read_activity ?? true,
       propose: p.mcp_propose,
       auto_apply: p.mcp_auto_apply,
       log_workouts: p.mcp_log_workouts ?? false,

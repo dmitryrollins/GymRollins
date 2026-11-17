@@ -16,13 +16,17 @@ export const SAMPLE_GYM_ID = '5a3b1e00-0000-4000-8000-000000000001'
 /** The dumbbells' generic item, as migrations/0004_seed_equipment.sql seeds it. */
 const GENERIC_DUMBBELLS = 'cdd9d434-9eca-5d33-8406-2bdea6b4c561'
 
+/** A new day for each activity-days sample, so one test's samples never share a key: 2026-01-01, 2026-01-02, … */
+let sampleDays = 0
+const nextDay = (): string => new Date(Date.UTC(2026, 0, 1 + sampleDays++)).toISOString().slice(0, 10)
+
 export const SAMPLES: Readonly<Record<string, () => Row>> = {
   profile: () => ({
     unit: 'kg', rest_sec: 120, warmup_rest_sec: 60, height_cm: 180, goal_weight_kg: null, goal_date: '2027-06-30',
     training_days: 4, experience: 'intermediate', limits: '', limits_until: null, deload_pct: 0.05, bar_kg: 20,
     plates_kg: [20, 10, 5, 2.5, 1.25], dumbbell_step_kg: 2, mcp_read_workouts: true, mcp_read_body: false,
     mcp_read_plan: true, mcp_read_gyms: true, mcp_propose: true, mcp_auto_apply: false, mcp_log_workouts: true,
-    sex: null, birth_year: null, client_updated_at: T1,
+    mcp_read_activity: false, sex: null, birth_year: null, client_updated_at: T1,
   }),
   'custom-exercises': () => ({
     id: `custom-${crypto.randomUUID()}`, n: 'Sled push', bp: 'legs', eq: 'machine', tg: 'quads', mode: 'reps',
@@ -47,6 +51,16 @@ export const SAMPLES: Readonly<Record<string, () => Row>> = {
   bodyweight: () => ({
     id: appUUID(), measured_at: '2026-11-07T07:00:00.000000Z', w_kg: 75.5, bf_pct: null, t: '07:00', source: null,
     health_sample_id: null, health_fat_sample_id: null, client_updated_at: T1, deleted_at: null,
+  }),
+  // an outside workout and a day of activity as HealthActivityDTO and ActivityDayDTO encode them (plan 39)
+  'health-activities': () => ({
+    id: appUUID(), kind: 'walking', started_at: '2026-11-06T07:00:00.000000Z', ended_at: '2026-11-06T07:45:00.000000Z',
+    duration_s: 2700, kcal: 180, distance_m: 3400, avg_hr: 102, max_hr: 121, avg_power_w: null,
+    avg_cadence_rpm: null, total_kcal: 231, source_name: 'Apple Watch', from_watch: true, client_updated_at: T1,
+    deleted_at: null,
+  }),
+  'activity-days': () => ({
+    day: nextDay(), steps: 8532, move_kcal: 410, exercise_min: 34, stand_h: null, client_updated_at: T1,
   }),
   // a private listing as GymListingDTO encodes it: the kind's generic item, at the public gym sampleNeeds stores
   'gym-listings': () => ({
@@ -75,6 +89,8 @@ export const BAD: Readonly<Record<string, Row>> = {
   bodyweight: { w_kg: 500 },
   gyms: { latitude: 91 },
   'gym-listings': { quantity: 51 },
+  'health-activities': { avg_hr: 300 },
+  'activity-days': { steps: 200001 },
 }
 
 /** The ack id the app matches for a row. */
@@ -88,6 +104,8 @@ export const KEY: Readonly<Record<string, (row: Row, userId: string) => string>>
   bodyweight: (row) => String(row.id).toLowerCase(),
   gyms: (row) => String(row.id).toLowerCase(),
   'gym-listings': (row) => String(row.id).toLowerCase(),
+  'health-activities': (row) => String(row.id).toLowerCase(),
+  'activity-days': (row) => String(row.day),
 }
 
 /** What a pull adds to a pushed row beyond its columns: a listing's item kind, embedded as the old REST API did. */

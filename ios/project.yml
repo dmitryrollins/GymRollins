@@ -19,7 +19,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     # The app, widgets and watch Info.plists read these; raise CURRENT_PROJECT_VERSION for every upload.
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "3"
+    CURRENT_PROJECT_VERSION: "4"
 packages:
   GymCore: { path: Packages/GymCore }
   GymData: { path: Packages/GymData }
@@ -65,7 +65,8 @@ targets:
         UIUserInterfaceStyle: Dark
         NSSupportsLiveActivities: true
         NSHealthShareUsageDescription: >-
-          GymRollins reads your weight and body fat from Apple Health to show them on the Body tab.
+          GymRollins reads your weight and body fat for the Body tab, and the workouts other apps save, your steps,
+          Activity rings and heart rate for the Log and Today.
         NSHealthUpdateUsageDescription: >-
           GymRollins saves your finished workouts with their estimated calories, and the weigh-ins you log, to
           Apple Health.

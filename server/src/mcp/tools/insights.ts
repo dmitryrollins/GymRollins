@@ -14,10 +14,11 @@ import {
   weekKey,
   weeklySets,
 } from '../../shared/insights.ts'
+import { counted, resolveActivities } from '../../shared/activity.ts'
 import type { ExerciseRow, MuscleTargetRow } from '../db.ts'
 import { exerciseMap } from './common.ts'
 import { round } from './format.ts'
-import { requireReads } from './permissions.ts'
+import { requireReads, switchedOff, withheld } from './permissions.ts'
 import { ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
 const WINDOW_DAYS = 28
@@ -49,13 +50,18 @@ export async function getTrainingInsights(
   // Workouts give the numbers; the plan permission covers the profile (weekly goal, limits note), custom exercises
   // and weekly targets, which RLS hides otherwise. Without it the goal/targets would be silent guesses.
   await requireReads(db, 'workouts', 'plan')
+  // Outside workouts count toward the streak (plan 39, decision 5) while the owner lets agents read activity.
+  const activityOff = await switchedOff(db, 'activity')
   const profile = await db.profile()
   const since = new Date(now.getTime() - WINDOW_DAYS * 86_400_000).toISOString()
-  const [workouts, dates, targetRows] = await Promise.all([
+  const [workouts, dates, targetRows, outside, spans] = await Promise.all([
     db.workouts({ since, limit: MAX_WORKOUTS }),
     db.workoutDates(),
     db.muscleTargets(),
+    activityOff.length > 0 ? [] : db.healthActivities(),
+    activityOff.length > 0 ? [] : db.workoutSpans(),
   ])
+  const outsideDates = counted(resolveActivities(outside, spans)).map((a) => a.started_at)
   const exercises: Map<string, ExerciseRow> = await exerciseMap(
     db,
     workouts.flatMap((w) => w.workout_entries.map((e) => e.exercise_id)),
@@ -67,9 +73,10 @@ export async function getTrainingInsights(
   const targets = targetsByGroup(targetRows)
   const week = weekKey(now.getTime(), tz)
   const goal = profile?.training_days ?? DEFAULT_TRAINING_DAYS
-  const s = streak(dates, goal, now, tz)
+  const s = streak([...dates, ...outsideDates], goal, now, tz)
 
   return ok({
+    ...(activityOff.length > 0 ? { withheld: [withheld(activityOff, 'Outside workouts in the streak')] } : {}),
     time_zone: tz,
     as_of: now.toISOString(),
     recovery: rec.map((r) => ({
@@ -109,7 +116,8 @@ export async function getTrainingInsights(
       'Hard sets = done, non-warm-up, non-cardio sets; an exercise counts 1 set for its target muscle and 0.5 ' +
       'for each secondary muscle. Recovery: each session leaves fatigue min(1, load/6) (load = sets × effort ' +
       'from RIR/RPE) fading linearly over 24 + 6 × load hours (max 96 h); sessions add up. A streak week has ' +
-      'at least goal_days_per_week distinct days with a workout; the current week never breaks it. ' +
+      'at least goal_days_per_week distinct days with a workout, an outside workout from Apple Health of 10 minutes ' +
+      "or more that isn't part of a GymRollins workout included; the current week never breaks it. " +
       "limited_by_injury_note: the owner's limits note mentions a knee/legs (display only).",
   })
 }
