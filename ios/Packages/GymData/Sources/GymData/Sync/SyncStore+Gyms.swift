@@ -27,8 +27,10 @@ extension SyncStore {
         // server. Deleting it is still sent.
         return try rows.filter { $0.statusRaw != unsupported || $0.deletedAt != nil }.map { r in
             let item = try itemRecord(r.itemId)
-            let loads: ListingLoads? = r.statusRaw == unsupported
-                ? nil : ((try? JSONDecoder().decode(ListingLoads.self, from: r.loadsData)) ?? ListingLoads.none)
+            // Weights a workout showed are only the ones seen so far: the account gets the listing without them.
+            let loads: ListingLoads? = if r.statusRaw == unsupported { nil }
+                else if r.loadsFromWorkouts { ListingLoads.none }
+                else { (try? JSONDecoder().decode(ListingLoads.self, from: r.loadsData)) ?? ListingLoads.none }
             let value = SyncedListing(id: r.id, gymId: r.gymId, kindId: r.kindId, brand: item?.brand,
                                       model: item?.model, loads: loads, quantity: r.quantity, notes: r.notes,
                                       photoFile: r.photoFile, remotePhotoPath: r.remotePhotoPath)
@@ -100,6 +102,15 @@ extension SyncStore {
         return files
     }
 
+    /// The pulled loads, except that a pulled listing without weights (what this phone pushed, or a phone that learned
+    /// nothing) leaves this phone's learned weights and their mark. Weights from the account are the user's list from
+    /// another phone, and loads this version can't read (nil) are the row's now: either way the mark goes.
+    private static func takeLoads(_ pulled: ListingLoads?, into r: GymListingRecord) {
+        if r.loadsFromWorkouts, let pulled, pulled.hasNoWeights { return }
+        r.loadsData = pulled.flatMap { try? JSONEncoder().encode($0) } ?? Data("{}".utf8)
+        r.loadsFromWorkouts = false
+    }
+
     /// Applies pulled listings; returns the local photo files of rows that were removed or whose picture changed.
     @discardableResult
     public func applyRemote(gymListings rows: [SyncRow<SyncedListing>]) throws -> [String] {
@@ -129,7 +140,7 @@ extension SyncStore {
             r.gymId = value.gymId
             r.itemId = item.id
             r.kindId = value.kindId
-            r.loadsData = value.loads.flatMap { try? JSONEncoder().encode($0) } ?? Data("{}".utf8)
+            Self.takeLoads(value.loads, into: r)
             r.statusRaw = (value.loads == nil ? ListingStatus.unsupported : ListingStatus.active).rawValue
             r.quantity = value.quantity
             r.notes = value.notes

@@ -143,22 +143,51 @@ public final class GymRepository {
         let record = GymListingRecord(gymId: new.gymId, itemId: item.id, kindId: new.kindId,
                                       loadsData: try JSONEncoder().encode(new.loads), quantity: new.quantity,
                                       notes: notes, photoFile: new.photoFile, now: now())
+        record.loadsFromWorkouts = new.loadsFromWorkouts
         context.insert(record)
         try context.save()
         return try listing(record)
     }
 
+    /// The user's own edit of a listing's loads, quantity and note. The loads are the user's list from now on, so
+    /// finished workouts no longer change them and suggestions fit to them.
     @discardableResult
     public func updateListing(_ id: UUID, loads: ListingLoads, quantity: Int, notes: String?) throws -> GymListing {
         guard let record = try listingRecord(id) else { throw GymDataError.invalidInput("Unknown listing.") }
         let notes = Self.clean(notes)
         try Self.validate(loads: loads, quantity: quantity, notes: notes)
         record.loadsData = try JSONEncoder().encode(loads)
+        record.loadsFromWorkouts = false // the screen saves the list it shows, so the list is confirmed
         record.quantity = quantity
         record.notes = notes
         touch(record)
         try context.save()
         return try listing(record)
+    }
+
+    /// Adds the weights (kg) a finished workout showed for this fixed-set listing (`GymEquipmentLearning`). A listing
+    /// already marked `loadsFromWorkouts` gains the new weights; one with no weights (what older builds learned, or a
+    /// synced listing another phone pushed without weights) is filled and marked. A list the user made, and a shared
+    /// listing, stay as they are. True when something was saved.
+    @discardableResult
+    public func learnWeights(_ kg: [Double], forListing id: UUID) throws -> Bool {
+        guard let record = try listingRecord(id), record.visibilityRaw != GymVisibility.shared.rawValue else { return false }
+        let current = (try? JSONDecoder().decode(ListingLoads.self, from: record.loadsData)) ?? ListingLoads.none
+        let merged: [Double]
+        if record.loadsFromWorkouts {
+            guard case let .fixed(weights) = current else { return false }
+            merged = LearnedWeights.merged(weights, with: kg)
+            guard merged != weights else { return false }
+        } else {
+            guard current.hasNoWeights else { return false }
+            merged = LearnedWeights.distinct(kg)
+            guard !merged.isEmpty else { return false }
+            record.loadsFromWorkouts = true
+        }
+        record.loadsData = try JSONEncoder().encode(ListingLoads.fixed(kg: merged))
+        touch(record)
+        try context.save()
+        return true
     }
 
     /// Points the listing at a new photo file and returns the one it had, so the caller can delete that file.
@@ -208,7 +237,7 @@ public final class GymRepository {
         guard let gym = try gymRecord(gymId) else { throw GymDataError.invalidInput("Unknown gym.") }
         let listings = try listings(gymId: gymId).map {
             InventoryListing(id: $0.id, kindId: $0.item.kindId, loads: $0.loads, confirmCount: $0.confirmCount,
-                             isOwn: $0.isOwn)
+                             isOwn: $0.isOwn, loadsFromWorkouts: $0.loadsFromWorkouts)
         }
         return GymInventory(gymName: gym.name, listings: listings)
     }
@@ -278,7 +307,7 @@ public final class GymRepository {
         return GymListing(
             id: record.id, gymId: record.gymId, item: Self.item(item),
             loads: (try? JSONDecoder().decode(ListingLoads.self, from: record.loadsData)) ?? ListingLoads.none,
-            quantity: record.quantity, notes: record.notes, photoFile: record.photoFile,
+            loadsFromWorkouts: record.loadsFromWorkouts, quantity: record.quantity, notes: record.notes, photoFile: record.photoFile,
             visibility: GymVisibility(rawValue: record.visibilityRaw) ?? .device,
             uploadState: UploadState(rawValue: record.uploadStateRaw) ?? .local, uploadError: record.uploadError,
             status: ListingStatus(rawValue: record.statusRaw) ?? .active, confirmCount: record.confirmCount,

@@ -153,6 +153,8 @@ deletion: private rows cascade with `owner_id`; public rows keep the data with `
 - `visibility`: `device` (never uploaded), `synced` (private rows on the server, only with sync on), `shared` (public).
 - `uploadState`: `local`, `queued`, `uploaded`, `failed(reason)`.
 - `remoteId` for rows that exist on the server.
+- `loadsFromWorkouts` (listings only, on this phone, never sent): the loads are the weights finished workouts showed, not
+  a list the user made (see "The gym's list grows from workouts").
 
 A Maps gym picked without an account is a local `Gym` with its `maps_place_id`. The app looks up the public gym by
 that id to download its shared listings. If the gym isn't on the server yet, it stays local until the first share,
@@ -247,6 +249,36 @@ For each exercise in today's routine, when a current gym is set:
   adapter leaves that item alone, so the next reload doesn't swap it back and an incomplete catalogue never blocks anyone.
 
 The routine and its progression history are never edited by the adapter.
+
+### The gym's list grows from workouts (`GymEquipmentLearning`)
+The app never swaps an exercise for the gym, so every exercise with a done set in a workout at a gym was done there and
+its equipment is there. When the workout is finished, the equipment it used is added to the gym's list as "This phone
+only" listings (generic item, no photo), and the summary says what was added. Nothing is learned from an exercise the
+owner swapped out or left with no set done, from bodyweight or unmapped exercises, or from a kind the app doesn't know.
+A listing the owner deleted comes back only when a later workout uses it.
+
+- A requirement group of one kind adds that kind. A group of alternatives ("flat or adjustable bench", "lat pulldown or
+  cable station") adds its first kind: the one the exercise is named for. A group the gym already covers with any of its
+  kinds adds nothing. (Owner, 2026-11-22: alternatives used to add nothing.)
+- Dumbbells and kettlebells get the weights of the done sets of the exercises whose weight they decide (the listing
+  `InventoryMatch.loadListingId` names, so a bench never gets weights). Weights within 0.25 kg of each other count once.
+  (Owner, 2026-11-22.)
+- Those weights are only "seen so far", so the listing is marked `loadsFromWorkouts`. While it is marked, suggestions and
+  Build workout are not fitted to it (no snapping, no "heaviest" cap), later workouts add their new weights to it, and the
+  listing screen says "From your workouts here. Add the rest so suggestions fit this gym."
+- When the owner saves the listing's loads, the mark is cleared: the list is theirs, it fits like any fixed set, and
+  workouts never change it again. A fixed set the owner made is never changed by workouts. A "This phone only" dumbbell or
+  kettlebell listing with no weights (what earlier builds learned) is treated as learned: it is filled and marked.
+- Once, after the update, the app goes through every finished workout that has a gym, oldest first, and learns from it the
+  same way, with no card. It doesn't run again (the owner's deleted listings stay deleted). It waits for the next start if
+  the equipment catalogue isn't usable. (Owner, 2026-11-22.)
+- A learned list stays on this phone. When the listing is shared or synced, it goes without weights, and a shared listing
+  then shows what the public listing holds (no weights, no mark). A list with weights that arrives from the account
+  replaces a learned one and clears the mark (it is the user's list from another phone); one without weights leaves it
+  alone. A synced listing with no weights on another phone learns that phone's own weights. Saving the listing, with any
+  change, makes the list the user's (owner, 2026-11-22).
+- When an exercise can use either of two fixed sets the gym has (dumbbells or kettlebells), the weights go to the listing
+  the app picks for that exercise; the workout can't say which was used.
 
 ### Build workout (`WorkoutBuilder`)
 Input: muscle chips, length, gym inventory, library, requirements, the last workouts, preferences, a seed.

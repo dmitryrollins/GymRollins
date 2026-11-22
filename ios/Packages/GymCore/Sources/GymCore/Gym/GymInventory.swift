@@ -10,6 +10,15 @@ public enum ListingLoads: Sendable, Hashable, Codable {
     case plates
     case none
 
+    /// A fixed set with no weights in it, or no loads at all: a listing that holds nothing a fit or a pull could keep.
+    public var hasNoWeights: Bool {
+        switch self {
+        case .none: true
+        case let .fixed(kg): kg.isEmpty
+        case .stack, .plates: false
+        }
+    }
+
     private enum CodingKeys: String, CodingKey { case type, maxKg, stepKg, kg }
 
     public init(from decoder: Decoder) throws {
@@ -47,17 +56,23 @@ public enum ListingLoads: Sendable, Hashable, Codable {
 public struct InventoryListing: Sendable, Hashable, Identifiable {
     public let id: UUID
     public let kindId: String
+    /// What the rules fit weights to. `.none` while `loadsFromWorkouts`: weights a workout showed are only the ones
+    /// seen so far, so a suggestion is neither snapped to them nor capped at the heaviest.
     public let loads: ListingLoads
     public let confirmCount: Int
     /// Added by this user; the matcher prefers these and the builder ranks them like one more confirmation.
     public let isOwn: Bool
+    /// The listing's loads come from finished workouts, not from the user (owner, 2026-11-22).
+    public let loadsFromWorkouts: Bool
 
-    public init(id: UUID, kindId: String, loads: ListingLoads = .none, confirmCount: Int = 0, isOwn: Bool = false) {
+    public init(id: UUID, kindId: String, loads: ListingLoads = .none, confirmCount: Int = 0, isOwn: Bool = false,
+                loadsFromWorkouts: Bool = false) {
         self.id = id
         self.kindId = kindId
-        self.loads = loads
+        self.loads = loadsFromWorkouts ? ListingLoads.none : loads
         self.confirmCount = confirmCount
         self.isOwn = isOwn
+        self.loadsFromWorkouts = loadsFromWorkouts
     }
 
     /// The builder's ranking score: confirmations, plus one for the user's own listing.

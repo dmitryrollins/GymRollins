@@ -228,7 +228,9 @@ public final class ShareOutbox {
         let gymId = try await serverId(of: gym, token: token)
         let photo = try await uploadedPhoto(of: listing, token: token)
         let item = try itemRecord(listing.itemId)
-        let loads = try JSONDecoder().decode(ListingLoads.self, from: listing.loadsData)
+        // Weights a workout showed are only the ones seen so far: the public listing goes without them.
+        let loads = listing.loadsFromWorkouts
+            ? ListingLoads.none : try JSONDecoder().decode(ListingLoads.self, from: listing.loadsData)
         let request = ShareRequest(listingId: listing.id, gymId: gymId, kindId: listing.kindId, brand: item?.brand,
                                    model: item?.model, loads: loads, quantity: listing.quantity,
                                    notes: listing.notes, photoPath: photo, forceNew: row.forceNew)
@@ -241,6 +243,10 @@ public final class ShareOutbox {
             listing.uploadError = nil
             listing.duplicatesData = nil
             listing.remoteId = id
+            if listing.loadsFromWorkouts { // the phone shows what the public listing holds
+                listing.loadsFromWorkouts = false
+                listing.loadsData = try JSONEncoder().encode(ListingLoads.none)
+            }
         case let .duplicates(found):
             listing.uploadStateRaw = UploadState.waitingForChoice.rawValue
             listing.duplicatesData = try JSONEncoder().encode(found)

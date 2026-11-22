@@ -73,6 +73,9 @@ public final class GymListingRecord {
     public var kindId: String
     /// `ListingLoads` as JSON, so a newer app's loads type can never break reading.
     public var loadsData: Data
+    /// The loads are the weights finished workouts showed (a gym's dumbbells, "seen so far"), not a list the user made.
+    /// Fitting ignores them; the user saving the loads clears this. Kept on this phone: it is never sent.
+    public var loadsFromWorkouts: Bool = false
     public var quantity: Int
     public var notes: String?
     public var photoFile: String?

@@ -91,11 +91,11 @@ final class AppEnvironment {
     private static let onboardingCompleteKey = "onboardingComplete"
 
     /// `makeSync` replaces the launch's sync backend (tests inject a coordinator over a fake transport); `healthStore`
-    /// replaces the launch's Health store (tests hold a `FakeHealthStore`).
+    /// replaces the launch's Health store (tests hold a `FakeHealthStore`); `equipmentCatalog` the bundled equipment catalogue.
     init(options: LaunchOptions = LaunchOptions(), defaults: UserDefaults = .standard,
          media: ExerciseMediaService? = nil, gymPhotos: GymPhotoStore? = nil,
          gymLocator: (any GymLocator)? = nil, gymPlaces: (any GymPlaceSearch)? = nil,
-         healthStore: (any HealthStore)? = nil,
+         equipmentCatalog: GymEquipmentCatalog? = nil, healthStore: (any HealthStore)? = nil,
          makeSync: (@MainActor (SyncStore, @escaping () -> Date) -> SyncCoordinator)? = nil) throws {
         if options.resetStore, let storeURL = options.diskStoreURL {
             Self.removeStoreFiles(at: storeURL)
@@ -115,6 +115,7 @@ final class AppEnvironment {
             defaults.removeObject(forKey: ExerciseRestStore.key) // UI tests share the simulator's defaults
             defaults.removeObject(forKey: PlanWeightsLbCleanup.flagKey) // a fresh store's plan hasn't been cleaned
             defaults.removeObject(forKey: Self.measuredBackfillKey) // nor have a fresh store's workouts been read (plan 40)
+            defaults.removeObject(forKey: Self.gymLearningCatchUpKey) // nor have a fresh store's workouts taught a gym
         }
         if options.seedSample {
             try SampleSeed.apply(to: context, now: now())
@@ -159,7 +160,7 @@ final class AppEnvironment {
         self.proposals = ProposalRepository(context: context, now: now)
         self.exercisePrefs = ExercisePreferenceRepository(context: context, now: now)
         self.gyms = GymRepository(context: context, now: now)
-        self.gymCatalog = Self.loadGymCatalog()
+        self.gymCatalog = equipmentCatalog ?? Self.loadGymCatalog()
         self.gymPhotos = gymPhotos ?? Self.makeGymPhotos(options: options)
         self.gymLocator = gymLocator ?? Self.makeGymLocator(options: options)
         self.gymPlaces = gymPlaces ?? Self.makeGymPlaces(options: options)
@@ -191,6 +192,7 @@ final class AppEnvironment {
                                       workouts: workouts, body: body, activities: activities, calories: calories,
                                       now: now)
         cleanUpPlanWeightsOnce()
+        catchUpGymLearningOnce()
         restoreSession()
         sync.autoApply = { [weak self] in try self?.autoApplyPulledProposals() ?? 0 }
         autoApplyProposals() // proposals pulled earlier, or seeded, while auto-apply is on

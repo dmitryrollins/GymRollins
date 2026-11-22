@@ -14,13 +14,14 @@ struct GymTestRig {
 
     var photos: GymPhotoStore { GymPhotoStore(directory: photoDir) }
 
-    static func make(makeSync: (@MainActor (SyncStore, @escaping () -> Date) -> SyncCoordinator)? = nil) throws -> GymTestRig {
+    static func make(gymCatalog: GymEquipmentCatalog? = nil,
+                     makeSync: (@MainActor (SyncStore, @escaping () -> Date) -> SyncCoordinator)? = nil) throws -> GymTestRig {
         let suite = "GymEnvironmentTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("gym-env-photos-\(UUID())")
         let options = LaunchOptions(arguments: ["-uiTesting", "-fixedNow", "2026-10-30T09:00:00Z"])
         let env = try AppEnvironment(options: options, defaults: defaults, gymPhotos: GymPhotoStore(directory: dir),
-                                     makeSync: makeSync)
+                                     equipmentCatalog: gymCatalog, makeSync: makeSync)
         return GymTestRig(env: env, defaults: defaults, photoDir: dir)
     }
 

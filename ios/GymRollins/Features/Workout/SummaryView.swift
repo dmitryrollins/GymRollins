@@ -146,12 +146,12 @@ struct SummaryView: View {
 
     // MARK: Gym equipment
 
-    /// "Added to Garage: Dumbbells, Cable station": the gym's list grew from what was done there.
+    /// "Added to Garage: Dumbbells (25 · 30 lb), Cable station": the gym's list grew from what was done there.
     private func learnedCard(_ learned: LearnedEquipment) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "dumbbell.fill").foregroundStyle(Theme.textSecondary).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Added to \(learned.gymName): \(learned.kindNames.joined(separator: ", "))")
+                Text("Added to \(learned.gymName): \(learned.label(unit: env.profile.unit))")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Text("From the exercises you did there. Change it on the gym's equipment screen.")

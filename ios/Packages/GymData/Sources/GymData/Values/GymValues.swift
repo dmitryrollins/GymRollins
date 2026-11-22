@@ -45,6 +45,8 @@ public struct GymListing: Sendable, Hashable, Identifiable {
     public let gymId: UUID
     public let item: EquipmentItem
     public let loads: ListingLoads
+    /// The loads are the weights finished workouts showed, not a list the user made (`GymRepository.learnWeights`).
+    public let loadsFromWorkouts: Bool
     public let quantity: Int
     public let notes: String?
     /// File name inside `GymPhotoStore`; nil when the user skipped the photo.
@@ -66,17 +68,19 @@ public struct NewListing: Sendable {
     public let brand: String?
     public let model: String?
     public let loads: ListingLoads
+    public let loadsFromWorkouts: Bool
     public let quantity: Int
     public let notes: String?
     public let photoFile: String?
 
     public init(gymId: UUID, kindId: String, brand: String? = nil, model: String? = nil, loads: ListingLoads = .none,
-                quantity: Int = 1, notes: String? = nil, photoFile: String? = nil) {
+                loadsFromWorkouts: Bool = false, quantity: Int = 1, notes: String? = nil, photoFile: String? = nil) {
         self.gymId = gymId
         self.kindId = kindId
         self.brand = brand
         self.model = model
         self.loads = loads
+        self.loadsFromWorkouts = loadsFromWorkouts
         self.quantity = quantity
         self.notes = notes
         self.photoFile = photoFile

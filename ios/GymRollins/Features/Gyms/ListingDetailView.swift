@@ -148,6 +148,7 @@ struct ListingDetailView: View {
     private var fields: some View {
         if let kind {
             ListingLoadsEditor(loads: $loads, kind: kind, unit: env.profile.unit, idPrefix: "listing")
+            loadsFromWorkoutsNote
         }
         Stepper(value: $quantity, in: 1...GymRepository.maxQuantity) {
             Text("Quantity: \(quantity)").foregroundStyle(Theme.textPrimary)
@@ -164,12 +165,24 @@ struct ListingDetailView: View {
             .accessibilityIdentifier("listing.notes")
     }
 
+    /// The weights came from finished workouts, so they are only the ones seen so far; saving the loads makes the list
+    /// the user's (suggestions then fit to it).
+    @ViewBuilder
+    private var loadsFromWorkoutsNote: some View {
+        if current.loadsFromWorkouts, current.visibility != .shared {
+            Text("From your workouts here. Add the rest and save, so suggestions fit this gym.")
+                .font(.footnote).foregroundStyle(Theme.textSecondary)
+                .accessibilityIdentifier("listing.loadsFromWorkouts")
+        }
+    }
+
     /// What a shared listing says, which this phone can't change.
     @ViewBuilder
     private var readOnlyFields: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let loads = ListingLoadsText.text(current.loads, unit: env.profile.unit) {
                 Text(loads).foregroundStyle(Theme.textPrimary).accessibilityIdentifier("listing.loads")
+                loadsFromWorkoutsNote
             }
             if current.quantity > 1 { Text("Quantity: \(current.quantity)").foregroundStyle(Theme.textSecondary) }
             if let notes = current.notes { Text(notes).foregroundStyle(Theme.textSecondary) }
