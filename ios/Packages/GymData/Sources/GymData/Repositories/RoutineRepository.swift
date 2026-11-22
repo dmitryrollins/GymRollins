@@ -52,13 +52,15 @@ public final class RoutineRepository {
             context.insert(new)
             return new
         }()
+        // Exercises before fields: proposal apply and undo stage this unsaved and may roll the context back, and the
+        // iOS 27 / macOS 27 SwiftData aborts that rollback when a field was written before the exercises were swapped.
+        r.exercises.forEach(context.delete)
+        r.exercises = routine.exercises.enumerated().map { RoutineExerciseRecord($1, position: $0) }
         r.name = routine.name
         r.emoji = routine.emoji
         r.policyRaw = routine.policy.rawValue
         r.paused = routine.paused
         r.deletedAt = nil
-        r.exercises.forEach(context.delete)
-        r.exercises = routine.exercises.enumerated().map { RoutineExerciseRecord($1, position: $0) }
         r.updatedAt = now()
         r.dirty = true
         try persist()

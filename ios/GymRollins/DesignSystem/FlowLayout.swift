@@ -13,9 +13,13 @@ struct FlowLayout: Layout {
         let height = lines.enumerated().reduce(CGFloat(0)) { total, line in
             total + (line.offset > 0 ? lineSpacing : 0) + (line.element.map { sizes[$0].height }.max() ?? 0)
         }
-        let width = lines.map { line in
-            line.map { sizes[$0].width }.reduce(0, +) + spacing * CGFloat(max(line.count - 1, 0))
-        }.max() ?? 0
+        // Typed in steps: as one expression it is too much for the Xcode 27 type checker.
+        let lineWidths: [CGFloat] = lines.map { (line: [Int]) -> CGFloat in
+            let items: CGFloat = line.map { sizes[$0].width }.reduce(0, +)
+            let gaps: CGFloat = spacing * CGFloat(max(line.count - 1, 0))
+            return items + gaps
+        }
+        let width: CGFloat = lineWidths.max() ?? 0
         return CGSize(width: proposal.width ?? width, height: height)
     }
 

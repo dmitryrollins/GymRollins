@@ -92,6 +92,27 @@ import Testing
         #expect(try container.mainContext.fetch(FetchDescriptor<RoutineExerciseRecord>()).count == 2)
     }
 
+    /// Proposal apply and undo stage routine edits unsaved and roll the context back when a later step fails. On the
+    /// iOS 27 / macOS 27 SwiftData, that rollback aborted the app when an upsert wrote the routine's fields before
+    /// swapping its exercises; it has to put back the saved routine instead.
+    @Test func unsavedRoutineUpsertRollsBackToTheSavedRoutine() throws {
+        let context = container.mainContext
+        let saved = Routine(name: "Push", exercises: [RoutineExercise(exerciseId: "0025", sets: 3, reps: 8)])
+        try RoutineRepository(context: context, now: clock).upsert(saved)
+        let staged = RoutineRepository(context: context, now: clock, autosave: false)
+        try staged.upsert(Routine(id: saved.id, name: "Push + Arms", emoji: "💪", exercises: [
+            RoutineExercise(exerciseId: "0314", sets: 3, reps: 10),
+        ]))
+
+        context.rollback()
+
+        #expect(!context.hasChanges)
+        let restored = try #require(try RoutineRepository(context: context, now: clock).all().first)
+        #expect(restored.name == "Push")
+        #expect(restored.emoji == nil)
+        #expect(restored.exercises.map(\.exerciseId) == ["0025"])
+    }
+
     @Test func routineDeleteIsTombstone() throws {
         let repo = RoutineRepository(context: container.mainContext, now: clock)
         let id = UUID()
