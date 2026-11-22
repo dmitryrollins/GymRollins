@@ -58,7 +58,7 @@ struct DayWorkoutEditView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: done).buttonStyle(.glassProminent).tint(Theme.primaryButtonFill)
+                    Button("Done", action: done).prominentGlass()
                         .accessibilityIdentifier("edit.done")
                 }
             }

@@ -59,7 +59,7 @@ struct AddWeighInSheet: View {
                 TextField("Weight", text: $valueText)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
-                    .font(Theme.display(56))
+                    .font(Theme.number(56))
                     .frame(width: 130)
                     .accessibilityIdentifier("weighin.value")
                 Text("kg").font(.title3).foregroundStyle(Theme.textSecondary)

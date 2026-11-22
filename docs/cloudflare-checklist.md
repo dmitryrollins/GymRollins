@@ -3,7 +3,7 @@
 Everything in this repo runs locally: `scripts/server-up.sh` serves the Worker on `http://127.0.0.1:8787` with a local
 D1 and R2, and the tests start throwaway Workers of their own. Nothing has been created on Cloudflare.
 
-This list is the owner's. **Every step below touches the Cloudflare account, the owner's phone or claude.ai, so each
+This list is the owner's. **Every step below touches the Cloudflare account, a phone or claude.ai, so each
 one runs only with the owner's approval, given for that step** (spec `docs/specs/2026-11-07-cloudflare-backend-design.md`,
 section 9). Work through it in order: the rate limits come before anything else.
 
@@ -268,7 +268,7 @@ Then the exercise photos (section 8).
 - [ ] D1 Time Travel is on by default (7 days on the free plan). Before the phone moves, note a bookmark:
       `npx wrangler d1 time-travel info gymrollins`.
 - [ ] To go back to a bookmark: `npx wrangler d1 time-travel restore gymrollins --bookmark=<bookmark>`.
-- [ ] After the move, export a copy outside the repo, because it holds the owner's personal data:
+- [ ] After the move, export a copy outside the repo, because it holds personal data:
       `npx wrangler d1 export gymrollins --remote --output <a folder outside the repo>/gymrollins-$(date +%Y%m%d).sql`.
 - [ ] Time Travel covers D1 only. R2 has no way back: a deleted photo is gone. The exercise photos can be uploaded
       again (section 8); private gym photos can't.
@@ -301,7 +301,7 @@ curl -s "https://api.gymrollins.com/photos/exercises/manifest.json" | head -c 30
 
 ## 10. Back up the phone, install, sign in, compare (owner's approval)
 
-Back up the app's data first: the phone holds the only live copy of the training data.
+Back up the app's data first: the phone may hold the only live copy of the training data.
 
 ```bash
 xcrun devicectl list devices                                   # the iPhone's identifier
@@ -342,7 +342,7 @@ sqlite3 "$READ/default.store" "select count(*) from ZWORKOUTRECORD"
       cd server && npx wrangler d1 execute gymrollins --remote --command "select (select count(*) from workouts) as workouts, (select count(*) from workout_entries) as entries, (select count(*) from workout_sets) as sets, (select count(*) from routines) as routines, (select count(*) from bodyweight) as body_weights"
       ```
 
-      The five numbers match. The rehearsal copy of 2026-11-08 held 148, 836, 2,685, 6 and 23.
+      The five numbers match.
 - [ ] If they don't match, change nothing on the phone. The backup and the Time Travel bookmark are the way back.
 
 ## 11. Connect Claude on claude.ai (owner's approval)
@@ -379,4 +379,4 @@ sqlite3 "$READ/default.store" "select count(*) from ZWORKOUTRECORD"
       delete the old backend's folder and `web/consent`.
 - [x] Once the phone has moved, `OldServerKeychain` can go, with its one exception in the old-backend guard
       (`scripts/check-old-backend.sh`, added by plan 30's last task), in a change of their own. During the move it deletes the old sign-in SDK's Keychain items.
-      Done on 2026-11-09, after the phone's move had verified (148 workouts on the server, as in the backup).
+      Done on 2026-11-09, after the phone's move had verified (the server's counts matched the backup).

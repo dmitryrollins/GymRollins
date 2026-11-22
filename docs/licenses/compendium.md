@@ -13,5 +13,5 @@
   `ios/GymRollins/Resources/met-values.json` (which also carries the citation and terms). Each part of a workout
   keeps its own activity's MET; activities are never averaged into a new MET value — the estimate is the sum of
   `MET × body weight (kg) × hours` per activity. The rules that pick an activity are in
-  `docs/plans/2026-09-30-plan-15-health.md`.
+  `ios/Packages/GymCore/Sources/GymCore/Calories/CalorieActivity.swift`.
 - The app cites the Compendium in the calorie info sheet and in Settings → Credits (`CREDITS.md`).

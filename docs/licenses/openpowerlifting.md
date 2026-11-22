@@ -13,7 +13,7 @@
   equipment, one best result per lifter per lift, sex × age group × 5 kg bodyweight bins, smoothed) in
   `ios/GymRollins/Resources/strength-standards.json` (a copy in `server/src/shared/` for the MCP
   server). No lifter names or individual rows are shipped. Filters and method: the JSON's `method` field and
-  `docs/plans/2026-09-29-plan-14-strength-levels.md`.
+  `scripts/build-strength-standards.mjs`.
 - Attribution (not required, requested by the project): Settings → Credits (`ios/GymRollins/Resources/CREDITS.md`)
   and the strength-level method sheet: "Strength standards derived from OpenPowerlifting data, public domain."
 

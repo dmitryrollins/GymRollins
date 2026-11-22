@@ -5,23 +5,24 @@ import GymData
 import Testing
 @testable import GymRollins
 
-/// Local-only dry run against the owner's real Fitbod export. Skipped unless `GYM_REAL_EXPORT` points at the CSV
-/// (from xcodebuild: `TEST_RUNNER_GYM_REAL_EXPORT=/path/to/WorkoutExport.csv scripts/ios-test.sh ...`).
+/// Local-only dry run against a real Fitbod export. Skipped unless `GYM_REAL_EXPORT` points at the CSV
+/// (from xcodebuild: `TEST_RUNNER_GYM_REAL_EXPORT=/path/to/export.csv scripts/ios-test.sh ...`).
 /// The CSV is never committed, and this test prints counts only — no names, dates, weights or notes.
 @MainActor
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["GYM_REAL_EXPORT"] != nil))
 struct RealExportImportTests {
-    @Test func ownerExportResolvesEveryNameAndImportsQuickly() async throws {
+    @Test func exportResolvesEveryNameAndImportsQuickly() async throws {
         let path = try #require(ProcessInfo.processInfo.environment["GYM_REAL_EXPORT"])
         let text = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
         let library = try ImportFixtures.library()
         let plan = ImportPlan.make(result: try FitbodImporter.parse(text), library: library,
                                    aliases: try FitbodAliases.load(), matcher: ExerciseMatcher(library: library.exercises))
         #expect(plan.needsChoice.isEmpty, "Unresolved names: \(plan.needsChoice.count)")
-        // The export's own workouts (`stats.workouts` counts a split one once); none of the owner's is past the caps.
-        #expect(plan.stats.workouts == 142)
+        // The export's own workouts (`stats.workouts` counts a split one once);
+        // a real export has some, and none past the caps.
+        #expect(plan.stats.workouts > 0)
         #expect(plan.stats.rowErrors.isEmpty)
-        #expect(plan.stats.warmupSets == 185)
+        #expect(plan.stats.warmupSets > 0)
 
         let container = try GymStore.container(inMemory: true)
         let workouts = WorkoutRepository(context: container.mainContext)

@@ -4,7 +4,7 @@ import SwiftData
 import Testing
 @testable import GymData
 
-/// Plan + one pending proposal (the shared fixture's knee-break shape, on real UUID routine ids).
+/// Plan + one pending proposal (the shared fixture's ankle-rest shape, on UUID routine ids).
 @MainActor
 struct ProposalFixture {
     let container: ModelContainer
@@ -34,9 +34,9 @@ struct ProposalFixture {
 
     func id(_ r: Routine) -> String { r.id.uuidString.lowercased() }
 
-    func kneeBreak(id: UUID = UUID(), extra: [PlanChange] = []) -> Proposal {
+    func ankleRest(id: UUID = UUID(), extra: [PlanChange] = []) -> Proposal {
         Proposal(id: id, createdAt: clock.now.addingTimeInterval(-3600),
-                 summary: "Knee break: replace Legs with upper work for 4 weeks", changes: [
+                 summary: "Ankle rest: replace Legs with upper work for 4 weeks", changes: [
                     PlanChange(id: "c1", type: .week, routineId: self.id(push), weekday: 6),
                     PlanChange(id: "c2", type: .weight, routineId: self.id(push), exerciseId: "bench", weightKg: 63.5),
                     PlanChange(id: "c3", type: .swapExercise, routineId: self.id(pull), exerciseId: "machine-shoulder-press",
@@ -55,7 +55,7 @@ struct ProposalFixture {
     init() throws { f = try ProposalFixture() }
 
     @Test func upsertRemoteStoresPendingOnceAndKeepsLocalResolution() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         try f.proposals.upsertRemote([p])
         #expect(try f.proposals.pending().map(\.id) == [p.id])
@@ -69,8 +69,8 @@ struct ProposalFixture {
     }
 
     @Test func pendingProposalsResolvedElsewhereAreDropped() throws {
-        let a = f.kneeBreak()
-        let b = f.kneeBreak()
+        let a = f.ankleRest()
+        let b = f.ankleRest()
         try f.proposals.upsertRemote([a, b])
         try f.proposals.upsertRemote([b]) // the full pending list no longer has `a`
         #expect(try f.proposals.pending().map(\.id) == [b.id])
@@ -79,7 +79,7 @@ struct ProposalFixture {
     /// Plan 32: the sender's name is stored with a new proposal, and one pulled before the app knew senders learns it
     /// from the next pull. A name, once stored, stays.
     @Test func theSendersNameIsKeptAndFilledInOnce() throws {
-        let unnamed = f.kneeBreak()
+        let unnamed = f.ankleRest()
         try f.proposals.upsertRemote([unnamed])
         #expect(try f.proposals.proposal(unnamed.id)?.fromAgent == nil)
 
@@ -102,7 +102,7 @@ struct ProposalFixture {
     }
 
     @Test func markAppliedStoresSnapshotAndGoesDirty() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         let before = try f.routines.planState()
         try f.proposals.markApplied(p.id, changeIds: ["c2"], total: 5, snapshot: before)
@@ -114,7 +114,7 @@ struct ProposalFixture {
     }
 
     @Test func undoOnlyWithinSevenDays() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         let before = try f.routines.planState()
         try f.proposals.markApplied(p.id, changeIds: ["c2"], total: 5, snapshot: before)
@@ -129,7 +129,7 @@ struct ProposalFixture {
     }
 
     @Test func markSyncedClearsDirtyOnlyForThePushedEdit() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         try f.proposals.dismiss(p.id)
         let row = try #require(try f.proposals.dirty().first)
@@ -143,8 +143,8 @@ struct ProposalFixture {
     }
 
     @Test func recentListsResolvedNewestFirst() throws {
-        let a = f.kneeBreak()
-        let b = f.kneeBreak()
+        let a = f.ankleRest()
+        let b = f.ankleRest()
         try f.proposals.upsertRemote([a, b])
         try f.proposals.dismiss(a.id)
         f.clock.advance()
@@ -170,13 +170,13 @@ struct ProposalFixture {
     @Test func aProfileSaveKeepsAddWorkouts() throws {
         try f.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true, propose: true,
                                          autoApply: false, logWorkouts: true)
-        try f.profiles.save(try f.profiles.load().withLimits("Knee", until: nil))
+        try f.profiles.save(try f.profiles.load().withLimits("Ankle", until: nil))
         let saved = try f.profiles.load()
-        #expect(saved.mcpLogWorkouts && saved.limits == "Knee")
+        #expect(saved.mcpLogWorkouts && saved.limits == "Ankle")
     }
 
     @Test func resetAllRemovesProposals() throws {
-        try f.proposals.upsertRemote([f.kneeBreak()])
+        try f.proposals.upsertRemote([f.ankleRest()])
         try SyncStore(context: f.context, defaults: UserDefaults(suiteName: "t-\(UUID())")!).resetAll()
         #expect(try f.proposals.pending().isEmpty)
     }
@@ -194,7 +194,7 @@ struct ProposalFixture {
     }
 
     @Test func applySubsetChangesPlanAndRecordsSnapshot() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         let before = try f.routines.planState()
         let outcome = try f.service.apply(p.id, changeIds: ["c1", "c2", "c5"])
@@ -215,7 +215,7 @@ struct ProposalFixture {
     /// Codex P1: apply is one transaction. A failure while resolving the proposal (after the plan changes were
     /// staged) leaves the plan exactly as it was, the proposal pending and nothing dirty to sync.
     @Test func applyFailingAtResolutionLeavesPlanAndProposalUntouched() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         let before = try f.routines.planState()
         let dirtyBefore = try SyncStore(context: f.context).dirtyRoutines().count
@@ -250,7 +250,7 @@ struct ProposalFixture {
     }
 
     @Test func undoFailingAfterRestoringLeavesTheAppliedPlan() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         try f.service.apply(p.id, changeIds: ["c1", "c2", "c5"])
         let applied = try f.routines.planState()
@@ -267,7 +267,7 @@ struct ProposalFixture {
     }
 
     @Test func invalidChangesAreSkippedWithTheirReasons() throws {
-        let p = f.kneeBreak(extra: [PlanChange(id: "c6", type: .addExercise, routineId: f.id(f.push),
+        let p = f.ankleRest(extra: [PlanChange(id: "c6", type: .addExercise, routineId: f.id(f.push),
                                                exerciseId: "unknown", sets: 3, reps: 10)])
         try f.proposals.upsertRemote([p])
         let review = try f.service.violations(for: p)
@@ -278,14 +278,14 @@ struct ProposalFixture {
     }
 
     @Test func applyingNothingValidThrowsAndChangesNothing() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         #expect(throws: ProposalError.nothingToApply) { try f.service.apply(p.id, changeIds: []) }
         #expect(try f.proposals.pending().count == 1)
     }
 
     @Test func dismissResolvesWithoutTouchingThePlan() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         let before = try f.routines.planState()
         try f.service.dismiss(p.id)
@@ -294,7 +294,7 @@ struct ProposalFixture {
     }
 
     @Test func autoApplyOnlyWhenTheProfileAllowsIt() throws {
-        let p = f.kneeBreak()
+        let p = f.ankleRest()
         try f.proposals.upsertRemote([p])
         #expect(try f.service.autoApplyPending() == 0)
         #expect(try f.proposals.pending().count == 1)
@@ -309,7 +309,7 @@ struct ProposalFixture {
 
     @Test func autoApplySkipsAndRecordsInvalidChanges() throws {
         try f.profiles.save(Profile(mcpAutoApply: true))
-        let p = f.kneeBreak(extra: [PlanChange(id: "c6", type: .sets, routineId: f.id(f.push), exerciseId: "dips", sets: 3)])
+        let p = f.ankleRest(extra: [PlanChange(id: "c6", type: .sets, routineId: f.id(f.push), exerciseId: "dips", sets: 3)])
         try f.proposals.upsertRemote([p])
         #expect(try f.service.autoApplyPending() == 1)
         let stored = try #require(try f.proposals.proposal(p.id))

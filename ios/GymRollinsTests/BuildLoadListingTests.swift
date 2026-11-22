@@ -85,6 +85,6 @@ import Testing
                                    listings: ["x": id])
         let decoded = try JSONDecoder().decode(TodayPlan.self, from: JSONEncoder().encode(plan))
         #expect(decoded.builtListings == ["x": id])
-        #expect(plan.adapted(by: nil).builtListings == ["x": id])
+        #expect(plan.withRest(90).builtListings == ["x": id], "and today's edits keep them")
     }
 }

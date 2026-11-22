@@ -62,10 +62,9 @@ import Testing
         #expect(shown.rows[0].note == nil)
     }
 
-    @Test func thePlanCarriesNoWeightAndPinsItsItems() throws {
+    @Test func thePlanCarriesNoWeight() throws {
         let plan = try preview(benchLink).plan
         #expect(plan.exercises.map(\.weightKg) == [nil])
-        #expect(plan.gymPinned == Set(plan.exercises.map(\.id)))
         #expect(plan.day == day)
     }
 
@@ -237,7 +236,7 @@ import Testing
     }
 
     @Test func theSheetCarriesThePersonsLimits() throws {
-        #expect(try preview(benchLink, profile: Profile(limits: "Bad left knee")).limits == "Bad left knee")
+        #expect(try preview(benchLink, profile: Profile(limits: "Sore ankle")).limits == "Sore ankle")
         #expect(try preview(benchLink).limits == nil)
     }
 

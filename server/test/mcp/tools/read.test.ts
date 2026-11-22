@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import { assert, assertEquals, assertRejects } from '../../assert.ts'
-import type { WorkoutRow } from '../../../src/mcp/db.ts'
+import type { WorkoutMeasurementRow, WorkoutRow } from '../../../src/mcp/db.ts'
 import { FakeDb, loadOwnerData } from '../fake-db.ts'
 import {
   getBodyweight,
@@ -30,8 +30,8 @@ async function ctx(mutate?: (d: Awaited<ReturnType<typeof loadOwnerData>>) => vo
 test('get_profile: unit, goal with display, limits, permissions', async () => {
   const out = json(await getProfile(await ctx()))
   assertEquals(out.unit, 'lb')
-  assertEquals(out.goal, { weight_kg: 85, weight_display: '187.4 lb (85 kg)', date: '2026-12-31' })
-  assertEquals(out.limits, 'left knee: no deep knee flexion')
+  assertEquals(out.goal, { weight_kg: 80, weight_display: '176.4 lb (80 kg)', date: '2026-12-15' })
+  assertEquals(out.limits, 'ankle sprain: no leg loading')
   assertEquals(out.limits_until, null)
   assertEquals(out.training_days, 4)
   assertEquals(out.permissions, {
@@ -50,12 +50,12 @@ test("get_profile: the injury note's end date", async () => {
   const out = json(
     await getProfile(
       await ctx((d) => {
-        d.profile!.limits_until = '2026-10-26'
+        d.profile!.limits_until = '2026-11-09'
       }),
     ),
   )
-  assertEquals(out.limits, 'left knee: no deep knee flexion')
-  assertEquals(out.limits_until, '2026-10-26')
+  assertEquals(out.limits, 'ankle sprain: no leg loading')
+  assertEquals(out.limits_until, '2026-11-09')
 })
 
 test('get_profile: a date without a note is hidden', async () => {
@@ -63,7 +63,7 @@ test('get_profile: a date without a note is hidden', async () => {
     await getProfile(
       await ctx((d) => {
         d.profile!.limits = ''
-        d.profile!.limits_until = '2026-10-26'
+        d.profile!.limits_until = '2026-11-09'
       }),
     ),
   )
@@ -86,8 +86,8 @@ test('get_plan: routines with exercise names, weights in kg + display, week Monâ
   assertEquals(push.paused, false)
   assertEquals(push.exercises[0].id, '0025')
   assertEquals(push.exercises[0].name, 'barbell bench press')
-  assertEquals(push.exercises[0].weight_kg, 58.97)
-  assertEquals(push.exercises[0].weight_display, '130 lb (59 kg)')
+  assertEquals(push.exercises[0].weight_kg, 68.04)
+  assertEquals(push.exercises[0].weight_display, '150 lb (68 kg)')
   assertEquals(push.exercises[0].reps, 10)
   assertEquals(push.exercises[0].reps_min, 8)
   assertEquals(out.routines[1].paused, true)
@@ -119,7 +119,7 @@ test('list_workouts: summaries newest first with working sets, volume and top se
   assertEquals(first.duration_min, 60) // 65 min minus 5 paused
   assertEquals(first.top_sets[0].exercise, 'barbell bench press')
   assertEquals(first.top_sets[0].reps, 6)
-  assertEquals(first.top_sets[0].weight_kg, 58.97)
+  assertEquals(first.top_sets[0].weight_kg, 68.04)
 })
 
 test('list_workouts: a date-only `until` includes that whole day', async () => {
@@ -142,7 +142,7 @@ test('get_workout: entries with sets, warm-ups flagged', async () => {
   assertEquals(out.entries[0].sets.length, 4)
   assertEquals(out.entries[0].sets[0].warmup, true)
   assertEquals(out.entries[0].sets[1].warmup, undefined)
-  assertEquals(out.entries[0].sets[1].weight_display, '130 lb (59 kg)')
+  assertEquals(out.entries[0].sets[1].weight_display, '150 lb (68 kg)')
 })
 
 test('get_workout: logged effort (rir / rpe) is on the set; absent effort is omitted', async () => {
@@ -173,14 +173,14 @@ function ctx0() {
   }
 }
 
-test('get_exercise_history by name "bench": the 2 bench sessions newest first, e1RM 78.6 then 70.8', async () => {
+test('get_exercise_history by name "bench": the 2 bench sessions newest first, e1RM 90.7 then 81.6', async () => {
   const out = json(await getExerciseHistory(await ctx(), { exercise: 'bench' }))
   assertEquals(out.exercise, { id: '0025', name: 'barbell bench press' })
   assertEquals(out.sessions.length, 2)
-  assertEquals(out.sessions.map((s: { e1rm_kg: number }) => s.e1rm_kg), [78.6, 70.8])
+  assertEquals(out.sessions.map((s: { e1rm_kg: number }) => s.e1rm_kg), [90.7, 81.6])
   assertEquals(out.sessions.map((s: { date: string }) => s.date), ['2026-09-19', '2026-09-12'])
   assertEquals(out.sessions[1].working_sets.length, 3) // warm-up excluded
-  assertEquals(out.sessions[0].top_set.weight_display, '130 lb (59 kg)')
+  assertEquals(out.sessions[0].top_set.weight_display, '150 lb (68 kg)')
 })
 
 test('get_exercise_history: working sets carry logged rir / rpe, and nothing when not logged', async () => {
@@ -233,14 +233,14 @@ test('get_training_summary weeks 4: sessions and volume per calendar week', asyn
     '2026-09-21',
   ])
   assertEquals(out.weekly.map((w: { sessions: number }) => w.sessions), [0, 1, 2, 0])
-  assertEquals(out.weekly[1].volume_kg, 1061.5)
-  assertEquals(out.weekly[2].volume_kg, 3209.1)
+  assertEquals(out.weekly[1].volume_kg, 1224.7)
+  assertEquals(out.weekly[2].volume_kg, 3481.2)
   assertEquals(out.weekly[2].sets_by_body_part, { chest: 3, back: 3 })
   assertEquals(out.prs.length, 1)
   assertEquals(out.prs[0].exercise_id, '0025')
-  assertEquals(out.prs[0].e1rm_kg, 78.6)
+  assertEquals(out.prs[0].e1rm_kg, 90.7)
   assertEquals(out.stalls, [])
-  assertEquals(out.bodyweight.latest.weight_kg, 81.6)
+  assertEquals(out.bodyweight.latest.weight_kg, 76.6)
   assertEquals(out.bodyweight.slope_kg_per_week, 0.3)
 })
 
@@ -279,8 +279,8 @@ test('get_bodyweight: entries and slope', async () => {
   assertEquals(out.entries.length, 2)
   assertEquals(out.entries[1], {
     date: '2026-09-24',
-    weight_kg: 81.6,
-    weight_display: '179.9 lb (81.6 kg)',
+    weight_kg: 76.6,
+    weight_display: '168.9 lb (76.6 kg)',
     body_fat_pct: 15,
   })
   assertEquals(out.slope_kg_per_week_4w, 0.3)
@@ -326,4 +326,39 @@ test('get_workout: a set shows its stored pound number', async () => {
   const out = json(await getWorkout(c, { id: 'b0b0b0b0-0000-4000-8000-000000000001' }))
   assertEquals(out.entries[0].sets[0].weight_lb, 45)
   assertEquals(out.entries[0].sets[0].weight_display, '45 lb (20.4 kg)')
+})
+
+/** What the Apple Watch recorded during the Saturday workout of owner.json, and an effort rated on Tuesday's. */
+const MEASURED: WorkoutMeasurementRow[] = [
+  {
+    workout_id: 'b0b0b0b0-0000-4000-8000-000000000003', recorded_by: 'watch', duration_s: 3500, active_kcal: 412,
+    total_kcal: 489, avg_hr: 128, max_hr: 162, post_hr: 124, effort: 6, effort_estimated: false,
+  },
+  {
+    workout_id: 'b0b0b0b0-0000-4000-8000-000000000002', recorded_by: null, duration_s: null, active_kcal: null,
+    total_kcal: null, avg_hr: null, max_hr: null, post_hr: null, effort: 7, effort_estimated: false,
+  },
+]
+
+test('get_workout: what Apple Health measured, in one line; a workout with nothing measured as before', async () => {
+  const c = await ctx((d) => (d.measurements = MEASURED))
+  const out = json(await getWorkout(c, { id: 'b0b0b0b0-0000-4000-8000-000000000003' }))
+  assertEquals(
+    out.measured,
+    'Apple Watch: 58 min, 412 active kcal (489 total), heart rate avg 128 / max 162, 124 BPM 2 min after, ' +
+      'effort 6/10 Moderate',
+  )
+  assertEquals(json(await getWorkout(c, { id: 'b0b0b0b0-0000-4000-8000-000000000002' })).measured, 'Effort 7/10 Hard')
+  const plain = json(await getWorkout(c, { id: 'b0b0b0b0-0000-4000-8000-000000000001' }))
+  assertEquals(plain, json(await getWorkout(await ctx(), { id: 'b0b0b0b0-0000-4000-8000-000000000001' })))
+  assertEquals('measured' in plain || 'withheld' in plain, false)
+})
+
+test('list_workouts: active kcal, average heart rate and effort on the lines that have them', async () => {
+  const out = json(await listWorkouts(await ctx((d) => (d.measurements = MEASURED)), {}))
+  const [saturday, tuesday, first] = out.workouts
+  assertEquals([saturday.active_kcal, saturday.avg_hr, saturday.effort], [412, 128, '6/10 Moderate'])
+  assertEquals([tuesday.active_kcal, tuesday.avg_hr, tuesday.effort], [undefined, undefined, '7/10 Hard'])
+  assertEquals('active_kcal' in first || 'avg_hr' in first || 'effort' in first, false)
+  assertEquals(out.withheld, undefined)
 })

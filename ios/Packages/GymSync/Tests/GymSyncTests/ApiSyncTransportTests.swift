@@ -47,7 +47,7 @@ import Testing
     }
 
     @Test func theProfileAckIsTheProfilesFixedId() async throws {
-        let accountId = "b73f3bdc-18c8-400a-b492-4db321b4baee"
+        let accountId = "00000000-0000-4000-8000-0000000000b7"
         let server = StubServer { _ in
             .json(200, #"{"acks": [{"id": "\#(accountId)", "updated_at": "2026-11-08T10:00:00.123000Z"}]}"#)
         }

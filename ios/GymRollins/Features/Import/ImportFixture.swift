@@ -9,7 +9,7 @@ import GymCore
 ///
 /// Each mirrors `GymRollinsTests/Fixtures/<source>-sample.csv` (`ImportFixtureSyncTests` fails if they drift), so
 /// the same expectations apply either way. The Fitbod one has 3 workouts, a warm-up set, a cardio row, an
-/// unresolved exercise and one bad row; the others are described in `docs/plans/2026-09-29-plan-13-importers.md`.
+/// unresolved exercise and one bad row; the others are a few rows each in the same spirit.
 enum ImportFixture {
     static func fileName(for source: ImportSource) -> String {
         "\(source == .fitNotes ? "fitnotes" : source.rawValue)-sample.csv"

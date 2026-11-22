@@ -35,37 +35,37 @@ type Data = Awaited<ReturnType<typeof loadOwnerData>>
 
 async function ctx(mutate?: (d: Data) => void) {
   const data = await loadOwnerData()
-  data.profile = { ...data.profile!, sex: 'male', birth_year: 1991 }
+  data.profile = { ...data.profile!, sex: 'male', birth_year: 1996 }
   data.workouts = [
-    session('b1', '2026-09-19T17:00:00Z', '0025', 130 * LB, 10), // e1RM 78.6 kg
-    session('s1', '2026-07-01T17:00:00Z', '0043', 225 * LB, 5),
+    session('b1', '2026-09-19T17:00:00Z', '0025', 150 * LB, 10), // e1RM 90.72 kg
+    session('s1', '2026-07-01T17:00:00Z', '0043', 245 * LB, 5),
     session('old', '2025-09-01T17:00:00Z', '0032', 250, 1), // > 365 days: ignored
   ]
   data.bodyweight = [
-    { id: 'bw1', measured_at: '2026-09-01T07:00:00Z', w_kg: 82, bf_pct: null },
-    { id: 'bw2', measured_at: '2026-09-25T07:00:00Z', w_kg: 81, bf_pct: null },
+    { id: 'bw1', measured_at: '2026-09-01T07:00:00Z', w_kg: 77, bf_pct: null },
+    { id: 'bw2', measured_at: '2026-09-25T07:00:00Z', w_kg: 76, bf_pct: null },
     { id: 'future', measured_at: '2026-10-01T07:00:00Z', w_kg: 90, bf_pct: null },
   ]
   mutate?.(data)
   return { db: new FakeDb(data), now: NOW }
 }
 
-test('get_strength_levels: owner bench is Novice with the gap to Intermediate; knee note pauses leg lifts', async () => {
+test('get_strength_levels: sample bench is Intermediate with the gap to Advanced; ankle note pauses leg lifts', async () => {
   const out = json(await getStrengthLevels(await ctx(), {}))
   assertEquals(out.missing, [])
-  assertEquals(out.bodyweight.weight_kg, 81) // latest past weigh-in, not the future one
+  assertEquals(out.bodyweight.weight_kg, 76) // latest past weigh-in, not the future one
   const byLift = Object.fromEntries(out.lifts.map((l: { lift: string }) => [l.lift, l]))
   const bench = byLift.bench
-  assertEquals(bench.level, 'novice')
-  assertEquals(bench.e1rm.weight_kg, 78.62)
+  assertEquals(bench.level, 'intermediate')
+  assertEquals(bench.e1rm.weight_kg, 90.72)
   assertEquals(bench.e1rm.date, '2026-09-19')
-  assertEquals(bench.next_level, 'intermediate')
-  assertEquals(bench.to_next_level, '+15 lb')
-  assertEquals(bench.percentile_text, '1%')
+  assertEquals(bench.next_level, 'advanced')
+  assertEquals(bench.to_next_level, '+32.5 lb')
+  assertEquals(bench.percentile_text, '7%')
   assertEquals(bench.paused_by_injury_note, false)
   assertEquals(Object.keys(bench.thresholds), ['novice', 'intermediate', 'advanced', 'elite'])
   assert(bench.next_level_target.weight_display.endsWith('kg)'), bench.next_level_target.weight_display)
-  assertEquals(byLift.squat.paused_by_injury_note, true) // owner.json limits: knee
+  assertEquals(byLift.squat.paused_by_injury_note, true) // owner.json limits: ankle sprain, no leg loading
   assertEquals(byLift.squat.level !== null, true)
   assertEquals(byLift.deadlift.e1rm, null)
   assertEquals(byLift.deadlift.level, null)
@@ -75,7 +75,7 @@ test('get_strength_levels: owner bench is Novice with the gap to Intermediate; k
 test('get_strength_levels: never returns the owner sex or birth year', async () => {
   const r = await getStrengthLevels(await ctx(), {})
   const text = r.content[0].text
-  assert(!text.includes('1991'), text)
+  assert(!text.includes('1996'), text)
   assert(!/"sex"|"birth_year"|"age"/.test(text), text)
 })
 
@@ -94,16 +94,16 @@ test('get_strength_levels: missing sex/birth year and weigh-in are listed, e1RMs
   assert(out.missing[1].startsWith('bodyweight'))
   assertEquals(out.bodyweight, null)
   const bench = out.lifts.find((l: { lift: string }) => l.lift === 'bench')
-  assertEquals(bench.e1rm.weight_kg, 78.62)
+  assertEquals(bench.e1rm.weight_kg, 90.72)
   assertEquals(bench.level, null)
 })
 
 test('get_strength_levels: kg unit, and no profile at all means missing inputs in lb', async () => {
   const kg = json(await getStrengthLevels(await ctx((d) => (d.profile = { ...d.profile!, unit: 'kg' })), {}))
-  assertEquals(kg.lifts[1].to_next_level, '+7 kg')
+  assertEquals(kg.lifts[1].to_next_level, '+14.5 kg')
   const none = json(await getStrengthLevels(await ctx((d) => (d.profile = null)), {}))
   assert(none.missing[0].startsWith('sex_and_birth_year'))
-  assert(none.bodyweight.weight_display.startsWith('178.6 lb'))
+  assert(none.bodyweight.weight_display.startsWith('167.6 lb'))
 })
 
 test('get_strength_levels: a date-only weigh-in logged today (stored at 12:00 UTC) counts at once', async () => {

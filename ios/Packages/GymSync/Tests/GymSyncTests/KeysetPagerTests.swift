@@ -102,9 +102,9 @@ private actor PagedTable {
 
     @Test func keyRowsAlsoComeFromTheAPIsRowsObject() throws {
         let page = Data(
-            (#"{"rows": [{"user_id": "b73f3bdc-18c8-400a-b492-4db321b4baee", "#
+            (#"{"rows": [{"user_id": "00000000-0000-4000-8000-0000000000b7", "#
                 + #""updated_at": "2026-11-08T10:00:00.123000Z"}]}"#).utf8)
-        #expect(try PageKey.decode(page, tiebreak: "user_id").first?.tiebreak == "b73f3bdc-18c8-400a-b492-4db321b4baee")
+        #expect(try PageKey.decode(page, tiebreak: "user_id").first?.tiebreak == "00000000-0000-4000-8000-0000000000b7")
         #expect(try PageKey.decode(Data(#"{"rows": []}"#.utf8), tiebreak: "id").isEmpty)
     }
 }

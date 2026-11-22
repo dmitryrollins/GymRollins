@@ -1,6 +1,6 @@
 # Apple Health activities: workouts from other apps and daily activity
 
-Approved by the owner on 2026-11-16. Builds on Apple Health (plan 15, `docs/plans/2026-09-30-plan-15-health.md`), the
+Approved by the owner on 2026-11-16. Builds on Apple Health (plan 15), the
 watch app (plan 17), the Cloudflare backend (`docs/specs/2026-11-07-cloudflare-backend-design.md`) and AI agents
 (`docs/specs/2026-11-09-ai-agents-design.md`).
 
@@ -29,7 +29,7 @@ plan around it (no heavy legs the day after a long run).
 | 12 | Import window: **2 years** on first import (as for weight). Afterwards: workouts incrementally (anchored query, deletions included); days **re-read for the last 7 days** on every sync, written only when a value changed. | Watch data lands late; a week covers it without re-pushing old days. |
 | 13 | No background delivery: imports run when the app launches or comes to the foreground, after enabling, and after a cloud pull (as today). | YAGNI; the agents read the server, which is as fresh as the last app open. |
 | 14 | Not in this plan: heart-rate graphs, routes and maps, sleep, editing outside workouts, adding them to the JSON/CSV exports, writing anything new to Health. | Scope. |
-| 15 | Average power, average cadence and total calories are kept too (owner's choice 2026-11-16, after the Fitness summary of a LifeFitness ride); shown only when the workout has them. | An Indoor Cycle recorded by the Apple Watch with GymKit shows Avg. Power 138 W, Avg. Cadence 62 RPM, Active 40 kcal and Total 48 kcal in Apple Fitness. |
+| 15 | Average power, average cadence and total calories are kept too (decided 2026-11-16, after the Fitness summary of an indoor ride); shown only when the workout has them. | An Indoor Cycle recorded by the Apple Watch with GymKit shows Avg. Power 150 W, Avg. Cadence 70 RPM, Active 62 kcal and Total 75 kcal in Apple Fitness. |
 
 ## 3. Data
 
@@ -102,9 +102,9 @@ name, start after end, duration) is outside is skipped. A day outside a limit is
 - **Purpose string.** `NSHealthShareUsageDescription` says the app reads workouts from other apps, steps, activity
   and heart rate, besides weight and body fat.
 
-### 4.1 Look: Apple Fitness style (owner's request, 2026-11-16)
+### 4.1 Look: Apple Fitness style (owner's decision, 2026-11-16)
 
-The owner sent the Fitness app's Indoor Cycle summary and asked for the activity screens to look like it. The
+The activity screens are asked to look like the Fitness app's Indoor Cycle summary. The
 screens it covers are:
 
 - the outside-workout card in the Log;
@@ -146,9 +146,9 @@ small units.
 everywhere), W, RPM, BPM, MIN and HRS. Time is H:MM:SS ("0:05:08"). Steps have no unit; the label says it.
 
 For VoiceOver, each cell is one element whose label is the metric and whose value speaks the unit in full, for
-example "Distance, 2.26 kilometres", "Active Calories, 40 kilocalories" or "Workout Time, 5 minutes 8 seconds".
+example "Distance, 3.4 kilometres", "Active Calories, 62 kilocalories" or "Workout Time, 7 minutes 30 seconds".
 Today's row and a day of the 7-day sheet read as one element ("Activity", "Steps 4,210, Move 210 kilocalories, …"),
-and the Log card as one button ("Cycling, 2.26 kilometres, Thu 24 Sep, 5 min, LifeFitness"). Values use text styles
+and the Log card as one button ("Cycling, 3.4 kilometres, Thu 24 Sep, 7 min, Indoor Bike"). Values use text styles
 (`.system(.title, design: .rounded, weight: .semibold)` and smaller) so they scale with Dynamic Type. At accessibility
 sizes the 2-column grids become 1 column.
 
@@ -158,9 +158,9 @@ sizes the 2-column grids become 1 column.
 - Behind the header sits the kind's symbol, very large and faint (8 % white), like the big bike in Fitness. It has a
   fixed size: it's decoration.
 - The title is the kind's name in large bold SF. Titles come from the kind, and the kind has no indoor/outdoor field,
-  so the owner's ride reads "Cycling", not Fitness' "Indoor Cycle".
+  so the sample ride reads "Cycling", not Fitness' "Indoor Cycle".
 - Under it is the headline metric in `workout` colour: the distance, else active kcal, else the time.
-- Under that, in secondary text, is the date and time range ("November 15, 2026, 16:02–16:07", in the phone's date
+- Under that, in secondary text, is the date and time range ("September 24, 2026, 16:15–16:22", in the phone's date
   and time format), and under it the source, after `applewatch` when it was recorded on a Watch. Fitness puts both on
   one line; here the source has its own, and the watch is its own element read "Apple Watch": inside the text, the
   symbol's spoken name made the line's label longer than the line, and the accessibility audit flagged it as clipped.
@@ -181,7 +181,7 @@ sizes the 2-column grids become 1 column.
 - On the left, the kind icon in `workout` colour inside a 44 pt circle filled with `workoutFill`.
 - Next to it, the kind's name in subheadline secondary, and under it the headline metric (title2 rounded, `workout`
   colour).
-- On the right, the date ("Thu 24 Sep"), with the duration and source under it ("5 min · LifeFitness"), in footnote
+- On the right, the date ("Thu 24 Sep"), with the duration and source under it ("7 min · Indoor Bike"), in footnote
   secondary. At accessibility sizes they go under the metric.
 - It's still read-only and opens the detail. It no longer has the outline: the round icon sets it apart from a
   GymRollins workout.
@@ -199,10 +199,10 @@ it becomes the 2-column grid, and 1 column at accessibility sizes. It hides as b
 **Permission card.** It uses the round icon (`applewatch` in `workout` colour) instead of the plain label icon. Its
 text and buttons stay the same.
 
-**UI-test data.** `-fakeHealth` also seeds an Indoor Cycle shaped like the owner's ride (synthetic: LifeFitness,
-recorded on a Watch, 5 min 8 s, 2,260 m, 40 of 48 kcal, 138 W, 62 rpm, avg 128 and max 151 bpm) on the Thursday
+**UI-test data.** `-fakeHealth` also seeds an Indoor Cycle shaped like a typical indoor ride (synthetic: Indoor Bike,
+recorded on a Watch, 7 min 30 s, 3,400 m, 62 of 75 kcal, 150 W, 70 rpm, avg 124 and max 146 bpm) on the Thursday
 before `-fixedNow`. It's added in the app (`AppEnvironment.uiTestRide`), next to GymHealth's seed. Under 10 minutes, it
-doesn't count toward the streak or the weekly goal; the week's measured kcal becomes 220.
+doesn't count toward the streak or the weekly goal; the week's measured kcal becomes 242.
 
 ## 5. Server
 

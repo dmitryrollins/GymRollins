@@ -5,7 +5,7 @@ import XCTest
 final class TodayScopeUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    private func summary(_ app: XCUIApplication) -> XCUIElement { app.staticTexts["today.summary"].firstMatch }
+    private func summary(_ app: XCUIApplication) -> XCUIElement { app.descendants(matching: .any)["today.workout"].firstMatch }
 
     private func waitForSummary(_ app: XCUIApplication, containing text: String,
                                 file: StaticString = #filePath, line: UInt = #line) {
@@ -19,13 +19,13 @@ final class TodayScopeUITests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Only '")).firstMatch
     }
 
-    /// Waits for the day's title between the swipes: two quick swipes once stayed on Sunday.
+    /// Waits for the day shown (the workout pill's value) between the swipes: two quick swipes once stayed on Sunday.
     private func waitForTitle(_ app: XCUIApplication, _ text: String,
                               file: StaticString = #filePath, line: UInt = #line) {
-        let title = app.staticTexts["today.title"].firstMatch
-        let predicate = NSPredicate(format: "label == %@", text)
-        let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: title)], timeout: 5)
-        XCTAssertEqual(result, .completed, "title was '\(title.label)'", file: file, line: line)
+        let pill = app.descendants(matching: .any)["today.workout"].firstMatch
+        let predicate = NSPredicate(format: "value == %@", text)
+        let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: pill)], timeout: 5)
+        XCTAssertEqual(result, .completed, "day was '\(pill.value ?? "")'", file: file, line: line)
     }
 
     private func openMonday(_ app: XCUIApplication) {
@@ -47,7 +47,7 @@ final class TodayScopeUITests: XCTestCase {
     func testSwitchingALaterDayOnlyChangesThatDate() {
         let app = XCUIApplication.launchReady { $0.buttons["today.start"] }
         openMonday(app)
-        app.buttons["today.switch"].tap()
+        app.buttons["today.workout"].tap()
         let pull = app.buttons["today.switch.routine.Pull + Shoulders + Triceps"]
         XCTAssertTrue(pull.waitForExistence(timeout: 5))
         pull.tap()
@@ -64,7 +64,7 @@ final class TodayScopeUITests: XCTestCase {
     func testSwitchingEveryWeekChangesTheWeek() {
         let app = XCUIApplication.launchReady { $0.buttons["today.start"] }
         openMonday(app)
-        app.buttons["today.switch"].tap()
+        app.buttons["today.workout"].tap()
         let pull = app.buttons["today.switch.routine.Pull + Shoulders + Triceps"]
         XCTAssertTrue(pull.waitForExistence(timeout: 5))
         pull.tap()
@@ -105,7 +105,7 @@ final class TodayScopeUITests: XCTestCase {
     func testSaveChangesOnASwitchedLaterDayKeepsTheSwitch() {
         let app = XCUIApplication.launchReady { $0.buttons["today.start"] }
         openMonday(app)
-        app.buttons["today.switch"].tap()
+        app.buttons["today.workout"].tap()
         let pull = app.buttons["today.switch.routine.Pull + Shoulders + Triceps"]
         XCTAssertTrue(pull.waitForExistence(timeout: 5))
         pull.tap()

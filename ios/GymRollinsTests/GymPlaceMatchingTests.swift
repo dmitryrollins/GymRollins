@@ -44,6 +44,33 @@ import Testing
         #expect(!GymPlaceMatching.nameHasEveryWord(of: "  ", "Harbor Yards Fitness"))
     }
 
+    @Test func aSearchWithAGymWordFindsAGymNamedWithoutIt() {
+        let complex = place("complex", "Harbor Yards")
+        let found = GymPlaceMatching.searchResults(query: "harbor yards gym", fitnessCenters: [],
+                                                   others: [complex, harborCafe, harborFitness])
+        #expect(found == [harborFitness])
+    }
+
+    @Test func aSearchOfOnlyGymWordsStillNeedsThemInTheName() {
+        #expect(!GymPlaceMatching.nameMatches(query: "gym", "Harbor Yards Fitness"))
+        #expect(GymPlaceMatching.nameMatches(query: "fitness", "Harbor Yards Fitness"))
+    }
+
+    /// Maps answers a chain's name with its best-known club, so the search also asks within the area; with a
+    /// location the named places come nearest first, here the chain's branch 300 m away before its flagship 8 km off.
+    @Test func withALocationNamedPlacesComeNearestFirst() {
+        let here = GymCoordinate(latitude: 40.68, longitude: -73.97)
+        func at(_ id: String, _ name: String, north meters: Double) -> GymPlace {
+            GymPlace(placeId: id, name: name, address: nil,
+                     coordinate: GymCoordinate(latitude: here.latitude + meters / 111_320, longitude: here.longitude))
+        }
+        let flagship = at("flagship", "Harbor Yards Fitness", north: 8_000)
+        let branch = at("branch", "Harbor Yards Fitness - Eastside", north: 300)
+        let found = GymPlaceMatching.searchResults(query: "harbor yards fitness", fitnessCenters: [ironWorks],
+                                                   others: [branch, flagship], near: here)
+        #expect(found == [branch, flagship, ironWorks])
+    }
+
     @Test func blankSearchKeepsOnlyFitnessCenters() {
         let found = GymPlaceMatching.searchResults(query: " ", fitnessCenters: [ironWorks], others: [harborFitness])
         #expect(found == [ironWorks])

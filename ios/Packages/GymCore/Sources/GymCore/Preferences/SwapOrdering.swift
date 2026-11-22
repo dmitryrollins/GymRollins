@@ -1,6 +1,6 @@
 /// The order Replace/Swap candidates are offered in: exercises with the same target, then with the same body part
 /// (the current exercise excluded), each group by how often it was logged and then by name. `ExerciseRanking` applies
-/// the owner's preferences on top. Shared by the Swap sheet (`ExerciseSuggestions.swap`) and `GymAdapter`.
+/// the owner's preferences on top. Used by the Swap sheet (`ExerciseSuggestions.swap`).
 public enum SwapOrdering {
     public static func candidates(for current: Exercise, in exercises: [Exercise],
                                   loggedCounts: [String: Int]) -> [Exercise] {

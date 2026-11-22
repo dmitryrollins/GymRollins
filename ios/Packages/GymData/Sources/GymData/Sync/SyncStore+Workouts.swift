@@ -78,6 +78,8 @@ extension SyncStore {
         r.volumeKg = row.value.volumeKg
         r.recordsData = row.value.records.isEmpty ? nil : try JSONEncoder().encode(row.value.records)
         r.deletedAt = row.deletedAt
+        // Deleted on another device: what Health measured during it goes too (plan 40).
+        if row.deletedAt != nil { try MeasurementRecord.remove(for: w.id, in: context) }
         try r.setEntries(w.entries, in: context)
         markClean(r, clientUpdatedAt: row.clientUpdatedAt, serverUpdatedAt: row.serverUpdatedAt)
     }

@@ -3,43 +3,12 @@ import GymCore
 import Testing
 @testable import GymRollins
 
-/// A gym swap changes what today's session does, never what the plan says: it must not reach a saved routine, must
-/// come back after a reload, and must not lose the sets typed on a swapped exercise.
+/// The app never swaps exercises for the gym (owner, 2026-11-18): only the owner does, with Replace. Builds before
+/// that stored swapped plans (`gymSwaps`: item id → the planned item, `exercises` holding the replacement); those
+/// plans come back as planned, without the sets typed on the replacement.
 @Suite struct TodayPlanGymTests {
     private let day = "2026-10-30"
     private let now = ISO8601DateFormatter().date(from: "2026-10-30T09:00:00Z")!
-
-    // MARK: Fixtures
-
-    private static let kinds = ["barbell", "dumbbells", "kettlebells", "cable-station"].map {
-        EquipmentKind(id: $0, name: $0, category: .freeWeight, load: .none)
-    }
-    private static let exercises = [
-        press("bb", "barbell"), press("db", "dumbbell"), press("kb", "kettlebell"), press("cable", "cable"),
-        Exercise(id: "free", name: "Free", bodyPart: "back", equipment: "body weight", target: "lats"),
-    ]
-    private static let requirements = ExerciseRequirements(groups: [
-        "bb": [["barbell"]], "db": [["dumbbells"]], "kb": [["kettlebells"]], "cable": [["cable-station"]],
-    ])
-
-    private static func press(_ id: String, _ equipment: String) -> Exercise {
-        Exercise(id: id, name: id, bodyPart: "chest", equipment: equipment, target: "pectorals", secondary: ["triceps"])
-    }
-
-    /// A gym with just these kinds of equipment.
-    private func adapter(_ kindIds: String...) -> GymAdapter {
-        let listings = kindIds.enumerated().map { index, kind in
-            InventoryListing(id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!,
-                             kindId: kind)
-        }
-        let matcher = InventoryMatcher(requirements: Self.requirements, kinds: Self.kinds,
-                                       inventory: GymInventory(gymName: "Gym", listings: listings))
-        return GymAdapter(matcher: matcher, exercises: Self.exercises)
-    }
-
-    private var dumbbellGym: GymAdapter { adapter("dumbbells") }
-    private var kettlebellGym: GymAdapter { adapter("kettlebells") }
-    private var fullGym: GymAdapter { adapter("barbell", "dumbbells", "kettlebells", "cable-station") }
 
     private let routine = Routine(name: "Push", exercises: [
         RoutineExercise(exerciseId: "bb", sets: 3, reps: 8, weightKg: 60),
@@ -51,220 +20,94 @@ import Testing
     }
 
     private let typed = [WorkoutSet(weightKg: 30, reps: 12)]
+    private let typedFree = [WorkoutSet(weightKg: 0, reps: 15)]
 
     private var benchId: UUID { routine.exercises[0].id }
     private var freeId: UUID { routine.exercises[1].id }
 
-    private func store() throws -> (TodayPlanStore, () -> Void) {
+    /// What an older build stored at a dumbbell gym: the barbell press shown as a dumbbell press (same item id), sets
+    /// typed on both items, the free item pinned.
+    private func legacyJSON() throws -> Data {
+        let replacement = RoutineExercise(id: benchId, exerciseId: "db", sets: 3, reps: 8)
+        let shown = TodayPlan(day: day, kind: .scheduled, base: routine,
+                              exercises: [replacement, routine.exercises[1]], edited: true,
+                              setOverrides: [benchId: typed, freeId: typedFree], unsavedSetEdits: [freeId])
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(shown)) as? [String: Any])
+        json["gymSwaps"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode([benchId: routine.exercises[0]]))
+        json["gymPinned"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Set([freeId])))
+        return try JSONSerialization.data(withJSONObject: json)
+    }
+
+    private func defaults() throws -> (UserDefaults, () -> Void) {
         let suite = "today-plan-gym-\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
-        return (TodayPlanStore(defaults: defaults), { defaults.removePersistentDomain(forName: suite) })
+        return (defaults, { defaults.removePersistentDomain(forName: suite) })
     }
 
-    // MARK: A swap is not an edit
+    // MARK: Plans stored by older builds
 
-    @Test func adaptedSwapsWithoutMarkingEdited() {
-        let plan = scheduled().adapted(by: dumbbellGym)
-        #expect(plan.exercises.map(\.exerciseId) == ["db", "free"])
-        #expect(!plan.edited)
-        #expect(!plan.canSaveToRoutine)
-        #expect(!plan.hasTodayChanges)
-        #expect(plan.plannedExercises == routine.exercises)
-        #expect(plan.gymSwaps[benchId]?.exerciseId == "bb")
-        #expect(plan.exercisesMatchBase)
+    @Test func aLegacySwappedPlanDecodesToThePlannedExercises() throws {
+        let decoded = try JSONDecoder().decode(TodayPlan.self, from: legacyJSON())
+        #expect(decoded.exercises == routine.exercises)
+        #expect(decoded.exercisesMatchBase)
+        #expect(decoded.sets(for: benchId) == nil, "the sets were typed on the replacement")
+        #expect(decoded.sets(for: freeId) == typedFree)
+        #expect(decoded.unsavedSetEdits == [freeId])
+        #expect(decoded.routineToStart?.exercises.map(\.exerciseId) == ["bb", "free"])
+        let saved = try #require(decoded.routineWithEdits(at: now))
+        #expect(saved.exercises[0] == routine.exercises[0], "the planned exercise is written untouched")
     }
 
-    @Test func routineToStartUsesTheSwap() throws {
-        let plan = scheduled().adapted(by: dumbbellGym)
-        let start = try #require(plan.routineToStart)
-        #expect(start.id == routine.id)
-        #expect(start.exercises.map(\.exerciseId) == ["db", "free"])
-        #expect(start.exercises[0].id == benchId)
-        let workout = Workout(startedAt: now, routineId: start.id, name: start.name,
-                              entries: start.exercises.map { WorkoutEntry(exerciseId: $0.exerciseId, sets: []) })
-        #expect(plan.entryId(for: benchId, in: workout) == workout.entries[0].id)
+    @Test func aLegacyPlanReEncodesWithoutGymKeys() throws {
+        let decoded = try JSONDecoder().decode(TodayPlan.self, from: legacyJSON())
+        let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded)) as? [String: Any])
+        #expect(json["gymSwaps"] == nil)
+        #expect(json["gymPinned"] == nil)
+        #expect(try JSONDecoder().decode(TodayPlan.self, from: JSONEncoder().encode(decoded)) == decoded)
     }
 
-    @Test func adaptedIsIdempotent() {
-        let once = scheduled().adapted(by: dumbbellGym)
-        #expect(once.adapted(by: dumbbellGym) == once)
-    }
-
-    @Test func adaptedWithNoGymUndoesEverySwap() {
-        let plan = scheduled().adapted(by: dumbbellGym).adapted(by: nil)
-        #expect(plan == scheduled())
-    }
-
-    @Test func changingGymsReDecides() {
-        let atA = scheduled().adapted(by: dumbbellGym)
-        #expect(atA.exercises[0].exerciseId == "db")
-        let atB = atA.adapted(by: fullGym)
-        #expect(atB.exercises[0].exerciseId == "bb")
-        #expect(atB.gymSwaps.isEmpty)
-        let atC = atB.adapted(by: kettlebellGym)
-        #expect(atC.exercises[0].exerciseId == "kb")
-        #expect(atC.gymSwaps[benchId]?.exerciseId == "bb")
-    }
-
-    // MARK: Saving
-
-    @Test func saveChangesNeverWritesASwap() throws {
-        let plan = scheduled().adapted(by: dumbbellGym)
-            .adding([RoutineExercise(exerciseId: "cable", sets: 3, reps: 12)])
-        #expect(plan.canSaveToRoutine)
-        let saved = try #require(plan.routineWithEdits(at: now))
-        #expect(saved.exercises.map(\.exerciseId) == ["bb", "free", "cable"])
-        #expect(saved.exercises[0] == routine.exercises[0], "sets and weight of the planned exercise are untouched")
-    }
-
-    @Test func savedToRoutineKeepsTheSwapShowing() throws {
-        let plan = scheduled().adapted(by: dumbbellGym)
-            .adding([RoutineExercise(exerciseId: "cable", sets: 3, reps: 12)])
-        let after = plan.savedToRoutine(at: now)
-        #expect(!after.edited)
-        #expect(after.exercises.map(\.exerciseId) == ["db", "free", "cable"])
-        #expect(after.base?.exercises.map(\.exerciseId) == ["bb", "free", "cable"])
-        #expect(after.gymSwaps[benchId]?.exerciseId == "bb")
-        #expect(after.exercisesMatchBase)
-    }
-
-    @Test func setEditsOnASwappedItemAreNotSavedToTheRoutine() throws {
-        let plan = scheduled().adapted(by: dumbbellGym).editingSets(benchId, typed)
-        #expect(!plan.canSaveToRoutine)
-        #expect(!plan.edited)
-        #expect(plan.hasTodayChanges, "the typed sets must survive a relaunch")
-        #expect(plan.sets(for: benchId) == typed)
-        #expect(plan.routineToStart?.exercises.map(\.exerciseId) == ["db", "free"])
-        #expect(plan.routineWithEdits(at: now) == nil)
-    }
-
-    // MARK: Reloads
-
-    @Test func setEditsOnASwappedItemSurviveReload() throws {
-        let (store, cleanup) = try store()
+    /// Through the store, as Today reads it (UserDefaults `gymrollins.todayPlan`).
+    @Test func todaysStoredLegacyPlanLoadsAsPlanned() throws {
+        let (defaults, cleanup) = try defaults()
         defer { cleanup() }
-        let plan = scheduled().adapted(by: dumbbellGym).editingSets(benchId, typed)
-        store.save(plan)
-
-        let loaded = try #require(store.load(day: day, routines: [routine], scheduled: routine.id))
-        let again = loaded.adapted(by: dumbbellGym)
-        #expect(again.exercises.map(\.exerciseId) == ["db", "free"])
-        #expect(again.sets(for: benchId) == typed)
-        #expect(!again.edited)
-        #expect(!again.canSaveToRoutine)
+        defaults.set(try legacyJSON(), forKey: TodayPlanStore.key)
+        let loaded = try #require(TodayPlanStore(defaults: defaults).load(day: day, routines: [routine],
+                                                                         scheduled: routine.id))
+        #expect(loaded.exercises == routine.exercises)
+        #expect(loaded.sets(for: benchId) == nil)
     }
 
-    @Test func setEditsAreDroppedWhenTheExerciseChanges() {
-        let plan = scheduled().adapted(by: dumbbellGym).editingSets(benchId, typed)
-        let elsewhere = plan.adapted(by: kettlebellGym)
-        #expect(elsewhere.exercises[0].exerciseId == "kb")
-        #expect(elsewhere.sets(for: benchId) == nil)
+    /// A later day's change, stored by an older build (`LaterDayPlanStore`, yyyy-MM-dd → plan).
+    @Test func aLaterDaysStoredLegacyPlanLoadsAsPlanned() throws {
+        let (defaults, cleanup) = try defaults()
+        defer { cleanup() }
+        let plan = try JSONSerialization.jsonObject(with: legacyJSON())
+        defaults.set(try JSONSerialization.data(withJSONObject: [day: plan]), forKey: LaterDayPlanStore.key)
+        let loaded = try #require(LaterDayPlanStore(defaults: defaults).plan(day: day, routines: [routine],
+                                                                             scheduled: routine.id))
+        #expect(loaded.exercises == routine.exercises)
+        #expect(loaded.sets(for: benchId) == nil)
+        #expect(loaded.sets(for: freeId) == typedFree)
     }
 
-    @Test func rebasedKeepsSwapsOfItemsStillThere() {
-        let swapped = scheduled().adapted(by: dumbbellGym).editingSets(benchId, typed)
-        let changedRoutine = routine.with(exercises: [
-            RoutineExercise(id: benchId, exerciseId: "bb", sets: 5, reps: 5), routine.exercises[1],
-        ])
-        let rebased = swapped.rebased(on: changedRoutine)
-        #expect(rebased.exercises.map(\.exerciseId) == ["db", "free"])
-        #expect(rebased.gymSwaps[benchId]?.sets == 5, "the planned item is the routine's current version")
-        #expect(rebased.sets(for: benchId) == typed)
-        #expect(!rebased.edited)
-        #expect(rebased.adapted(by: dumbbellGym).exercises[0].exerciseId == "db")
-    }
-
-    @Test func rebasedDropsSwapsWhenThePlannedExerciseChanged() {
-        let swapped = scheduled().adapted(by: dumbbellGym).editingSets(benchId, typed)
-        let changedRoutine = routine.with(exercises: [
-            RoutineExercise(id: benchId, exerciseId: "cable", sets: 3, reps: 8), routine.exercises[1],
-        ])
-        let rebased = swapped.rebased(on: changedRoutine)
-        #expect(rebased.exercises.map(\.exerciseId) == ["cable", "free"])
-        #expect(rebased.gymSwaps.isEmpty)
-        #expect(rebased.sets(for: benchId) == nil)
+    @Test func plansStoredBeforeSetEditingOrBuiltWorkoutsStillDecode() throws {
+        let old = scheduled().editingSets(benchId, typed)
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
+        json["builtName"] = nil
+        json["builtListings"] = nil
+        let decoded = try JSONDecoder().decode(TodayPlan.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(decoded == old)
     }
 
     // MARK: Hand choices
 
-    @Test func replacingPinsAndClearsTheSwap() {
-        let replaced = scheduled().adapted(by: dumbbellGym)
-            .replacing(benchId, with: RoutineExercise(id: benchId, exerciseId: "cable", sets: 3, reps: 12))
-        #expect(replaced.gymSwaps.isEmpty)
-        #expect(replaced.gymPinned == [benchId])
-        #expect(replaced.edited)
-        #expect(replaced.adapted(by: dumbbellGym).exercises[0].exerciseId == "cable", "a pinned item is not swapped")
-    }
-
-    /// Today's Replace sheet passes a brand new item with its own id.
-    @Test func replacingWithANewItemPinsTheNewItem() {
-        let item = RoutineExercise(exerciseId: "cable", sets: 3, reps: 12)
-        let replaced = scheduled().adapted(by: dumbbellGym).replacing(benchId, with: item)
-        #expect(replaced.gymPinned == [item.id])
-        #expect(replaced.adapted(by: dumbbellGym).exercises[0].exerciseId == "cable", "a pinned item is not swapped")
-    }
-
     /// Save Changes would write the same exercise twice: the app addresses plan exercises by id.
-    @Test func replacingOntoASwappedItemsPlannedExerciseIsRefused() {
-        let swapped = scheduled().adapted(by: dumbbellGym)
-        let refused = swapped.replacing(freeId, with: RoutineExercise(exerciseId: "bb", sets: 3, reps: 8))
-        #expect(refused == swapped)
-        let shown = swapped.replacing(freeId, with: RoutineExercise(exerciseId: "db", sets: 3, reps: 8))
-        #expect(shown == swapped, "nor onto the exercise it shows")
-    }
-
-    @Test func rebasedDropsASwapWhoseReplacementIsNowInTheRoutine() {
-        let swapped = scheduled().adapted(by: dumbbellGym).editingSets(benchId, typed)
-        let extended = routine.with(exercises: routine.exercises + [RoutineExercise(exerciseId: "db", sets: 3, reps: 8)])
-        let rebased = swapped.rebased(on: extended)
-        #expect(rebased.exercises.map(\.exerciseId) == ["bb", "free", "db"], "never the same exercise twice")
-        #expect(rebased.gymSwaps.isEmpty)
-        #expect(rebased.sets(for: benchId) == nil, "the typed sets belonged to the replacement")
-    }
-
-    @Test func addingPins() {
-        let item = RoutineExercise(exerciseId: "cable", sets: 3, reps: 12)
-        let added = scheduled().adapted(by: dumbbellGym).adding([item])
-        #expect(added.gymPinned == [item.id])
-        #expect(added.gymSwaps[benchId]?.exerciseId == "bb", "other swaps stay")
-    }
-
-    @Test func deletingClearsBoth() {
-        let pinned = scheduled().adapted(by: dumbbellGym)
-            .replacing(freeId, with: RoutineExercise(id: freeId, exerciseId: "cable", sets: 3, reps: 8))
-        let gone = pinned.deleting(freeId).deleting(benchId)
-        #expect(gone.gymPinned.isEmpty)
-        #expect(gone.gymSwaps.isEmpty)
-        #expect(gone.exercises.isEmpty)
-    }
-
-    @Test func pinnedSurvivesReload() throws {
-        let (store, cleanup) = try store()
-        defer { cleanup() }
-        let pinned = scheduled().adapted(by: dumbbellGym).usingPlanned(benchId)
-        store.save(pinned)
-        let loaded = try #require(store.load(day: day, routines: [routine], scheduled: routine.id))
-        #expect(loaded.gymPinned == [benchId])
-        let again = loaded.adapted(by: dumbbellGym)
-        #expect(again.exercises.map(\.exerciseId) == ["bb", "free"])
-        #expect(again.gymSwaps.isEmpty)
-    }
-
-    @Test func pinnedPlannedExerciseIsStoredEvenThoughNothingIsEdited() {
-        let pinned = scheduled().adapted(by: dumbbellGym).usingPlanned(benchId)
-        #expect(!pinned.edited)
-        #expect(pinned.hasTodayChanges)
-    }
-
-    @Test func usePlannedAnywayRestoresAndPins() {
-        let plan = scheduled().adapted(by: dumbbellGym).editingSets(benchId, typed)
-        let used = plan.usingPlanned(benchId)
-        #expect(used.exercises == routine.exercises)
-        #expect(used.exercisesMatchBase)
-        #expect(!used.edited)
-        #expect(used.gymPinned == [benchId])
-        #expect(used.gymSwaps.isEmpty)
-        #expect(used.sets(for: benchId) == nil, "the sets belonged to the replacement")
+    @Test func replacingOntoAnExerciseAlreadyInThePlanIsRefused() {
+        let plan = scheduled()
+        #expect(plan.replacing(freeId, with: RoutineExercise(exerciseId: "bb", sets: 3, reps: 8)) == plan)
+        let replaced = plan.replacing(benchId, with: RoutineExercise(id: benchId, exerciseId: "db", sets: 3, reps: 8))
+        #expect(replaced.exercises.map(\.exerciseId) == ["db", "free"])
+        #expect(replaced.edited)
     }
 
     // MARK: Built workouts
@@ -279,25 +122,5 @@ import Testing
         #expect(plan.hasTodayChanges)
         let decoded = try JSONDecoder().decode(TodayPlan.self, from: JSONEncoder().encode(plan))
         #expect(decoded == plan)
-        #expect(plan.adapted(by: dumbbellGym).exercises[0].exerciseId == "db")
-    }
-
-    @Test func plansStoredBeforeThisStillDecode() throws {
-        let old = scheduled().editingSets(benchId, typed)
-        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
-        json["gymSwaps"] = nil
-        json["gymPinned"] = nil
-        json["builtName"] = nil
-        let decoded = try JSONDecoder().decode(TodayPlan.self, from: JSONSerialization.data(withJSONObject: json))
-        #expect(decoded.gymSwaps.isEmpty)
-        #expect(decoded.gymPinned.isEmpty)
-        #expect(decoded == old)
-    }
-
-    @Test func switchingRoutinesDropsSwapsAndPins() {
-        let other = Routine(name: "Pull", exercises: [RoutineExercise(exerciseId: "free", sets: 3, reps: 8)])
-        let switched = scheduled().adapted(by: dumbbellGym).usingPlanned(benchId).switched(to: other)
-        #expect(switched.gymSwaps.isEmpty)
-        #expect(switched.gymPinned.isEmpty)
     }
 }

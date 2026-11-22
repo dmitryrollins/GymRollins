@@ -13,8 +13,8 @@ This is the first version: same workout, separate phones, no live connection. Li
 
 ### Acceptance criteria
 
-1. **Own weights.** A has benched 140 lb and B has benched 95 lb. A shares a workout with bench press. B's sheet and Today
-   show B's suggested weight, worked out from B's history. Nothing in the link or on B's phone says 140.
+1. **Own weights.** A has benched 160 lb and B has benched 95 lb. A shares a workout with bench press. B's sheet and Today
+   show B's suggested weight, worked out from B's history. Nothing in the link or on B's phone says 160.
 2. **New exercise.** B has never done an exercise in the link. B's sheet says "Set on first set", and the first set starts
    with no weight.
 3. **No account, no signal.** Both phones are signed out and in airplane mode. A shows a QR code. B opens the link, taps

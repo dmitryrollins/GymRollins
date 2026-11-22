@@ -41,14 +41,18 @@ struct FakeGymPlaceSearch: GymPlaceSearch {
     }
 }
 
-/// Each call asks Maps twice at once: for fitness centers, and for every place, since some gyms have no category.
+/// Each call asks Maps at once for fitness centers and for every place, since some gyms have no category. A search
+/// with the phone's location also asks for every place inside the 20 km area only: with the area as a mere hint,
+/// Maps answers a chain's name with its best-known club alone, even across town, and leaves out the one nearby.
 struct MapKitGymPlaceSearch: GymPlaceSearch {
     private static let fitnessCenters = MKPointOfInterestFilter(including: [.fitnessCenter])
 
     func search(query: String, near: GymCoordinate?) async throws -> [GymPlace] {
         async let tagged = Self.searchPlaces(query, near: near, fitnessCentersOnly: true)
         async let others = Self.searchPlaces(query, near: near, fitnessCentersOnly: false)
-        return try await GymPlaceMatching.searchResults(query: query, fitnessCenters: tagged, others: others)
+        async let inArea = Self.searchPlaces(query, near: near, fitnessCentersOnly: false, areaOnly: true)
+        return try await GymPlaceMatching.searchResults(query: query, fitnessCenters: tagged, others: inArea + others,
+                                                        near: near)
     }
 
     func nearby(_ coordinate: GymCoordinate) async throws -> [GymPlace] {
@@ -57,9 +61,11 @@ struct MapKitGymPlaceSearch: GymPlaceSearch {
         return try await GymPlaceMatching.nearbyResults(fitnessCenters: tagged, others: others)
     }
 
-    /// Requests are built here, on the main actor: MapKit's request and filter types aren't Sendable.
-    private static func searchPlaces(_ query: String, near: GymCoordinate?,
-                                     fitnessCentersOnly: Bool) async throws -> [GymPlace] {
+    /// Requests are built here, on the main actor: MapKit's request and filter types aren't Sendable. `areaOnly`
+    /// keeps results inside the area around `near` (nothing to ask without a location).
+    private static func searchPlaces(_ query: String, near: GymCoordinate?, fitnessCentersOnly: Bool,
+                                     areaOnly: Bool = false) async throws -> [GymPlace] {
+        if areaOnly && near == nil { return [] }
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.pointOfInterestFilter = fitnessCentersOnly ? fitnessCenters : nil
@@ -68,6 +74,7 @@ struct MapKitGymPlaceSearch: GymPlaceSearch {
             request.region = MKCoordinateRegion(
                 center: CLLocationCoordinate2D(latitude: near.latitude, longitude: near.longitude),
                 latitudinalMeters: 20_000, longitudinalMeters: 20_000)
+            if areaOnly { request.regionPriority = .required }
         }
         return try await run(request)
     }

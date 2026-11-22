@@ -67,8 +67,8 @@ import Testing
         #expect(!env.health.isEnabled) // a UI-test launch always starts with Health off
         #expect(await env.health.enable())
         let imported = try env.body.entries(since: nil).filter { $0.source == .appleHealth }
-        #expect(imported.map(\.weightKg) == [81.0, 81.3, 81.6])
-        #expect(imported.first { $0.weightKg == 81.3 }?.bodyFatPct == 15.2)
+        #expect(imported.map(\.weightKg) == [76.0, 76.3, 76.6])
+        #expect(imported.first { $0.weightKg == 76.3 }?.bodyFatPct == 15.2)
     }
 
     @Test func finishingAWorkoutSavesItToHealth() async throws {

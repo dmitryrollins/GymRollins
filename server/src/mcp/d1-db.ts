@@ -34,6 +34,7 @@ import type {
   ScheduleRow,
   SetRow,
   WorkoutAdded,
+  WorkoutMeasurementRow,
   WorkoutQuery,
   WorkoutRow,
   WorkoutSpanRow,
@@ -413,6 +414,20 @@ export class D1Db implements Db {
         `AND ended_at IS NOT NULL${after} ORDER BY started_at, id LIMIT ?2`,
       ...binds,
     )
+  }
+
+  /** Through the primary key (user_id, workout_id): at most one row per id, and list_workouts asks for 60 at most. */
+  async workoutMeasurements(workoutIds: string[]): Promise<WorkoutMeasurementRow[]> {
+    const { workouts, activity } = await this.allowed()
+    if (!workouts || !activity || workoutIds.length === 0) return []
+    const rows = await this.all(
+      'SELECT workout_id, recorded_by, duration_s, active_kcal, total_kcal, avg_hr, max_hr, post_hr, effort, ' +
+        'effort_estimated FROM workout_measurements WHERE user_id = ?1 AND deleted_at IS NULL AND ' +
+        inJson('workout_id', '?2'),
+      this.userId,
+      ids(workoutIds.map((id) => id.toLowerCase())),
+    )
+    return rows.map((r) => ({ ...r, effort_estimated: bool(r.effort_estimated) }) as WorkoutMeasurementRow)
   }
 
   async muscleTargets(): Promise<MuscleTargetRow[]> {

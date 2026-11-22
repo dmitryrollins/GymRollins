@@ -54,8 +54,8 @@ export const CONFIG = Object.freeze({
    * Level thresholds, anchored on the raw-competitor curve at the lifter's sex, age group and bodyweight:
    * `fraction x (the competitors' p<percentile> lift)`. Competitors out-lift the general gym population — their
    * p1 is already a solid intermediate gym lifter — so the two lower thresholds sit BELOW the competitor
-   * distribution, as fractions of its median. At 81 kg, 23-39, male this gives ~0.73/1.05/1.38/1.87 x bodyweight
-   * on the bench (see docs/plans/2026-09-29-plan-14-strength-levels.md, "Level mapping").
+   * distribution, as fractions of its median. At about 80 kg, 23-39, male this gives ~0.73/1.05/1.38/1.87 x bodyweight
+   * on the bench (plan 14, "Level mapping").
    */
   levels: [
     { id: 'beginner', name: 'Beginner', percentile: 50, fraction: 0 },

@@ -77,6 +77,21 @@ async function ownRoutines(ctx: PushContext, rows: readonly Record<string, unkno
 }
 
 /**
+ * A workout's measured numbers must be for one of the caller's workouts (the foreign key only says the workout exists).
+ * Deleted workouts count: a phone that hasn't pulled the deletion yet may still save its numbers, and nothing reads
+ * the numbers of a deleted workout.
+ */
+async function ownWorkouts(ctx: PushContext, rows: readonly Record<string, unknown>[]) {
+  const ids = [...new Set(rows.map((r) => r.workout_id as string))]
+  const { results } = await ctx.env.DB.prepare(
+    'SELECT id FROM workouts WHERE user_id = ?1 AND id IN (SELECT value FROM json_each(?2))',
+  ).bind(ctx.userId, JSON.stringify(ids)).all<{ id: string }>()
+  const mine = new Set(results.map((r) => r.id))
+  const missing = ids.find((id) => !mine.has(id))
+  if (missing !== undefined) throw new RowError(`workout_id ${missing} is not one of your workouts`)
+}
+
+/**
  * A deletion that comes with an Apple Health sample id, of a weigh-in still live: Health's deletion, which wins over
  * a newer edit (Postgres's health_tombstone_guard, which ran before last-write-wins).
  */
@@ -183,6 +198,20 @@ export const ENTITIES: Readonly<Record<string, Entity>> = {
       col('day', 'date'), col('steps', 'int'), col('move_kcal', 'real'), col('exercise_min', 'int'),
       opt('stand_h', 'int'), edited,
     ],
+  },
+  // Plan 40: what Apple Health measured during a GymRollins workout, one row per workout
+  // (migrations/0014_workout_measurements.sql). The phone that read Health writes it, so plain last-write-wins.
+  'workout-measurements': {
+    table: 'workout_measurements',
+    conflict: ['user_id', 'workout_id'],
+    ackKey: 'workout_id',
+    tiebreak: { column: 'workout_id', kind: 'text' },
+    columns: [
+      col('workout_id', 'uuid'), opt('recorded_by', 'text'), opt('duration_s', 'real'), opt('active_kcal', 'real'),
+      opt('total_kcal', 'real'), opt('avg_hr', 'int'), opt('max_hr', 'int'), opt('post_hr', 'int'),
+      opt('effort', 'int'), col('effort_estimated', 'bool'), edited, deleted,
+    ],
+    check: ownWorkouts,
   },
   gyms: {
     table: 'gyms',

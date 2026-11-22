@@ -72,7 +72,7 @@ test('planSnapshot: routine ids, library exercise ids and effective rep ranges',
 
 test("change_plan: the fixture's valid proposal is inserted once and returns its id", async () => {
   const db = fixtureDb()
-  const valid = fixture.cases.find((c) => c.name === 'valid knee-break proposal')!
+  const valid = fixture.cases.find((c) => c.name === 'valid ankle-rest proposal')!
   const r = await proposePlanChanges({ db, now: NOW }, valid.proposal)
   assert(!r.isError, r.content[0].text)
   assertEquals(db.insertedProposals.length, 1)

@@ -8,16 +8,16 @@ Builds on: the unmerged branch `feat-shared-workout` (plan 23), which sits on pl
 An injury note can have an end date. When that date comes, Today asks whether it's the right time to continue. If it is,
 the note goes and any paused routine can come back at lighter weights, so training restarts light.
 
-It came from the owner's knee note, "Knee: no leg loading until ~26 Oct 2026", still showing on 1 November. The app never
+It came from a note like "Ankle sprain: no leg loading until ~9 Nov 2026" that kept showing after its date had passed. The app never
 reads a date in the note, and the note can only be set in first-time setup, so it can't be removed either.
 
 ### Acceptance criteria
 
 1. **Edit and clear.** In Settings, Injuries / limits, the owner can change the note, set or clear an Until date, and clear
    the note. Clearing the note clears its date. Today's reminder follows at once.
-2. **Before the date.** With "Knee: no leg loading" until 26 Oct, Today's reminder reads "Knee: no leg loading · until 26 Oct", in
+2. **Before the date.** With "Ankle sprain: no leg loading" until 9 Nov, Today's reminder reads "Ankle sprain: no leg loading · until 9 Nov", in
    the same place as now.
-3. **On the date.** On 26 Oct or later, Today shows the check-in card in place of the reminder, every time Today is open,
+3. **On the date.** On 9 Nov or later, Today shows the check-in card in place of the reminder, every time Today is open,
    until it's answered. It never shows while a workout is running.
 4. **Not yet.** The card offers a new date, two weeks from today, which can be changed. Save puts the reminder back with the
    new date, and the card comes back on that date.
@@ -41,7 +41,7 @@ note or date, and reading a date out of the note's text.
 | Notification on the date | None. The card on Today only, because the owner opens Today to train. Nothing to schedule or cancel. |
 | Where the date lives | On the profile next to the note, synced with the account, and readable by Claude. |
 | Which paused routines are offered | Every paused routine, each with its own button. The owner may have paused one for another reason, so it's an offer. |
-| The sample data | `-seedOwner` keeps its note with no date, so existing tests see no card. A separate launch flag sets a past date. |
+| The sample data | `-seedSample` keeps its note with no date, so existing tests see no card. A separate launch flag sets a past date. |
 
 ## 3. Architecture
 
@@ -107,10 +107,10 @@ actions, so its steps can be tested without a database.
   "Until" toggle with a date picker, and **Clear note**. The note keeps its 500-character limit.
 - **First-time setup:** the same editor in place of the single field. The placeholder becomes "e.g. knee — no leg loading",
   because the date has its own field now.
-- **Today, before the date:** the reminder reads "<note> · until 26 Oct". With no date it reads as it does now.
+- **Today, before the date:** the reminder reads "<note> · until 9 Nov". With no date it reads as it does now.
 - **Today, on the date:** the card, in the app's card style, where the reminder was:
   - "<note>"
-  - "You planned this until 26 Oct. Is it the right time to continue?"
+  - "You planned this until 9 Nov. Is it the right time to continue?"
   - **Yes, continue** and **Not yet**.
 - Every control has an accessibility identifier under `limits.` and works with VoiceOver and the largest text sizes.
 

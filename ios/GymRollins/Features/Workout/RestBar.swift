@@ -30,7 +30,7 @@ struct RestBar: View {
                     }
                 }
                 .foregroundStyle(Theme.textSecondary)
-                Text(rest.label(at: now)).font(Theme.display(24))
+                Text(rest.label(at: now)).font(Theme.number(24))
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .ignore)
@@ -40,8 +40,7 @@ struct RestBar: View {
             .accessibilityIdentifier("logging.rest")
             circleButton(system: "plus", label: "Add 15 seconds", identifier: "logging.rest.plus", action: onPlus)
             Button(action: onSkip) { Text("Skip").fixedSize() }
-                .buttonStyle(.glassProminent)
-                .tint(Theme.primaryButtonFill)
+                .prominentGlass()
                 .accessibilityLabel("Skip rest")
                 .accessibilityIdentifier("logging.rest.skip")
         }

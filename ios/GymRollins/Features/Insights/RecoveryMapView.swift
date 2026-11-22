@@ -97,7 +97,7 @@ struct MuscleDetailSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .lastTextBaseline, spacing: 8) {
-                        Text("\(recovery.percent)%").font(Theme.display(56))
+                        Text("\(recovery.percent)%").font(Theme.number(56))
                             .foregroundStyle(RecoveryPalette.tint(recovery.status))
                         Text("recovered \u{00B7} \(RecoveryPalette.label(recovery.status).lowercased())")
                             .font(.subheadline).foregroundStyle(Theme.textSecondary)

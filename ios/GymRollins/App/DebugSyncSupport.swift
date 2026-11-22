@@ -20,6 +20,8 @@ struct OfflineTransport: SyncTransport {
     func push(activityDays: [ActivityDayDTO]) async throws -> [RowAck] { throw offline() }
     func pullHealthActivities(since: Date?) async throws -> [HealthActivityDTO] { throw offline() }
     func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO] { throw offline() }
+    func push(workoutMeasurements: [WorkoutMeasurementDTO]) async throws -> [RowAck] { throw offline() }
+    func pullWorkoutMeasurements(since: Date?) async throws -> [WorkoutMeasurementDTO] { throw offline() }
     func pullProfile(since: Date?) async throws -> [ProfileDTO] { throw offline() }
     func pullCustomExercises(since: Date?) async throws -> [CustomExerciseDTO] { throw offline() }
     func pullExercisePrefs(since: Date?) async throws -> [ExercisePrefDTO] { throw offline() }
@@ -71,6 +73,10 @@ actor SeededConflictTransport: SyncTransport {
     func push(activityDays: [ActivityDayDTO]) async throws -> [RowAck] { activityDays.map { ack($0.day) } }
     func pullHealthActivities(since: Date?) async throws -> [HealthActivityDTO] { [] }
     func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO] { [] }
+    func push(workoutMeasurements: [WorkoutMeasurementDTO]) async throws -> [RowAck] {
+        workoutMeasurements.map { ack($0.workoutId.uuidString.lowercased()) }
+    }
+    func pullWorkoutMeasurements(since: Date?) async throws -> [WorkoutMeasurementDTO] { [] }
     func fetchWorkout(id: UUID) async throws -> WorkoutDTO? { remote[id] }
     func pendingProposals() async throws -> [PulledProposal] { [] }
     func resolveProposal(id: UUID, status: String, appliedChangeIds: [String], at: Date) async throws {}

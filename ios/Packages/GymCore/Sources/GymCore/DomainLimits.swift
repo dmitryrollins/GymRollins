@@ -177,3 +177,13 @@ public enum DomainLimits {
         return nil
     }
 }
+
+/// What a workout's measurements must fit (plan 40): `server/migrations/0014_workout_measurements.sql` CHECKs the same
+/// numbers and the server's drift test compares them, so each stays a literal like `DomainLimits`' own. Its own enum,
+/// so the names (`kcal`, `heartRate`) don't sit among `DomainLimits`' activity limits, whose values they share.
+public enum MeasurementLimits {
+    public static let durationS: ClosedRange<Double> = 0...86_400
+    public static let kcal: ClosedRange<Double> = 0...20_000
+    public static let heartRate: ClosedRange<Int> = 20...250
+    public static let effort: ClosedRange<Int> = 1...10
+}

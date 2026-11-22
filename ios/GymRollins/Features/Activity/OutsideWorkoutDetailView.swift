@@ -17,7 +17,6 @@ struct OutsideWorkoutDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                topBar
                 switch lookup {
                 case .shown(let activity): content(activity)
                 case .removed: removed
@@ -25,25 +24,16 @@ struct OutsideWorkoutDetailView: View {
                 }
             }
             .padding(.horizontal, Theme.gutter)
-            .padding(.top, 8)
             .padding(.bottom, 40)
             .background(alignment: .top) {
-                if case .shown(let activity) = lookup { backdrop(activity) }
+                // Up behind the pinned Back circle, where it sat when the bar scrolled with the page.
+                if case .shown(let activity) = lookup { backdrop(activity).offset(y: -DetailTopBar<EmptyView>.height) }
             }
         }
+        .detailTopBar(DetailTopBar(backIdentifier: "outside.back", onBack: { dismiss() }))
         .background(Theme.background)
         .toolbar(.hidden, for: .navigationBar)
         .task(id: env.dataRevision) { load() }
-    }
-
-    private var topBar: some View {
-        HStack {
-            Button { dismiss() } label: { Image(systemName: "chevron.left") }
-                .glassCircle()
-                .accessibilityLabel("Back")
-                .accessibilityIdentifier("outside.back")
-            Spacer()
-        }
     }
 
     @ViewBuilder
@@ -83,7 +73,7 @@ struct OutsideWorkoutDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// "⌚ LifeFitness", on its own line under the date (Fitness has one line): the watch only when an Apple Watch
+    /// "⌚ Indoor Bike", on its own line under the date (Fitness has one line): the watch only when an Apple Watch
     /// recorded it, as its own "Apple Watch" element. Inside the text, the symbol's spoken name made the line's label
     /// longer than the line, which the accessibility audit flags as clipped.
     private func source(_ activity: HealthActivity) -> some View {

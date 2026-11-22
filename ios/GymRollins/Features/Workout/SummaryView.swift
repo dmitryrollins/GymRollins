@@ -1,11 +1,12 @@
 import GymCore
 import SwiftUI
 
-/// Post-workout recap: a duration/sets/volume/records stat grid, any new personal records, and a
-/// line per exercise. "Done" ends the session and closes the workout cover.
+/// Post-workout recap: a duration/sets/volume/records stat grid, any new personal records, what the workout added to
+/// its gym's equipment, and a line per exercise. "Done" ends the session and closes the workout cover.
 struct SummaryView: View {
     let summary: WorkoutSummary
     let workout: Workout
+    var learned: LearnedEquipment? = nil
     let done: () -> Void
     @Environment(AppEnvironment.self) private var env
 
@@ -17,6 +18,7 @@ struct SummaryView: View {
                 CalorieCard(estimate: env.calories.estimate(workout), healthStatus: env.health.exportStatus(for: workout),
                             prefix: "summary")
                 if !summary.records.isEmpty { recordsCard }
+                if let learned { learnedCard(learned) }
                 SummaryInsightsSection(workout: workout)
                 exerciseList
             }
@@ -68,7 +70,7 @@ struct SummaryView: View {
     private func stat(label: String, value: String, identifier: String, tint: Color = Theme.textPrimary) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label).font(.caption).foregroundStyle(Theme.textSecondary)
-            Text(value).font(Theme.display(28)).foregroundStyle(tint).accessibilityIdentifier(identifier)
+            Text(value).font(Theme.number(28)).foregroundStyle(tint).accessibilityIdentifier(identifier)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -140,6 +142,27 @@ struct SummaryView: View {
 
     private func exerciseName(_ id: String) -> String {
         DisplayName.of(env.library.exercise(id)?.name ?? id)
+    }
+
+    // MARK: Gym equipment
+
+    /// "Added to Garage: Dumbbells, Cable station": the gym's list grew from what was done there.
+    private func learnedCard(_ learned: LearnedEquipment) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "dumbbell.fill").foregroundStyle(Theme.textSecondary).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Added to \(learned.gymName): \(learned.kindNames.joined(separator: ", "))")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("From the exercises you did there. Change it on the gym's equipment screen.")
+                    .font(.caption).foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Theme.card, in: .rect(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("summary.gymEquipment")
     }
 
     // MARK: Per-exercise lines

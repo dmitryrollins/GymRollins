@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import GymCore
 
-private struct KneeFixture: Decodable {
+private struct PlanChangeFixture: Decodable {
     struct Case: Decodable { let name: String; let proposal: PlanProposal }
     let cases: [Case]
 }
@@ -214,19 +214,19 @@ private struct KneeFixture: Decodable {
         }
     }
 
-    static func kneeBreak() throws -> PlanProposal {
+    static func ankleRest() throws -> PlanProposal {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("fixtures/plan-changes.json")
-        let fixture = try JSONDecoder().decode(KneeFixture.self, from: Data(contentsOf: url))
-        return try #require(fixture.cases.first { $0.name == "valid knee-break proposal" }).proposal
+        let fixture = try JSONDecoder().decode(PlanChangeFixture.self, from: Data(contentsOf: url))
+        return try #require(fixture.cases.first { $0.name == "valid ankle-rest proposal" }).proposal
     }
 
     static let aliases = ["push": pushId, "pull": pullId, "legs": legsId]
 
-    @Test func fixtureKneeBreakProposal() throws {
-        let proposal = try Self.kneeBreak()
+    @Test func fixtureAnkleRestProposal() throws {
+        let proposal = try Self.ankleRest()
         let out = try PlanChangeApplier.apply(proposal.changes, to: Self.plan, now: Self.now, aliases: Self.aliases)
         #expect(out.schedule == [1: Self.pushId, 3: Self.pullId, 6: Self.pushId])
         #expect(bench(out)?.weightKg == 63.5 && bench(out)?.weightSetAt == Self.now)
@@ -238,7 +238,7 @@ private struct KneeFixture: Decodable {
     }
 
     @Test func subsetOfFixtureChanges() throws {
-        let proposal = try Self.kneeBreak()
+        let proposal = try Self.ankleRest()
         let chosen = proposal.changes.filter { ["c2", "c5"].contains($0.id) }
         let out = try PlanChangeApplier.apply(chosen, to: Self.plan, now: Self.now, aliases: Self.aliases)
         #expect(out.schedule == Self.plan.schedule)

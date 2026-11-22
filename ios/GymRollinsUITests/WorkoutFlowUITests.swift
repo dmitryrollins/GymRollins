@@ -31,7 +31,7 @@ final class WorkoutFlowUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["logging.rest"].waitForExistence(timeout: 3))
         app.buttons["logging.rest.skip"].tap()
 
-        // Plate calculator for the 135 lb working weight: 45 lb bar + one 45 lb plate each side
+        // Plate calculator for the 155 lb working weight: 45 lb bar + a 45 and a 10 lb plate each side
         app.buttons["logging.chip.plates"].tap()
         XCTAssertTrue(app.buttons["plates.target.working.1"].waitForExistence(timeout: 3))
         app.buttons["plates.target.working.1"].tap()
@@ -45,7 +45,7 @@ final class WorkoutFlowUITests: XCTestCase {
         // Waits for the dismiss animation to finish so the set timeline below is hittable again.
         XCTAssertTrue(app.buttons["plates.done"].waitForNonExistence(timeout: 3))
 
-        // Beat last session: 10 reps at 135 on every working set -> records. Consecutive rows are
+        // Beat last session: 10 reps at 155 on every working set -> records. Consecutive rows are
         // edited on the same screen; see testEditConsecutiveFieldsWithoutLeavingScreen.
         for index in 2...4 {
             app.textFields["logging.set.\(index).reps"].clearAndType("10")

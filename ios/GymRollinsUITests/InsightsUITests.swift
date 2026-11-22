@@ -1,7 +1,7 @@
 import XCTest
 
 /// Recovery map, weekly set targets and streaks on the `-seedInsights` history (five goal-met weeks, then this
-/// week's Mon/Wed/Fri sessions; the owner's 4-day goal). Screenshots are attached as "insights-*".
+/// week's Mon/Wed/Fri sessions; the sample 4-day goal). Screenshots are attached as "insights-*".
 final class InsightsUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -32,7 +32,7 @@ final class InsightsUITests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         XCTAssertTrue(card.label.localizedCaseInsensitiveContains("Muscle recovery"), card.label)
         XCTAssertTrue(card.label.contains("Fresh: "), card.label)
-        XCTAssertTrue(card.label.contains("Legs limited"), card.label) // owner's knee note
+        XCTAssertTrue(card.label.contains("Legs limited"), card.label) // the sample ankle note
         screenshot(app, "today-card")
 
         card.tap()
@@ -111,14 +111,13 @@ final class InsightsUITests: XCTestCase {
         XCTAssertTrue(element(app, "targets.value.chest").waitForExistence(timeout: 5))
     }
 
-    func testStreakChipOnTodayAndStreakCardOnLog() {
+    /// The streak lives on Log; Today's chip went with the contacts-style header (owner, 2026-11-18).
+    func testStreakCardOnLog() {
         let app = launch()
-        let chip = element(app, "today.streak")
-        XCTAssertTrue(chip.waitForExistence(timeout: 5))
-        XCTAssertEqual(chip.label, "Weekly streak: 5 weeks. 3 of 4 workouts this week.")
         app.tabBars.buttons["Log"].tap()
         let card = element(app, "log.streak")
         XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.hasPrefix("Weekly streak: 5 weeks. 3 of 4 workouts this week."), card.label)
         XCTAssertTrue(card.label.contains("Longest: 5 weeks."), card.label)
         screenshot(app, "log-streak")
     }

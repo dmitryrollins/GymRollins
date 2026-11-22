@@ -1,7 +1,7 @@
 import XCTest
 
 /// Claude's proposals, hermetic (no backend): `-seedProposal` inserts a pending proposal on the seeded plan with four
-/// changes — Sun → Upper weak points, bench 140 → 145 lb, lever → dumbbell shoulder press on Pull, and leg extension
+/// changes — Sun → Upper weak points, bench 160 → 165 lb, lever → dumbbell shoulder press on Pull, and leg extension
 /// removed from Legs. 26 Sep 2026 is a Saturday, so Today shows Push + Arms (with the bench).
 @MainActor
 final class ProposalUITests: XCTestCase {
@@ -47,13 +47,13 @@ final class ProposalUITests: XCTestCase {
 
     func testApplySubsetThenUndo() {
         launch(["-seedProposal"])
-        waitForBench("140 lb")
+        waitForBench("160 lb")
         openReview()
         for id in ["c1", "c2", "c3", "c4"] {
             XCTAssertTrue(app.switches["proposal.change.\(id)"].exists, id)
         }
         XCTAssertEqual(app.switches.matching(NSPredicate(format: "identifier BEGINSWITH 'proposal.change.'")).count, 4)
-        XCTAssertTrue(app.staticTexts["proposal.text.c2"].label.contains("140 lb \u{2192} 3 \u{00D7} 8\u{2013}10 @ 145 lb"),
+        XCTAssertTrue(app.staticTexts["proposal.text.c2"].label.contains("160 lb \u{2192} 3 \u{00D7} 8\u{2013}10 @ 165 lb"),
                       app.staticTexts["proposal.text.c2"].label)
 
         flip(app.switches["proposal.change.c3"])
@@ -64,10 +64,10 @@ final class ProposalUITests: XCTestCase {
         // Back on Today: the chip is gone and the bench plan is heavier.
         XCTAssertTrue(app.descendants(matching: .any)["proposal.toast"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["today.proposal"].exists)
-        waitForBench("145 lb")
+        waitForBench("165 lb")
 
         app.buttons["proposal.undo"].tap()
-        waitForBench("140 lb")
+        waitForBench("160 lb")
         XCTAssertTrue(app.descendants(matching: .any)["proposal.toast"].waitForNonExistence(timeout: 3))
         XCTAssertFalse(app.buttons["today.proposal"].exists) // undone proposals count as dismissed
     }
@@ -76,7 +76,7 @@ final class ProposalUITests: XCTestCase {
     /// routine (like Switch) — no need to use Switch — and the week's schedule keeps Push + Arms on Saturdays.
     func testTodayChangeSwitchesTodaysWorkout() {
         launch(["-seedTodayProposal"])
-        let summary = app.staticTexts["today.summary"]
+        let summary = app.descendants(matching: .any)["today.workout"]
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         XCTAssertTrue(summary.label.hasPrefix("Push + Arms"), summary.label)
         openReview()
@@ -106,7 +106,7 @@ final class ProposalUITests: XCTestCase {
         openReview()
         app.buttons["proposal.dismiss"].tap()
         XCTAssertTrue(app.buttons["today.proposal"].waitForNonExistence(timeout: 5))
-        waitForBench("140 lb")
+        waitForBench("160 lb")
     }
 
     func testAutoApplyOnRelaunchAppliesTheProposal() {
@@ -127,7 +127,7 @@ final class ProposalUITests: XCTestCase {
 
         // 2. Relaunch with a proposal arriving: it's applied straight away, no chip.
         launch(["-diskStore", "-seedProposal"])
-        waitForBench("145 lb")
+        waitForBench("165 lb")
         XCTAssertFalse(app.buttons["today.proposal"].exists)
 
         // Claude's screen offers to undo it.

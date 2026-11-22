@@ -112,11 +112,11 @@ test('weeks: Monday start in the zone, across DST', () => {
   const day = (iso: string) => new Date(iso).getTime()
   assertEquals(new Date(weekKey(day('2026-09-27T23:30:00Z'), 'UTC')).toISOString().slice(0, 10), '2026-09-21')
   assertEquals(
-    new Date(weekKey(day('2026-09-27T23:30:00Z'), 'Europe/Warsaw')).toISOString().slice(0, 10),
+    new Date(weekKey(day('2026-09-27T23:30:00Z'), 'Europe/Berlin')).toISOString().slice(0, 10),
     '2026-09-28',
   )
   assertEquals(
-    new Date(weekKey(day('2026-10-25T22:30:00Z'), 'Europe/Warsaw')).toISOString().slice(0, 10),
+    new Date(weekKey(day('2026-10-25T22:30:00Z'), 'Europe/Berlin')).toISOString().slice(0, 10),
     '2026-10-19',
   )
   assertThrows(() => assertTimeZone('Mars/Olympus'))

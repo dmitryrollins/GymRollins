@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import GymCore
 
-/// The rules against the real library and requirements, at the owner's real home setup: a flat bench and kettlebells
+/// The rules against the bundled library and requirements, at a home setup: a flat bench and kettlebells
 /// of 20 and 24 kg.
 @Suite struct GymRealDataTests {
     private static let resources = URL(fileURLWithPath: #filePath)

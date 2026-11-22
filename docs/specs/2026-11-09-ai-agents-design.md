@@ -7,7 +7,7 @@ and the MCP connector, which since commit d7550ef takes any agent's https callba
 
 Meta's agent (Muse) connected on 2026-11-09 beside Claude. The app still treats the connector as Claude's: one
 "Disconnect Claude" that cuts every agent, one "last used" for all of them, proposals with no sender, and a screen
-named "Claude". Muse also found 9 Fitbod sessions (6 Oct – 7 Nov, 191 sets) missing from GymRollins and has no way to
+named "Claude". Muse also found sessions logged in another app that are missing from GymRollins and has no way to
 add them: the only MCP writes are `propose_plan_changes` and `log_bodyweight`.
 
 ## 2. Decisions
@@ -129,7 +129,7 @@ started this connection yourself, in agent.meta.ai." Claude's own hosts show no 
 
 1. Migration and server deploy (owner's approval): the Worker before the app, as the checklist's order rule says.
 2. Back up the phone, build and install (owner's approval).
-3. The owner turns on Add workouts; Muse loads its 9 sessions; the counts are checked (157 workouts if all 9 land).
+3. The owner turns on Add workouts; Muse loads the missing sessions; the counts are checked (the workout count grows by the number loaded).
 
 ## 7. Out of scope
 

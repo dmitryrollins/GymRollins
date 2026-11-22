@@ -18,7 +18,7 @@ final class PerformanceUITests: XCTestCase {
         return options
     }
 
-    /// Cold launch to the first frame with the owner seed + history (every launch rebuilds the in-memory store).
+    /// Cold launch to the first frame with the sample seed + history (every launch rebuilds the in-memory store).
     func testColdLaunch() {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "-fixedNow", Self.fixedNow, "-seedHistory"]

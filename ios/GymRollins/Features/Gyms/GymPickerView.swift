@@ -179,7 +179,7 @@ struct GymPickerView: View {
                     }
                 }
                 Spacer(minLength: 8)
-                if gym.id == current?.id { Image(systemName: "checkmark").foregroundStyle(Theme.primaryFill) }
+                if gym.id == current?.id { Image(systemName: "checkmark").foregroundStyle(Theme.accent) }
             }
             .frame(minHeight: Theme.minTapSize)
             .contentShape(.rect)
@@ -192,6 +192,7 @@ struct GymPickerView: View {
         .listRowBackground(Theme.card)
         .swipeActions(edge: .trailing) {
             Button("Delete", role: .destructive) { askToDelete(gym) }
+            // The red action fill: the swipe action's label is the system's white, 5.6:1 on it (2.8:1 on the accent).
             if Self.canSync(gym) { syncButton(gym).tint(Theme.primaryFill) }
         }
         .contextMenu {

@@ -3,7 +3,6 @@ import GymCore
 
 /// Every string and metric the activity screens show (plan 39, in Apple Fitness' look §4.1):
 /// - outside workouts in the Log and their detail;
-/// - what Health measured during a GymRollins workout;
 /// - the week's measured calories;
 /// - Today's days of activity.
 enum ActivityText {
@@ -51,26 +50,13 @@ enum ActivityText {
          DurationFormatter.hoursMinutes(activity.durationS), activity.sourceName].joined(separator: ", ")
     }
 
-    /// "November 15, 2026, 16:02–16:07", under the detail's headline.
+    /// "September 24, 2026, 16:15–16:22", under the detail's headline.
     static func dateAndTimes(_ activity: HealthActivity) -> String {
         let day = activity.startedAt.formatted(date: .long, time: .omitted)
         let from = activity.startedAt.formatted(date: .omitted, time: .shortened)
         let to = activity.endedAt.formatted(date: .omitted, time: .shortened)
         return "\(day), \(from)\u{2013}\(to)"
     }
-
-    // MARK: A GymRollins workout
-
-    /// What Health measured during a GymRollins workout: Active Calories, Avg. and Max Heart Rate, and Avg. Power when
-    /// there is one. Empty when nothing was measured.
-    static func measured(_ activity: HealthActivity) -> [MetricReading] {
-        [activeKcal(activity), activity.avgHr.map { heartRate("avgHr", "Avg. Heart Rate", $0) },
-         activity.maxHr.map { heartRate("maxHr", "Max Heart Rate", $0) }, activity.avgPowerW.map { power($0) }]
-            .compactMap { $0 }
-    }
-
-    /// "Apple Watch measured", over those values.
-    static func measuredTitle(_ activity: HealthActivity) -> String { "\(activity.sourceName) measured" }
 
     // MARK: The week
 
@@ -110,13 +96,13 @@ enum ActivityText {
 
     // MARK: Values
 
-    /// Workout time as Fitness shows it, always with hours: "0:05:08", "1:02:05".
+    /// Workout time as Fitness shows it, always with hours: "0:07:30", "1:02:05".
     static func clock(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
         return String(format: "%ld:%02ld:%02ld", total / 3_600, (total % 3_600) / 60, total % 60)
     }
 
-    /// The same time for VoiceOver: "1 hour 2 minutes 5 seconds", "5 minutes 8 seconds", "0 seconds".
+    /// The same time for VoiceOver: "1 hour 2 minutes 5 seconds", "7 minutes 30 seconds", "0 seconds".
     static func spokenDuration(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
         let parts = [(total / 3_600, "hour"), ((total % 3_600) / 60, "minute"), (total % 60, "second")]
@@ -129,7 +115,7 @@ enum ActivityText {
                       spoken: spokenDuration(activity.durationS), tint: .time)
     }
 
-    /// Two decimals, as Fitness shows it, in the profile's unit ("2.26 KM", or "1.40 MI" for a profile in lb, the
+    /// Two decimals, as Fitness shows it, in the profile's unit ("3.40 KM", or "2.11 MI" for a profile in lb, the
     /// distance unit of cardio sets); nil without a distance.
     private static func distance(_ activity: HealthActivity, unit: WeightUnit) -> MetricReading? {
         guard let meters = activity.distanceM, meters > 0 else { return nil }
@@ -143,7 +129,8 @@ enum ActivityText {
         activity.kcal.map { kcal("kcal", "Active Calories", $0, tint: .calories) }
     }
 
-    private static func kcal(_ key: String, _ label: String, _ value: Double, tint: MetricTint) -> MetricReading {
+    /// Calories as Fitness shows them ("412" + "KCAL"); also the workout detail's (plan 40).
+    static func kcal(_ key: String, _ label: String, _ value: Double, tint: MetricTint) -> MetricReading {
         let whole = Int(value.rounded())
         return MetricReading(key: key, label: label, value: whole.formatted(), unit: "KCAL",
                              spoken: "\(whole.formatted()) kilocalorie\(whole == 1 ? "" : "s")", tint: tint)
@@ -154,7 +141,8 @@ enum ActivityText {
                       spoken: "\(watts) watt\(watts == 1 ? "" : "s")", tint: .power)
     }
 
-    private static func heartRate(_ key: String, _ label: String, _ bpm: Int) -> MetricReading {
+    /// Heart rate as Fitness shows it ("128" + "BPM"); also the workout detail's (plan 40).
+    static func heartRate(_ key: String, _ label: String, _ bpm: Int) -> MetricReading {
         MetricReading(key: key, label: label, value: "\(bpm)", unit: "BPM", spoken: "\(bpm) beats per minute",
                       tint: .heartRate)
     }

@@ -95,6 +95,16 @@ extension XCUIApplication {
 }
 
 extension XCUIApplication {
+    /// Library's search field, opened from the header's search button when it isn't open yet (owner, 2026-11-19:
+    /// search behind a button in the header).
+    func librarySearch(file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
+        let field = searchFields["library.search"]
+        let open = buttons["library.searchButton"]
+        if !field.exists, open.waitForExistence(timeout: 5) { open.tap() }
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Library's search didn't open", file: file, line: line)
+        return field
+    }
+
     /// A `List` (Settings) or a lazy grid (a gym's equipment) builds only the rows near the screen, so a row further
     /// down isn't in the accessibility tree until scrolled close, and one scrolled well past is dropped again. Swipes
     /// toward `element` until it can take a touch: while it exists, toward its side of the screen; while it's missing,

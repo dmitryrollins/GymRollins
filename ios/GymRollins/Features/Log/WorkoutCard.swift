@@ -3,7 +3,7 @@ import GymData
 import SwiftUI
 
 /// One row in the Log's "Past workouts" list: date/duration, an amber records badge, the workout
-/// name, and a summary of the first two exercises' working sets.
+/// name, a summary of the first two exercises' working sets, and a strip of the exercises' photos.
 struct WorkoutCard: View {
     let workout: Workout
     let recordCount: Int
@@ -28,6 +28,7 @@ struct WorkoutCard: View {
                 if !summary.isEmpty {
                     Text(summary).font(.subheadline).foregroundStyle(Theme.textSecondary)
                 }
+                photoStrip
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -37,6 +38,29 @@ struct WorkoutCard: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("log.workout.\(workout.id.uuidString)")
     }
+
+    /// Each exercise's photo (or its body-part icon), as in the workout and the exercise picker. Decorative: the
+    /// summary above names the exercises.
+    @ViewBuilder
+    private var photoStrip: some View {
+        let strip = WorkoutText.photoStrip(workout.entries, limit: Self.photoLimit)
+        if !strip.exerciseIds.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(strip.exerciseIds, id: \.self) { id in
+                    ExerciseThumbnail(exercise: library?.exercise(id), size: Self.photoSize)
+                }
+                if strip.more > 0 {
+                    Text("+\(strip.more)").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .padding(.top, 6)
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// Five 40 pt photos fit the narrowest iPhone's card with room for "+N".
+    private static let photoLimit = 5
+    private static let photoSize: CGFloat = 40
 
     private var dateAndDuration: String {
         let date = workout.startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))

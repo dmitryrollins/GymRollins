@@ -27,7 +27,7 @@ import Testing
     @Test func seedLimitsDueEndsTheNoteYesterday() throws {
         let env = try makeEnv(["-seedLimitsDue"])
         let today = Calendar.current.startOfDay(for: env.now())
-        #expect(env.profile.limits == "Knee: no leg loading")
+        #expect(env.profile.limits == "Ankle sprain: no leg loading")
         #expect(env.profile.limitsUntil == Calendar.current.date(byAdding: .day, value: -1, to: today))
         #expect(env.limitsCheckInDue())
     }
@@ -36,7 +36,7 @@ import Testing
         let env = try makeEnv(["-seedLimitsDue"])
         let later = LimitsCheckIn.laterDate(now: env.now(), calendar: .current)
         try env.postponeLimits(to: later)
-        #expect(env.profile.limits == "Knee: no leg loading")
+        #expect(env.profile.limits == "Ankle sprain: no leg loading")
         #expect(env.profile.limitsUntil == later)
         #expect(!env.limitsCheckInDue())
     }
@@ -69,9 +69,9 @@ import Testing
         let legs = try legsRoutine(env)
         #expect(!legs.paused)
         let weights = Dictionary(uniqueKeysWithValues: legs.exercises.map { ($0.exerciseId, lb($0.weightKg)) })
-        let expected: [String: Double] = ["0085": 80, "0043": 80, "0739": 100, "0586": 60, "0585": 65, "0594": 115]
+        let expected: [String: Double] = ["0085": 90, "0043": 110, "0739": 120, "0586": 52.5, "0585": 70, "0594": 137.5]
         for (id, light) in expected { #expect(abs((weights[id] ?? 0) - light) < 0.01, "\(id)") }
-        // In lb each is a pound number on the exercise's grid, so it shows as 80 lb and not 79.9.
+        // In lb each is a pound number on the exercise's grid, so it shows as 110 lb and not 109.9.
         let pounds = Dictionary(uniqueKeysWithValues: legs.exercises.map { ($0.exerciseId, $0.weightLb ?? .nan) })
         for (id, light) in expected { #expect(pounds[id] == light, "\(id) keeps its pound number") }
         #expect(legs.exercises.allSatisfy { $0.weightSetAt == env.now() })
@@ -88,7 +88,7 @@ import Testing
                                       exercise: env.library.exercise("0043"), history: history)
         }
         let first = suggest(try env.workouts.history(exerciseId: "0043", limit: 5))
-        #expect(abs(lb(first.weightKg) - 80) < 0.01)
+        #expect(abs(lb(first.weightKg) - 110) < 0.01)
 
         let start = env.now().addingTimeInterval(3_600)
         try env.workouts.save(Workout(startedAt: start, endedAt: start.addingTimeInterval(3_000), name: "Legs", entries: [
@@ -96,7 +96,7 @@ import Testing
                 WorkoutSet(weightKg: first.weightKg, reps: 6, done: true, completedAt: start) }),
         ]))
         let next = suggest(try env.workouts.history(exerciseId: "0043", limit: 5))
-        #expect(abs(lb(next.weightKg) - 85) < 0.01)
+        #expect(abs(lb(next.weightKg) - 115) < 0.01)
     }
 
     @Test func timedOffAndBodyweightExercisesKeepTheirWeights() throws {
@@ -140,19 +140,19 @@ import Testing
         #expect(result.lowered == 5)
         let after = try #require(try legsRoutine(env).exercises.first { $0.exerciseId == "0085" })
         #expect(after.weightKg == before.weightKg)
-        #expect(abs(lb(after.weightKg) - 135) < 0.01)
+        #expect(abs(lb(after.weightKg) - 155) < 0.01)
     }
 
     @Test func afterHeavierHistoryTheFirstSessionBackIsPlannedAtSixtyPercent() throws {
         let env = try makeEnv()
-        try logFinished(env, "0043", sets: 4, reps: 6, lb: 135, daysAgo: 7)
+        try logFinished(env, "0043", sets: 4, reps: 6, lb: 185, daysAgo: 7)
         _ = try env.resumeAtReturnWeights(try legsRoutine(env).id)
         let legs = try legsRoutine(env)
         let squat = try #require(legs.exercises.first { $0.exerciseId == "0043" })
         let first = SessionPlanner.suggestion(for: squat, policy: squat.policy ?? legs.policy, profile: env.profile,
                                               exercise: env.library.exercise("0043"),
                                               history: try env.workouts.history(exerciseId: "0043", limit: 5))
-        #expect(abs(lb(first.weightKg) - 80) < 0.01)
+        #expect(abs(lb(first.weightKg) - 110) < 0.01)
         #expect(first.reason == .planned)
     }
 }

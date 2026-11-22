@@ -2,11 +2,11 @@
  "_comment": "Shared by GymCore (StrengthFixtureTests.swift) and the MCP server (server/test/shared/strength-levels.test.ts): the same inputs on the bundled strength-standards.json must give the same e1RM, level, percentile and next target on both sides. Numbers rounded to 0.01; comparisons allow 0.01.",
  "cases": [
   {
-   "name": "owner: 81 kg man, 35, knee note; bench 130 lb x 10, squat paused, sumo deadlift counts",
+   "name": "sample: 76 kg man, 30, ankle note; bench 150 lb x 10, squat paused, sumo deadlift counts",
    "sex": "male",
-   "birth_year": 1991,
-   "bodyweight_kg": 81,
-   "limits": "Knee: no leg loading until ~26 Oct 2026",
+   "birth_year": 1996,
+   "bodyweight_kg": 76,
+   "limits": "Ankle sprain: no leg loading until ~9 Nov 2026",
    "now": "2026-09-29T12:00:00Z",
    "workouts": [
     {
@@ -16,13 +16,13 @@
        "exercise_id": "0025",
        "workout_sets": [
         {
-         "w_kg": 58.967008,
+         "w_kg": 68.038856,
          "r": 10,
          "done": true,
          "warmup": false
         },
         {
-         "w_kg": 58.967008,
+         "w_kg": 68.038856,
          "r": 10,
          "done": true,
          "warmup": false
@@ -44,7 +44,7 @@
        "exercise_id": "0025",
        "workout_sets": [
         {
-         "w_kg": 58.967008,
+         "w_kg": 68.038856,
          "r": 6,
          "done": true,
          "warmup": false
@@ -88,33 +88,33 @@
    ],
    "expected": {
     "missing": [],
-    "age": 35,
+    "age": 30,
     "lifts": {
      "squat": {
       "e1rm_kg": 116.67,
       "exercise_id": "0043",
       "level": "novice",
-      "percentile": 1.66,
+      "percentile": 3.06,
       "next": "intermediate",
-      "next_target_kg": 124.11,
+      "next_target_kg": 117.48,
       "paused": true
      },
      "bench": {
-      "e1rm_kg": 78.62,
+      "e1rm_kg": 90.72,
       "exercise_id": "0025",
-      "level": "novice",
-      "percentile": 1.32,
-      "next": "intermediate",
-      "next_target_kg": 85.17,
+      "level": "intermediate",
+      "percentile": 7.36,
+      "next": "advanced",
+      "next_target_kg": 105,
       "paused": false
      },
      "deadlift": {
       "e1rm_kg": 154,
       "exercise_id": "0117",
       "level": "intermediate",
-      "percentile": 2.91,
+      "percentile": 4.71,
       "next": "advanced",
-      "next_target_kg": 194.64,
+      "next_target_kg": 185.04,
       "paused": true
      }
     }
@@ -236,7 +236,7 @@
   {
    "name": "no sex set: estimates, no levels",
    "sex": null,
-   "birth_year": 1991,
+   "birth_year": 1996,
    "bodyweight_kg": 90,
    "limits": "",
    "now": "2026-09-29T12:00:00Z",
@@ -262,7 +262,7 @@
     "missing": [
      "profile"
     ],
-    "age": 35,
+    "age": 30,
     "lifts": {
      "squat": {
       "e1rm_kg": null,

@@ -150,4 +150,11 @@ describe('the D1 schema', () => {
       .all<{ detail: string }>()
     expect(plan.results.map((r) => r.detail).join('\n')).toMatch(/USING (COVERING )?INDEX workout_entries_workout/)
   })
+
+  it("finds a deleted workout's measured numbers through workout_measurements_workout (plan 40)", async () => {
+    const plan = await env.DB.prepare("EXPLAIN QUERY PLAN DELETE FROM workout_measurements WHERE workout_id = 'x'")
+      .all<{ detail: string }>()
+    expect(plan.results.map((r) => r.detail).join('\n'))
+      .toMatch(/USING (COVERING )?INDEX workout_measurements_workout/)
+  })
 })

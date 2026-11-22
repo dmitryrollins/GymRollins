@@ -12,13 +12,13 @@ final class StepLog: @unchecked Sendable {
     func add(_ item: String) { lock.withLock { entries.append(item) } }
 }
 
-private let userId = UUID(uuidString: "b73f3bdc-18c8-400a-b492-4db321b4baee")!
+private let userId = UUID(uuidString: "00000000-0000-4000-8000-0000000000b7")!
 /// Better Auth 1.7.18's answers as plan 27's probe recorded them, trimmed.
 private let signInBody = #"{"redirect": false, "token": "raw-token", "#
-    + #""user": {"id": "b73f3bdc-18c8-400a-b492-4db321b4baee", "#
+    + #""user": {"id": "00000000-0000-4000-8000-0000000000b7", "#
     + #""email": "a@test.local", "name": "", "emailVerified": true}}"#
-private let sessionBody = #"{"session": {"token": "raw-token", "userId": "b73f3bdc-18c8-400a-b492-4db321b4baee"}, "#
-    + #""user": {"id": "b73f3bdc-18c8-400a-b492-4db321b4baee", "email": "a@test.local", "name": ""}}"#
+private let sessionBody = #"{"session": {"token": "raw-token", "userId": "00000000-0000-4000-8000-0000000000b7"}, "#
+    + #""user": {"id": "00000000-0000-4000-8000-0000000000b7", "email": "a@test.local", "name": ""}}"#
 private let signedOutBody = #"{"error": {"code": "signed_out", "message": "Sign in required."}}"#
 /// The bearer plugin's `set-auth-token`: the token and its signature, as sent.
 private let signedToken = "raw-token.c2lnbmF0dXJl+/="

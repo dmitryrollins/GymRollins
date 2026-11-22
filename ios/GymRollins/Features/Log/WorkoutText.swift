@@ -20,6 +20,15 @@ enum WorkoutText {
         }
     }
 
+    /// The Log card's photo strip: the exercises that have a working set, in order and each once, at most `limit`,
+    /// and how many more there are (shown as "+N").
+    static func photoStrip(_ entries: [WorkoutEntry], limit: Int) -> (exerciseIds: [String], more: Int) {
+        var seen = Set<String>()
+        let ids = entries.filter { !WorkoutMetrics.workingSets($0).isEmpty }.map(\.exerciseId)
+            .filter { seen.insert($0).inserted }
+        return (Array(ids.prefix(limit)), max(0, ids.count - limit))
+    }
+
     /// Weights show their pound numbers in lb (plan 38); whether they're equal is still decided in kg.
     private static func repsSummary(_ sets: [WorkoutSet], unit: WeightUnit) -> String {
         let weights = sets.map(\.weight)

@@ -1,7 +1,8 @@
 import XCTest
 
-/// Today's "Build workout": the sheet, the result, Start, and the gym marks on Today's rows. `-seedGym` gives "Home":
-/// kettlebells (20 and 24 kg) and a flat bench, with the seeded Push + Arms routine on the default (Saturday) date.
+/// Today's "Build workout": the sheet, the result, Start, and Today's rows at a gym without the planned equipment.
+/// `-seedGym` gives "Home": kettlebells (20 and 24 kg) and a flat bench, with the seeded Push + Arms routine on the
+/// default (Saturday) date.
 final class BuildWorkoutUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -106,28 +107,15 @@ final class BuildWorkoutUITests: XCTestCase {
         XCTAssertTrue(Set(first).isDisjoint(with: second), "none of them repeat while the gym has more")
     }
 
-    func testSwappedBadgeOnToday() {
+    /// Home has no barbell, but the app never swaps (owner, 2026-11-18): Today shows the plan, unmarked.
+    func testTodayKeepsThePlanAtAGymWithoutItsEquipment() {
         let app = launch()
-        let row = element(app, "today.row.swapped.3294")
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertTrue(row.label.contains("SWAPPED"), row.label)
-        XCTAssertTrue(row.label.contains("Barbell Bench Press"), "the note names what it replaces: \(row.label)")
-        let note = element(app, "today.gymNote")
-        XCTAssertTrue(note.exists)
-        XCTAssertTrue(note.label.hasSuffix("swapped for this gym. Your plan isn't changed."), note.label)
-    }
-
-    func testUsePlannedAnyway() {
-        let app = launch()
-        XCTAssertTrue(element(app, "today.row.swapped.3294").waitForExistence(timeout: 5))
-        app.buttons["today.row.menu.3294"].tap()
-        let use = app.buttons["today.menu.usePlanned"]
-        XCTAssertTrue(use.waitForExistence(timeout: 5))
-        XCTAssertEqual(use.label, "Use Barbell Bench Press anyway")
-        use.tap()
-        XCTAssertTrue(element(app, "today.row.0025").waitForExistence(timeout: 5), "the planned exercise is back")
-        XCTAssertFalse(element(app, "today.row.swapped.3294").exists)
-        XCTAssertFalse(element(app, "today.row.swapped.0025").exists, "and the gym leaves it alone")
+        let row = element(app, "today.row.0025")
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the barbell bench press stays planned")
+        XCTAssertFalse(row.label.contains("SWAPPED"), row.label)
+        XCTAssertFalse(row.label.contains("NOT HERE"), row.label)
+        XCTAssertFalse(element(app, "today.row.3294").exists, "nothing was put in its place")
+        XCTAssertEqual(app.buttons["today.gymChip"].label, "Gym: Home")
     }
 
     /// The two-button bottom bar: both meet 44 pt, and Start still starts.

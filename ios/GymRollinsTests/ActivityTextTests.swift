@@ -17,11 +17,11 @@ import UIKit
                               sourceName: "Apple Watch", fromWatch: true)
     }
 
-    /// The owner's LifeFitness ride: 5 min 8 s, 2.26 km, 40 of 48 kcal, 138 W, 62 rpm.
-    private func ride(durationS: Double = 308) -> HealthActivity {
+    /// A sample indoor ride: 7 min 30 s, 3.4 km, 62 of 75 kcal, 150 W, 70 rpm.
+    private func ride(durationS: Double = 450) -> HealthActivity {
         HealthActivity(id: UUID(), kind: "cycling", startedAt: start, endedAt: start.addingTimeInterval(durationS),
-                       durationS: durationS, kcal: 40, totalKcal: 48, distanceM: 2_260, avgHr: 128, maxHr: 151,
-                       avgPowerW: 138, avgCadenceRpm: 62, sourceName: "LifeFitness", fromWatch: true)
+                       durationS: durationS, kcal: 62, totalKcal: 75, distanceM: 3_400, avgHr: 124, maxHr: 146,
+                       avgPowerW: 150, avgCadenceRpm: 70, sourceName: "Indoor Bike", fromWatch: true)
     }
 
     // MARK: Detail
@@ -29,30 +29,30 @@ import UIKit
     @Test func theDetailListsEveryMetricInFitnessOrder() {
         let metrics = ActivityText.details(ride(), unit: .kg)
         #expect(metrics == [
-            MetricReading(key: "duration", label: "Workout Time", value: "0:05:08", unit: nil,
-                          spoken: "5 minutes 8 seconds", tint: .time),
-            MetricReading(key: "distance", label: "Distance", value: "2.26", unit: "KM", spoken: "2.26 kilometres",
+            MetricReading(key: "duration", label: "Workout Time", value: "0:07:30", unit: nil,
+                          spoken: "7 minutes 30 seconds", tint: .time),
+            MetricReading(key: "distance", label: "Distance", value: "3.40", unit: "KM", spoken: "3.40 kilometres",
                           tint: .distance),
-            MetricReading(key: "kcal", label: "Active Calories", value: "40", unit: "KCAL",
-                          spoken: "40 kilocalories", tint: .calories),
-            MetricReading(key: "totalKcal", label: "Total Calories", value: "48", unit: "KCAL",
-                          spoken: "48 kilocalories", tint: .calories),
-            MetricReading(key: "power", label: "Avg. Power", value: "138", unit: "W", spoken: "138 watts",
+            MetricReading(key: "kcal", label: "Active Calories", value: "62", unit: "KCAL",
+                          spoken: "62 kilocalories", tint: .calories),
+            MetricReading(key: "totalKcal", label: "Total Calories", value: "75", unit: "KCAL",
+                          spoken: "75 kilocalories", tint: .calories),
+            MetricReading(key: "power", label: "Avg. Power", value: "150", unit: "W", spoken: "150 watts",
                           tint: .power),
-            MetricReading(key: "cadence", label: "Avg. Cadence", value: "62", unit: "RPM",
-                          spoken: "62 revolutions per minute", tint: .cadence),
-            MetricReading(key: "avgHr", label: "Avg. Heart Rate", value: "128", unit: "BPM",
-                          spoken: "128 beats per minute", tint: .heartRate),
-            MetricReading(key: "maxHr", label: "Max Heart Rate", value: "151", unit: "BPM",
-                          spoken: "151 beats per minute", tint: .heartRate),
+            MetricReading(key: "cadence", label: "Avg. Cadence", value: "70", unit: "RPM",
+                          spoken: "70 revolutions per minute", tint: .cadence),
+            MetricReading(key: "avgHr", label: "Avg. Heart Rate", value: "124", unit: "BPM",
+                          spoken: "124 beats per minute", tint: .heartRate),
+            MetricReading(key: "maxHr", label: "Max Heart Rate", value: "146", unit: "BPM",
+                          spoken: "146 beats per minute", tint: .heartRate),
         ])
     }
 
     @Test func distanceFollowsTheProfileUnit() {
         let miles = ActivityText.details(ride(), unit: .lb).first { $0.key == "distance" }
-        #expect(miles?.value == "1.40")
+        #expect(miles?.value == "2.11")
         #expect(miles?.unit == "MI")
-        #expect(miles?.spoken == "1.40 miles")
+        #expect(miles?.spoken == "2.11 miles")
         #expect(ActivityText.details(walk(distanceM: 0), unit: .kg).allSatisfy { $0.key != "distance" })
     }
 
@@ -64,7 +64,7 @@ import UIKit
     }
 
     @Test func timeIsHoursMinutesSeconds() {
-        #expect(ActivityText.clock(308) == "0:05:08")
+        #expect(ActivityText.clock(450) == "0:07:30")
         #expect(ActivityText.clock(2_700) == "0:45:00")
         #expect(ActivityText.clock(3_725) == "1:02:05")
         #expect(ActivityText.clock(-4) == "0:00:00")
@@ -76,7 +76,7 @@ import UIKit
 
     @Test func theHeadlineIsTheDistanceElseCaloriesElseTime() {
         #expect(ActivityText.headline(ride(), unit: .kg)
-            == MetricReading(key: "distance", label: "Distance", value: "2.26", unit: "KM", spoken: "2.26 kilometres",
+            == MetricReading(key: "distance", label: "Distance", value: "3.40", unit: "KM", spoken: "3.40 kilometres",
                              tint: .workout))
         let calories = ActivityText.headline(walk(distanceM: nil), unit: .kg)
         #expect(calories.key == "kcal" && calories.value == "180" && calories.unit == "KCAL")
@@ -91,16 +91,6 @@ import UIKit
         let label = ActivityText.cardLabel(walk(), unit: .kg)
         #expect(label.hasPrefix("Walk, 3.40 kilometres, "), "\(label)")
         #expect(label.hasSuffix(", 45 min, Apple Watch"), "\(label)")
-    }
-
-    // MARK: A GymRollins workout
-
-    @Test func theMeasuredBlockHasCaloriesHeartRateAndPowerWhenThereIsOne() {
-        #expect(ActivityText.measured(walk(kcal: 412, avgHr: 128, maxHr: 162)).map(\.key) == ["kcal", "avgHr", "maxHr"])
-        #expect(ActivityText.measured(ride()).map(\.key) == ["kcal", "avgHr", "maxHr", "power"])
-        #expect(ActivityText.measured(walk(kcal: nil, maxHr: nil)).map(\.value) == ["102"])
-        #expect(ActivityText.measured(walk(kcal: nil, avgHr: nil, maxHr: nil)).isEmpty)
-        #expect(ActivityText.measuredTitle(walk()) == "Apple Watch measured")
     }
 
     @Test func theWeeksMeasuredCaloriesCountOnlyThisWeek() {

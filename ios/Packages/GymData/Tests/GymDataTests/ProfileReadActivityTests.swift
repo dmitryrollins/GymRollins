@@ -17,7 +17,7 @@ import Testing
         try f.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true,
                                          propose: true, autoApply: false, logWorkouts: false, readActivity: false)
         #expect(try !f.profiles.load().mcpReadActivity)
-        try f.profiles.save(try f.profiles.load().withLimits("left knee", until: nil))
+        try f.profiles.save(try f.profiles.load().withLimits("ankle sprain", until: nil))
         #expect(try !f.profiles.load().mcpReadActivity, "saving the whole profile keeps it")
         try f.profiles.setMcpPermissions(readWorkouts: true, readBody: true, readPlan: true, readGyms: true,
                                          propose: true, autoApply: false, logWorkouts: true)

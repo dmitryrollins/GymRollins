@@ -139,6 +139,8 @@ public final class WorkoutRepository {
         r.deletedAt = now()
         r.updatedAt = now()
         r.dirty = true
+        // What Health measured during it goes too (plan 40).
+        try MeasurementRecord.remove(for: id, in: context)
         try context.save()
     }
 

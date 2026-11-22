@@ -17,11 +17,9 @@ let richGym: [String: ListingLoads] = [
 @Suite struct GymEnvironmentTests {
     @Test func noCurrentGymChangesNothing() throws {
         let rig = try GymTestRig.make()
-        let plan = try rig.env.todaysPlan().plan
-        #expect(plan.gymSwaps.isEmpty)
-        #expect(plan == plan.adapted(by: nil))
+        _ = try rig.env.todaysPlan()
         #expect(rig.env.gymMatcher() == nil)
-        #expect(rig.env.gymAdapter() == nil)
+        #expect(rig.env.todayGymContext() == nil)
         #expect(rig.env.gymLoads("0541") == nil)
     }
 
@@ -77,7 +75,7 @@ let richGym: [String: ListingLoads] = [
         #expect(rig.env.gymMatcher() == nil)
         rig.defaults.set("not a uuid", forKey: AppEnvironment.currentGymKey)
         #expect(rig.env.currentGym == nil)
-        #expect(try rig.env.todaysPlan().plan.gymSwaps.isEmpty)
+        _ = try rig.env.todaysPlan()
     }
 
     @Test func changingTheGymReloadsTodayAndTheWatchWithoutSyncing() throws {
@@ -94,23 +92,47 @@ let richGym: [String: ListingLoads] = [
         #expect(rig.env.todayPlanRevision == today + 2)
     }
 
-    @Test func todaysPlanIsAdapted() throws {
+    /// The app never swaps for the gym (owner, 2026-11-18): at a gym without a barbell (or with nothing listed),
+    /// today's plan, a later day's plan and what the watch's "Start today's workout" starts are all the routine.
+    @Test func theGymNeverChangesThePlan() throws {
+        let rig = try GymTestRig.make()
+        let push = try rig.routine("Push + Arms")
+        #expect(push.exercises.contains { $0.exerciseId == "0025" }, "the barbell bench press is planned")
+        let later = TodayDay(offset: 2).date(now: rig.env.now())
+        try rig.env.schedule(every: WeekSchedule.isoWeekday(later), push.id)
+        for gym in [try rig.gym("Iron Works Gym", kettlebellGym), try rig.gym("Garage")] {
+            rig.env.setCurrentGym(gym.id)
+            let matcher = try #require(rig.env.gymMatcher())
+            if case .available = matcher.availability(of: "0025") {
+                Issue.record("\(gym.name) can't do the barbell bench press")
+            }
+            try rig.switchToday(to: push)
+            let today = try rig.env.todaysPlan().plan
+            #expect(today.exercises == push.exercises, Comment(rawValue: gym.name))
+            #expect(!today.canSaveToRoutine, Comment(rawValue: gym.name))
+            let model = TodayModel.make(plan: today, profile: rig.env.profile, library: rig.env.library,
+                                        history: { _ in [] }, gym: rig.env.todayGymContext())
+            #expect(model.rows.map(\.exerciseId) == push.exercises.map(\.exerciseId), Comment(rawValue: gym.name))
+            #expect(try rig.env.laterDay(on: later).plan.exercises == push.exercises, Comment(rawValue: gym.name))
+        }
+        #expect(rig.env.startTodaysWorkout())
+        let workout = try #require(rig.env.session?.workout)
+        #expect(workout.entries.map(\.exerciseId) == push.exercises.map(\.exerciseId))
+        #expect(try rig.env.routines.routine(push.id) == push)
+    }
+
+    /// A gym with nothing listed still gives Today its context (no loads, no photos), and nothing else changes.
+    @Test func aGymWithNothingListedKeepsThePlan() throws {
         let rig = try GymTestRig.make()
         let push = try rig.routine("Push + Arms")
         try rig.switchToday(to: push)
-        rig.env.setCurrentGym(try rig.gym("Kettlebells", kettlebellGym).id)
-
-        let plan = try rig.env.todaysPlan().plan
-        #expect(!plan.gymSwaps.isEmpty)
-        #expect(plan.plannedExercises == push.exercises)
-        #expect(!plan.exercises.map(\.exerciseId).contains("0025"), "a barbell bench press isn't doable here")
-        #expect(!plan.canSaveToRoutine, "a swap isn't an edit, so Save to routine isn't offered")
-        #expect(try rig.env.routines.routine(push.id) == push)
-        rig.env.setCurrentGym(nil)
+        rig.env.setCurrentGym(try rig.gym("Just added").id)
         #expect(try rig.env.todaysPlan().plan.exercises == push.exercises)
+        let context = try #require(rig.env.todayGymContext())
+        #expect(push.exercises.allSatisfy { context.loads(for: $0.exerciseId) == nil })
     }
 
-    @Test func startSessionUsesSwapsAndFittedWeights() throws {
+    @Test func startSessionUsesThePlanAndFittedWeights() throws {
         let rig = try GymTestRig.make()
         let heavy = Routine(name: "KB", exercises: [
             RoutineExercise(exerciseId: "0541", sets: 3, reps: 12, repsMin: 10, weightKg: 30),
@@ -119,66 +141,16 @@ let richGym: [String: ListingLoads] = [
         try rig.env.routines.upsert(heavy)
         try rig.switchToday(to: heavy)
         rig.env.setCurrentGym(try rig.gym("Kettlebells", kettlebellGym).id)
-        let plan = try rig.env.todaysPlan().plan
-        #expect(plan.gymSwaps.count == 1, "the barbell preacher curl can't be done here")
 
         #expect(rig.env.startTodaysWorkout())
 
         let workout = try #require(rig.env.session?.workout)
-        #expect(workout.entries.map(\.exerciseId) == plan.exercises.map(\.exerciseId))
+        #expect(workout.entries.map(\.exerciseId) == ["0541", "0070"], "the barbell preacher curl stays planned")
         let row = try #require(workout.entries.first)
         #expect(row.sets.allSatisfy { $0.weightKg == 24 }, "30 kg isn't on the shelf: the heaviest bell is 24 kg")
         #expect(workout.routineId == heavy.id)
     }
 
-    @Test func everyAdaptedExerciseIsBackedByListings() throws {
-        let rig = try GymTestRig.make()
-        let gyms = [try rig.gym("KB", kettlebellGym), try rig.gym("Rich", richGym), try rig.gym("Empty")]
-        var available = 0, swapped = 0, unavailable = 0
-        for gym in gyms {
-            rig.env.setCurrentGym(gym.id)
-            let matcher = try #require(rig.env.gymMatcher())
-            for routine in try rig.env.routines.all() where !routine.exercises.isEmpty {
-                try rig.switchToday(to: routine)
-                let plan = try rig.env.todaysPlan().plan
-                let model = TodayModel.make(plan: plan, profile: rig.env.profile, library: rig.env.library,
-                                            history: { _ in [] }, gym: rig.env.todayGymContext())
-                for item in plan.exercises {
-                    let label = "\(gym.name) \(item.exerciseId)"
-                    let row = try #require(model.rows.first { $0.id == item.id }, Comment(rawValue: label))
-                    if let planned = plan.gymSwaps[item.id] {
-                        swapped += 1
-                        guard case .missing = matcher.availability(of: planned.exerciseId) else {
-                            Issue.record("\(label): swapped although the gym can do \(planned.exerciseId)")
-                            continue
-                        }
-                        guard case let .available(match) = matcher.availability(of: item.exerciseId) else {
-                            Issue.record("\(label): a swap must land on something the gym has")
-                            continue
-                        }
-                        #expect(match.listingIds.allSatisfy { matcher.listing($0) != nil }, Comment(rawValue: label))
-                        if case .swapped = row.gymMark {} else { Issue.record("\(label): the swapped row says so: \(String(describing: row.gymMark))") }
-                        continue
-                    }
-                    switch matcher.availability(of: item.exerciseId) {
-                    case let .available(match):
-                        available += 1
-                        #expect(match.listingIds.allSatisfy { matcher.listing($0) != nil }, Comment(rawValue: label))
-                        #expect(row.gymMark == nil, Comment(rawValue: label))
-                    case .unmapped:
-                        #expect(row.gymMark == nil, Comment(rawValue: label))
-                    case .missing:
-                        unavailable += 1
-                        if case .unavailable = row.gymMark {} else { Issue.record("\(label): an item the gym can't do says so: \(String(describing: row.gymMark))") }
-                    }
-                }
-            }
-        }
-        #expect(available > 0 && swapped > 0 && unavailable > 0,
-                "every case was reached: \(available) available, \(swapped) swapped, \(unavailable) unavailable")
-    }
-
-    /// Today, plan mode and the watch each call this, so it must stay cheap on the real library.
     @Test func addingAnExerciseMidWorkoutUsesTheGymsWeights() throws {
         let rig = try GymTestRig.make()
         let gym = try rig.gym("KB", ["kettlebells": .fixed(kg: [20, 24])])
@@ -195,7 +167,8 @@ let richGym: [String: ListingLoads] = [
         #expect(rig.env.adHocEntry(exerciseId: curl.id).sets.filter { !$0.warmup }.allSatisfy { $0.weightKg == 24 })
     }
 
-    @Test func adaptingTheWholeSplitIsFast() throws {
+    /// Today, plan mode and the watch each call this, so it must stay cheap on the real library.
+    @Test func todaysPlanAtAGymForTheWholeSplitIsFast() throws {
         let rig = try GymTestRig.make()
         rig.env.setCurrentGym(try rig.gym("KB", kettlebellGym).id)
         let routines = try rig.env.routines.all().filter { !$0.exercises.isEmpty }

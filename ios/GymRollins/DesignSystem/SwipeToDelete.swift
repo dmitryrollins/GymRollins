@@ -52,7 +52,7 @@ struct SwipeToDelete: ViewModifier {
         Button(role: .destructive) { delete(onDelete) } label: {
             Image(systemName: "trash").font(.body.weight(.semibold)).foregroundStyle(.white)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.primaryFill) // the Log Set red: white on it reads (Theme.destructive is too light)
+                .background(Theme.destructiveFill) // white on it is 5.6:1; on system red only 3.4:1
                 .clipShape(.rect(cornerRadius: Self.cornerRadius)) // also clips the icon while the button is still narrow
         }
         .buttonStyle(.plain)

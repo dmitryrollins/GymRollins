@@ -138,7 +138,7 @@ import Testing
         expectHalfChanges(days, "Rich chest")
     }
 
-    /// The owner's real gym (`-seedGym`): kettlebells and a flat bench, building Arms.
+    /// The sample home gym (`-seedGym`): kettlebells and a flat bench, building Arms.
     @Test func fourDaysInARowAtHomeForArms() throws {
         let rig = try GymTestRig.make()
         let home = try DebugGymSeed.apply(context: rig.env.container.mainContext, now: rig.env.now())

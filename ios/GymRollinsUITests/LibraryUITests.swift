@@ -11,8 +11,37 @@ final class LibraryUITests: XCTestCase {
         app.tabBars.buttons["Library"].tap()
     }
 
+    /// The header like a contacts app (owner, 2026-11-19): the pill counts the exercises shown, following the
+    /// body-part filter; Search swaps the pill for the field, and ✕ closes it and shows them all again.
+    func testTheHeaderCountsAndOpensSearch() {
+        let count = app.staticTexts["library.subtitle"]
+        XCTAssertTrue(count.waitForExistence(timeout: 5))
+        let all = count.label
+        XCTAssertTrue(all.hasSuffix(" exercises"), all)
+        app.buttons["library.filter.back"].tap()
+        XCTAssertNotEqual(count.label, all, "the count follows the filter")
+        app.buttons["library.filter.all"].tap()
+        XCTAssertEqual(count.label, all)
+
+        app.buttons["library.searchButton"].tap()
+        let search = app.searchFields["library.search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["library.title"].exists, "the field takes the pill's place")
+        search.typeText("barbell bench press") // the field has the keyboard
+        XCTAssertTrue(app.buttons["library.row.0025"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "library-search"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        app.buttons["library.closeSearch"].tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 5))
+        XCTAssertEqual(count.label, all, "closing clears the search")
+        XCTAssertFalse(search.exists)
+    }
+
     func testMusclesTabShowsTheBodyMap() {
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("barbell bench press")
@@ -27,7 +56,7 @@ final class LibraryUITests: XCTestCase {
     }
 
     func testSearchAndOpenDetail() {
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("barbell bench press")
@@ -43,7 +72,7 @@ final class LibraryUITests: XCTestCase {
 
     func testFilterByBodyPart() {
         app.buttons["library.filter.back"].tap()
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("cable pulldown")
@@ -71,7 +100,7 @@ final class LibraryUITests: XCTestCase {
         name.tap()
         name.typeText("Handle Band Squat to Press")
         app.buttons["custom.save"].tap()
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         search.tap()
         search.typeText("handle band squat")
         XCTAssertTrue(app.staticTexts["Handle Band Squat To Press"].waitForExistence(timeout: 5))

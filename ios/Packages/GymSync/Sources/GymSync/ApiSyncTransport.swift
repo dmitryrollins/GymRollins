@@ -15,7 +15,7 @@ import GymData
 /// (`ApiSyncTransport+Claude.swift`).
 public struct ApiSyncTransport: SyncTransport {
     public static let defaultPageSize = 500
-    /// A workout page carries every entry and set. The owner averages 6 entries and 18 sets a workout, so 50 workouts
+    /// A workout page carries every entry and set. A workout has about 6 entries and 18 sets, so 50 workouts
     /// are about a thousand rows: small enough for one request within the Worker's free-plan CPU time.
     public static let defaultWorkoutPageSize = 50
     static let pushBatchSize = 200
@@ -81,6 +81,10 @@ public struct ApiSyncTransport: SyncTransport {
         try await push(activityDays, to: "activity-days")
     }
 
+    public func push(workoutMeasurements: [WorkoutMeasurementDTO]) async throws -> [RowAck] {
+        try await push(workoutMeasurements, to: "workout-measurements")
+    }
+
     // MARK: Pull
 
     public func pullProfile(since: Date?) async throws -> [ProfileDTO] {
@@ -121,6 +125,10 @@ public struct ApiSyncTransport: SyncTransport {
 
     public func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO] {
         try await pull("activity-days", tiebreak: "day", since: since)
+    }
+
+    public func pullWorkoutMeasurements(since: Date?) async throws -> [WorkoutMeasurementDTO] {
+        try await pull("workout-measurements", tiebreak: "workout_id", since: since)
     }
 
     public func fetchWorkout(id: UUID) async throws -> WorkoutDTO? {

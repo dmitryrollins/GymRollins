@@ -57,7 +57,7 @@ struct SetEffortRow: View {
         let isSelected = selected == choice
         return Button { onTap(choice) } label: {
             Text(SetEffortText.title(choice))
-                .font(Theme.display(17, heavy: isSelected))
+                .font(Theme.number(17, heavy: isSelected))
                 .foregroundStyle(isSelected ? Theme.background : Theme.textPrimary)
                 .frame(minWidth: Theme.minTapSize, minHeight: Theme.minTapSize)
                 .background(isSelected ? Theme.textPrimary : Theme.cardInner, in: .capsule)

@@ -6,7 +6,6 @@ import UIKit
 struct TodayView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model = TodayModel(routineId: nil, title: "", summary: "", rows: [])
     @State private var showPlan = false
     @State private var showWorkout = false
@@ -69,17 +68,15 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    header
-                    VStack(alignment: .leading, spacing: 14) {
-                        dayContent
-                    }
-                    .id(day.offset)
-                    .transition(.push(from: forward ? .trailing : .leading))
+                    dayContent
                 }
+                .id(day.offset)
+                .transition(.push(from: forward ? .trailing : .leading))
                 .padding(.horizontal, Theme.gutter)
                 .padding(.bottom, 170)
             }
             .gesture(DaySwipeGesture { show($0 > 0 ? day.next : day.previous) })
+            .fixedHeader { header }
             .background(Theme.background)
             .refreshable { await env.sync.syncNow() }
             .safeAreaInset(edge: .bottom) { bottomBar }
@@ -105,7 +102,9 @@ struct TodayView: View {
                                  scheduled: scheduledRoutine?.id, date: day.date(now: env.now()), isToday: day.isToday,
                                  onAsScheduled: { dayStore.clear(); reload() }, onSwitch: switchDay)
             }
-            .sheet(isPresented: $showDatePicker) { TodayDatePickerSheet(selected: day, now: env.now()) { show($0) } }
+            .sheet(isPresented: $showDatePicker) {
+                TodayDatePickerSheet(selected: day, now: env.now(), days: env.trainingCalendar()) { show($0) }
+            }
             .buildWorkoutFlow(requested: $buildRequested, onStart: startBuilt)
             .sheet(isPresented: $showAddExercise) {
                 ExercisePickerView(excluded: plan?.usedExerciseIds ?? []) { ids in
@@ -169,26 +168,13 @@ struct TodayView: View {
         }
     }
 
-    /// The day's content: its title, plan, rows and the editing controls (today's status lines on today only).
+    /// The day's content: its plan, rows and the editing controls (today's status lines on today only).
     @ViewBuilder
     private var dayContent: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                DisplayTitle(text: day.title(now: env.now()), size: 48)
-                    .lineLimit(1).minimumScaleFactor(0.6)
-                    .accessibilityIdentifier("today.title")
-                Text("\(model.title) \u{00B7} \(model.summary)")
-                    .foregroundStyle(Theme.textSecondary)
-                    .accessibilityIdentifier("today.summary")
-            }
-            Spacer(minLength: 8)
-            if env.session == nil && (env.hasAnyRoutine || plan?.kind == .built) { switchButton }
-        }
         if day.isToday { todayStatus }
         if let loadError { Text(loadError).foregroundStyle(Theme.destructive) }
         if let session = env.session { resumeBanner(session) }
         if day.isToday && !env.hasAnyRoutine && model.rows.isEmpty { emptyPlanState }
-        if let note = model.gymNote { TodayGymNote(text: note) }
         ForEach(model.rows) { row in exerciseRow(row) }
         if env.session == nil {
             addExerciseRow
@@ -269,33 +255,13 @@ struct TodayView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Button { showSettings = true } label: { Text("R").font(.headline) }
-                .glassCircle()
-                .accessibilityLabel("Settings")
-                .accessibilityIdentifier("today.settings")
-            Button { showPlan = true } label: { Text("My Plan \u{203A}").font(.subheadline.weight(.semibold)) }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("today.myPlan")
-            StreakChip()
-            Spacer()
-            Button { showDatePicker = true } label: {
-                let date = day.date(now: env.now()).formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-                // At accessibility sizes the spelled-out date breaks one letter per line; the title names the day.
-                if dynamicTypeSize.isAccessibilitySize {
-                    Image(systemName: "calendar").font(.footnote.weight(.semibold)).accessibilityLabel(date)
-                } else {
-                    Label(date, systemImage: "calendar").font(.footnote.weight(.semibold))
-                }
-            }
-            .buttonStyle(.glass)
-            .disabled(env.session != nil)
-            .accessibilityHint("Pick a day to see its workout")
-            .accessibilityIdentifier("today.date")
-            .accessibilityAction(named: "Next day") { show(day.next) }
-            .accessibilityAction(named: "Previous day") { show(day.previous) }
-        }
-        .padding(.top, 8)
+        TodayHeader(workout: model.title, summary: model.summary, exercises: model.rows.count,
+                    day: day.title(now: env.now()), date: day.date(now: env.now()),
+                    canSwitch: env.session == nil && (env.hasAnyRoutine || plan?.kind == .built),
+                    canPickDay: env.session == nil,
+                    actions: .init(settings: { showSettings = true }, switchWorkout: { showSwitch = true },
+                                   plan: { showPlan = true }, pickDay: { showDatePicker = true },
+                                   nextDay: { show(day.next) }, previousDay: { show(day.previous) }))
     }
 
     /// Shows `new` with a slide; a running workout keeps Today on today.
@@ -413,15 +379,6 @@ struct TodayView: View {
 
     // MARK: Today's workout controls
 
-    private var switchButton: some View {
-        Button { showSwitch = true } label: {
-            Label("Switch", systemImage: "arrow.left.arrow.right").font(.subheadline.weight(.semibold))
-        }
-        .buttonStyle(.glass)
-        .accessibilityHint("Pick another workout for this day")
-        .accessibilityIdentifier("today.switch")
-    }
-
     /// Before the workout starts a row opens the exercise screen in plan mode; during a workout it's display only.
     private func exerciseRow(_ row: TodayModel.Row) -> some View {
         let editable = env.session == nil
@@ -436,8 +393,7 @@ struct TodayView: View {
                 confirmingNever: $confirmingNever, error: $loadError,
                 onDetails: { detailExercise = row.exerciseId }, onHistory: { historyExercise = row.exerciseId },
                 onReplace: { replacingItem = row.id }, onReset: { editor.resetSets(row.id) },
-                onDelete: { editor.delete(row.id) },
-                usePlanned: usePlannedItem(row))
+                onDelete: { editor.delete(row.id) })
         } label: {
             Image(systemName: "ellipsis")
                 .font(.body.weight(.bold))
@@ -447,11 +403,6 @@ struct TodayView: View {
         }
         .accessibilityLabel("More for \(row.name)")
         .accessibilityIdentifier("today.row.menu.\(row.exerciseId)")
-    }
-
-    private func usePlannedItem(_ row: TodayModel.Row) -> (name: String, action: () -> Void)? {
-        guard case let .swapped(planned, _) = row.gymMark else { return nil }
-        return (planned, { editor.usePlanned(row.id) })
     }
 
     private var addExerciseRow: some View {
@@ -464,7 +415,7 @@ struct TodayView: View {
                 Text("Add Exercise").font(.body.weight(.semibold))
                 Spacer()
             }
-            .foregroundStyle(Theme.primaryFill)
+            .foregroundStyle(Theme.accent) // text on the page: the coral (7.6:1), not the darker red fill (3.8:1)
             .padding(10)
             .contentShape(.rect)
         }
@@ -510,7 +461,7 @@ struct TodayView: View {
                 if day.isToday {
                     apply(plan.savedToRoutine(at: env.now()))
                 } else if plan.kind == .switched {
-                    apply(plan.switched(to: routine).adapted(by: env.gymAdapter())) // still this date's workout
+                    apply(plan.switched(to: routine)) // still this date's workout
                 } else {
                     dayStore.clear()
                 }
@@ -531,7 +482,7 @@ struct TodayView: View {
         guard let current = plan else { return }
         switch scope {
         case .thisDay:
-            apply(current.switched(to: routine).adapted(by: env.gymAdapter()))
+            apply(current.switched(to: routine))
         case .everyWeek:
             do {
                 try env.schedule(every: weekday, routine?.id)
@@ -564,7 +515,7 @@ struct TodayView: View {
                     loadError = "Couldn't undo. Your plan wasn't changed."
                 }
             }
-            .buttonStyle(.glassProminent).tint(Theme.primaryButtonFill)
+            .prominentGlass()
             .accessibilityIdentifier("proposal.undo")
             Button { env.clearLastApplied() } label: { Image(systemName: "xmark") }
                 .buttonStyle(.glass)

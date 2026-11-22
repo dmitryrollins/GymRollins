@@ -76,7 +76,7 @@ final class ExercisePreferenceUITests: XCTestCase {
     func testDetailMenuMorePutsTheExerciseFirstInThePicker() {
         let app = launch()
         app.tabBars.buttons["Library"].tap()
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("chest dip")
@@ -102,7 +102,7 @@ final class ExercisePreferenceUITests: XCTestCase {
     func testNeverIsHiddenFromThePickerButFoundBySearch() {
         let app = launch()
         app.tabBars.buttons["Library"].tap()
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("3/4 sit-up")

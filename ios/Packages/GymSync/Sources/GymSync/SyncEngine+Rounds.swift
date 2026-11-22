@@ -33,7 +33,17 @@ extension SyncEngine {
         })
         let stale = try await pushWorkouts(only: nil, force: false)
         try await pushActivity()
+        try await pushMeasurements()
         return stale
+    }
+
+    /// What Apple Health measured during workouts (plan 40), after the workouts: the server takes a row only for a
+    /// workout it holds, so rows whose workout is still dirty wait for a later round instead of being refused.
+    private func pushMeasurements() async throws {
+        try await pushBatch(.workoutMeasurements, rows: try store.pushableWorkoutMeasurements(),
+                            key: { $0.value.workoutId.uuidString }, send: {
+            try await self.transport.push(workoutMeasurements: $0.map(WorkoutMeasurementDTO.init))
+        })
     }
 
     /// Outside workouts and days of activity (plan 39), after the workouts.
@@ -191,6 +201,9 @@ extension SyncEngine {
         try await pull(.activityDays, fetch: { try await self.transport.pullActivityDays(since: $0) }, apply: {
             try self.store.applyRemote(activityDays: $0.map { $0.toDomain() })
         })
+        // After the workouts: a row is kept only for a workout that is on this iPhone (SyncStore+Measurements).
+        try await pull(.workoutMeasurements, fetch: { try await self.transport.pullWorkoutMeasurements(since: $0) },
+                       apply: { try self.store.applyRemote(workoutMeasurements: $0.map { $0.toDomain() }) })
         if transport.servesProposals { try await pullProposals() }
         return conflicts
     }

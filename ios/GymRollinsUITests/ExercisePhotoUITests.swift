@@ -11,7 +11,7 @@ final class ExercisePhotoUITests: XCTestCase {
 
     private func openBenchDetail(_ app: XCUIApplication) {
         app.tabBars.buttons["Library"].tap()
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("barbell bench press")
@@ -88,7 +88,7 @@ final class WgerUITests: XCTestCase {
 
     private func openDetail(_ app: XCUIApplication, search text: String, id: String) {
         app.tabBars.buttons["Library"].tap()
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText(text)

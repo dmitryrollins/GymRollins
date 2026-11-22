@@ -317,7 +317,7 @@ extension LoggingView {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             HStack(spacing: 6) {
                 Image(systemName: "timer").font(.caption.weight(.semibold)).accessibilityHidden(true)
-                Text(DurationFormatter.clock(session.elapsed(at: env.now()))).font(Theme.display(15))
+                Text(DurationFormatter.clock(session.elapsed(at: env.now()))).font(Theme.number(15))
             }
             .foregroundStyle(Theme.textPrimary)
         }
@@ -343,8 +343,7 @@ extension LoggingView {
                         confirmingNever: $confirmingNever, error: $menuError,
                         onDetails: { detailExercise = exerciseId }, onHistory: { showHistory = true },
                         onReplace: { showSwap = true }, onReset: { resetSets(editor, itemId) },
-                        onDelete: { editor.delete(itemId) },
-                        usePlanned: plannedAnyway(editor, itemId))
+                        onDelete: { editor.delete(itemId) })
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -353,13 +352,6 @@ extension LoggingView {
             .accessibilityLabel("More options")
             .accessibilityIdentifier("logging.options")
         }
-    }
-
-    /// "Use <planned> anyway" for an item the gym swapped.
-    private func plannedAnyway(_ editor: TodayPlanEditor, _ itemId: UUID) -> (name: String, action: () -> Void)? {
-        guard let planned = editor.plan?.gymSwaps[itemId] else { return nil }
-        let name = DisplayName.of(env.library.exercise(planned.exerciseId)?.name ?? planned.exerciseId)
-        return (name, { editor.usePlanned(itemId) })
     }
 
     /// Back arrow on the left, where iOS puts Back (the screen is pushed, not presented).

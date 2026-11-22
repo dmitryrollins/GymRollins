@@ -22,6 +22,7 @@ import type {
   RoutineRow,
   ScheduleRow,
   WorkoutAdded,
+  WorkoutMeasurementRow,
   WorkoutQuery,
   WorkoutRow,
   WorkoutSpanRow,
@@ -67,6 +68,8 @@ export interface FakeData {
   /** Outside workouts and days of activity (plan 39). */
   activities?: HealthActivityRow[]
   days?: ActivityDayRow[]
+  /** What Apple Health measured during the workouts (plan 40). */
+  measurements?: WorkoutMeasurementRow[]
 }
 
 
@@ -222,6 +225,15 @@ export class FakeDb implements Db {
       .map((w) => ({ id: w.id, started_at: w.started_at, ended_at: w.ended_at ?? w.started_at }))
     return Promise.resolve(rows)
   }
+
+  /** Like D1Db: the rows of these workouts, hidden while mcp_read_workouts or mcp_read_activity is off. */
+  workoutMeasurements(workoutIds: string[]): Promise<WorkoutMeasurementRow[]> {
+    const p = this.data.profile
+    if (p?.mcp_read_workouts === false || p?.mcp_read_activity === false) return Promise.resolve([])
+    const wanted = new Set(workoutIds.map((id) => id.toLowerCase()))
+    return Promise.resolve((this.data.measurements ?? []).filter((m) => wanted.has(m.workout_id)))
+  }
+
 
   muscleTargets(): Promise<MuscleTargetRow[]> {
     return Promise.resolve(this.data.targets ?? [])

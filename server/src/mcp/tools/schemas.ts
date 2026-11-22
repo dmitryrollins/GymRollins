@@ -120,12 +120,12 @@ export const schemas = {
   activity: z.object({
     days: z.number().int().min(1).max(84).optional().describe('1–84, default 28'),
     time_zone: z.string().min(1).max(64).optional().describe(
-      'IANA time zone for the days and the Monday–Sunday weeks, e.g. Europe/Warsaw. Default: UTC',
+      'IANA time zone for the days and the Monday–Sunday weeks, e.g. Europe/Berlin. Default: UTC',
     ),
   }),
   insights: z.object({
     time_zone: z.string().min(1).max(64).optional().describe(
-      'IANA time zone for the Monday–Sunday week, e.g. Europe/Warsaw. Default: UTC',
+      'IANA time zone for the Monday–Sunday week, e.g. Europe/Berlin. Default: UTC',
     ),
   }),
   strengthLevels: z.object({}),

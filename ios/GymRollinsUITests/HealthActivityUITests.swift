@@ -2,9 +2,10 @@ import XCTest
 
 /// Plan 39: Apple Health activities on the in-memory fake store. `-fakeHealth` also seeds:
 /// - yesterday's Apple Watch walk (Fri 25 Sep, 07:00 UTC, 45 min, 180 kcal);
-/// - an Indoor Cycle from a LifeFitness bike (Thu 24 Sep, 16:02 UTC, 5 min 8 s, 2.26 km, 40 of 48 kcal, 138 W, 62 rpm):
+/// - an Indoor Cycle from an indoor bike (Thu 24 Sep, 16:15 UTC, 7 min 30 s, 3.4 km, 62 of 75 kcal, 150 W, 70 rpm):
 ///   under 10 minutes, so it doesn't count toward the streak;
-/// - an Apple Watch strength recording during `-seedHistory`'s workout of Sat 19 Sep;
+/// - an Apple Watch strength recording during `-seedHistory`'s workout of Sat 19 Sep, and (plan 40) the GymRollins
+///   watch app's own copy of that workout; `-fakeHealthNoWatchCopy` leaves only the recording;
 /// - seven days of steps, today's being 4,210.
 ///
 /// `-healthBeforeActivity` starts with Health on, as a build from before plan 39 left it.
@@ -182,7 +183,7 @@ final class HealthActivityUITests: XCTestCase {
         openLog(app)
         let other = app.staticTexts["log.week.otherKcal"]
         XCTAssertTrue(other.waitForExistence(timeout: 10))
-        XCTAssertEqual(other.label, "+ 220 kcal from other activities (measured)", "the walk's 180 and the ride's 40")
+        XCTAssertEqual(other.label, "+ 242 kcal from other activities (measured)", "the walk's 180 and the ride's 62")
         let card = app.buttons["log.outside.\(walk)"]
         scrollTo(card, in: app)
         XCTAssertTrue(card.waitForExistence(timeout: 5))
@@ -194,7 +195,7 @@ final class HealthActivityUITests: XCTestCase {
         XCTAssertEqual(title.label, "Walk")
         XCTAssertEqual(cell(app, "outside.avgHr").label, "Avg. Heart Rate")
         XCTAssertEqual(cell(app, "outside.avgHr").value as? String, "102 beats per minute")
-        XCTAssertEqual(cell(app, "outside.distance").value as? String, "2.11 miles", "the owner's profile is in lb")
+        XCTAssertEqual(cell(app, "outside.distance").value as? String, "2.11 miles", "the sample profile is in lb")
         XCTAssertFalse(cell(app, "outside.power").exists, "a walk has no power")
         XCTAssertEqual(app.staticTexts["outside.healthNote"].label, "Change or delete it in the Health app.")
         screenshot(app, "outside-walk-detail")
@@ -209,19 +210,19 @@ final class HealthActivityUITests: XCTestCase {
         let card = app.buttons["log.outside.\(ride)"]
         scrollTo(card, in: app)
         XCTAssertTrue(card.waitForExistence(timeout: 5))
-        XCTAssertTrue(card.label.hasPrefix("Cycling, 1.40 miles, ") && card.label.hasSuffix("5 min, LifeFitness"),
+        XCTAssertTrue(card.label.hasPrefix("Cycling, 2.11 miles, ") && card.label.hasSuffix("7 min, Indoor Bike"),
                       card.label)
         card.tap()
         XCTAssertTrue(app.staticTexts["outside.title"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["outside.title"].label, "Cycling")
-        let expected = [("outside.duration", "Workout Time", "5 minutes 8 seconds"),
-                        ("outside.distance", "Distance", "1.40 miles"),
-                        ("outside.kcal", "Active Calories", "40 kilocalories"),
-                        ("outside.totalKcal", "Total Calories", "48 kilocalories"),
-                        ("outside.power", "Avg. Power", "138 watts"),
-                        ("outside.cadence", "Avg. Cadence", "62 revolutions per minute"),
-                        ("outside.avgHr", "Avg. Heart Rate", "128 beats per minute"),
-                        ("outside.maxHr", "Max Heart Rate", "151 beats per minute")]
+        let expected = [("outside.duration", "Workout Time", "7 minutes 30 seconds"),
+                        ("outside.distance", "Distance", "2.11 miles"),
+                        ("outside.kcal", "Active Calories", "62 kilocalories"),
+                        ("outside.totalKcal", "Total Calories", "75 kilocalories"),
+                        ("outside.power", "Avg. Power", "150 watts"),
+                        ("outside.cadence", "Avg. Cadence", "70 revolutions per minute"),
+                        ("outside.avgHr", "Avg. Heart Rate", "124 beats per minute"),
+                        ("outside.maxHr", "Max Heart Rate", "146 beats per minute")]
         for (identifier, label, value) in expected {
             let element = cell(app, identifier)
             scrollTo(element, in: app)
@@ -242,20 +243,20 @@ final class HealthActivityUITests: XCTestCase {
     // MARK: Workout detail
 
     func testAnAppleWatchRecordingDuringAWorkoutShowsOnItAndNotOnItsOwn() {
-        let app = XCUIApplication.launchReady(["-fakeHealth", "-seedHistory"])
+        let app = XCUIApplication.launchReady(["-fakeHealth", "-fakeHealthNoWatchCopy", "-seedHistory"])
         enableHealth(app)
         openLog(app)
         let workouts = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'log.workout.'"))
         XCTAssertTrue(workouts.firstMatch.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["log.outside.\(strength)"].exists, "attached: not listed on its own")
         workouts.firstMatch.tap() // Sat 19 Sep, the newest seeded workout
-        let measured = app.staticTexts["detail.measured.title"]
+        let measured = app.staticTexts["detail.measuredBy"]
         XCTAssertTrue(measured.waitForExistence(timeout: 5))
-        XCTAssertEqual(measured.label, "Apple Watch measured")
-        XCTAssertEqual(cell(app, "detail.measured.kcal").value as? String, "412 kilocalories")
-        XCTAssertEqual(cell(app, "detail.measured.avgHr").value as? String, "128 beats per minute")
-        XCTAssertEqual(cell(app, "detail.measured.maxHr").value as? String, "162 beats per minute")
-        XCTAssertFalse(cell(app, "detail.measured.power").exists)
+        XCTAssertEqual(measured.label, "Measured by Apple Watch", "plan 40: its numbers fill the grid")
+        XCTAssertEqual(cell(app, "detail.activeKcal").value as? String, "412 kilocalories")
+        XCTAssertEqual(cell(app, "detail.avgHeartRate").value as? String, "128 beats per minute")
+        XCTAssertEqual(cell(app, "detail.maxHeartRate").value as? String, "162 beats per minute")
+        XCTAssertFalse(app.staticTexts["detail.measured.title"].exists, "the separate block is gone")
         screenshot(app, "workout-measured")
     }
 }

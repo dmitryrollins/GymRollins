@@ -208,4 +208,17 @@ public protocol HealthStore: Sendable {
     /// Each day of `calendar` from `start` through `end` that has any data: steps from Health's merged statistics,
     /// and move, exercise and stand from the day's Activity summary (plan 39). Oldest first.
     func activityDays(from start: Date, through end: Date, calendar: Calendar) async throws -> [ActivityDay]
+
+    /// What Health holds for the GymRollins workout with this external id (plan 40, spec §5.1): its copy (the watch
+    /// app's when there are two), the watch copy's time and calories, every heart-rate reading from `start` to `end` and
+    /// for `WorkoutMeasuredRules.postWindow` after it (any source), and the copy's effort. No copy: heart rate only.
+    func workoutMeasurements(externalId: UUID, start: Date, end: Date) async throws -> WorkoutMeasurements
+    /// Saves a workout effort score (1–10) and relates it to the workout's copy, after removing GymRollins' own earlier
+    /// rating. Throws when there's no copy or the score can't be written.
+    func rateEffort(externalId: UUID, score: Int) async throws
+    /// Removes GymRollins' own rating of the workout; a rating made in Fitness stays.
+    func clearEffort(externalId: UUID) async throws
+    /// The effort types were part of a finished authorization request. iOS asks only about types never asked, so a
+    /// phone that allowed plan 39's types needs one more request for these.
+    func effortTypesAsked() async -> Bool
 }

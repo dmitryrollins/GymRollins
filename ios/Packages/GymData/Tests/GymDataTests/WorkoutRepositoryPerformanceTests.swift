@@ -26,7 +26,7 @@ struct WorkoutRepositoryPerformanceTests {
         try FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
         container = try GymStore.container(inMemory: false, url: storeDir.appendingPathComponent("perf.store"))
         let now = Date(timeIntervalSince1970: 1_790_380_800)
-        try OwnerSeed.applyLargeHistory(to: container.mainContext, now: now, count: Self.workoutCount)
+        try SampleSeed.applyLargeHistory(to: container.mainContext, now: now, count: Self.workoutCount)
         repo = WorkoutRepository(context: container.mainContext, now: { now })
     }
 

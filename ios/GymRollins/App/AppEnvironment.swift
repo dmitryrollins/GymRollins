@@ -19,6 +19,8 @@ final class AppEnvironment {
     let body: BodyRepository
     /// Outside workouts and days of activity read from Apple Health (plan 39).
     let activities: ActivityRepository
+    /// What Apple Health measured for each workout, saved and synced (plan 40).
+    let measurements: MeasurementRepository
     let customExercises: CustomExerciseRepository
     let proposals: ProposalRepository
     let exercisePrefs: ExercisePreferenceRepository
@@ -58,6 +60,11 @@ final class AppEnvironment {
     /// The insights and resolved outside workouts until their data may have changed (`AppEnvironment+Insights`). Not
     /// observed: filling it from a view's refresh never invalidates a view.
     @ObservationIgnored var insightsMemo = InsightsMemo()
+    /// This session's Health reads per workout and the attached recordings last seen (`AppEnvironment+Measured`). Not
+    /// observed: a read from a view's task never invalidates a view.
+    @ObservationIgnored var measuredMemo = MeasuredMemo()
+    /// Bumps when a hook, a rating or the effort ask changed a workout's measured numbers, so an open detail redraws.
+    private(set) var measuredRevision = 0
     /// Bumps whenever the current gym or its equipment changes, for screens that show them.
     private(set) var gymRevision = 0
     /// Why the server refused a report or a block the user made, until the gym screen has shown it.
@@ -83,10 +90,12 @@ final class AppEnvironment {
     static let log = Logger(subsystem: "com.rollins.gymrollins", category: "app")
     private static let onboardingCompleteKey = "onboardingComplete"
 
-    /// `makeSync` replaces the launch's sync backend (tests inject a coordinator over a fake transport).
+    /// `makeSync` replaces the launch's sync backend (tests inject a coordinator over a fake transport); `healthStore`
+    /// replaces the launch's Health store (tests hold a `FakeHealthStore`).
     init(options: LaunchOptions = LaunchOptions(), defaults: UserDefaults = .standard,
          media: ExerciseMediaService? = nil, gymPhotos: GymPhotoStore? = nil,
          gymLocator: (any GymLocator)? = nil, gymPlaces: (any GymPlaceSearch)? = nil,
+         healthStore: (any HealthStore)? = nil,
          makeSync: (@MainActor (SyncStore, @escaping () -> Date) -> SyncCoordinator)? = nil) throws {
         if options.resetStore, let storeURL = options.diskStoreURL {
             Self.removeStoreFiles(at: storeURL)
@@ -105,15 +114,16 @@ final class AppEnvironment {
             defaults.removeObject(forKey: Self.gymLocationCheckedKey)
             defaults.removeObject(forKey: ExerciseRestStore.key) // UI tests share the simulator's defaults
             defaults.removeObject(forKey: PlanWeightsLbCleanup.flagKey) // a fresh store's plan hasn't been cleaned
+            defaults.removeObject(forKey: Self.measuredBackfillKey) // nor have a fresh store's workouts been read (plan 40)
         }
-        if options.seedOwner {
-            try OwnerSeed.apply(to: context, now: now())
-            if options.seedHistory { try OwnerSeed.applyHistory(to: context, now: now()) }
-            if options.seedBodyweight { try OwnerSeed.applyBodyweight(to: context, now: now()) }
-            if options.seedPlank { try OwnerSeed.applyPlank(to: context, now: now()) }
-            if options.seedLimitsDue { try OwnerSeed.applyLimitsDue(to: context, now: now()) }
+        if options.seedSample {
+            try SampleSeed.apply(to: context, now: now())
+            if options.seedHistory { try SampleSeed.applyHistory(to: context, now: now()) }
+            if options.seedBodyweight { try SampleSeed.applyBodyweight(to: context, now: now()) }
+            if options.seedPlank { try SampleSeed.applyPlank(to: context, now: now()) }
+            if options.seedLimitsDue { try SampleSeed.applyLimitsDue(to: context, now: now()) }
             if options.seedLargeHistory {
-                try OwnerSeed.applyLargeHistory(to: context, now: now(), count: options.largeHistoryCount)
+                try SampleSeed.applyLargeHistory(to: context, now: now(), count: options.largeHistoryCount)
             }
         }
         #if DEBUG
@@ -144,6 +154,7 @@ final class AppEnvironment {
         self.workouts = WorkoutRepository(context: context, now: now)
         self.body = BodyRepository(context: context, now: now)
         self.activities = ActivityRepository(context: context, now: now)
+        self.measurements = MeasurementRepository(context: context)
         self.customExercises = CustomExerciseRepository(context: context, now: now)
         self.proposals = ProposalRepository(context: context, now: now)
         self.exercisePrefs = ExercisePreferenceRepository(context: context, now: now)
@@ -176,8 +187,9 @@ final class AppEnvironment {
                                               photoStore: self.gymPhotos, now: now)
         let calories = CalorieService(library: { [bundledLibrary] in bundledLibrary }, body: body)
         self.calories = calories
-        self.health = Self.makeHealth(options: options, defaults: defaults, workouts: workouts, body: body,
-                                      activities: activities, calories: calories, now: now)
+        self.health = Self.makeHealth(options: options, defaults: defaults, injected: healthStore,
+                                      workouts: workouts, body: body, activities: activities, calories: calories,
+                                      now: now)
         cleanUpPlanWeightsOnce()
         restoreSession()
         sync.autoApply = { [weak self] in try self?.autoApplyPulledProposals() ?? 0 }
@@ -190,6 +202,7 @@ final class AppEnvironment {
         sync.onLocalDataReset = { [weak self] in
             ExportService.removeExportFiles() // never share a file built from the previous account's data
             self?.health.localDataWasReset()
+            self?.measuredMemo.reset() // the previous account's Health reads (plan 40)
             if let defaults = self?.defaults { Self.clearTodaySwitches(in: defaults) }
             self?.abandonSession()
             self?.reloadAll()
@@ -209,12 +222,12 @@ final class AppEnvironment {
     /// applies to a genuinely empty plan.
     var hasAnyRoutine: Bool { (try? routines.all().isEmpty) == false }
 
-    /// Finishes onboarding: optionally seeds the owner's Push/Pull/Upper/Legs split (no history) when the
+    /// Finishes onboarding: optionally seeds the sample Push/Pull/Upper/Legs split (no history) when the
     /// plan is empty, then marks onboarding complete so `RootView` shows the main tabs.
     func completeOnboarding(useTemplate: Bool) {
         if useTemplate {
             do {
-                try OwnerSeed.applyTemplate(to: container.mainContext, now: now())
+                try SampleSeed.applyTemplate(to: container.mainContext, now: now())
                 planChanged()
             } catch {
                 Self.log.error("Apply template failed: \(error.localizedDescription, privacy: .public)")
@@ -253,6 +266,8 @@ final class AppEnvironment {
         abandonSession(); gymSharing.invalidate() // before the wipe: requests still out must not write back
         try syncStore.resetAll()
         health.reset()
+        measuredMemo.reset()
+        defaults.removeObject(forKey: Self.measuredBackfillKey)
         todayPlanStore.clear()
         PlannedSwitchStore(defaults: defaults).clear()
         LaterDayPlanStore(defaults: defaults).clear()
@@ -288,12 +303,14 @@ final class AppEnvironment {
         sync.localDataChanged()
     }
 
-    /// A workout or weigh-in was written locally: screens reload and a sync is scheduled.
+    /// A workout or weigh-in was written locally: screens reload and a sync is scheduled. A workout the watch recorded
+    /// before the phone saved its finish is read now (plan 40).
     func dataChanged() {
         dataRevision += 1
         calories.invalidate()
         sync.localDataChanged()
         exportToHealth()
+        readWorkoutsTheWatchRecorded()
     }
 
     /// The current gym or a gym's equipment changed: Today reloads, the watch is re-sent today's plan, and a synced
@@ -318,6 +335,9 @@ final class AppEnvironment {
 
     /// Screens that show workouts or weigh-ins reload (without scheduling a sync).
     func bumpDataRevision() { dataRevision += 1 }
+
+    /// A workout's measured numbers changed outside its detail (plan 40): an open detail reads them again.
+    func bumpMeasuredRevision() { measuredRevision += 1 }
 
     /// A custom exercise changed locally.
     func libraryChanged() {

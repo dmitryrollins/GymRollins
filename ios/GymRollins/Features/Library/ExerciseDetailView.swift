@@ -68,7 +68,7 @@ struct ExerciseDetailView: View {
             }
             ForEach(Array(ex.instructions.enumerated()), id: \.offset) { index, step in
                 HStack(alignment: .top, spacing: 10) {
-                    Text("\(index + 1)").font(Theme.display(22)).foregroundStyle(Theme.accent)
+                    Text("\(index + 1)").font(Theme.number(22)).foregroundStyle(Theme.accent)
                     Text(step).foregroundStyle(Theme.textPrimary)
                 }
             }

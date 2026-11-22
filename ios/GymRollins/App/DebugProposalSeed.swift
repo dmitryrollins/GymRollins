@@ -4,12 +4,12 @@ import GymCore
 import GymData
 import SwiftData
 
-/// DEBUG-only (`-seedProposal`): a pending proposal from Claude, shaped like the shared fixture's "valid knee-break proposal",
-/// mapped onto `OwnerSeed`'s routines and exercise ids, with one visible effect per change (four cards). Inserted
+/// DEBUG-only (`-seedProposal`): a pending proposal from Claude, shaped like the shared fixture's "valid ankle-rest proposal",
+/// mapped onto `SampleSeed`'s routines and exercise ids, with one visible effect per change (four cards). Inserted
 /// once (fixed id), so a relaunch on the same disk store keeps its resolution.
 enum DebugProposalSeed {
     static let id = UUID(uuidString: "C1A0DE00-0000-4000-8000-000000000001")!
-    static let heavierBenchKg = UnitConverter.toKg(145, from: .lb)
+    static let heavierBenchKg = UnitConverter.toKg(165, from: .lb)
 
     @MainActor
     static func apply(context: ModelContext, now: Date) throws {
@@ -22,13 +22,13 @@ enum DebugProposalSeed {
         guard let push = ref("Push + Arms"), let pull = ref("Pull + Shoulders + Triceps"), let legs = ref("Legs"),
               let upper = ref("Upper weak points") else { return }
         let seed = Proposal(id: id, createdAt: now.addingTimeInterval(-3_600),
-                            summary: "Knee break: replace Legs with upper work for ~4 weeks", changes: [
+                            summary: "Ankle rest: replace Legs with upper work for ~4 weeks", changes: [
             PlanChange(id: "c1", type: .week, routineId: upper, weekday: 7, reason: "An extra upper day while legs rest"),
             PlanChange(id: "c2", type: .weight, routineId: push, exerciseId: "0025", weightKg: heavierBenchKg,
                        reason: "Hit the top of the range twice"),
             PlanChange(id: "c3", type: .swapExercise, routineId: pull, exerciseId: "0603", toExerciseId: "0405",
                        reason: "Stalled 3 sessions"),
-            PlanChange(id: "c4", type: .removeExercise, routineId: legs, exerciseId: "0585", reason: "Knee"),
+            PlanChange(id: "c4", type: .removeExercise, routineId: legs, exerciseId: "0585", reason: "Ankle"),
         ], fromAgent: "Claude")
         try proposals.upsertRemote(try proposals.pending() + [seed])
     }

@@ -29,9 +29,9 @@ import Testing
         let env = try makeEnv()
         _ = await env.health.enable()
         let ride = try #require(env.resolvedActivities().shown.first { $0.id == AppEnvironment.uiTestRideId })
-        #expect(ride.kind == "cycling" && ride.sourceName == "LifeFitness" && ride.fromWatch)
-        #expect(ride.durationS == 308 && ride.distanceM == 2_260 && ride.kcal == 40 && ride.totalKcal == 48)
-        #expect(ride.avgPowerW == 138 && ride.avgCadenceRpm == 62 && ride.avgHr == 128 && ride.maxHr == 151)
+        #expect(ride.kind == "cycling" && ride.sourceName == "Indoor Bike" && ride.fromWatch)
+        #expect(ride.durationS == 450 && ride.distanceM == 3_400 && ride.kcal == 62 && ride.totalKcal == 75)
+        #expect(ride.avgPowerW == 150 && ride.avgCadenceRpm == 70 && ride.avgHr == 124 && ride.maxHr == 146)
         #expect(!ride.countsAsWorkout, "under 10 minutes: the streak and the weekly goal stay as they were")
     }
 

@@ -5,7 +5,7 @@ import Testing
 @Suite struct WorkoutImportersTests {
     static let fitbod = """
     \(FitbodImporterTests.header)
-    2026-09-19 18:02:11 +0000,Barbell Bench Press, 10,58.9,0.0,0.0,0.0,0.0,false,, 1.0
+    2026-09-18 17:30:00 +0000,Barbell Bench Press, 10,61.2,0.0,0.0,0.0,0.0,false,, 1.0
     """
 
     @Test func everySourceHasOneImporter() {

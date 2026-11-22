@@ -23,7 +23,7 @@ const FEDB_JSON_URL = `https://raw.githubusercontent.com/yuhonas/free-exercise-d
 const ROOT = resolve(import.meta.dirname, '..')
 const LIBRARY = resolve(ROOT, 'ios/GymRollins/Resources/exercises.json')
 const FITBOD_ALIASES = resolve(ROOT, 'ios/GymRollins/Resources/fitbod-aliases.json')
-const OWNER_SEED = resolve(ROOT, 'ios/Packages/GymData/Sources/GymData/Seed/OwnerSeed.swift')
+const OWNER_SEED = resolve(ROOT, 'ios/Packages/GymData/Sources/GymData/Seed/SampleSeed.swift')
 const ALIASES = resolve(ROOT, 'scripts/exercise-photo-aliases.json')
 const OUT_JSON = resolve(ROOT, 'ios/GymRollins/Resources/exercise-photos.json')
 const OUT_REVIEW = resolve(ROOT, 'docs/import/exercise-photo-review.md')
@@ -195,7 +195,7 @@ function review(library, upstream, mapping) {
     `  - automatic (exact normalized name + agreeing equipment): ${count('auto')}`,
     `  - curated alias: ${count('alias')}; vetoed by a \`null\` alias: ${count('veto')}`,
     `- Upstream entries used: ${new Set([...decisions.values()].filter(d => d.fedb).map(d => d.fedb)).size} / ${upstream.length}`,
-    `- Owner routine exercises (\`OwnerSeed\`): **${covered(owner)} / ${owner.length}**`,
+    `- Sample routine exercises (\`SampleSeed\`): **${covered(owner)} / ${owner.length}**`,
     `- Fitbod-import exercises (\`fitbod-aliases.json\`): **${covered(fitbod)} / ${fitbod.length}**`,
     `- Ambiguous automatic keys left unmatched: ${ambiguous.length}`,
     '',
@@ -214,7 +214,7 @@ function review(library, upstream, mapping) {
     '   name only adds a default detail (e.g. "- Medium Grip"). Grip/angle/stance variants that change the picture',
     '   (wide vs close grip, incline vs flat, single vs two arm) are not aliased.',
     '',
-    '## Owner routine exercises',
+    '## Sample routine exercises',
     '',
     '| Id | Library name | Equipment | Photo source | How |',
     '|---|---|---|---|---|',

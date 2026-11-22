@@ -14,11 +14,11 @@ import Testing
     }
 
     @Test func progressAndWeeklySlope() throws {
-        // +0.2 kg per week over 4 weeks, starting 81.0
-        let entries = (0...4).map { BodyweightEntry(date: t0.addingTimeInterval(Double($0) * 7 * day), weightKg: 81 + 0.2 * Double($0)) }
-        let trend = BodyTrend(entries: entries, goalKg: 85, goalDate: nil, now: t0.addingTimeInterval(28 * day))
-        #expect(trend.startKg == 81)
-        #expect(trend.currentKg == 81.8)
+        // +0.2 kg per week over 4 weeks, starting 76.0
+        let entries = (0...4).map { BodyweightEntry(date: t0.addingTimeInterval(Double($0) * 7 * day), weightKg: 76 + 0.2 * Double($0)) }
+        let trend = BodyTrend(entries: entries, goalKg: 80, goalDate: nil, now: t0.addingTimeInterval(28 * day))
+        #expect(trend.startKg == 76)
+        #expect(trend.currentKg == 76.8)
         #expect(abs(try #require(trend.weeklyChangeKg) - 0.2) < 0.001)
         #expect(abs(trend.progress - 0.2) < 0.001)          // 0.8 of 4 kg
         let projected = try #require(trend.projectedGoalDate)  // 3.2 kg at 0.2/week = 16 weeks

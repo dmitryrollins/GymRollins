@@ -69,10 +69,10 @@ struct PlatesSheet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(target.title)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                            .foregroundStyle(isSelected ? Theme.onAccent : Theme.textSecondary)
                         Text("\(number(target.weightKg, in: unit)) \(unit.rawValue)")
                             .font(.subheadline.weight(.bold))
-                            .foregroundStyle(Theme.textPrimary)
+                            .foregroundStyle(isSelected ? Theme.onAccent : Theme.textPrimary)
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
@@ -88,7 +88,7 @@ struct PlatesSheet: View {
     private var weightHeader: some View {
         VStack(spacing: 2) {
             Text("\(number(weightKg, in: unit)) \(unit.rawValue)")
-                .font(Theme.display(44))
+                .font(Theme.number(44))
                 .foregroundStyle(Theme.textPrimary)
                 .accessibilityIdentifier("plates.weight")
             Text("\(number(weightKg, in: other)) \(other.rawValue) \u{00B7} " +

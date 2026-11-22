@@ -16,7 +16,7 @@ extension AppEnvironment {
     }
 
     /// The later day `date` falls on: the owner's change for it, else an agent's planned switch, else the week (a
-    /// rest day is an empty plan), at the current gym. A change that no longer applies is removed; nothing is taken.
+    /// rest day is an empty plan). A change that no longer applies is removed; nothing is taken.
     func laterDay(on date: Date) throws -> LaterDay {
         let all = try routines.all()
         let routine = try routines.schedule().routineId(on: date).flatMap { id in all.first { $0.id == id } }
@@ -32,8 +32,7 @@ extension AppEnvironment {
                                    planned: PlannedSwitchStore(defaults: defaults).all()[day])
                 ?? TodayPlan(day: day, kind: .empty, base: nil, exercises: [], edited: false)
         }
-        let shown = plan.adapted(by: gymAdapter())
-        return LaterDay(plan: shown, scheduled: scheduled, changed: isLaterDayChanged(shown))
+        return LaterDay(plan: plan, scheduled: scheduled, changed: isLaterDayChanged(plan))
     }
 
     /// Where Today's editor keeps changes to the later day `date` falls on.

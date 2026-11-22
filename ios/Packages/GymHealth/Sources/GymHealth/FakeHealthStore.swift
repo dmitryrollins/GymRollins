@@ -41,11 +41,27 @@ public actor FakeHealthStore: HealthStore {
     private var activity: [String: ActivityDay] = [:]
     /// Every `activityDays` call's range, in order.
     public private(set) var dayReads: [(from: Date, through: Date)] = []
+    /// What `workoutMeasurements` answers, by external id (plan 40); `WorkoutMeasurements.none` for any other workout.
+    /// Kept as HealthKitStore reads it: a phone copy's time and calories are dropped when set.
+    public private(set) var workoutMeasurementsById: [UUID: WorkoutMeasurements] = [:]
+    /// GymRollins' own effort ratings in "Health", by external id.
+    public private(set) var ratedEfforts: [UUID: Int] = [:]
+    /// `rateEffort` / `clearEffort` throw while on.
+    public private(set) var failEffortWrites = false
+    /// What `effortTypesAsked` answers. `requestAuthorization` sets it: the request covers the effort types.
+    public private(set) var effortAsked = false
+    /// false: the first `requestAuthorization` is a build 4's, made before the effort types existed, so it leaves them
+    /// unasked; the next one (the detail's Allow pill) asks them. DEBUG `-fakeHealthEffortUnasked`.
+    private let firstRequestAsksEffort: Bool
+    /// The effort Health showed before GymRollins rated (Fitness' rating, the Watch's estimate): back after a clear.
+    private var effortBeforeRating: [UUID: Effort] = [:]
 
     public init(isAvailable: Bool = true, grantOnRequest: [HealthDataType: HealthPermission]? = nil,
                 seed: [HealthBodySample] = [], outsideWorkouts: [HealthOutsideWorkout] = [],
-                days: [ActivityDay] = []) {
+                days: [ActivityDay] = [], measurements: [UUID: WorkoutMeasurements] = [:],
+                effortAsked: Bool = false, firstRequestAsksEffort: Bool = true) {
         self.isAvailable = isAvailable
+        self.firstRequestAsksEffort = firstRequestAsksEffort
         self.grantOnRequest = grantOnRequest
             ?? Dictionary(uniqueKeysWithValues: HealthDataType.allCases.map { ($0, .authorized) })
         for sample in seed {
@@ -57,16 +73,18 @@ public actor FakeHealthStore: HealthStore {
             outside.append((seq, workout))
         }
         for day in days { activity[day.day] = day }
+        workoutMeasurementsById = measurements.mapValues(Self.asRead)
+        self.effortAsked = effortAsked
     }
 
     /// Three Withings weigh-ins (one with body fat) before `now`, for UI tests.
     public static func uiTestSeed(now: Date) -> [HealthBodySample] {
         let day: TimeInterval = 86_400
         return [
-            HealthBodySample(kind: .bodyMass, value: 81.0, date: now.addingTimeInterval(-15 * day), sourceName: "Withings"),
-            HealthBodySample(kind: .bodyMass, value: 81.3, date: now.addingTimeInterval(-8 * day), sourceName: "Withings"),
+            HealthBodySample(kind: .bodyMass, value: 76.0, date: now.addingTimeInterval(-15 * day), sourceName: "Withings"),
+            HealthBodySample(kind: .bodyMass, value: 76.3, date: now.addingTimeInterval(-8 * day), sourceName: "Withings"),
             HealthBodySample(kind: .bodyFat, value: 15.2, date: now.addingTimeInterval(-8 * day), sourceName: "Withings"),
-            HealthBodySample(kind: .bodyMass, value: 81.6, date: now.addingTimeInterval(-1 * day), sourceName: "Withings"),
+            HealthBodySample(kind: .bodyMass, value: 76.6, date: now.addingTimeInterval(-1 * day), sourceName: "Withings"),
         ]
     }
 
@@ -173,6 +191,7 @@ public actor FakeHealthStore: HealthStore {
 
     public func requestAuthorization() async throws {
         authorizationRequests += 1
+        if firstRequestAsksEffort || authorizationRequests > 1 { effortAsked = true }
         // Like HealthKit: asking again never changes a decision already made.
         current = HealthPermissions(write: Dictionary(uniqueKeysWithValues: HealthDataType.allCases.map { type in
             let now = current.permission(type)
@@ -301,5 +320,69 @@ public actor FakeHealthStore: HealthStore {
             seq += 1
             deletions.append((seq, uuid))
         }
+    }
+}
+
+// MARK: Measurements (plan 40)
+
+extension FakeHealthStore {
+    /// What Health holds for a GymRollins workout (plan 40): its copy, heart rate and effort.
+    public func setWorkoutMeasurements(_ measurements: WorkoutMeasurements, for externalId: UUID) {
+        workoutMeasurementsById[externalId] = Self.asRead(measurements)
+    }
+
+    public func setFailEffortWrites(_ fail: Bool) { failEffortWrites = fail }
+
+    /// `false`: Health was asked by a build before plan 40, without the effort types.
+    public func setEffortAsked(_ asked: Bool) { effortAsked = asked }
+
+    public func workoutMeasurements(externalId: UUID, start: Date, end: Date) async throws -> WorkoutMeasurements {
+        if gateReads { await passGate() }
+        if failReads { throw Failure(message: "Reading failed") }
+        return workoutMeasurementsById[externalId] ?? WorkoutMeasurements.none
+    }
+
+    /// Like HealthKit: needs write access and a GymRollins copy to relate the rating to. GymRollins' earlier rating is
+    /// replaced; the effort Health showed before the first one comes back on `clearEffort`.
+    public func rateEffort(externalId: UUID, score: Int) async throws {
+        try checkEffortWrite()
+        guard let current = workoutMeasurementsById[externalId], current.recordedBy != nil else {
+            throw Failure(message: "No workout in Health")
+        }
+        guard let rating = Effort(score: score, estimated: false) else { throw Failure(message: "Not an effort score") }
+        if ratedEfforts[externalId] == nil, let before = current.effort { effortBeforeRating[externalId] = before }
+        ratedEfforts[externalId] = score
+        workoutMeasurementsById[externalId] = Self.measurements(current, effort: rating)
+    }
+
+    public func clearEffort(externalId: UUID) async throws {
+        try checkEffortWrite()
+        guard ratedEfforts.removeValue(forKey: externalId) != nil else { return }
+        let before = effortBeforeRating.removeValue(forKey: externalId)
+        if let current = workoutMeasurementsById[externalId] {
+            workoutMeasurementsById[externalId] = Self.measurements(current, effort: before)
+        }
+    }
+
+    public func effortTypesAsked() async -> Bool { effortAsked }
+
+    private func checkEffortWrite() throws {
+        if failEffortWrites { throw Failure(message: "Saving failed") }
+        guard effortAsked else { throw Failure(message: "Not authorized") }
+    }
+
+    /// As HealthKitStore reads it: the phone's copy holds the app's estimate, so its time and calories never come back
+    /// as measured (plan 40, decision 8).
+    private static func asRead(_ measurements: WorkoutMeasurements) -> WorkoutMeasurements {
+        guard measurements.recordedBy != .watch else { return measurements }
+        return WorkoutMeasurements(recordedBy: measurements.recordedBy, duration: nil, activeKcal: nil, totalKcal: nil,
+                                   heartRate: measurements.heartRate, postWorkout: measurements.postWorkout,
+                                   effort: measurements.effort)
+    }
+
+    private static func measurements(_ measurements: WorkoutMeasurements, effort: Effort?) -> WorkoutMeasurements {
+        WorkoutMeasurements(recordedBy: measurements.recordedBy, duration: measurements.duration,
+                            activeKcal: measurements.activeKcal, totalKcal: measurements.totalKcal,
+                            heartRate: measurements.heartRate, postWorkout: measurements.postWorkout, effort: effort)
     }
 }

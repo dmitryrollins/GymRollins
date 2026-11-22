@@ -2,7 +2,7 @@ import XCTest
 
 /// Tapping an exercise on Today opens the same exercise screen as inside a workout, in plan mode: today's sets are
 /// edited there (same `logging.*` identifiers), the edits survive a relaunch the same day, and Start Workout starts
-/// today's workout on that exercise. Barbell Bench Press (0025) is planned 3 × 8–10 @ 140 lb with two generated
+/// today's workout on that exercise. Barbell Bench Press (0025) is planned 3 × 8–10 @ 160 lb with two generated
 /// warm-ups, so set index 3 is working "Set 2". Screenshots are attached as "plan-screen-*".
 final class TodayPlanScreenUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
@@ -55,7 +55,7 @@ final class TodayPlanScreenUITests: XCTestCase {
         XCTAssertFalse(app.buttons["logging.logSet"].exists)
         XCTAssertFalse(app.buttons["logging.edited"].exists)
         XCTAssertFalse(app.staticTexts["logging.edited"].exists)
-        XCTAssertEqual(field(app, 3, "weight").value as? String, "140")
+        XCTAssertEqual(field(app, 3, "weight").value as? String, "160")
 
         type(app, 3, "weight", "150")
         type(app, 3, "reps", "7")
@@ -123,7 +123,7 @@ final class TodayPlanScreenUITests: XCTestCase {
         XCTAssertTrue(reset.waitForExistence(timeout: 5))
         reset.tap()
         XCTAssertTrue(app.descendants(matching: .any)["logging.edited"].waitForNonExistence(timeout: 5))
-        XCTAssertEqual(field(app, 3, "weight").value as? String, "140", "back to the suggestion")
+        XCTAssertEqual(field(app, 3, "weight").value as? String, "160", "back to the suggestion")
 
         app.buttons["logging.options"].tap()
         let replace = app.buttons["Replace"]
@@ -140,8 +140,8 @@ final class TodayPlanScreenUITests: XCTestCase {
         app.buttons["logging.close"].tap()
         XCTAssertTrue(app.buttons["today.row.\(newId)"].waitForExistence(timeout: 5), "replaced for today")
         XCTAssertFalse(app.buttons["today.row.0025"].exists)
-        XCTAssertTrue(app.staticTexts["today.summary"].label.contains("edited for today"),
-                      app.staticTexts["today.summary"].label)
+        XCTAssertTrue(app.descendants(matching: .any)["today.workout"].label.contains("edited for today"),
+                      app.descendants(matching: .any)["today.workout"].label)
     }
 
     /// How-To from the plan screen opens the exercise's details on top, and Back returns to the plan screen (it used
@@ -165,7 +165,7 @@ final class TodayPlanScreenUITests: XCTestCase {
         openBench(app)
         let setTwo = app.descendants(matching: .any)["logging.set.3.summary"]
         XCTAssertTrue(setTwo.waitForExistence(timeout: 5))
-        XCTAssertEqual(setTwo.label, "Set 2, 8 reps, 140 pounds", "planned: no done / current status")
+        XCTAssertEqual(setTwo.label, "Set 2, 8 reps, 160 pounds", "planned: no done / current status")
 
         setTwo.press(forDuration: 1.0)
         let makeWarmup = app.buttons["Make Warm-up Set"]
@@ -184,7 +184,7 @@ final class TodayPlanScreenUITests: XCTestCase {
     func testSaveChangesWritesThePlanScreenEditsIntoTheRoutine() {
         var app = launch(["-diskStore", "-resetStore"])
         openBench(app)
-        type(app, 3, "weight", "150")
+        type(app, 3, "weight", "170")
         app.buttons["logging.addSet"].tap()
         app.buttons["logging.close"].tap()
         let save = app.buttons["today.saveToRoutine"]
@@ -201,6 +201,6 @@ final class TodayPlanScreenUITests: XCTestCase {
         let row = app.buttons["today.row.0025"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         XCTAssertTrue(row.label.contains("4 \u{00D7} 8\u{2013}10"), row.label)
-        XCTAssertTrue(row.label.contains("150 lb"), row.label)
+        XCTAssertTrue(row.label.contains("170 lb"), row.label)
     }
 }

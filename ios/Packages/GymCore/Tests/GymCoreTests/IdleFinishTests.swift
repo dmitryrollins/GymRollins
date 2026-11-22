@@ -6,7 +6,7 @@ import Testing
     private let start = Date(timeIntervalSince1970: 100_000)
     private func at(_ minutes: Double) -> Date { start.addingTimeInterval(minutes * 60) }
 
-    /// The owner's real case: started 19:05, last set 19:25, Finish tapped 20:52.
+    /// A sample case: started 19:05, last set 19:25, Finish tapped 20:52.
     @Test func suggestsLastSetPlusRestWhenFinishedLongAfter() {
         let sets = [at(11), at(20), at(15)] // order doesn't matter
         let end = IdleFinish.suggestedEnd(completedAt: sets, clock: WorkoutClock(startedAt: start),

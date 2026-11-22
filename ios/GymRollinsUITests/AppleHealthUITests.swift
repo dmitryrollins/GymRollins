@@ -43,9 +43,9 @@ final class AppleHealthUITests: XCTestCase {
         app.openBodySection("Weight")
         let newest = app.descendants(matching: .any)["body.entry.0"]
         XCTAssertTrue(newest.waitForExistence(timeout: 5))
-        XCTAssertTrue(newest.label.contains("81.6 kg"), newest.label)
+        XCTAssertTrue(newest.label.contains("76.6 kg"), newest.label)
         XCTAssertTrue(newest.label.contains("Apple Health"), newest.label)
-        XCTAssertTrue(app.descendants(matching: .any)["body.entry.2"].label.contains("81 kg"))
+        XCTAssertTrue(app.descendants(matching: .any)["body.entry.2"].label.contains("76 kg"))
     }
 
     func testFinishedWorkoutShowsCaloriesAndIsSavedToHealth() {

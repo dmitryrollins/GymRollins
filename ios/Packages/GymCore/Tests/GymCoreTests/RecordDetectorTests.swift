@@ -5,15 +5,15 @@ import Testing
 @Suite struct RecordDetectorTests {
     private let benchSession = Workout(startedAt: .now, name: "Push + Biceps", entries: [
         WorkoutEntry(exerciseId: "bench", sets: [
-            WorkoutSet(weightKg: 58.967, reps: 10, done: true),
-            WorkoutSet(weightKg: 58.967, reps: 10, done: true),
-            WorkoutSet(weightKg: 58.967, reps: 10, done: true),
+            WorkoutSet(weightKg: 68.039, reps: 10, done: true),
+            WorkoutSet(weightKg: 68.039, reps: 10, done: true),
+            WorkoutSet(weightKg: 68.039, reps: 10, done: true),
         ]),
     ])
 
-    @Test func ownersBenchSessionBeatsPriorWeek() throws {
-        // 12 Sep: 3 x 6 @ 58.967 kg (e1RM 70.76, volume 1061)
-        let previous = ["bench": ExerciseBests(e1RMKg: 70.76, repsAtWeight: [58_967: 6], volumeKg: 1_061.4)]
+    @Test func sampleBenchSessionBeatsPriorWeek() throws {
+        // 12 Sep: 3 x 6 @ 68.039 kg (e1RM 81.65, volume 1225)
+        let previous = ["bench": ExerciseBests(e1RMKg: 81.65, repsAtWeight: [68_039: 6], volumeKg: 1_224.7)]
         let records = RecordDetector.records(for: benchSession, previous: previous)
         #expect(Set(records.map(\.kind)) == [.e1RM, .repsAtWeight, .volume])
         let reps = try #require(records.first { $0.kind == .repsAtWeight })
@@ -25,7 +25,7 @@ import Testing
     }
 
     @Test func noRecordWhenNotBeaten() {
-        let previous = ["bench": ExerciseBests(e1RMKg: 90, repsAtWeight: [58_967: 12], volumeKg: 5_000)]
+        let previous = ["bench": ExerciseBests(e1RMKg: 100, repsAtWeight: [68_039: 12], volumeKg: 5_000)]
         #expect(RecordDetector.records(for: benchSession, previous: previous).isEmpty)
     }
 
@@ -38,19 +38,19 @@ import Testing
 
     @Test func bestsFromEntry() {
         let bests = ExerciseBests(entry: benchSession.entries[0])
-        #expect(bests.repsAtWeight == [58_967: 10])
-        #expect(abs(bests.volumeKg - 1_769.01) < 0.01)
+        #expect(bests.repsAtWeight == [68_039: 10])
+        #expect(abs(bests.volumeKg - 2_041.17) < 0.01)
     }
 
     /// `PersonalRecord`'s memberwise init must be public so other modules (GymData, GymRollins) can
     /// construct it directly, e.g. when round-tripping through persistence or test spies.
     @Test func personalRecordPublicInit() {
-        let record = PersonalRecord(exerciseId: "0025", kind: .e1RM, valueKg: 78.6, reps: nil, weightKg: nil,
-                                    previousKg: 70.8)
+        let record = PersonalRecord(exerciseId: "0025", kind: .e1RM, valueKg: 90.7, reps: nil, weightKg: nil,
+                                    previousKg: 81.6)
         #expect(record.exerciseId == "0025")
         #expect(record.kind == .e1RM)
-        #expect(record.valueKg == 78.6)
-        #expect(record.previousKg == 70.8)
+        #expect(record.valueKg == 90.7)
+        #expect(record.previousKg == 81.6)
     }
 
     @Test func repsAtWeightReturnsOneRecordPerQualifyingWeight() {

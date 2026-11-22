@@ -2,8 +2,8 @@ import GymCore
 import GymData
 import SwiftUI
 
-/// Body tab: a switch under the title picks one of three sections.
-/// Muscles: muscle recovery and weekly sets. Weight: the 81 → 85 kg goal card with progress/trend, a range-filtered
+/// Body tab: a switch under the header picks one of three sections.
+/// Muscles: muscle recovery and weekly sets. Weight: the start → goal weight card with progress/trend, a range-filtered
 /// bodyweight chart and the weigh-in list (swipe to delete). Strength: an "Est. 1RM" card for the most-logged lifts
 /// and strength levels (squat/bench/deadlift).
 struct BodyView: View {
@@ -11,11 +11,12 @@ struct BodyView: View {
     @State private var entries: [BodyweightEntry] = []
     @State private var topLifts: [LiftTrend] = []
     @State private var range: ChartRange = .month
-    /// The section of the switch under the title; kept across launches, Muscles the first time.
+    /// The section of the switch under the header; kept across launches, Muscles the first time.
     @AppStorage("bodySection") private var section: BodySection = .muscles
     @State private var showAddWeighIn = false
     /// Exercise id pushed from the strength-level card.
     @State private var strengthHistory: String?
+    @State private var showSettings = false
 
     private var unit: WeightUnit { env.profile.unit }
     private var trend: BodyTrend {
@@ -38,10 +39,6 @@ struct BodyView: View {
         NavigationStack {
             List {
                 Section {
-                    DisplayTitle(text: "Body", size: 44)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(Self.rowInsets())
                     sectionPicker
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -55,7 +52,9 @@ struct BodyView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .fixedHeader { TabHeader(title: "Body", prefix: "body") { showSettings = true } }
             .background(Theme.background)
+            .navigationDestination(isPresented: $showSettings) { SettingsView() }
             .navigationDestination(for: String.self) { ExerciseHistoryView(exerciseId: $0) }
             .navigationDestination(item: $strengthHistory) { ExerciseHistoryView(exerciseId: $0) }
             .sheet(isPresented: $showAddWeighIn) {
@@ -156,9 +155,9 @@ struct BodyView: View {
                     }
                 }
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
-                    Text(startText).font(Theme.display(44)).foregroundStyle(Theme.textPrimary)
+                    Text(startText).font(Theme.number(44)).foregroundStyle(Theme.textPrimary)
                     Text("\u{2192}").font(.subheadline).foregroundStyle(Theme.textSecondary)
-                    Text(goalText).font(Theme.display(44)).foregroundStyle(Theme.accent)
+                    Text(goalText).font(Theme.number(44)).foregroundStyle(Theme.accent)
                 }
                 ProgressView(value: trend.progress)
                     .tint(Theme.accent)

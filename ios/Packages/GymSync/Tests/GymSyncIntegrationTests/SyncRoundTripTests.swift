@@ -14,10 +14,10 @@ struct SyncRoundTripTests {
         let phone = try Device(user, clock: DeviceClock("2026-09-27T07:30:00.654321Z"))
         defer { phone.tearDown() }
 
-        try phone.profiles.save(Profile(unit: .kg, restSec: 150, heightCm: 181.5, goalWeightKg: 85,
-                                        goalDate: SyncDay.parse("2026-12-31"), trainingDays: 4,
+        try phone.profiles.save(Profile(unit: .kg, restSec: 150, heightCm: 181.5, goalWeightKg: 80,
+                                        goalDate: SyncDay.parse("2026-12-15"), trainingDays: 4,
                                         limits: "left shoulder",
-                                        limitsUntil: SyncDay.parse("2026-10-26"), deloadPct: 0.1))
+                                        limitsUntil: SyncDay.parse("2026-11-09"), deloadPct: 0.1))
         let routine = Routine(name: "Push", emoji: "💪", policy: .double, exercises: [
             RoutineExercise(exerciseId: "bench", sets: 3, reps: 8, repsMin: 6, weightKg: 61.234567, policy: .linear,
                             incKg: 2.267962, weightSetAt: phone.clock.now),
@@ -25,7 +25,7 @@ struct SyncRoundTripTests {
         ])
         try phone.routines.upsert(routine)
         try phone.routines.setSchedule(weekday: 2, routineId: routine.id)
-        let weighIn = BodyweightEntry(date: phone.clock.now, weightKg: 81.4, bodyFatPct: 15.5, timeOfDay: "am")
+        let weighIn = BodyweightEntry(date: phone.clock.now, weightKg: 76.4, bodyFatPct: 15.5, timeOfDay: "am")
         try phone.body.add(weighIn)
         try phone.prefs.set(.more, for: "0025")
         try phone.prefs.set(.never, for: "0070")

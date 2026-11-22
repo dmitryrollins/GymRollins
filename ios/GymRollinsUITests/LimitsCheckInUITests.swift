@@ -41,7 +41,7 @@ final class LimitsCheckInUITests: XCTestCase {
 
     func testANoteWithNoDateShowsAsBefore() {
         let app = XCUIApplication.launchReady { $0.buttons["today.start"] }
-        XCTAssertEqual(element(app, "today.limits").label, "Knee: no leg loading until ~26 Oct 2026")
+        XCTAssertEqual(element(app, "today.limits").label, "Ankle sprain: no leg loading until ~9 Nov 2026")
         XCTAssertFalse(element(app, "limits.card").exists)
     }
 
@@ -82,7 +82,7 @@ final class LimitsCheckInUITests: XCTestCase {
         app.tabBars.buttons["Today"].tap()
         let chip = element(app, "today.limits")
         XCTAssertTrue(chip.waitForExistence(timeout: 5))
-        XCTAssertTrue(chip.label.hasPrefix("Knee: no leg loading \u{00B7} until "), chip.label)
+        XCTAssertTrue(chip.label.hasPrefix("Ankle sprain: no leg loading \u{00B7} until "), chip.label)
         XCTAssertFalse(element(app, "limits.card").exists)
     }
 
@@ -97,7 +97,7 @@ final class LimitsCheckInUITests: XCTestCase {
         scrollAndTap(app, app.buttons["limits.saveDate"])
         let chip = element(app, "today.limits")
         XCTAssertTrue(chip.waitForExistence(timeout: 5))
-        XCTAssertTrue(chip.label.hasPrefix("Knee: no leg loading \u{00B7} until "), chip.label)
+        XCTAssertTrue(chip.label.hasPrefix("Ankle sprain: no leg loading \u{00B7} until "), chip.label)
         XCTAssertFalse(element(app, "limits.card").exists)
     }
 

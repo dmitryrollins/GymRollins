@@ -150,29 +150,29 @@ struct StrengthLevelCalculatorTests {
 struct StrengthReportTests {
     private let now = StrengthFixture.date("2026-09-29T12:00:00Z")
 
-    private func report(_ workouts: [Workout], sex: ProfileSex? = .male, birthYear: Int? = 1991,
-                        bodyweightKg: Double? = 81, limits: String = "") throws -> StrengthReport {
+    private func report(_ workouts: [Workout], sex: ProfileSex? = .male, birthYear: Int? = 1996,
+                        bodyweightKg: Double? = 76, limits: String = "") throws -> StrengthReport {
         StrengthReport.make(standards: try StrengthFixture.bundled(), workouts: workouts, sex: sex,
                             birthYear: birthYear, bodyweightKg: bodyweightKg, limits: limits, now: now,
                             calendar: StrengthFixture.utc())
     }
 
-    /// Bench 130 lb x 10 (Epley 78.6 kg), 81 kg, male, 35: the plan's worked example.
-    private var ownerBench: Workout {
-        StrengthFixture.workout("2026-09-19T10:00:00Z", "0025", kg: UnitConverter.toKg(130, from: .lb), reps: 10)
+    /// Bench 150 lb x 10 (Epley 90.7 kg), 76 kg, male, 30: the worked example.
+    private var sampleBench: Workout {
+        StrengthFixture.workout("2026-09-19T10:00:00Z", "0025", kg: UnitConverter.toKg(150, from: .lb), reps: 10)
     }
 
-    @Test func ownerExampleReadsNoviceWithTheGapToIntermediate() throws {
-        let r = try report([ownerBench])
+    @Test func sampleExampleReadsIntermediateWithTheGapToAdvanced() throws {
+        let r = try report([sampleBench])
         #expect(r.missing.isEmpty)
-        #expect(r.age == 35)
+        #expect(r.age == 30)
         let bench = try #require(r.row(.bench)?.assessment)
-        #expect(abs(bench.e1RMKg - 78.62) < 0.01)
-        #expect(bench.level == .novice)
-        #expect(bench.next == .intermediate)
-        #expect(abs(try #require(bench.nextTargetKg) - 85.2) < 0.05)
-        #expect(StrengthGap.text(kg: try #require(bench.gapKg), unit: .lb) == "+15 lb") // 14.4 lb
-        #expect(bench.percentileText == "1%")
+        #expect(abs(bench.e1RMKg - 90.72) < 0.01)
+        #expect(bench.level == .intermediate)
+        #expect(bench.next == .advanced)
+        #expect(abs(try #require(bench.nextTargetKg) - 105.0) < 0.05)
+        #expect(StrengthGap.text(kg: try #require(bench.gapKg), unit: .lb) == "+32.5 lb") // 31.5 lb
+        #expect(bench.percentileText == "7%")
         #expect(r.row(.squat)?.estimate == nil && r.row(.squat)?.assessment == nil)
     }
 
@@ -180,10 +180,10 @@ struct StrengthReportTests {
     @Test func ageAndBirthYearChoicesUseGregorianYearsOnAnyDeviceCalendar() throws {
         var buddhist = Calendar(identifier: .buddhist)
         buddhist.timeZone = TimeZone(identifier: "UTC")!
-        #expect(StrengthReport.age(birthYear: 1991, now: now, calendar: buddhist) == 35)
-        let r = StrengthReport.make(standards: try StrengthFixture.bundled(), workouts: [ownerBench], sex: .male,
-                                    birthYear: 1991, bodyweightKg: 81, limits: "", now: now, calendar: buddhist)
-        #expect(r.age == 35 && r.missing.isEmpty)
+        #expect(StrengthReport.age(birthYear: 1996, now: now, calendar: buddhist) == 30)
+        let r = StrengthReport.make(standards: try StrengthFixture.bundled(), workouts: [sampleBench], sex: .male,
+                                    birthYear: 1996, bodyweightKg: 76, limits: "", now: now, calendar: buddhist)
+        #expect(r.age == 30 && r.missing.isEmpty)
         let years = StrengthReport.birthYears(now: now, calendar: buddhist)
         #expect(years.first == 2012) // 14 this year
         #expect(years.last == 1926) // 100 this year
@@ -192,14 +192,14 @@ struct StrengthReportTests {
     }
 
     @Test func missingProfileOrBodyweightKeepsEstimatesButNoLevels() throws {
-        let noSex = try report([ownerBench], sex: nil)
+        let noSex = try report([sampleBench], sex: nil)
         #expect(noSex.missing == [.profile])
         #expect(noSex.row(.bench)?.estimate != nil)
         #expect(noSex.row(.bench)?.assessment == nil)
-        #expect(try report([ownerBench], birthYear: nil).missing == [.profile])
-        #expect(try report([ownerBench], birthYear: 2015).missing == [.profile]) // 11: under the table's 14
-        #expect(try report([ownerBench], birthYear: 2012).missing.isEmpty) // 14
-        #expect(try report([ownerBench], bodyweightKg: nil).missing == [.bodyweight])
+        #expect(try report([sampleBench], birthYear: nil).missing == [.profile])
+        #expect(try report([sampleBench], birthYear: 2015).missing == [.profile]) // 11: under the table's 14
+        #expect(try report([sampleBench], birthYear: 2012).missing.isEmpty) // 14
+        #expect(try report([sampleBench], bodyweightKg: nil).missing == [.bodyweight])
         #expect(try report([], sex: nil, bodyweightKg: nil).missing == [.profile, .bodyweight])
     }
 
@@ -225,9 +225,9 @@ struct StrengthReportTests {
                                                                         reps: 20)], lift: .bench, now: now) == nil)
     }
 
-    @Test func kneeNotePausesLegLiftsWithoutHidingNumbers() throws {
+    @Test func limitsNotePausesLegLiftsWithoutHidingNumbers() throws {
         let squat = StrengthFixture.workout("2026-09-10T10:00:00Z", "0043", kg: 100, reps: 5)
-        let r = try report([squat, ownerBench], limits: "Knee: no leg loading until ~26 Oct 2026")
+        let r = try report([squat, sampleBench], limits: "Ankle sprain: no leg loading until ~9 Nov 2026")
         #expect(r.row(.squat)?.paused == true)
         #expect(r.row(.deadlift)?.paused == true)
         #expect(r.row(.bench)?.paused == false)

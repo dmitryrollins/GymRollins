@@ -6,7 +6,7 @@ import {
 import { ApiError } from '../src/http/errors.ts'
 import { deleteAccount } from '../src/account/delete.ts'
 import { request, signUp, upload } from './helpers.ts'
-import { SAMPLES, sampleNeeds, workoutSample } from './samples.ts'
+import { SAMPLES, sampleNeeds, T1, workoutSample } from './samples.ts'
 
 beforeAll(sampleNeeds)
 
@@ -21,6 +21,7 @@ const OWNED: readonly [string, string][] = [
   ['equipment_confirmations', 'user_id'], ['reports', 'reporter_id'], ['user_blocks', 'blocker_id'],
   ['user_blocks', 'blocked_id'], ['gym_unblocks', 'user_id'], ['app_admins', 'user_id'],
   ['health_activities', 'user_id'], ['activity_days', 'user_id'], ['health_rows', 'user_id'],
+  ['workout_measurements', 'user_id'],
 ]
 
 async function rowsNaming(table: string, column: string, userId: string): Promise<number> {
@@ -47,7 +48,16 @@ describe('deleting an account', () => {
       const res = await request('POST', `/v1/sync/${entity}`, { token: me.token, body: { rows: [make()] } })
       expect(res.status).toBe(200)
     }
-    expect((await request('POST', '/v1/sync/workouts', { token: me.token, body: workoutSample() })).status).toBe(200)
+    const workout = workoutSample()
+    expect((await request('POST', '/v1/sync/workouts', { token: me.token, body: workout })).status).toBe(200)
+    const measured = {
+      workout_id: workout.id, recorded_by: 'watch', duration_s: 3500, active_kcal: 412, total_kcal: 489, avg_hr: 128,
+      max_hr: 162, post_hr: 124, effort: 6, effort_estimated: false, client_updated_at: T1, deleted_at: null,
+    }
+    const measuredRes = await request('POST', '/v1/sync/workout-measurements', {
+      token: me.token, body: { rows: [measured] },
+    })
+    expect(measuredRes.status).toBe(200)
     const gym = await insertGym({ visibility: 'private', owner: me.userId })
     await insertListing({ gym, item: await genericItem(), visibility: 'private', owner: me.userId })
     await makeAdmin(me.userId)

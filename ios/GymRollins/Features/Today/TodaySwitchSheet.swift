@@ -73,7 +73,7 @@ struct TodaySwitchSheet: View {
             }
             Spacer()
             if routine.id == current {
-                Image(systemName: "checkmark").foregroundStyle(Theme.primaryFill)
+                Image(systemName: "checkmark").foregroundStyle(Theme.accent)
             }
         }
     }

@@ -17,7 +17,7 @@ SHARE_LINK_HOST =
 
 // The app's bundle id; the Live Activity extension and the watch app add .widgets and .watchkitapp. VIPPIE LLC's app
 // (TestFlight, the App Store) is com.gymrollins.app. The first builds, signed by another team and still installed on
-// the owner's phone, were com.rollins.gymrollins: a build that updates that install sets it in Local.xcconfig or on
+// a phone, were com.rollins.gymrollins: a build that updates that install sets it in Local.xcconfig or on
 // the xcodebuild command line. The server takes both (APPLE_BUNDLE_IDS in server/wrangler.jsonc).
 APP_BUNDLE_ID = com.gymrollins.app
 

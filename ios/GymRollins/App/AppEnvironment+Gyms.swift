@@ -9,8 +9,9 @@ enum GymChoiceError: LocalizedError {
     var errorDescription: String? { "That gym was deleted." }
 }
 
-/// The current gym and the rules that run on it (plan 19): matcher, adapter, loads and Build workout. Everything
-/// reads the id from `defaults` (per device) and the gym's rows from `gyms`.
+/// The current gym and the rules that run on it (plan 19): matcher, loads and Build workout. The gym never changes
+/// today's plan: only the owner swaps exercises (owner, 2026-11-18). Everything reads the id from `defaults` (per
+/// device) and the gym's rows from `gyms`.
 extension AppEnvironment {
     static let currentGymKey = "gymrollins.currentGymId"
     static let gymLocationCheckedKey = "gymrollins.gymLocationCheckedAt"
@@ -178,13 +179,8 @@ extension AppEnvironment {
         }
     }
 
-    func gymAdapter() -> GymAdapter? {
-        guard let matcher = gymMatcher() else { return nil }
-        return GymAdapter(matcher: matcher, exercises: library.exercises, loggedCounts: gymLoggedCounts(),
-                          preferences: exercisePreferences)
-    }
-
-    /// How many of the 200 latest workouts include each exercise (Replace's "Logged N×", and the rules' tie-breaks).
+    /// How many of the 200 latest workouts include each exercise (Replace's "Logged N×", and Build workout's
+    /// tie-breaks).
     func gymLoggedCounts() -> [String: Int] {
         let recent: [Workout]
         do { recent = try workouts.recent(limit: 200) }
@@ -212,7 +208,7 @@ extension AppEnvironment {
         return TodayGymContext(matcher: matcher, photo: { _ in nil }, preferred: preferring)
     }
 
-    /// What Today's rows need from the current gym, read once per reload.
+    /// What Today's rows need from the current gym (its loads and listing photos), read once per reload.
     func todayGymContext() -> TodayGymContext? {
         guard let gym = currentGym, let matcher = gymMatcher(gymId: gym.id) else { return nil }
         let photos: [UUID: String]

@@ -22,8 +22,8 @@ import Testing
 
     @Test func theNotesEndDateSavesAndLoads() throws {
         let repo = ProfileRepository(context: container.mainContext, now: clock)
-        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
-        try repo.save(Profile(limits: "Knee: no leg loading", limitsUntil: until))
+        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 9))
+        try repo.save(Profile(limits: "Ankle sprain: no leg loading", limitsUntil: until))
         #expect(try repo.load().limitsUntil == until)
         try repo.save(try repo.load().withLimits("", until: until))
         #expect(try repo.load().limits == "")
@@ -31,11 +31,11 @@ import Testing
     }
 
     @Test func withLimitsTrimsTheNoteAndKeepsEverythingElse() {
-        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
+        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 9))
         let p = Profile(unit: .kg, restSec: 150, heightCm: 181, goalWeightKg: 85, trainingDays: 5, experience: "advanced",
                         limits: "old", deloadPct: 0.1, mcpAutoApply: true, sex: .male, birthYear: 1990)
-        let changed = p.withLimits("  Knee: no leg loading \n", until: until)
-        #expect(changed.limits == "Knee: no leg loading")
+        let changed = p.withLimits("  Ankle sprain: no leg loading \n", until: until)
+        #expect(changed.limits == "Ankle sprain: no leg loading")
         #expect(changed.limitsUntil == until)
         #expect(changed.withLimits("old", until: nil) == p)
     }
@@ -46,11 +46,11 @@ import Testing
         let repo = ProfileRepository(context: container.mainContext, now: clock)
         #expect(try repo.load().sex == nil)
         #expect(try repo.load().birthYear == nil)
-        try repo.setStrengthProfile(sex: .male, birthYear: 1991)
+        try repo.setStrengthProfile(sex: .male, birthYear: 1996)
         try repo.save(Profile(unit: .kg, goalWeightKg: 85)) // no sex/birth year in this value
         let loaded = try repo.load()
         #expect(loaded.sex == .male)
-        #expect(loaded.birthYear == 1991)
+        #expect(loaded.birthYear == 1996)
         #expect(loaded.unit == .kg)
         #expect(throws: GymDataError.self) { try repo.setStrengthProfile(sex: .female, birthYear: 1899) }
         #expect(throws: GymDataError.self) { try repo.setStrengthProfile(sex: .female, birthYear: 2101) }
@@ -265,20 +265,20 @@ import Testing
 
     @Test func bodyweightEntries() throws {
         let repo = BodyRepository(context: container.mainContext, now: clock)
-        try repo.add(BodyweightEntry(date: clock(), weightKg: 81))
-        try repo.add(BodyweightEntry(date: clock().addingTimeInterval(7 * 86_400), weightKg: 81.4))
-        #expect(try repo.latest()?.weightKg == 81.4)
-        #expect(try repo.entries(since: nil).map(\.weightKg) == [81, 81.4])
+        try repo.add(BodyweightEntry(date: clock(), weightKg: 76))
+        try repo.add(BodyweightEntry(date: clock().addingTimeInterval(7 * 86_400), weightKg: 76.4))
+        #expect(try repo.latest()?.weightKg == 76.4)
+        #expect(try repo.entries(since: nil).map(\.weightKg) == [76, 76.4])
     }
 
     @Test func bodyweightDeleteIsTombstone() throws {
         let repo = BodyRepository(context: container.mainContext, now: clock)
         let entry = BodyweightEntry(date: clock(), weightKg: 81)
         try repo.add(entry)
-        try repo.add(BodyweightEntry(date: clock().addingTimeInterval(7 * 86_400), weightKg: 81.4))
+        try repo.add(BodyweightEntry(date: clock().addingTimeInterval(7 * 86_400), weightKg: 76.4))
         try repo.delete(entry.id)
-        #expect(try repo.entries(since: nil).map(\.weightKg) == [81.4])
-        #expect(try repo.latest()?.weightKg == 81.4)
+        #expect(try repo.entries(since: nil).map(\.weightKg) == [76.4])
+        #expect(try repo.latest()?.weightKg == 76.4)
     }
 
     @Test func customExercises() throws {

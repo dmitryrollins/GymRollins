@@ -2,12 +2,12 @@ import Testing
 @testable import GymCore
 
 @Suite struct OneRepMaxTests {
-    @Test func epleyMatchesOwnersBench() throws {
-        // 19 Sep: 10 reps @ 130 lb (58.967 kg) -> 78.6 kg
-        let e1rm = try #require(OneRepMax.estimate(weightKg: 58.967, reps: 10))
-        #expect(abs(e1rm - 78.62) < 0.01)
-        let prior = try #require(OneRepMax.estimate(weightKg: 58.967, reps: 6))
-        #expect(abs(prior - 70.76) < 0.01)
+    @Test func epleyMatchesSampleBench() throws {
+        // 19 Sep: 10 reps @ 150 lb (68.039 kg) -> 90.7 kg
+        let e1rm = try #require(OneRepMax.estimate(weightKg: 68.039, reps: 10))
+        #expect(abs(e1rm - 90.72) < 0.01)
+        let prior = try #require(OneRepMax.estimate(weightKg: 68.039, reps: 6))
+        #expect(abs(prior - 81.65) < 0.01)
     }
 
     @Test func otherFormulas() throws {

@@ -45,7 +45,7 @@ export async function getTrainingInsights(
   try {
     assertTimeZone(tz)
   } catch {
-    throw new ToolError(`Unknown time zone "${tz}". Use an IANA name such as Europe/Warsaw.`)
+    throw new ToolError(`Unknown time zone "${tz}". Use an IANA name such as Europe/Berlin.`)
   }
   // Workouts give the numbers; the plan permission covers the profile (weekly goal, limits note), custom exercises
   // and weekly targets, which RLS hides otherwise. Without it the goal/targets would be silent guesses.

@@ -14,6 +14,7 @@ import {
   weight,
   workingSets,
 } from './format.ts'
+import { listedMeasurement, measuredText, measurementsFor } from './measured.ts'
 import { requireReads, switchedOff, withheld } from './permissions.ts'
 import { compact, ok, type ToolCtx, ToolError, type ToolResult } from './result.ts'
 
@@ -178,13 +179,20 @@ export async function listWorkouts(
     ownerUnit(db),
     db.workouts({ since: since.toISOString(), until: until?.toISOString(), limit }),
   ])
-  const names = await exerciseMap(db, rows.flatMap((w) => w.workout_entries.map((e) => e.exercise_id)))
+  const [names, measured] = await Promise.all([
+    exerciseMap(db, rows.flatMap((w) => w.workout_entries.map((e) => e.exercise_id))),
+    measurementsFor(db, rows.map((w) => w.id)),
+  ])
   return ok({
     unit,
     since: since.toISOString(),
     until: until?.toISOString() ?? null,
     count: rows.length,
-    workouts: rows.map((w) => workoutSummary(w, names, unit)),
+    ...(measured.withheld ? { withheld: measured.withheld } : {}),
+    workouts: rows.map((w) => ({
+      ...workoutSummary(w, names, unit),
+      ...listedMeasurement(measured.byId.get(w.id)),
+    })),
   })
 }
 
@@ -217,8 +225,12 @@ export async function getWorkout({ db }: ToolCtx, args: { id: string }): Promise
   await requireReads(db, 'workouts')
   const [unit, w] = await Promise.all([ownerUnit(db), db.workout(args.id)])
   if (!w) throw new ToolError('Workout not found. Use list_workouts to find workout ids.')
-  const names = await exerciseMap(db, w.workout_entries.map((e) => e.exercise_id))
+  const [names, measured] = await Promise.all([
+    exerciseMap(db, w.workout_entries.map((e) => e.exercise_id)),
+    measurementsFor(db, [w.id]),
+  ])
   const summary = workoutSummary(w, names, unit)
+  const m = measured.byId.get(w.id)
   return ok(compact({
     id: w.id,
     date: summary.date,
@@ -229,8 +241,10 @@ export async function getWorkout({ db }: ToolCtx, args: { id: string }): Promise
     duration_min: summary.duration_min,
     working_sets: summary.working_sets,
     volume_kg: summary.volume_kg,
+    measured: m === undefined ? null : measuredText(m),
     unit,
     entries: byPosition(w.workout_entries).map((e) => entryDetail(e, names, unit)),
+    withheld: measured.withheld,
   }))
 }
 

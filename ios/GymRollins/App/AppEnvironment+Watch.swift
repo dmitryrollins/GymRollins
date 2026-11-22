@@ -18,8 +18,8 @@ extension AppEnvironment {
     func todaysPlan() throws -> (plan: TodayPlan, scheduled: Routine?) { try todaysPlan(at: now()) }
 
     /// `todaysPlan()` for the day `date` falls on (the owner's change for that date, or a switch Claude planned for
-    /// it, becomes its stored plan). The plan is shown at the current gym (`adapted`): Today, plan mode, Start and the
-    /// watch all read it, and a swap is never written to the store or a routine.
+    /// it, becomes its stored plan). Today, plan mode, Start and the watch all read it, exactly as planned: the app
+    /// never swaps an exercise for the gym (only the owner does, with Replace).
     func todaysPlan(at date: Date) throws -> (plan: TodayPlan, scheduled: Routine?) {
         let schedule = try routines.schedule()
         let routine = try schedule.routineId(on: date).flatMap { try routines.routine($0) }
@@ -33,7 +33,7 @@ extension AppEnvironment {
             ?? laterDay
             ?? planned
             ?? TodayPlan.make(scheduled: scheduled, routines: all, lastDone: lastDoneByRoutine(), day: day)
-        return (plan.adapted(by: gymAdapter()), scheduled)
+        return (plan, scheduled)
     }
 
     /// Whether Today offers Start for `plan` (the same rule as its bottom bar).
@@ -115,6 +115,7 @@ extension AppEnvironment {
                 // Taken however late; an export run then keeps the watch's copy if the phone already wrote one.
                 self?.health.markRecordedByWatch($0)
                 self?.exportToHealth()
+                self?.healthRecordedByWatch($0) // plan 40: read what the watch measured
             })
     }
 }

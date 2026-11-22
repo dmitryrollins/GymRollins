@@ -4,7 +4,7 @@ import GymCore
 import GymData
 import SwiftData
 
-/// DEBUG/UI-test only (`-seedInsights`): six weeks of the owner's Mon/Wed/Fri/Sat split ending with this week's
+/// DEBUG/UI-test only (`-seedInsights`): six weeks of the sample Mon/Wed/Fri/Sat split ending with this week's
 /// Monday push, Wednesday pull and Friday upper session (3 of the 4-day goal; the week before met it), so the
 /// recovery map shows fatigued shoulders/triceps and fresh back muscles, the weekly bars have data, the streak
 /// is 5 weeks, and finishing today's workout completes the week. Does nothing if any workout exists.
@@ -12,12 +12,12 @@ import SwiftData
 enum DebugInsightsSeed {
     private static func lb(_ v: Double) -> Double { UnitConverter.toKg(v, from: .lb) }
 
-    private static let push: [(String, Int, Double)] = [("0025", 3, 140), ("0314", 3, 45), ("0194", 3, 40),
-                                                        ("0313", 3, 22.5)]
-    private static let pull: [(String, Int, Double)] = [("0198", 3, 120), ("0861", 3, 120), ("0203", 3, 30),
-                                                        ("0201", 3, 50)]
-    private static let upper: [(String, Int, Double)] = [("0405", 3, 30), ("0334", 4, 10), ("0030", 3, 95),
-                                                         ("0070", 3, 55)]
+    private static let push: [(String, Int, Double)] = [("0025", 3, 160), ("0314", 3, 50), ("0194", 3, 50),
+                                                        ("0313", 3, 25)]
+    private static let pull: [(String, Int, Double)] = [("0198", 3, 135), ("0861", 3, 110), ("0203", 3, 40),
+                                                        ("0201", 3, 60)]
+    private static let upper: [(String, Int, Double)] = [("0405", 3, 35), ("0334", 4, 12.5), ("0030", 3, 105),
+                                                         ("0070", 3, 65)]
 
     static func apply(context: ModelContext, now: Date, calendar: Calendar = TrainingWeek.calendar()) throws {
         let repo = WorkoutRepository(context: context, now: { now })

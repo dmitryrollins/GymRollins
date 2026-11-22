@@ -31,8 +31,8 @@ public enum MuscleHistory {
     }
 }
 
-/// Muscle groups the owner's free-text limits note puts off-limits. There is no structured injury model: this only
-/// recognises a knee or leg mention ("Knee: no leg loading until ~26 Oct 2026") and flags the leg groups, for
+/// Muscle groups the user's free-text limits note puts off-limits. There is no structured injury model: this only
+/// recognises a knee or leg mention ("Ankle sprain: no leg loading until ~9 Nov 2026") and flags the leg groups, for
 /// display on the map and to keep them out of the "Fresh" hint. It changes no recovery maths or plan logic.
 public enum LimitedMuscles {
     public static func from(limits: String) -> Set<MuscleGroup> {

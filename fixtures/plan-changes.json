@@ -11,9 +11,9 @@
   },
   "cases": [
     {
-      "name": "valid knee-break proposal",
+      "name": "valid ankle-rest proposal",
       "proposal": {
-        "summary": "Knee break: replace Legs with upper work for 4 weeks",
+        "summary": "Ankle rest: replace Legs with upper work for 4 weeks",
         "changes": [
           { "id": "c1", "type": "week", "weekday": 6, "routineId": "push" },
           { "id": "c2", "type": "weight", "routineId": "push", "exerciseId": "bench", "weightKg": 63.5 },

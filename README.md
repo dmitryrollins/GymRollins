@@ -86,12 +86,11 @@ reads training data and *proposes* plan changes through MCP; it never edits the 
 proposals in the app (or opts in to auto-apply).
 
 - Spec: `docs/specs/2026-09-26-gymrollins-ios-design.md`; the backend: `docs/specs/2026-11-07-cloudflare-backend-design.md`
-- Plans: `docs/plans/`
 - Server: `server/README.md`
 - Mockups: `docs/design/`
 - Release readiness: `docs/release-readiness.md`: what works locally, what needs the deploy, what's deferred, owner
   decisions needed, install instructions
-- Deploy checklist: `docs/cloudflare-checklist.md`: the owner's steps to deploy the Worker and move the phone to it,
+- Deploy checklist: `docs/cloudflare-checklist.md`: the owner's steps to deploy the Worker and move a phone to it,
   each approved separately
 - Flow-map test coverage: `docs/testing/flow-coverage.md`
 - Performance baselines: `docs/testing/performance.md`
@@ -156,7 +155,7 @@ owner deploys the Worker, its https `API_URL` (see `docs/cloudflare-checklist.md
 | Suite | Command |
 |---|---|
 | Everything (opt-in end-to-end suites, each on a throwaway local Worker: `SYNC_E2E=1`, `MCP_E2E=1`, `PHOTO_E2E=1`, `GYM_E2E=1`) | `scripts/test-all.sh` |
-| The old backend is gone: no folder, no name outside `docs/plans`, `docs/specs` and `docs/research`, no script running Docker (the first step of `test-all.sh`) | `scripts/check-old-backend.sh` |
+| The old backend is gone: no folder, no name outside `docs/specs` and `docs/research`, no script running Docker (the first step of `test-all.sh`) | `scripts/check-old-backend.sh` |
 | API server (Vitest in workerd with in-memory D1 and R2: sync, gyms, photos, moderation, account deletion, the MCP tools, Claude's OAuth and `/connect`, the domain-limits drift test) | `cd server && npx vitest run && npx tsc --noEmit` |
 | GymCore unit tests | `cd ios/Packages/GymCore && swift test` |
 | GymCore coverage (≥ 90%) | `scripts/coverage-gymcore.sh` |
@@ -187,8 +186,8 @@ owner deploys the Worker, its https `API_URL` (see `docs/cloudflare-checklist.md
 
 ## Apple Watch
 
-A companion watch app (plan 17, `docs/plans/2026-09-30-plan-17-watch.md`) for **watchOS 10+** (the owner's Series 5
-runs watchOS 10.6.1). The iPhone stays the source of truth: while a workout runs on the phone, the watch shows the
+A companion watch app (plan 17) for **watchOS 10+** (the target device is an Apple Watch Series 5
+running watchOS 10.6.1). The iPhone stays the source of truth: while a workout runs on the phone, the watch shows the
 next set ("Set 3/5 · 135 lb × 8"), rest countdown (haptic at 0), workout clock and heart rate; it can Log set (Digital
 Crown adjusts weight by the phone's plate/dumbbell increment, and reps), +30s / Skip rest, move between exercises, and
 start today's workout. The watch's `HKWorkoutSession` saves the Health workout (heart rate, measured energy) and the

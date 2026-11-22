@@ -145,8 +145,8 @@ struct ClaudeConnectionView: View {
                 Text("Agents can read gyms you've synced or shared. \"This phone only\" gyms stay on your phone, so "
                      + "agents can't see them.")
                     .accessibilityIdentifier("claude.gymsNote")
-                Text("Activity is what GymRollins reads from Apple Health: workouts from other apps and your daily "
-                     + "steps, move, exercise and stand.")
+                Text("Activity is what GymRollins reads from Apple Health: workouts from other apps, your daily "
+                     + "steps, move, exercise and stand, and your workouts' calories, heart rate and effort.")
                     .accessibilityIdentifier("agents.readActivityNote")
                 Text("A workout an agent adds goes straight into your history, marked with the agent's name. You can "
                      + "edit or delete it like any other.")

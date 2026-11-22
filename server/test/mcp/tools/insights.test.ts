@@ -73,10 +73,10 @@ test('get_training_insights: recovery, fresh, limited legs from the limits note'
   assertEquals(byMuscle.triceps.recovered_pct, 84)
   assertEquals(byMuscle.lats.recovered_pct, 100)
   assertEquals(byMuscle.lats.last_trained, null)
-  assertEquals(byMuscle.quads.limited_by_injury_note, true) // "left knee: no deep knee flexion"
+  assertEquals(byMuscle.quads.limited_by_injury_note, true) // "ankle sprain: no leg loading"
   assertEquals(byMuscle.chest.limited_by_injury_note, undefined)
   assertEquals(out.fresh, [])
-  assertEquals(out.limits_note, 'left knee: no deep knee flexion')
+  assertEquals(out.limits_note, 'ankle sprain: no leg loading')
 })
 
 test('get_training_insights: weekly sets vs default and stored targets (UTC week)', async () => {
@@ -120,13 +120,13 @@ test('get_training_insights: streak with the profile goal (4 days/week)', async 
 })
 
 test('get_training_insights: time zone moves the week boundary; bad zone is a user error', async () => {
-  const late = await ctx((d) => d.workouts.push(bench('w7', '2026-09-20T22:30:00Z', 2))) // Mon 00:30 in Warsaw
+  const late = await ctx((d) => d.workouts.push(bench('w7', '2026-09-20T22:30:00Z', 2))) // Mon 00:30 in Berlin
   const utc = json(await getTrainingInsights(late, {}))
-  const warsaw = json(await getTrainingInsights(late, { time_zone: 'Europe/Warsaw' }))
+  const berlin = json(await getTrainingInsights(late, { time_zone: 'Europe/Berlin' }))
   const chest = (o: { weekly_sets: { muscles: { muscle: string; hard_sets: number }[] } }) =>
     o.weekly_sets.muscles.find((m) => m.muscle === 'chest')!.hard_sets
   assertEquals(chest(utc), 6)
-  assertEquals(chest(warsaw), 8)
+  assertEquals(chest(berlin), 8)
   await assertRejects(
     () => getTrainingInsights(late, { time_zone: 'Mars/Olympus' }),
     ToolError,

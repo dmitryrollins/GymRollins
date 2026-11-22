@@ -122,7 +122,7 @@ struct ExerciseHistoryView: View {
                             SectionLabel(text: "Best set")
                             Text(WeightFormatter.format(kg: best.weightKg, lb: best.weightLb, unit: unit,
                                                         includeSecondary: false) + " \u{00D7} \(best.reps)")
-                                .font(Theme.display(26))
+                                .font(Theme.number(26))
                                 .foregroundStyle(Theme.textPrimary)
                         }
                     }

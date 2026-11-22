@@ -10,14 +10,14 @@ private func instant(_ iso: String) -> Date { ISO8601DateFormatter().date(from: 
         c.timeZone = TimeZone(identifier: "UTC")!
         return c
     }()
-    let until = instant("2026-10-26T00:00:00Z")
+    let until = instant("2026-11-09T00:00:00Z")
     let legs = LimitsCheckInModel.PausedRoutine(id: UUID(), name: "Legs")
     let core = LimitsCheckInModel.PausedRoutine(id: UUID(), name: "Core")
 
     @Test func theReminderAddsTheDateWhenThereIsOne() {
-        #expect(LimitsCheckInModel.reminder(note: "Knee", until: nil, calendar: utc) == "Knee")
-        #expect(LimitsCheckInModel.reminder(note: "Knee", until: until, calendar: utc)
-                == "Knee \u{00B7} until \(GoalDate.dayMonth(until, calendar: utc))")
+        #expect(LimitsCheckInModel.reminder(note: "Ankle", until: nil, calendar: utc) == "Ankle")
+        #expect(LimitsCheckInModel.reminder(note: "Ankle", until: until, calendar: utc)
+                == "Ankle \u{00B7} until \(GoalDate.dayMonth(until, calendar: utc))")
     }
 
     @Test func theQuestionNamesTheDate() {

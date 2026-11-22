@@ -69,8 +69,8 @@ final class DynamicTypeUITests: XCTestCase {
 
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id] }
 
-    /// The bottom bar stacks Start above Build, and both stay reachable; the gym marks wrap instead of clipping.
-    func testTodayBottomBarAndGymMarksAtAccessibilityXL() {
+    /// The bottom bar stacks Start above Build, and both stay reachable, with the gym chip on Today.
+    func testTodayBottomBarAndGymChipAtAccessibilityXL() {
         let app = launch(extra: ["-seedGym"])
         let start = app.buttons["today.start"], build = app.buttons["today.build"]
         XCTAssertTrue(build.waitForExistence(timeout: 5))
@@ -78,18 +78,64 @@ final class DynamicTypeUITests: XCTestCase {
         XCTAssertTrue(build.isHittable)
         XCTAssertLessThanOrEqual(start.frame.maxY, build.frame.minY + 1, "Start stacks above Build workout")
         XCTAssertGreaterThanOrEqual(build.frame.height, 44)
-        XCTAssertTrue(element(app, "today.gymNote").exists)
+        let chip = app.buttons["today.gymChip"]
+        XCTAssertTrue(chip.exists)
+        XCTAssertTrue(chip.label.contains("Home"), chip.label)
+        XCTAssertGreaterThanOrEqual(chip.frame.height, 44)
         screenshot("today-gym-ax-xl")
     }
 
-    /// At accessibility sizes the header's date button is just the calendar icon: spelled out, it broke one letter per
-    /// line and pushed Today down. VoiceOver still reads the date.
-    func testTodayDateButtonStaysCompactAtAccessibilityXL() {
+    /// At accessibility sizes the workout pill takes its own full row under Settings, My Plan and the day picker.
+    /// VoiceOver still reads the date.
+    func testTodayHeaderAtAccessibilityXL() {
         let app = launch()
-        let date = app.buttons["today.date"], myPlan = app.buttons["today.myPlan"]
-        XCTAssertTrue(date.waitForExistence(timeout: 5))
-        XCTAssertLessThanOrEqual(date.frame.height, myPlan.frame.height, "date \(date.frame) / My Plan \(myPlan.frame)")
-        XCTAssertTrue(date.label.contains("26"), "label was '\(date.label)'")
+        let header = TodayHeaderElements(app)
+        XCTAssertTrue(header.workout.waitForExistence(timeout: 5))
+        screenshot("today-header-ax-xl")
+        XCTAssertEqual(header.myPlan.frame.midY, header.settings.frame.midY, accuracy: 4, header.description)
+        XCTAssertEqual(header.date.frame.midY, header.settings.frame.midY, accuracy: 4, header.description)
+        XCTAssertGreaterThanOrEqual(header.workout.frame.minY, header.settings.frame.maxY, header.description)
+        header.assertOnScreen(app)
+        XCTAssertTrue(header.date.label.contains("26"), "label was '\(header.date.label)'")
+    }
+
+    /// The header stays at the top while Today scrolls under it (owner, 2026-11-19).
+    func testTodayHeaderStaysAtTheTop() {
+        let app = launch(size: "UICTContentSizeCategoryL")
+        let header = TodayHeaderElements(app)
+        let recovery = app.descendants(matching: .any)["today.recovery"].firstMatch
+        XCTAssertTrue(recovery.waitForExistence(timeout: 5))
+        let pill = header.workout.frame, card = recovery.frame
+        app.swipeUp()
+        app.swipeUp()
+        _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: 1) // the screenshot after the fling
+        screenshot("today-header-scrolled")
+        XCTAssertLessThan(recovery.frame.minY, card.minY - 100, "Today didn't scroll")
+        XCTAssertEqual(header.workout.frame, pill)
+        for element in [header.settings, header.workout, header.myPlan, header.date] {
+            XCTAssertTrue(element.isHittable, header.description)
+        }
+    }
+
+    /// Below accessibility sizes the header is one row like the reference design (owner, 2026-11-18): Settings, the workout
+    /// pill, then My Plan and the day picker sharing one pill, all on screen.
+    func testTodayHeaderIsOneRow() {
+        for name in ["L", "XL", "XXL", "XXXL"] {
+            let size = "UICTContentSizeCategory\(name)"
+            let app = launch(size: size)
+            let header = TodayHeaderElements(app)
+            XCTAssertTrue(header.workout.waitForExistence(timeout: 5))
+            screenshot("today-header-\(name)")
+            XCTAssertEqual(header.workout.frame.midY, header.settings.frame.midY, accuracy: 4, "\(size): \(header)")
+            XCTAssertEqual(header.date.frame.midY, header.settings.frame.midY, accuracy: 4, "\(size): \(header)")
+            XCTAssertGreaterThanOrEqual(header.workout.frame.minX, header.settings.frame.maxX, "\(size): \(header)")
+            XCTAssertGreaterThanOrEqual(header.myPlan.frame.minX, header.workout.frame.maxX, "\(size): \(header)")
+            header.assertOnScreen(app)
+            XCTAssertEqual(header.workout.label, "Push + Arms \u{00B7} 7 exercises")
+            XCTAssertEqual(header.workout.value as? String, "Today")
+            XCTAssertTrue(header.date.label.contains("26"), "\(size): label was '\(header.date.label)'")
+            app.terminate()
+        }
     }
 
     /// My Plan's day rows stay inside the screen and every day can be reached at the largest text size.
@@ -187,8 +233,11 @@ final class DynamicTypeUITests: XCTestCase {
         app.buttons["today.gymChip"].tap()
         XCTAssertTrue(app.buttons["gymPicker.currentEquipment"].waitForExistence(timeout: 5))
         app.buttons["gymPicker.currentEquipment"].tap()
+        XCTAssertTrue(app.staticTexts["gymEquipment.coverage.chest"].waitForExistence(timeout: 15))
+        // Plan 40's taller section labels leave the lat pulldown's row of the lazy grid just below the fold at this
+        // size, where it isn't built until scrolled to.
         let tile = app.buttons["gymEquipment.listing.lat-pulldown"]
-        XCTAssertTrue(tile.waitForExistence(timeout: 15))
+        app.scrollToHittable(tile)
         tile.tapWhenHittable()
         let menu = app.buttons["listing.menu"]
         XCTAssertTrue(menu.waitForExistence(timeout: 5))
@@ -235,7 +284,9 @@ final class DynamicTypeUITests: XCTestCase {
         let search = app.textFields["addEquipment.kindSearch"]
         XCTAssertTrue(search.waitForExistence(timeout: 30))
         search.tap()
-        search.typeText("lat")
+        // Two words leave one tile, at the top: at this size "lat" alone puts the lat pulldown in the second row, where
+        // the bar above the keyboard covers its middle and takes the tap.
+        search.typeText("lat pull")
         app.buttons["addEquipment.kind.lat-pulldown"].tapCenter()
         let confirm = app.buttons["add.confirm.00000000-0000-4000-8000-0000000000B1"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
@@ -257,7 +308,10 @@ final class DynamicTypeUITests: XCTestCase {
         for id in ["limits.yes", "limits.notYet"] {
             let button = app.buttons[id]
             XCTAssertTrue(button.waitForExistence(timeout: 5))
-            for _ in 0..<6 where !button.isHittable { app.swipeUp() }
+            // Toward the button either way: at this size one swipe can carry the second button past the top.
+            for _ in 0..<8 where !button.isHittable {
+                if button.frame.midY < app.frame.midY { app.swipeDown(velocity: .slow) } else { app.swipeUp(velocity: .slow) }
+            }
             XCTAssertTrue(button.isHittable, id)
             XCTAssertGreaterThanOrEqual(button.frame.height, 44, id)
         }
@@ -363,5 +417,30 @@ final class DynamicTypeUITests: XCTestCase {
         XCTAssertTrue(confirm.isHittable)
         XCTAssertGreaterThanOrEqual(confirm.frame.height, 44)
         screenshot("moderation-confirm-ax-xl")
+    }
+}
+
+/// Today's header: Settings, the workout pill, and My Plan and the day picker.
+private struct TodayHeaderElements: CustomStringConvertible {
+    let settings, workout, myPlan, date: XCUIElement
+
+    init(_ app: XCUIApplication) {
+        settings = app.buttons["today.settings"]
+        workout = app.descendants(matching: .any)["today.workout"].firstMatch
+        myPlan = app.buttons["today.myPlan"]
+        date = app.buttons["today.date"]
+    }
+
+    var description: String {
+        "settings \(settings.frame), workout \(workout.frame), My Plan \(myPlan.frame), date \(date.frame)"
+    }
+
+    /// Every part is inside the screen's width and at least a tap target tall.
+    func assertOnScreen(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        for element in [settings, workout, myPlan, date] {
+            XCTAssertGreaterThanOrEqual(element.frame.minX, 0, description, file: file, line: line)
+            XCTAssertLessThanOrEqual(element.frame.maxX, app.frame.maxX, description, file: file, line: line)
+            XCTAssertGreaterThanOrEqual(element.frame.height, 43.5, description, file: file, line: line) // 44 pt, rounded
+        }
     }
 }

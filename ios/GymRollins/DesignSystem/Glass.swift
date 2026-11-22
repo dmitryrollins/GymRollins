@@ -16,6 +16,14 @@ extension View {
     }
 }
 
+extension View {
+    /// The prominent Liquid Glass button (spec §3.3): the same glass, tinted the red action colour
+    /// (`primaryButtonFill`) with a white label, 7.1:1 on it (the owner's amendment of 17 Nov).
+    func prominentGlass() -> some View {
+        buttonStyle(.glassProminent).tint(Theme.primaryButtonFill).foregroundStyle(Theme.onAccent)
+    }
+}
+
 private struct InteractiveGlass: ViewModifier {
     let enabled: Bool
     func body(content: Content) -> some View { content } // `.interactive()` is applied via the Glass value when needed
@@ -44,10 +52,10 @@ struct PrimaryGlassButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(.headline).multilineTextAlignment(.center).frame(maxWidth: .infinity, minHeight: 56)
+            Text(title).font(.headline).foregroundStyle(Theme.onAccent).multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 56)
         }
-        .buttonStyle(.glassProminent)
-        .tint(Theme.primaryButtonFill)
+        .prominentGlass()
         .accessibilityIdentifier(identifier ?? title)
     }
 }

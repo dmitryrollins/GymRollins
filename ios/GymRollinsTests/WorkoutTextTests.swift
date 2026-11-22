@@ -46,4 +46,37 @@ import Testing
     @Test func cardioWithoutDistance() {
         #expect(WorkoutText.setsSummary(cardioEntry(minutes: 20, distanceM: nil), unit: .kg, mode: .cardio) == "20 min")
     }
+
+    // MARK: Photo strip
+
+    private func done(_ id: String) -> WorkoutEntry {
+        WorkoutEntry(exerciseId: id, sets: [WorkoutSet(weightKg: lb(100), reps: 8, done: true)])
+    }
+
+    @Test func photoStripKeepsOrderAndShowsEachExerciseOnce() {
+        let strip = WorkoutText.photoStrip([done("bench"), done("curl"), done("bench")], limit: 5)
+        #expect(strip.exerciseIds == ["bench", "curl"])
+        #expect(strip.more == 0)
+    }
+
+    @Test func photoStripLeavesOutExercisesWithNoWorkingSet() {
+        let skipped = WorkoutEntry(exerciseId: "dip", sets: [WorkoutSet(weightKg: lb(0), reps: 10, done: false)])
+        let warmupOnly = WorkoutEntry(exerciseId: "row",
+                                      sets: [WorkoutSet(weightKg: lb(45), reps: 10, done: true, warmup: true)])
+        let strip = WorkoutText.photoStrip([skipped, done("squat"), warmupOnly], limit: 5)
+        #expect(strip.exerciseIds == ["squat"])
+        #expect(strip.more == 0)
+    }
+
+    @Test func photoStripCountsTheExercisesPastTheLimit() {
+        let strip = WorkoutText.photoStrip(["a", "b", "c", "d", "e", "f", "g"].map(done), limit: 5)
+        #expect(strip.exerciseIds == ["a", "b", "c", "d", "e"])
+        #expect(strip.more == 2)
+    }
+
+    @Test func photoStripIsEmptyWithNoExercises() {
+        let strip = WorkoutText.photoStrip([], limit: 5)
+        #expect(strip.exerciseIds.isEmpty)
+        #expect(strip.more == 0)
+    }
 }

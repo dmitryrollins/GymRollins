@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The server-move check (spec section 8, iOS; acceptance criterion 7). A COPY of the owner's phone store goes into a
+# The server-move check (spec section 8, iOS; acceptance criterion 7). A COPY of a phone's store goes into a
 # throwaway simulator, the app moves it to a throwaway local Worker, a new account signs in, and the first sync uploads
 # it. Then D1's counts must equal the copy's, and the phone's records must be unchanged apart from sync state.
 #
@@ -7,7 +7,7 @@
 #
 # <phone-backup-dir> holds the app container's Library: Library/Application Support/default.store (with its -wal and
 # -shm) and Library/Preferences/com.rollins.gymrollins.plist. It is only read. <work-dir> gets every copy, the build and
-# the D1 state. Both must be outside the repo, because this is the owner's personal data. The simulator and the D1
+# the D1 state. Both must be outside the repo, because this is personal data. The simulator and the D1
 # state are deleted at the end; delete <work-dir> once the numbers are noted. Local only: no Cloudflare account,
 # nothing on a phone.
 set -euo pipefail
@@ -17,7 +17,7 @@ mkdir -p "${2:?usage: server-move-check.sh <phone-backup-dir> <work-dir>}"
 WORK="$(cd "$2" && pwd)"
 for dir in "$BACKUP" "$WORK"; do
   case "$dir/" in
-    "$ROOT"/*) echo "Refusing: $dir is inside the repo, and the owner's data stays out of it." >&2; exit 1 ;;
+    "$ROOT"/*) echo "Refusing: $dir is inside the repo, and personal data stays out of it." >&2; exit 1 ;;
   esac
 done
 STORE="$BACKUP/Library/Application Support/default.store"
@@ -112,7 +112,7 @@ for check in "${CHECKS[@]}"; do
   printf '%-22s %8s %8s\n' "$name" "$mine" "$theirs"
   [[ "$mine" == "$theirs" ]] || failed=1
 done
-echo "(Spec section 8 lists 148 workouts, 836 entries, 2,685 sets, 6 routines and 24 body weights; the copy is the reference.)"
+echo "(The copy is the reference for these counts.)"
 
 unsynced="$(sqlite3 "$WORK/after/default.store" "select
     (select count(*) from ZWORKOUTRECORD where ZISACTIVE = 0 and (ZDIRTY = 1 or ZSERVERUPDATEDAT is null))

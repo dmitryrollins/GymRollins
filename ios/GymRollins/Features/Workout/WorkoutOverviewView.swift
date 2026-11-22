@@ -68,7 +68,7 @@ struct WorkoutOverviewView: View {
                 HStack(spacing: 7) {
                     Image(systemName: "timer").font(.subheadline.weight(.semibold)).accessibilityHidden(true)
                     Text(DurationFormatter.clock(session.elapsed(at: env.now())))
-                        .font(Theme.display(22))
+                        .font(Theme.number(22))
                         .accessibilityIdentifier("workout.clock")
                 }
             }
@@ -77,8 +77,7 @@ struct WorkoutOverviewView: View {
             Spacer(minLength: 4)
 
             Button(action: finish) { Text("Finish").fixedSize() }
-                .buttonStyle(.glassProminent)
-                .tint(Theme.primaryButtonFill)
+                .prominentGlass()
                 .accessibilityIdentifier("workout.finish")
         }
         .padding(.horizontal, 8)

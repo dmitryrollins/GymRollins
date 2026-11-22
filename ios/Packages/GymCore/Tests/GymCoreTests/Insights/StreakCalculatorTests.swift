@@ -66,24 +66,24 @@ struct StreakCalculatorTests {
     }
 
     @Test func weekBoundaryFollowsTheTimeZone() {
-        // Sunday 23:30 UTC = Monday 01:30 in Warsaw: in UTC that's week 1's 3rd day, in Warsaw week 2's 1st.
+        // Sunday 23:30 UTC = Monday 01:30 in Berlin: in UTC that's week 1's 3rd day, in Berlin week 2's 1st.
         let dates = [F.date("2026-09-21T10:00:00Z"), F.date("2026-09-23T10:00:00Z"), F.date("2026-09-27T23:30:00Z")]
         let now = F.date("2026-09-28T10:00:00Z")
         let inUTC = StreakCalculator.compute(workoutDates: dates, goal: 3, now: now, calendar: utc)
         #expect(inUTC.current == 1)
         #expect(inUTC.thisWeekDays == 0)
-        let warsaw = TrainingWeek.calendar(timeZone: TimeZone(identifier: "Europe/Warsaw")!)
-        let inWarsaw = StreakCalculator.compute(workoutDates: dates, goal: 3, now: now, calendar: warsaw)
-        #expect(inWarsaw.current == 0)
-        #expect(inWarsaw.thisWeekDays == 1)
+        let berlin = TrainingWeek.calendar(timeZone: TimeZone(identifier: "Europe/Berlin")!)
+        let inBerlin = StreakCalculator.compute(workoutDates: dates, goal: 3, now: now, calendar: berlin)
+        #expect(inBerlin.current == 0)
+        #expect(inBerlin.thisWeekDays == 1)
     }
 
     @Test func streakAcrossDSTWeeks() {
-        let warsaw = TrainingWeek.calendar(timeZone: TimeZone(identifier: "Europe/Warsaw")!)
+        let berlin = TrainingWeek.calendar(timeZone: TimeZone(identifier: "Europe/Berlin")!)
         // Weeks of 19 Oct (DST ends Sun 25 Oct) and 26 Oct 2026.
         let dates = ["2026-10-19", "2026-10-21", "2026-10-26", "2026-10-28"].map { F.date("\($0)T10:00:00Z") }
         let s = StreakCalculator.compute(workoutDates: dates, goal: 2, now: F.date("2026-10-29T10:00:00Z"),
-                                         calendar: warsaw)
+                                         calendar: berlin)
         #expect(s.current == 2)
     }
 

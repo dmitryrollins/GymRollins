@@ -1,11 +1,11 @@
 import SwiftUI
 
 /// Apple Fitness' look for measured values (plan 39 §4.1): each value in its metric's colour, SF Pro Rounded semibold,
-/// its unit uppercase and smaller right after it ("2.26KM"), a plain label above. Digits stay proportional, as in
+/// its unit uppercase and smaller right after it ("3.40KM"), a plain label above. Digits stay proportional, as in
 /// Fitness' summary: these values don't tick, and tabular digits left a gap after every 1 ("1 38W").
 extension Theme {
-    /// Every colour keeps at least 4.5:1 on `Theme.card` and `Theme.background` (the lowest, `calories`, is 5.6:1 on
-    /// the card), so even the small units pass the accessibility audit.
+    /// Every colour keeps at least 4.5:1 on `Theme.card` (0x1C1C1E since stage 1) and `Theme.background` (the lowest,
+    /// `calories`, is 5.3:1 on the card; `ThemeContrastTests` checks them all), so even the small units pass the audit.
     enum Metric {
         /// The kind icon and the headline metric (Fitness' green-yellow).
         static let workout = Color(hex: 0xB6F23A)
@@ -27,6 +27,10 @@ extension Theme {
 /// Which `Theme.Metric` colour a value is drawn in. Plain data, so the text that picks it stays unit-testable.
 enum MetricTint: Equatable, Sendable {
     case workout, time, distance, calories, heartRate, power, cadence, steps, exercise, stand
+    /// The app's own counts in plain text, and records in amber (plan 40's Strength grid).
+    case primary, record
+    /// The red action colour: the planned days on Today's calendar, like their dots.
+    case accent
 
     var color: Color {
         switch self {
@@ -40,11 +44,14 @@ enum MetricTint: Equatable, Sendable {
         case .steps: Theme.Metric.steps
         case .exercise: Theme.Metric.exercise
         case .stand: Theme.Metric.stand
+        case .primary: Theme.textPrimary
+        case .record: Theme.record
+        case .accent: Theme.accent
         }
     }
 }
 
-/// One measured value as a cell shows it: "Distance" over "2.26" + "KM", read by VoiceOver as "Distance, 2.26
+/// One measured value as a cell shows it: "Distance" over "3.40" + "KM", read by VoiceOver as "Distance, 3.40
 /// kilometres".
 struct MetricReading: Equatable, Identifiable, Sendable {
     /// Stable per kind of value; the cell's accessibility identifier ends with it ("outside.distance").
@@ -53,7 +60,7 @@ struct MetricReading: Equatable, Identifiable, Sendable {
     let value: String
     /// Uppercase ("KM", "KCAL"); nil when the label says it all (steps, a clock time).
     let unit: String?
-    /// The value with its unit in full, for VoiceOver ("2.26 kilometres").
+    /// The value with its unit in full, for VoiceOver ("3.40 kilometres").
     let spoken: String
     let tint: MetricTint
 
@@ -100,12 +107,13 @@ enum MetricSize {
     }
 }
 
-/// "2.26KM": the value, then its unit in the same colour, smaller and with no space between.
+/// "3.40KM": the value, then its unit in the same colour, smaller and with no space between.
 struct MetricValueText: View {
     let reading: MetricReading
     var size: MetricSize = .large
     /// Overrides the reading's own colour (the headline is drawn in `workout`).
     var tint: MetricTint?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Group {
@@ -116,7 +124,8 @@ struct MetricValueText: View {
             }
         }
         .foregroundStyle((tint ?? reading.tint).color)
-        .lineLimit(1)
+        // Two lines at accessibility sizes, where a metric has the row to itself: "≈ 277KCAL" no longer fits one.
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
         .minimumScaleFactor(0.7)
     }
 }

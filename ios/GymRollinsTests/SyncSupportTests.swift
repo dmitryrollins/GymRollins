@@ -157,8 +157,8 @@ import Testing
         #expect(LaunchOptions(arguments: ["-uiTesting", "-seedConflict"], environment: [:]).syncBackend == .seededConflict)
     }
 
-    @Test func noSeedSkipsOwnerSeed() {
-        #expect(LaunchOptions(arguments: ["-uiTesting"], environment: [:]).seedOwner)
-        #expect(!LaunchOptions(arguments: ["-uiTesting", "-noSeed"], environment: [:]).seedOwner)
+    @Test func noSeedSkipsSampleSeed() {
+        #expect(LaunchOptions(arguments: ["-uiTesting"], environment: [:]).seedSample)
+        #expect(!LaunchOptions(arguments: ["-uiTesting", "-noSeed"], environment: [:]).seedSample)
     }
 }

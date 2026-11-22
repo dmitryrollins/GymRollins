@@ -52,7 +52,7 @@ import Testing
         #expect(provider.media(for: exercise("2")) != nil)
     }
 
-    @Test func bundledMappingCoversTheOwnersBenchPress() throws {
+    @Test func bundledMappingCoversBenchPress() throws {
         let provider = try #require(FreeExerciseDBPhotoProvider.bundled())
         let media = try #require(provider.media(for: exercise("0025")))
         #expect(media.photos.count == 2)

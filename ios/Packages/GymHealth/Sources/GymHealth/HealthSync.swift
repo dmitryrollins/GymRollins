@@ -31,6 +31,9 @@ public final class HealthSync {
     public internal(set) var lastError: String?
     public internal(set) var isSyncing = false
     var failedWorkouts: Set<UUID> = []
+    /// Whether Health has asked about the effort types (plan 40); nil until a measurements read or an effort write
+    /// checked, so the Effort card's Allow pill never flashes before the answer. Read through `effortNeedsAsking`.
+    var effortAsked: Bool?
 
     @ObservationIgnored let store: any HealthStore
     @ObservationIgnored let workouts: WorkoutRepository
@@ -44,6 +47,9 @@ public final class HealthSync {
     @ObservationIgnored public var onBodyChanged: @MainActor () -> Void
     /// Outside workouts or days of activity were added, changed or deleted by an import (plan 39).
     @ObservationIgnored public var onActivityChanged: @MainActor () -> Void = {}
+    /// The phone wrote this workout's copy to Health (plan 40): the app re-reads what Health measured during it. Not
+    /// called for an unchanged copy, a failed save, or a workout the Apple Watch recorded.
+    @ObservationIgnored public var onWorkoutExported: @MainActor (UUID) -> Void = { _ in }
     @ObservationIgnored private var tail: Task<Void, Never>?
     /// Bumped by `disable`, `reset` and `localDataWasReset`: a run that started under an older generation stops
     /// at its next suspension point instead of writing into (or about) data that was just cleared.
@@ -306,6 +312,7 @@ public final class HealthSync {
             guard run == generation else { return false }
             failedWorkouts.remove(id)
             update { $0.workouts[key] = fingerprint }
+            onWorkoutExported(id)
         } catch {
             guard run == generation else { return false }
             Self.log.error("Health workout save failed: \(error.localizedDescription, privacy: .public)")

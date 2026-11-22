@@ -41,8 +41,8 @@ struct BodyweightChart: View {
 }
 
 /// Pure y-axis domain for the bodyweight chart: tight around the data and goal line (padded by
-/// 1 kg, rounded outward to the nearest 0.5 kg) so a small trend like 81 → 81.8 kg and a distant
-/// goal line like 85 kg both read clearly, instead of Swift Charts' default auto-scaled axis.
+/// 1 kg, rounded outward to the nearest 0.5 kg) so a small trend like 76 → 76.8 kg and a distant
+/// goal line like 80 kg both read clearly, instead of Swift Charts' default auto-scaled axis.
 enum BodyweightChartDomain {
     static func yDomain(entries: [BodyweightEntry], goalKg: Double?) -> ClosedRange<Double> {
         var values = entries.map(\.weightKg)

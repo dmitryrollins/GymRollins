@@ -9,7 +9,8 @@ struct WorkoutFlowView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var showFinishSheet = false
-    @State private var summary: (summary: WorkoutSummary, workout: Workout)?
+    /// The finished workout, its recap, and what it added to its gym's equipment.
+    @State private var summary: (summary: WorkoutSummary, workout: Workout, learned: LearnedEquipment?)?
     @State private var finishFailed = false
     /// `IdleFinish`'s earlier end, worked out when Finish is tapped (nil: the last set was recent, or none).
     @State private var suggestedEnd: Date?
@@ -42,7 +43,7 @@ struct WorkoutFlowView: View {
     private var content: some View {
         Group {
             if let summary {
-                SummaryView(summary: summary.summary, workout: summary.workout) {
+                SummaryView(summary: summary.summary, workout: summary.workout, learned: summary.learned) {
                     env.endSession()
                     dismiss()
                 }
@@ -120,17 +121,22 @@ struct WorkoutFlowView: View {
     private func finishDirectly(endingAt end: Date?) {
         directEnd = end
         do {
-            let result = try session.finish(discardingUndone: false, endingAt: end)
-            summary = (result, session.workout)
-            env.dataChanged()
+            showSummary(try session.finish(discardingUndone: false, endingAt: end))
         } catch {
             finishFailed = true
         }
     }
 
     private func finished(_ result: WorkoutSummary) {
-        summary = (result, session.workout)
+        showSummary(result)
         showFinishSheet = false
+    }
+
+    /// The workout is saved: its gym learns what it used, and the summary shows. Only the first finish counts: a second
+    /// one (a double tap on the finish sheet) would find nothing new and blank the "Added to" card.
+    private func showSummary(_ result: WorkoutSummary) {
+        guard summary == nil else { return }
+        summary = (result, session.workout, env.recordGymEquipment(from: session.workout))
         env.dataChanged()
     }
 

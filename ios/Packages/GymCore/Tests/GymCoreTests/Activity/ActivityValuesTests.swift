@@ -55,17 +55,17 @@ import Testing
     }
 
     @Test func aDayIsKeyedByItsLocalCalendarDay() throws {
-        var warsaw = Calendar(identifier: .gregorian)
-        warsaw.timeZone = try #require(TimeZone(identifier: "Europe/Warsaw"))
+        var berlin = Calendar(identifier: .gregorian)
+        berlin.timeZone = try #require(TimeZone(identifier: "Europe/Berlin"))
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = try #require(TimeZone(identifier: "UTC"))
-        let lateEvening = try #require(ISO8601DateFormatter().date(from: "2026-09-25T22:30:00Z")) // 00:30 in Warsaw
-        #expect(ActivityDay.key(for: lateEvening, calendar: warsaw) == "2026-09-26")
+        let lateEvening = try #require(ISO8601DateFormatter().date(from: "2026-09-25T22:30:00Z")) // 00:30 in Berlin
+        #expect(ActivityDay.key(for: lateEvening, calendar: berlin) == "2026-09-26")
         #expect(ActivityDay.key(for: lateEvening, calendar: utc) == "2026-09-25")
 
         let day = ActivityDay(day: "2026-09-26", steps: 4_210, moveKcal: 210, exerciseMin: 18, standH: nil)
         #expect(day.id == "2026-09-26")
-        #expect(day.date(calendar: warsaw).map { ActivityDay.key(for: $0, calendar: warsaw) } == "2026-09-26")
+        #expect(day.date(calendar: berlin).map { ActivityDay.key(for: $0, calendar: berlin) } == "2026-09-26")
         let notADay = ActivityDay(day: "2026-02-30", steps: 0, moveKcal: 0, exerciseMin: 0, standH: nil)
         #expect(notADay.date(calendar: utc) == nil)
     }

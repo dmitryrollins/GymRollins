@@ -11,7 +11,7 @@ final class OnboardingUITests: XCTestCase {
     }
 
     /// Fills the required bodyweight field and taps Continue (height/training days/experience keep the
-    /// owner's seeded defaults).
+    /// sample seeded defaults).
     private func completeProfileSetup(_ app: XCUIApplication) {
         XCTAssertTrue(app.buttons["setup.continue"].waitForExistence(timeout: 5))
         let bodyweight = app.textFields["setup.bodyweight"]
@@ -70,7 +70,7 @@ final class OnboardingUITests: XCTestCase {
         app.buttons["onboarding.done"].tap()
 
         // Today shows (onboarding finished).
-        XCTAssertTrue(app.staticTexts["today.summary"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["today.workout"].waitForExistence(timeout: 5))
 
         // Log shows the 3 imported workouts.
         app.tabBars.buttons["Log"].tap()
@@ -93,7 +93,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["onboarding.later"].waitForExistence(timeout: 5))
         app.buttons["onboarding.later"].tap()
 
-        XCTAssertTrue(app.staticTexts["today.summary"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["today.workout"].waitForExistence(timeout: 5))
 
         app.tabBars.buttons["Log"].tap()
         let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'log.workout.'"))

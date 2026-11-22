@@ -19,18 +19,18 @@ enum SyncBackend: Equatable {
 struct LaunchOptions {
     /// In-memory store (fresh every launch).
     let inMemory: Bool
-    /// Seed the owner's split if the store is empty.
-    let seedOwner: Bool
+    /// Seed the sample split if the store is empty.
+    let seedSample: Bool
     /// Fixed "now" for deterministic UI tests (ISO 8601), e.g. -fixedNow 2026-09-26T09:00:00Z
     let fixedNow: Date?
     /// UI tests that relaunch need a store that survives the process: -diskStore uses a file in tmp.
     let diskStoreURL: URL?
     /// Delete the disk store before opening (first launch of a test).
     let resetStore: Bool
-    /// DEBUG/UI-test only (`-seedHistory`): seeds the owner's past workouts, for Log/History/progression tests.
+    /// DEBUG/UI-test only (`-seedHistory`): seeds the sample past workouts, for Log/History/progression tests.
     let seedHistory: Bool
-    /// DEBUG/UI-test only: seeds 5 weekly weigh-ins (81.0 → 81.8 kg) ending on `fixedNow`, for
-    /// screenshots and manual QA of the Body tab's chart and trend with real data.
+    /// DEBUG/UI-test only: seeds 5 weekly weigh-ins (76.0 → 76.8 kg) ending on `fixedNow`, for
+    /// screenshots and manual QA of the Body tab's chart and trend with sample data.
     let seedBodyweight: Bool
     /// DEBUG/UI-test only: seeds one extra workout with a timed (plank) set, for testing the
     /// detail screen's time-mode display/edit without disturbing `-seedHistory`'s fixed shape.
@@ -40,7 +40,7 @@ struct LaunchOptions {
     let seedLargeHistory: Bool
     /// DEBUG only: `-largeHistoryCount N` (default 60, clamped to 1…1000).
     let largeHistoryCount: Int
-    /// DEBUG/UI-test only (`-seedProposal`): inserts a pending Claude proposal (knee-break style) on the seeded
+    /// DEBUG/UI-test only (`-seedProposal`): inserts a pending Claude proposal (ankle-rest style) on the seeded
     /// routines, for the proposal review UI tests.
     let seedProposal: Bool
     /// DEBUG/UI-test only (`-seedTodayProposal`): a pending proposal that adds "Home · KB Upper" and picks it for
@@ -113,12 +113,20 @@ struct LaunchOptions {
     /// DEBUG/UI-test only (`-seedAgentWorkout`): a past workout Muse added, stored as a pull stores it (`DebugAgents`).
     let seedAgentWorkout: Bool
     /// DEBUG/UI-test only (`-fakeHealth`): Apple Health is an in-memory `FakeHealthStore` seeded with three Withings
-    /// weigh-ins and plan 39's walk, strength recording and seven days of activity, so the Health flows can be tested
-    /// on the simulator without HealthKit.
+    /// weigh-ins, plan 39's walk, strength recording and seven days of activity, and (plan 40, `DebugMeasuredSeed`) the
+    /// GymRollins watch app's copy of `-seedHistory`'s Sat 19 Sep workout, so the Health flows can be tested on the
+    /// simulator without HealthKit.
     let fakeHealth: Bool
     /// DEBUG/UI-test only (`-healthBeforeActivity`): Health starts on, as a build from before plan 39 left it, so Today
     /// offers the one-time "Bring in your Apple Watch activity" card.
     let healthBeforeActivity: Bool
+    /// DEBUG/UI-test only (`-fakeHealthNoWatchCopy`): `-fakeHealth` without the watch app's copy, so `-seedHistory`'s
+    /// Sat 19 Sep workout shows plan 39's attached Apple Watch recording instead (plan 40).
+    let fakeHealthNoWatchCopy: Bool
+    /// DEBUG/UI-test only (`-fakeHealthEffortUnasked`): `-fakeHealth` whose first Health request leaves the effort types
+    /// unasked, as on a phone where build 4 turned Health on before they existed, so the workout detail offers the
+    /// Allow pill; its ask grants them (plan 40).
+    let fakeHealthEffortUnasked: Bool
     /// DEBUG/UI-test only (`-workoutStartedMinutesAgo N`): new workouts start N minutes before "now", so a workout
     /// finished under `-fixedNow` has a duration (and a calorie estimate).
     let workoutStartedMinutesAgo: Double?
@@ -140,12 +148,12 @@ struct LaunchOptions {
         #if DEBUG
         // `-noSeed` simulates a fresh install of a real user (sync UI tests pull everything from the server).
         // `-emptyStore` is the same "skip every seed" behavior, named for Task 5's first-run empty-state tests.
-        seedOwner = (arguments.contains("-uiTesting") || arguments.contains("-seedOwner"))
+        seedSample = (arguments.contains("-uiTesting") || arguments.contains("-seedSample"))
             && !arguments.contains("-noSeed") && !arguments.contains("-emptyStore")
         syncBackend = Self.backend(arguments)
         simulateOffline = environment["GYM_SIMULATE_OFFLINE"] == "1"
         #else
-        seedOwner = false
+        seedSample = false
         syncBackend = .configured
         simulateOffline = false
         #endif
@@ -160,6 +168,8 @@ struct LaunchOptions {
         forgetSession = arguments.contains("-forgetSession")
         fakeHealth = arguments.contains("-fakeHealth")
         healthBeforeActivity = arguments.contains("-healthBeforeActivity")
+        fakeHealthNoWatchCopy = arguments.contains("-fakeHealthNoWatchCopy")
+        fakeHealthEffortUnasked = arguments.contains("-fakeHealthEffortUnasked")
         workoutStartedMinutesAgo = arguments.firstIndex(of: "-workoutStartedMinutesAgo")
             .flatMap { arguments.indices.contains($0 + 1) ? Double(arguments[$0 + 1]) : nil }
             .map { min(max($0, 0), 600) }
@@ -190,6 +200,8 @@ struct LaunchOptions {
         forgetSession = false
         fakeHealth = false
         healthBeforeActivity = false
+        fakeHealthNoWatchCopy = false
+        fakeHealthEffortUnasked = false
         workoutStartedMinutesAgo = nil
         seedProposal = false
         seedTodayProposal = false

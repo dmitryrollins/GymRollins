@@ -238,8 +238,8 @@ func sampleRoutine(id: UUID = UUID(), name: String = "Push") -> Routine {
 
     @Test func theNotesEndDateMarksDirtyAndAppliesFromRemote() throws {
         defer { f.tearDown() }
-        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
-        try f.profiles.save(Profile(limits: "Knee", limitsUntil: until))
+        let until = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 9))
+        try f.profiles.save(Profile(limits: "Ankle", limitsUntil: until))
         let row = try #require(try f.store.dirtyProfile())
         #expect(row.value.limitsUntil == until)
 

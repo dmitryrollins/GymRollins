@@ -7,7 +7,7 @@ Mockups: https://claude.ai/artifact/49XbqyeLuXR35ABhvFpbzK (30 artboards; the fl
 
 A native SwiftUI iPhone app for logging strength training, Fitbod-style. Its main difference is that **Claude reads the
 training data and writes the next plan through MCP**, replacing today's loop of CSV export → chat → hand-written plan.
-It is built for one user first (the owner, 81 → 85 kg lean goal, lb plates) and kept clean enough to ship to the App
+It is built for one user first (a sample lifter: 76 → 80 kg lean goal, lb plates) and kept clean enough to ship to the App
 Store later.
 
 ### In v1
@@ -17,7 +17,7 @@ Store later.
 4. Deterministic weight suggestions (progression engine).
 5. Cloud sync plus a remote MCP server so Claude can read data and propose plan changes.
 6. Fitbod CSV import (`Date,Exercise,Reps,Weight(kg),Duration(s),Distance(m),Incline,Resistance,isWarmup,Note,multiplier`);
-   since plan 13 also Strong, Hevy and FitNotes CSV exports (`docs/plans/2026-09-29-plan-13-importers.md`).
+   since plan 13 also Strong, Hevy and FitNotes CSV exports.
 7. Body tracking: bodyweight and body-fat log, goal progress.
 
 ### Not in v1
@@ -25,7 +25,7 @@ Recovery muscle map, weekly set targets, streaks, Apple Health, Apple Watch, Liv
 importers for other apps (Strong, Hevy, FitNotes) — the importers were added later in plan 13.
 
 > **Plan 12 (2026-09-29, owner-approved):** the recovery muscle map, weekly set targets and weekly streaks were
-> added after v1 — see `docs/plans/2026-09-29-plan-12-insights.md` (model, defaults, `muscle_targets` table and the
+> added after v1 — see plan 12 (model, defaults, `muscle_targets` table and the
 > `get_training_insights` MCP tool). The figure comes from react-native-body-highlighter (MIT,
 > `docs/licenses/body-highlighter.md`; vulovix/body-muscles until 2026-10-03) and also draws each exercise's
 > target-muscle badge on its thumbnail.
@@ -327,7 +327,7 @@ reason) with a toggle.
 
 ## 9. Testing
 - **GymCore unit tests** (Swift Testing): progression policies and deloads, 1RM, plates, unit rounding, CSV import
-  (fixture: a trimmed slice of the owner's export plus edge cases), plan-change validation (shared fixture), clock.
+  (fixture: a small synthetic export plus edge cases), plan-change validation (shared fixture), clock.
   Target ≥ 90% line coverage.
 - **GymData tests**: repositories on an in-memory SwiftData container; SyncEngine against a stub transport
   (push order, cursors, conflicts, tombstones).

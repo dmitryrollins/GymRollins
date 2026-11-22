@@ -202,7 +202,7 @@ export function buildRequirements(library, kindIds) {
   return { requirements, unmapped }
 }
 
-/** The owner's review file: counts, every machine mapping, every unmapped exercise. */
+/** The review file: counts, every machine mapping, every unmapped exercise. */
 export function review(library, { requirements, unmapped }) {
   const cell = s => String(s).replaceAll('|', '\\|')
   const needs = groups => groups.map(g => g.join(' or ')).join(' + ')

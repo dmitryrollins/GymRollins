@@ -35,7 +35,7 @@ struct GymVisibilityPicker: View {
         return Button { selection = option } label: {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(selected ? Theme.primaryFill : Theme.textTertiary).accessibilityHidden(true)
+                    .foregroundStyle(selected ? Theme.accent : Theme.textTertiary).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.title(option)).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
                     Text(Self.detail(option)).font(.caption).foregroundStyle(Theme.textSecondary)

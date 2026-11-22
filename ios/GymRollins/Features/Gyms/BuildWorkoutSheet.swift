@@ -94,7 +94,7 @@ struct BuildWorkoutSheet: View {
                 if selected { Image(systemName: "checkmark").font(.footnote.weight(.bold)) }
                 Text(title).font(font).multilineTextAlignment(.center)
             }
-            .foregroundStyle(selected ? Color.white : Theme.textPrimary)
+            .foregroundStyle(selected ? Theme.onAccent : Theme.textPrimary)
             .frame(maxWidth: .infinity, minHeight: minHeight)
             .background(selected ? Theme.primaryFill : Theme.card, in: .rect(cornerRadius: Theme.cardRadius))
             .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).stroke(selected ? .clear : Theme.textTertiary, lineWidth: 1))

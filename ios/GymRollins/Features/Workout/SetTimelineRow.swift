@@ -74,7 +74,7 @@ struct SetTimelineRow: View {
             } else {
                 Text(ordinal.workingPosition.map(String.init) ?? "W")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(badgeText)
+                    .foregroundStyle(Self.badgeText(isActive: isActive))
             }
         }
         .frame(width: 28, height: 26)
@@ -109,7 +109,9 @@ struct SetTimelineRow: View {
         return Theme.cardInner
     }
 
-    private var badgeText: Color { isActive ? Theme.background : Theme.textTertiary }
+    /// The badge's "W" / "1": dark on the active set's white hexagon, else secondary on `cardInner` (`badgeFill`):
+    /// 5.1:1, where system gray (`textTertiary`) is only 4.3:1.
+    static func badgeText(isActive: Bool) -> Color { isActive ? Theme.background : Theme.textSecondary }
 
     private func caption(_ field: SetField) -> String? {
         guard case .weight = field, isActive else { return nil }
@@ -127,7 +129,7 @@ struct SetTimelineRow: View {
             TextField(label, text: text(field))
                 .keyboardType(SetFieldFormat.isDecimal(field) ? .decimalPad : .numberPad)
                 .multilineTextAlignment(.center)
-                .font(Theme.display(isActive ? 28 : 20, heavy: isActive))
+                .font(Theme.number(isActive ? 28 : 20, heavy: isActive))
                 .foregroundStyle(!isActive && set.done ? Theme.textTertiary : Theme.textPrimary)
                 .padding(.horizontal, 6)
                 // Minimum (not fixed) heights so scaled text never clips.

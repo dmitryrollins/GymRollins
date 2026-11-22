@@ -16,7 +16,7 @@ test('displayWeight: owner unit first, the other in parentheses', () => {
 })
 
 test('weight: kg rounded to 2 decimals plus display', () => {
-  assertEquals(weight(58.967008, 'lb'), { weight_kg: 58.97, weight_display: '130 lb (59 kg)' })
+  assertEquals(weight(68.0388555, 'lb'), { weight_kg: 68.04, weight_display: '150 lb (68 kg)' })
 })
 
 test('epley: 1..12 reps only, 1 rep is the weight itself (OneRepMax.swift)', () => {
@@ -32,7 +32,7 @@ test('slopePerWeek: least-squares slope in kg per week', () => {
   assertEquals(slopePerWeek([]), null)
   assertEquals(slopePerWeek([{ t: 0, v: 80 }]), null)
   const day = 86_400_000
-  assertEquals(slopePerWeek([{ t: 0, v: 81 }, { t: 14 * day, v: 81.6 }]), 0.3)
+  assertEquals(slopePerWeek([{ t: 0, v: 76 }, { t: 14 * day, v: 76.6 }]), 0.3)
 })
 
 test('weight: a stored pound number is shown as it is, and given as weight_lb', () => {

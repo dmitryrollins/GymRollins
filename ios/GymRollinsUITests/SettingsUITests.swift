@@ -6,7 +6,7 @@ final class SettingsUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-uiTesting", "-fixedNow", "2026-09-26T09:00:00Z"] // Sat: owner's Push + Arms day
+        app.launchArguments = ["-uiTesting", "-fixedNow", "2026-09-26T09:00:00Z"] // Sat: the sample Push + Arms day
         app.launch()
     }
 
@@ -40,7 +40,7 @@ final class SettingsUITests: XCTestCase {
 
     /// Switching Units to kg makes Today show the "<n> kg (<n> lb)" style (primary unit first) instead of
     /// "<n> lb (<n> kg)". The exact kg number isn't pinned: a barbell suggestion rounds to the new unit's plate
-    /// grid (`ProgressionEngine`/`LoadRounding`), so 140 lb's kg-plate equivalent isn't a bare unit conversion.
+    /// grid (`ProgressionEngine`/`LoadRounding`), so 160 lb's kg-plate equivalent isn't a bare unit conversion.
     func testSwitchingUnitsToKgChangesTodayDisplay() {
         app.tabBars.buttons["Today"].tap()
         let lbRow = app.staticTexts.containing(NSPredicate(format: "label CONTAINS ' lb (' AND label CONTAINS ' kg)'"))
@@ -60,7 +60,7 @@ final class SettingsUITests: XCTestCase {
     }
 
     /// Turning off the 45 lb plate in Bar & Plates changes the combination the plate calculator suggests for
-    /// the same 140 lb working set (135 lb of plates per 45+35+10+2.5 arithmetic becomes 35+10+2.5 per side).
+    /// the same 155 lb working set.
     func testPlatesEditorChangeReflectsInPlateCalculator() {
         openSettings()
         let barPlates = app.buttons["settings.barPlates"]
@@ -74,8 +74,8 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["workout.clock"].waitForExistence(timeout: 5))
         app.buttons["workout.entry.0025"].tap()
 
-        // 140 lb generates 2 auto warm-ups (bar, then a ~75% ramp) before the working sets; log/skip past both
-        // so the plate calculator opens on a 140 lb WORKING set. All 3 working sets share the same target
+        // 155 lb generates 2 auto warm-ups (bar, then a ~75% ramp) before the working sets; log/skip past both
+        // so the plate calculator opens on a 155 lb WORKING set. All 3 working sets share the same target
         // weight, so it's safe to over-shoot by one if there's actually only 1 warm-up.
         for _ in 0..<2 {
             app.buttons["logging.logSet"].tap()

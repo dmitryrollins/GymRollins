@@ -1,12 +1,12 @@
 {
   "profile": {
     "unit": "lb",
-    "height_cm": 180,
-    "goal_weight_kg": 85,
-    "goal_date": "2026-12-31",
+    "height_cm": 178,
+    "goal_weight_kg": 80,
+    "goal_date": "2026-12-15",
     "training_days": 4,
     "experience": "intermediate",
-    "limits": "left knee: no deep knee flexion",
+    "limits": "ankle sprain: no leg loading",
     "deload_pct": 0.05,
     "rest_sec": 120,
     "mcp_read_plan": true,
@@ -48,7 +48,7 @@
           "sets": 3,
           "reps": 10,
           "reps_min": 8,
-          "weight_kg": 58.967,
+          "weight_kg": 68.039,
           "mode": "reps",
           "prog": null,
           "inc_kg": 2.268
@@ -103,9 +103,9 @@
           "position": 0,
           "workout_sets": [
             { "position": 0, "w_kg": 20.412, "r": 10, "done": true, "warmup": true, "multiplier": 1 },
-            { "position": 1, "w_kg": 58.97, "r": 6, "done": true, "warmup": false, "multiplier": 1 },
-            { "position": 2, "w_kg": 58.97, "r": 6, "done": true, "warmup": false, "multiplier": 1 },
-            { "position": 3, "w_kg": 58.97, "r": 6, "done": true, "warmup": false, "multiplier": 1 }
+            { "position": 1, "w_kg": 68.04, "r": 6, "done": true, "warmup": false, "multiplier": 1 },
+            { "position": 2, "w_kg": 68.04, "r": 6, "done": true, "warmup": false, "multiplier": 1 },
+            { "position": 3, "w_kg": 68.04, "r": 6, "done": true, "warmup": false, "multiplier": 1 }
           ]
         }
       ]
@@ -142,9 +142,9 @@
           "exercise_id": "0025",
           "position": 0,
           "workout_sets": [
-            { "position": 0, "w_kg": 58.97, "r": 10, "done": true, "warmup": false, "multiplier": 1 },
-            { "position": 1, "w_kg": 58.97, "r": 10, "done": true, "warmup": false, "multiplier": 1 },
-            { "position": 2, "w_kg": 58.97, "r": 10, "done": true, "warmup": false, "multiplier": 1 }
+            { "position": 0, "w_kg": 68.04, "r": 10, "done": true, "warmup": false, "multiplier": 1 },
+            { "position": 1, "w_kg": 68.04, "r": 10, "done": true, "warmup": false, "multiplier": 1 },
+            { "position": 2, "w_kg": 68.04, "r": 10, "done": true, "warmup": false, "multiplier": 1 }
           ]
         }
       ]
@@ -154,13 +154,13 @@
     {
       "id": "c0c0c0c0-0000-4000-8000-000000000001",
       "measured_at": "2026-09-10T07:00:00+00:00",
-      "w_kg": 81.0,
+      "w_kg": 76.0,
       "bf_pct": null
     },
     {
       "id": "c0c0c0c0-0000-4000-8000-000000000002",
       "measured_at": "2026-09-24T07:00:00+00:00",
-      "w_kg": 81.6,
+      "w_kg": 76.6,
       "bf_pct": 15
     }
   ]

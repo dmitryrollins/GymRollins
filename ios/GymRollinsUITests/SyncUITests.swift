@@ -154,7 +154,7 @@ final class SyncUITests: XCTestCase {
     func testSigningInToAnotherAccountRemovesTheOtherAccountsDataAfterConfirming() {
         let first = "ui-\(UUID().uuidString.lowercased())@test.local"
         let second = "ui-\(UUID().uuidString.lowercased())@test.local"
-        var app = launch(freshInstall: true) // seeds the owner's routines
+        var app = launch(freshInstall: true) // seeds the sample routines
         openAccount(app)
         submitCredentials(app, email: first, button: "account.signUp")
         waitForLabel(app.staticTexts["account.status"], "Up to date")
@@ -187,7 +187,7 @@ final class SyncUITests: XCTestCase {
     }
 
     /// The server-move check (spec section 8), run only by `scripts/server-move-check.sh`, which first puts a copy of
-    /// the owner's phone store and settings into a throwaway simulator. The launch moves the data to the Worker, a new
+    /// a phone's store and settings into a throwaway simulator. The launch moves the data to the Worker, a new
     /// account signs in and adopts it, and the first sync uploads all of it. The script then compares D1's counts and
     /// the store with the copy.
     func testThePhonesDataMovesToTheWorker() throws {
@@ -210,7 +210,7 @@ final class SyncUITests: XCTestCase {
 
     // MARK: Helpers
 
-    /// A fresh install wipes the store, the pull cursors and the session, and skips the owner seed on relaunches
+    /// A fresh install wipes the store, the pull cursors and the session, and skips the sample seed on relaunches
     /// that should get everything from the server.
     private func launch(freshInstall: Bool, forgetSession: Bool = false,
                         extraEnvironment: [String: String] = [:]) -> XCUIApplication {

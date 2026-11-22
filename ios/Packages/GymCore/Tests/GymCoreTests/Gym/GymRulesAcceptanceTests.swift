@@ -66,18 +66,6 @@ import Testing
             return matcher.kind(listing.kindId)?.isMachine == true ? id : nil
         }, by: { $0 }).mapValues(\.count)
         #expect(machineUse.values.allSatisfy { $0 <= WorkoutBuilder.maxPerMachine })
-
-        let routine = GymFixtures.exercises.enumerated().map { index, exercise in
-            RoutineExercise(id: GymFixtures.id(500 + index), exerciseId: exercise.id, sets: 3, reps: 10)
-        }
-        for adapted in GymAdapter(matcher: matcher, exercises: GymFixtures.exercises).adapt(routine) {
-            switch adapted {
-            case let .kept(item, match): #expect(covers(match, item.exerciseId, inventory))
-            case let .swapped(_, item, match, _): #expect(covers(match, item.exerciseId, inventory))
-            case let .unavailable(item, _): #expect(matcher.availability(of: item.exerciseId) != .unmapped)
-            case let .unmapped(item): #expect(matcher.availability(of: item.exerciseId) == .unmapped)
-            }
-        }
     }
 
     /// Each fixture kind is present with probability 1/2, as one or two listings with random confirmations.

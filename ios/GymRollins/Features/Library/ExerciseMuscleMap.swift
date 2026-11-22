@@ -20,7 +20,7 @@ enum MuscleRole: Equatable {
     }
 }
 
-/// The exercise's muscles on the front and back body figures: target groups in the accent red, secondary groups
+/// The exercise's muscles on the front and back body figures: target groups in the accent, secondary groups
 /// in amber, with a key. Draws nothing when the exercise works no group (cardio, an unknown target).
 struct ExerciseMuscleMap: View {
     let exercise: Exercise

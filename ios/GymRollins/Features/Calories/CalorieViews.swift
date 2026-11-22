@@ -7,8 +7,8 @@ enum CalorieText {
     static func kcal(_ value: Int) -> String { "\u{2248} \(value.formatted()) kcal" }
 }
 
-/// The full-width "≈ 320 kcal (estimated)" tile on the workout Summary and detail, with the ⓘ method sheet and,
-/// when Apple Health is on, whether the workout is saved there.
+/// The full-width "≈ 320 kcal (estimated)" tile on the workout Summary, with the ⓘ method sheet and, when Apple Health
+/// is on, whether the workout is saved there. The workout detail shows both in Workout Details since plan 40.
 struct CalorieCard: View {
     let estimate: CalorieEstimate?
     let healthStatus: HealthSync.ExportStatus
@@ -17,7 +17,7 @@ struct CalorieCard: View {
     @State private var showInfo = false
 
     var body: some View {
-        if estimate != nil || healthInfo != nil {
+        if estimate != nil || MeasuredText.healthSave(healthStatus) != nil {
             VStack(alignment: .leading, spacing: 8) {
                 if let estimate { kcalRow(estimate) }
                 healthLine
@@ -34,7 +34,7 @@ struct CalorieCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Calories").font(.caption).foregroundStyle(Theme.textSecondary)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(CalorieText.kcal(estimate.kcal)).font(Theme.display(28)).foregroundStyle(Theme.textPrimary)
+                    Text(CalorieText.kcal(estimate.kcal)).font(Theme.number(28)).foregroundStyle(Theme.textPrimary)
                     Text(estimate.usedDefaultBodyWeight ? "(estimated, 70 kg)" : "(estimated)")
                         .font(.footnote).foregroundStyle(Theme.textSecondary)
                 }
@@ -49,22 +49,14 @@ struct CalorieCard: View {
         }
     }
 
+    /// Whether the workout is in Apple Health, as the detail's footnote says it (`MeasuredText.healthSave`).
     @ViewBuilder
     private var healthLine: some View {
-        if let info = healthInfo {
-            Label(info.text, systemImage: info.icon)
+        if let line = MeasuredText.healthSave(healthStatus) {
+            Label(line.text, systemImage: line.symbol)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(info.color)
+                .foregroundStyle(line.color)
                 .accessibilityIdentifier("\(prefix).health")
-        }
-    }
-
-    private var healthInfo: (text: String, icon: String, color: Color)? {
-        switch healthStatus {
-        case .notEnabled, .notEligible: nil
-        case .pending: ("Saving to Apple Health\u{2026}", "heart", Theme.textSecondary)
-        case .saved: ("Saved to Apple Health", "heart.fill", Theme.success)
-        case .failed: ("Couldn't save to Apple Health", "exclamationmark.triangle", Theme.destructive)
         }
     }
 }

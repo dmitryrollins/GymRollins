@@ -8,7 +8,7 @@ Measured 2026-09-28 on the development Mac (Apple silicon), Xcode 26 / iOS 26.2 
 
 ## Repository queries (GymData, 150 workouts)
 
-`WorkoutRepositoryPerformanceTests`: on-disk SwiftData store seeded with `OwnerSeed.applyLargeHistory(count: 150)`
+`WorkoutRepositoryPerformanceTests`: on-disk SwiftData store seeded with `SampleSeed.applyLargeHistory(count: 150)`
 (4 exercises × 3 sets per workout, like an imported Fitbod session), release build, median of 10 runs after a
 warm-up. Target: **< 50 ms each**.
 
@@ -51,8 +51,7 @@ Covered by `RepositoryTests.entriesCacheMatchesRowsAndFallsBack` and the existin
 
 ## Today and Library taps (2026-11-16)
 
-The owner saw about half of the taps on Today and Library answer late (iPhone 14 Pro Max, ~160 workouts, 2,900
-sets). The main thread was busy with work that ran on every layout, reload or refresh. Measured with
+About half of the taps on Today and Library answered late on a physical iPhone with a large history. The main thread was busy with work that ran on every layout, reload or refresh. Measured with
 `ResponsivenessTimingTests` (app, Debug, iPhone 17 Pro simulator, median of 20; 160 workouts of 6 × 3 sets with the
 bench in 100, and 500 outside workouts) and `HistoryTimingTests` (GymData, release, Mac):
 

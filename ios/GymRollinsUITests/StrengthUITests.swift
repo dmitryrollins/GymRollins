@@ -1,8 +1,8 @@
 import XCTest
 
 /// Strength levels in the Body tab, the method sheet, the sex/birth-year sheet and the lift's history screen.
-/// `-seedStrength`: a 35-year-old man at 81 kg with bench 130 lb × 10 (Novice), and a squat and deadlift from
-/// before the owner's knee note (paused). Screenshots are attached as "strength-*".
+/// `-seedStrength`: a 30-year-old man at 76 kg with bench 150 lb × 10 (Intermediate), and a squat and deadlift from
+/// before the sample ankle note (paused). Screenshots are attached as "strength-*".
 final class StrengthUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -34,18 +34,18 @@ final class StrengthUITests: XCTestCase {
         let (app, list) = openBody(["-seedStrength"])
         let bench = element(app, "body.strength.bench")
         scroll(list, to: element(app, "body.strength.deadlift"))
-        XCTAssertTrue(bench.label.hasPrefix("Bench press, Novice, e1RM 173.3 lb"), bench.label)
-        XCTAssertTrue(bench.label.hasSuffix("to Intermediate"), bench.label)
+        XCTAssertTrue(bench.label.hasPrefix("Bench press, Intermediate, e1RM 200 lb"), bench.label)
+        XCTAssertTrue(bench.label.hasSuffix("to Advanced"), bench.label)
         let squat = element(app, "body.strength.squat")
-        XCTAssertTrue(squat.label.contains("Paused"), squat.label) // the owner's knee note
-        XCTAssertTrue(squat.label.contains("e1RM 262.5 lb"), squat.label) // 225 lb x 5, numbers stay visible
+        XCTAssertTrue(squat.label.contains("Paused"), squat.label) // the sample ankle note
+        XCTAssertTrue(squat.label.contains("e1RM 285.8 lb"), squat.label) // 245 lb x 5, numbers stay visible
         XCTAssertFalse(element(app, "body.strength.missing").exists)
         screenshot(app, "body-card")
 
         element(app, "body.strength.info").tap()
         let inputs = element(app, "strength.method.inputs")
         XCTAssertTrue(inputs.waitForExistence(timeout: 5))
-        XCTAssertEqual(inputs.label, "Male, 35 \u{00B7} 178.6 lb")
+        XCTAssertEqual(inputs.label, "Male, 30 \u{00B7} 167.6 lb")
         XCTAssertTrue(element(app, "strength.method.thresholds.bench").exists)
         screenshot(app, "method-sheet")
         let source = element(app, "strength.method.source")
@@ -57,7 +57,7 @@ final class StrengthUITests: XCTestCase {
         bench.tap()
         let history = element(app, "history.strength")
         XCTAssertTrue(history.waitForExistence(timeout: 5))
-        XCTAssertTrue(history.label.contains("Novice"), history.label)
+        XCTAssertTrue(history.label.contains("Intermediate"), history.label)
         screenshot(app, "history")
     }
 
@@ -67,7 +67,7 @@ final class StrengthUITests: XCTestCase {
         scroll(list, to: missing)
         XCTAssertTrue(missing.label.hasPrefix("Add your sex and birth year"), missing.label)
         let bench = element(app, "body.strength.bench")
-        XCTAssertTrue(bench.label.hasPrefix("Bench press, e1RM 173.3 lb"), bench.label) // no level yet
+        XCTAssertTrue(bench.label.hasPrefix("Bench press, e1RM 200 lb"), bench.label) // no level yet
         screenshot(app, "empty-profile")
 
         element(app, "body.strength.addProfile").tap()
@@ -82,7 +82,7 @@ final class StrengthUITests: XCTestCase {
 
         scroll(list, to: bench)
         XCTAssertFalse(element(app, "body.strength.missing").exists)
-        let levelled = NSPredicate(format: "label BEGINSWITH %@", "Bench press, Novice, ")
+        let levelled = NSPredicate(format: "label BEGINSWITH %@", "Bench press, Intermediate, ")
         let updated = XCTNSPredicateExpectation(predicate: levelled, object: bench)
         XCTAssertEqual(XCTWaiter().wait(for: [updated], timeout: 5), .completed, bench.label)
     }

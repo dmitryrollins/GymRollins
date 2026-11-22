@@ -45,7 +45,7 @@ enum StrengthText {
         return nil
     }
 
-    /// "Male, 35 · 81 kg" — the inputs the method sheet shows.
+    /// "Male, 30 · 76 kg" — the inputs the method sheet shows.
     static func inputs(sex: ProfileSex?, age: Int?, bodyweightKg: Double?, unit: WeightUnit) -> String {
         let who = [sex?.displayName, age.map { "\($0)" }].compactMap { $0 }.joined(separator: ", ")
         let bw = bodyweightKg.map { weight($0, unit: unit) }

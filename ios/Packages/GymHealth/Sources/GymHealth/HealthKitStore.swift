@@ -3,6 +3,7 @@ import Foundation
 import GymCore
 import GymWatchLink
 import HealthKit
+import os
 
 /// The real `HealthStore`: HealthKit on iPhone (and, later, Apple Watch). Every sample GymRollins writes carries
 /// `HKMetadataKeyExternalUUID` = the app's id, which is how updates and deletes find it.
@@ -46,11 +47,16 @@ public actor HealthKitStore: HealthStore {
     // MARK: Authorization
 
     public func requestAuthorization() async throws {
-        let share = Set(HealthDataType.allCases.map(Self.sampleType))
+        var share = Set(HealthDataType.allCases.map(Self.sampleType))
+        // A workout's effort rating is written too (plan 40). It isn't a `HealthDataType`: that enum is the export's
+        // write list, and `HealthPermissions.summary` reads it.
+        share.insert(Self.effortScore)
         // Workouts are read to find the Apple Watch's copy of a GymRollins workout (plan 17) and, with the activity
-        // types, to bring in what other apps record (plan 39). The system only asks for types never asked.
+        // types, to bring in what other apps record (plan 39); the effort scores to show a workout's effort (plan 40).
+        // The system only asks for types never asked.
         var read: Set<HKObjectType> = [Self.bodyMass, Self.bodyFat, Self.workout]
         read.formUnion(Self.activityReadTypes)
+        read.formUnion(Self.effortReadTypes)
         try await healthStore().requestAuthorization(toShare: share, read: read)
     }
 
@@ -405,6 +411,193 @@ public actor HealthKitStore: HealthStore {
         case .hiit: .highIntensityIntervalTraining
         case .mixedCardio: .mixedCardio
         }
+    }
+}
+
+// MARK: Measurements (plan 40)
+
+extension HealthKitStore {
+    /// A person's rating of a workout (1–10), made in Fitness or here: GymRollins reads it and writes its own.
+    private static let effortScore = HKQuantityType(.workoutEffortScore)
+    /// The Apple Watch's own estimate of a workout's effort: read only.
+    private static let estimatedEffortScore = HKQuantityType(.estimatedWorkoutEffortScore)
+    private static let log = Logger(subsystem: "com.rollins.gymrollins", category: "health")
+
+    /// Both effort scores, read for a workout's effort; the rating is also written (`requestAuthorization`).
+    static var effortReadTypes: Set<HKObjectType> { [effortScore, estimatedEffortScore] }
+
+    public func workoutMeasurements(externalId: UUID, start: Date, end: Date) async throws -> WorkoutMeasurements {
+        let store = try healthStore()
+        let copy = try await gymRollinsCopy(externalId, in: store)
+        let heartRate = try await heartRateReadings(from: start, through: end, in: store)
+        let postEnd = end.addingTimeInterval(WorkoutMeasuredRules.postWindow)
+        let post = try await heartRateReadings(from: end, through: postEnd, in: store)
+        guard let copy else {
+            return WorkoutMeasurements(recordedBy: nil, duration: nil, activeKcal: nil, totalKcal: nil,
+                                       heartRate: heartRate, postWorkout: post, effort: nil)
+        }
+        let effort = await effort(of: copy, in: store)
+        // The phone's copy holds the app's own estimate (decision 8): its time and calories are never read back.
+        guard Self.isWatchRecording(copy) else {
+            return WorkoutMeasurements(recordedBy: .phone, duration: nil, activeKcal: nil, totalKcal: nil,
+                                       heartRate: heartRate, postWorkout: post, effort: effort)
+        }
+        let active = copy.statistics(for: Self.energy)?.sumQuantity()?.doubleValue(for: .kilocalorie())
+        let resting = await restingKcal(during: copy, in: store)
+        return WorkoutMeasurements(recordedBy: .watch, duration: copy.duration, activeKcal: active,
+                                   totalKcal: HealthActivity.totalKcal(active: active, basal: resting),
+                                   heartRate: heartRate, postWorkout: post, effort: effort)
+    }
+
+    /// Saves the new rating and relates it to the copy Health shows (the watch's first), and only then removes
+    /// GymRollins' earlier ones (`writeRating`).
+    public func rateEffort(externalId: UUID, score: Int) async throws {
+        let store = try healthStore()
+        guard Effort.range.contains(score) else { throw HKError(.errorInvalidArgument) }
+        guard allowed(Self.effortScore, in: store) else { throw HKError(.errorAuthorizationDenied) }
+        guard let copy = try await gymRollinsCopy(externalId, in: store) else { throw HKError(.errorNoData) }
+        let rating = HKQuantitySample(type: Self.effortScore,
+                                      quantity: HKQuantity(unit: .appleEffortScore(), doubleValue: Double(score)),
+                                      start: copy.startDate, end: copy.endDate,
+                                      metadata: marker(externalId, kind: "effort"))
+        try await Self.writeRating(
+            save: { try await store.save(rating) },
+            relate: { _ = try await store.relateWorkoutEffortSample(rating, with: copy, activity: nil) },
+            deleteSaved: { try await store.delete(rating) },
+            deleteEarlier: { try await self.deleteOwnEffort(externalId, in: store, except: rating.uuid) })
+    }
+
+    /// `rateEffort`'s order, public for its test. A failed save leaves the previous rating. A rating saved but not
+    /// related is deleted again, so no orphan stays, and the rating fails. Once it's related Health shows it, so a
+    /// failed removal of GymRollins' earlier rating is logged, not a failure ("Couldn't save to Apple Health" would be
+    /// wrong): that one stays beside it until the next rating or a Clear removes it.
+    public static func writeRating(save: @Sendable () async throws -> Void, relate: @Sendable () async throws -> Void,
+                                   deleteSaved: @Sendable () async throws -> Void,
+                                   deleteEarlier: @Sendable () async throws -> Void) async throws {
+        try await save()
+        do {
+            try await relate()
+        } catch {
+            do {
+                try await deleteSaved()
+            } catch let cleanup {
+                log.error("Health effort cleanup failed: \(cleanup.localizedDescription, privacy: .public)")
+            }
+            throw error
+        }
+        do {
+            try await deleteEarlier()
+        } catch {
+            let reason = error.localizedDescription
+            log.error("Health effort: removing the earlier rating failed: \(reason, privacy: .public)")
+        }
+    }
+
+    public func clearEffort(externalId: UUID) async throws {
+        let store = try healthStore()
+        guard allowed(Self.effortScore, in: store) else { throw HKError(.errorAuthorizationDenied) }
+        try await deleteOwnEffort(externalId, in: store)
+    }
+
+    /// HealthKit's request status for the effort types: `.unnecessary` once a request with them finished.
+    public func effortTypesAsked() async -> Bool {
+        guard let store else { return false }
+        do {
+            let status = try await store.statusForAuthorizationRequest(toShare: [Self.effortScore],
+                                                                       read: Self.effortReadTypes)
+            return status == .unnecessary
+        } catch {
+            Self.log.error("Health effort permission check failed: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// A workout effort sample as an `Effort`: a rating (`workoutEffortScore`) or the Apple Watch's estimate
+    /// (`estimatedWorkoutEffortScore`). Nil for any other type, or a score outside 1–10.
+    public static func effort(from sample: HKQuantitySample) -> Effort? {
+        let estimated: Bool
+        switch sample.quantityType {
+        case effortScore: estimated = false
+        case estimatedEffortScore: estimated = true
+        default: return nil
+        }
+        let score = sample.quantity.doubleValue(for: .appleEffortScore()).rounded()
+        return Int(exactly: score).flatMap { Effort(score: $0, estimated: estimated) }
+    }
+
+    /// The GymRollins copy of a workout: the watch app's recording when Health has one, else the phone's. Both carry
+    /// the workout's id; plan 17 keeps one, but there can be two for a while after a late watch confirmation.
+    private func gymRollinsCopy(_ externalId: UUID, in store: HKHealthStore) async throws -> HKWorkout? {
+        let descriptor = HKSampleQueryDescriptor(predicates: [.workout(Self.externalIdPredicate(externalId))],
+                                                 sortDescriptors: [SortDescriptor(\.endDate, order: .reverse)])
+        let copies = try await descriptor.result(for: store)
+        return copies.first(where: Self.isWatchRecording) ?? copies.first
+    }
+
+    /// Every heart-rate value from `start` through `end`, whatever recorded it (decision 9). An Apple Watch workout
+    /// can store a series of values in one sample, so each value comes with its own date; samples are matched by
+    /// overlap and their values by date.
+    private func heartRateReadings(from start: Date, through end: Date,
+                                   in store: HKHealthStore) async throws -> [HeartRateReading] {
+        let span = HKQuery.predicateForSamples(withStart: start, end: end)
+        let descriptor = HKQuantitySeriesSampleQueryDescriptor(
+            predicate: .quantitySample(type: Self.heartRate, predicate: span), options: .orderByQuantitySampleStartDate)
+        let perMinute = HKUnit.count().unitDivided(by: .minute())
+        var readings: [HeartRateReading] = []
+        for try await value in descriptor.results(for: store) {
+            let date = value.dateInterval.start
+            guard date >= start, date <= end else { continue }
+            readings.append(HeartRateReading(date: date, bpm: value.quantity.doubleValue(for: perMinute)))
+        }
+        return readings
+    }
+
+    /// The resting energy during the watch copy: its own statistic, else Health's merged total for its span (the watch
+    /// app doesn't ask to write resting energy, so its copy may carry none while the Apple Watch recorded it). A
+    /// failed read leaves the total out, not the whole read (logged).
+    private func restingKcal(during copy: HKWorkout, in store: HKHealthStore) async -> Double? {
+        if let own = copy.statistics(for: Self.basalEnergy)?.sumQuantity() {
+            return own.doubleValue(for: .kilocalorie())
+        }
+        let span = HKQuery.predicateForSamples(withStart: copy.startDate, end: copy.endDate)
+        let descriptor = HKStatisticsQueryDescriptor(
+            predicate: .quantitySample(type: Self.basalEnergy, predicate: span), options: .cumulativeSum)
+        do {
+            return try await descriptor.result(for: store)?.sumQuantity()?.doubleValue(for: .kilocalorie())
+        } catch let error as HKError where error.code == .errorNoData {
+            return nil
+        } catch {
+            Self.log.error("Health resting energy read failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// The effort Health shows for the copy: its most relevant related sample, a rating before the Watch's estimate.
+    /// A failed read leaves the effort out, not the whole read (logged).
+    private func effort(of copy: HKWorkout, in store: HKHealthStore) async -> Effort? {
+        let descriptor = HKWorkoutEffortRelationshipQueryDescriptor(
+            predicate: HKQuery.predicateForObject(with: copy.uuid), anchor: nil, option: .mostRelevant)
+        do {
+            let efforts = try await descriptor.result(for: store).relationships
+                .filter { $0.workout.uuid == copy.uuid }
+                .flatMap { $0.samples ?? [] }
+                .compactMap { ($0 as? HKQuantitySample).flatMap(Self.effort(from:)) }
+            return efforts.first { !$0.estimated } ?? efforts.first
+        } catch {
+            Self.log.error("Health effort read failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Only this app's samples can be deleted, and only ours carry the workout's id: Fitness' rating stays. Deleting
+    /// the sample ends its relation to the workout. `except` keeps the rating just saved.
+    private func deleteOwnEffort(_ externalId: UUID, in store: HKHealthStore, except kept: UUID? = nil) async throws {
+        var predicate = Self.externalIdPredicate(externalId)
+        if let kept {
+            let notKept = NSCompoundPredicate(notPredicateWithSubpredicate: HKQuery.predicateForObject(with: kept))
+            predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, notKept])
+        }
+        _ = try await store.deleteObjects(of: Self.effortScore, predicate: predicate)
     }
 }
 #endif

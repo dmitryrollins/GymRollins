@@ -87,7 +87,8 @@ export const TOOL_SPECS = [
     title: 'List workouts',
     description:
       `List logged workouts newest first with duration, working sets, volume and the top set per ` +
-      `exercise. Defaults to the last 12 weeks. ${UNITS}`,
+      'exercise, and active_kcal, avg_hr and effort (1–10 with its word) when Apple Health measured them. ' +
+      `Defaults to the last 12 weeks. ${UNITS}`,
     input: schemas.listWorkouts,
     annotations: READ,
     run: (ctx, a) => listWorkouts(ctx, a),
@@ -97,7 +98,10 @@ export const TOOL_SPECS = [
     title: 'Get workout',
     description:
       'Get one workout with every exercise and set (warm-ups are flagged). A set has `rir` (reps left in the ' +
-      'tank: 0 = failure, 4 = 4 or more) and/or `rpe` when the owner logged how hard it was. ' + UNITS,
+      'tank: 0 = failure, 4 = 4 or more) and/or `rpe` when the owner logged how hard it was. `measured` says what ' +
+      "Apple Health recorded during it: the Apple Watch's or an Apple Workout recording's time, active and total " +
+      'kcal, average and maximum heart rate, the heart rate 2 minutes after, and the effort (1–10). It shows ' +
+      'only if the owner allowed agents to read activity from Apple Health. ' + UNITS,
     input: schemas.byId,
     annotations: READ,
     run: (ctx, a) => getWorkout(ctx, a),

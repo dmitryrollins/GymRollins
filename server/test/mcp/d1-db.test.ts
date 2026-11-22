@@ -30,7 +30,7 @@ async function seedOwner(): Promise<Owner> {
     'INSERT INTO profiles (user_id, unit, limits, client_updated_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)',
     userId,
     'kg',
-    'left knee',
+    'ankle sprain: no leg loading',
     T,
   )
   const routineId = crypto.randomUUID()
@@ -123,6 +123,13 @@ async function seedOwner(): Promise<Owner> {
     userId,
     T,
   )
+  await run(
+    'INSERT INTO workout_measurements (user_id, workout_id, recorded_by, active_kcal, avg_hr, effort, ' +
+      "effort_estimated, client_updated_at, updated_at) VALUES (?1, ?2, 'watch', 412, 128, 6, 0, ?3, ?3)",
+    userId,
+    workoutId,
+    T,
+  )
   const privateGym = await insertGym({ visibility: 'private', owner: userId })
   await insertListing({ gym: privateGym, item: await genericItem(), visibility: 'private', owner: userId })
   const publicGym = await insertGym({ visibility: 'public', createdBy: userId })
@@ -162,6 +169,7 @@ async function snapshot(o: Owner): Promise<Record<string, unknown>> {
     latestBodyweight: await db.latestBodyweight('2026-11-08T00:00:00.000Z'),
     healthActivities: await db.healthActivities(),
     activityDays: await db.activityDays('2026-11-01'),
+    workoutMeasurements: await db.workoutMeasurements([o.workoutId]),
     privateGyms: await db.privateGyms(10),
     myPublicGyms: await db.myPublicGyms(10),
     privateListings: await db.gymListings(o.privateGym, 10),
@@ -177,7 +185,7 @@ describe("Claude's reads", () => {
     const owner = await seedOwner()
     const all = await snapshot(owner)
     expect(await new D1Db(DB, owner.userId, 'claude').profile())
-      .toMatchObject({ unit: 'kg', limits: 'left knee', mcp_read_plan: true, mcp_auto_apply: false })
+      .toMatchObject({ unit: 'kg', limits: 'ankle sprain: no leg loading', mcp_read_plan: true, mcp_auto_apply: false })
     expect((all.routines as { paused: boolean; exercises: unknown[] }[])[0]).toMatchObject({ paused: false })
     expect(
       (all.workouts as { workout_entries: { workout_sets: unknown[] }[] }[])[0].workout_entries[0]
@@ -234,11 +242,12 @@ describe("Claude's reads", () => {
       'performedExerciseIds',
       'workout',
       'workoutDates',
+      'workoutMeasurements',
       'workouts',
     ],
     mcp_read_body: ['bodyweight', 'latestBodyweight'],
     mcp_read_gyms: ['myPublicGyms', 'privateGyms', 'privateListings', 'publicListings'],
-    mcp_read_activity: ['activityDays', 'healthActivities'],
+    mcp_read_activity: ['activityDays', 'healthActivities', 'workoutMeasurements'],
     mcp_propose: [],
   }
 
@@ -277,6 +286,17 @@ describe("Claude's reads", () => {
     expect(await db.activityDays('2026-11-06')).toEqual([])
     expect((await db.readPermissions()).activity).toBe(true)
   })
+
+  it("reads what Apple Health measured during the owner's workouts, whatever case the ids come in", async () => {
+    const owner = await seedOwner()
+    const db = new D1Db(DB, owner.userId, 'claude')
+    expect(await db.workoutMeasurements([owner.workoutId.toUpperCase()])).toEqual([{
+      workout_id: owner.workoutId, recorded_by: 'watch', duration_s: null, active_kcal: 412, total_kcal: null,
+      avg_hr: 128, max_hr: null, post_hr: null, effort: 6, effort_estimated: false,
+    }])
+    expect(await db.workoutMeasurements([])).toEqual([])
+  })
+
 
   it("reads finished workouts' spans whatever the workouts switch says: rule 6 only learns a session was there",
     async () => {

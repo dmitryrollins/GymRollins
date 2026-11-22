@@ -31,6 +31,8 @@ public protocol SyncTransport: Sendable {
     func push(healthActivities: [HealthActivityDTO]) async throws -> [RowAck]
     /// Days of activity; acks use the day (`YYYY-MM-DD`).
     func push(activityDays: [ActivityDayDTO]) async throws -> [RowAck]
+    /// What Apple Health measured during workouts (plan 40); acks use the workout id.
+    func push(workoutMeasurements: [WorkoutMeasurementDTO]) async throws -> [RowAck]
 
     func pullProfile(since: Date?) async throws -> [ProfileDTO]
     func pullCustomExercises(since: Date?) async throws -> [CustomExerciseDTO]
@@ -44,6 +46,7 @@ public protocol SyncTransport: Sendable {
     func pullWorkouts(since: Date?) async throws -> [WorkoutDTO]
     func pullHealthActivities(since: Date?) async throws -> [HealthActivityDTO]
     func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO]
+    func pullWorkoutMeasurements(since: Date?) async throws -> [WorkoutMeasurementDTO]
     /// One workout with its entries and sets (conflict resolution "Keep other"), or nil if absent.
     func fetchWorkout(id: UUID) async throws -> WorkoutDTO?
 
@@ -95,6 +98,10 @@ extension SyncTransport {
     public func push(activityDays: [ActivityDayDTO]) async throws -> [RowAck] { [] }
     public func pullHealthActivities(since: Date?) async throws -> [HealthActivityDTO] { [] }
     public func pullActivityDays(since: Date?) async throws -> [ActivityDayDTO] { [] }
+
+    /// Test doubles that predate plan 40 store no measurements.
+    public func push(workoutMeasurements: [WorkoutMeasurementDTO]) async throws -> [RowAck] { [] }
+    public func pullWorkoutMeasurements(since: Date?) async throws -> [WorkoutMeasurementDTO] { [] }
 
     /// When Claude last called the MCP server for this user (newest `mcp_audit` row), nil if never.
     public func lastMcpUse() async throws -> Date? { nil }

@@ -14,7 +14,7 @@ catalogue is shared between users of the same gym, and the app uses it in two wa
 the gym, and it builds a new workout for chosen muscles from that gym's equipment.
 
 The trigger: plans written without knowing the equipment don't fit (October 2026 home plans assumed dumbbells when the
-owner has a bench and two kettlebells, 20 kg and 24 kg).
+home gym had a bench and two kettlebells, 20 kg and 24 kg).
 
 ### In scope
 1. **Gyms:** Apple Maps gyms (shared) and private gyms (home, office; never shared). A gym chip on Today, a gym

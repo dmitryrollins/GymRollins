@@ -5,7 +5,7 @@ import SwiftUI
 import Testing
 @testable import GymRollins
 
-/// Main-thread work behind Today's and Library's taps, with an owner-sized store: 160 finished workouts of 6 exercises
+/// Main-thread work behind Today's and Library's taps, with a large store: 160 finished workouts of 6 exercises
 /// × 3 sets (the bench in 100 of them) and 500 outside workouts over two years. Prints `PERF …` lines (median of
 /// `runs` after a warm-up) and asserts nothing about time.
 ///
@@ -53,7 +53,7 @@ struct ResponsivenessTimingTests {
     }
 
     /// 160 workouts over the plan's exercises (the bench in 100) and 500 outside workouts.
-    private func seedOwnerSizedData(_ env: AppEnvironment) throws -> [String] {
+    private func seedSampleSizedData(_ env: AppEnvironment) throws -> [String] {
         let push = try #require(try env.routines.all().first { $0.exercises.count >= 6 })
         let others = push.exercises.map(\.exerciseId).filter { $0 != Self.staple }
         let now = env.now()
@@ -150,7 +150,7 @@ struct ResponsivenessTimingTests {
 
     @Test func insightsAndTodayRefresh() throws {
         let env = try makeEnv()
-        let items = try seedOwnerSizedData(env)
+        let items = try seedSampleSizedData(env)
         median("env.resolvedActivities() (500 outside, 160 workouts)") { _ = env.resolvedActivities() }
         median("env.insights()") { _ = env.insights() }
         median("env.insights(), data changed (memo emptied)") {
@@ -185,7 +185,7 @@ struct ResponsivenessTimingTests {
         median("env.recentActivityDays()") { _ = env.recentActivityDays() }
         try median("env.todaysPlan()") { _ = try env.todaysPlan() }
         // What Today did after a sync that brought rows (plan and data revisions bump together): `reload()` and the
-        // `dataRevision` handler each read every item's history, and StreakChip and RecoveryCard each compute insights.
+        // `dataRevision` handler each read every item's history, and the streak chip (since removed) and RecoveryCard each computed insights.
         try median("Today refresh after a sync (as before)") {
             _ = try env.todaysPlan()
             for _ in 0..<2 {

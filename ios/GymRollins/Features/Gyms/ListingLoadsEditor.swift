@@ -61,7 +61,7 @@ struct ListingLoadsEditor: View {
     private func chip(_ title: String, selected: Bool, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title).font(.subheadline.weight(.semibold))
-                .foregroundStyle(selected ? Color.white : Theme.textPrimary)
+                .foregroundStyle(selected ? Theme.onAccent : Theme.textPrimary)
                 .padding(.horizontal, 12).frame(minHeight: Theme.minTapSize)
                 .background(selected ? Theme.primaryFill : Theme.cardInner, in: .capsule)
                 .contentShape(.capsule)

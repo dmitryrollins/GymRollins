@@ -2,7 +2,7 @@ import XCTest
 
 /// Gap tests from the flow-map coverage matrix (`docs/testing/flow-coverage.md`): one test per flow-map step that
 /// had no UI coverage, named after the step. 26 Sep 2026 is a Saturday, so Today shows Push + Arms (bench 0025
-/// first). With `-seedHistory` the bench session is 2 warm-ups + 3 working sets at 135 lb.
+/// first). With `-seedHistory` the bench session is 2 warm-ups + 3 working sets at 155 lb.
 final class FlowCoverageUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -226,15 +226,15 @@ final class FlowCoverageUITests: XCTestCase {
         XCTAssertTrue(lift.waitForExistence(timeout: 5))
         lift.tap()
         // History tab: past sessions, newest first.
-        XCTAssertTrue(app.staticTexts["3 \u{00D7} 10 @ 130 lb (59 kg)"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["3 \u{00D7} 10 @ 150 lb (68 kg)"].waitForExistence(timeout: 5))
         app.buttons["Trends"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["history.chart"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["EST. 1RM"].exists) // SectionLabel uppercases
+        XCTAssertTrue(app.staticTexts["Est. 1RM"].exists) // SectionLabel is sentence case (plan 40)
     }
 
     // MARK: 4.4 Body: goal + trends
 
-    /// Five weekly weigh-ins (81.0 → 81.8 kg) give a chart, goal progress and a weekly trend line.
+    /// Five weekly weigh-ins (76.0 → 76.8 kg) give a chart, goal progress and a weekly trend line.
     func testStep4_4BodyShowsGoalProgressAndTrend() {
         let app = XCUIApplication.launchReady(["-seedBodyweight"])
         app.tabBars.buttons["Body"].tap()

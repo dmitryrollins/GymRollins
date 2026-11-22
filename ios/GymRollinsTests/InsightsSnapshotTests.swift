@@ -35,7 +35,6 @@ import Testing
         #expect(s.freshLine == nil)
         #expect(s.streak.current == 0)
         #expect(s.weeklyRows.map(\.group) == MuscleGroup.allCases.filter(\.isMajor))
-        #expect(s.streakChipText == "0 wk")
     }
 
     @Test func summaryFreshLineAndLabels() {
@@ -48,7 +47,7 @@ import Testing
     }
 
     @Test func limitedLegsAreLabelledAndLeftOutOfFresh() {
-        let s = snapshot([], limits: "Knee: no leg loading until ~26 Oct 2026")
+        let s = snapshot([], limits: "Ankle sprain: no leg loading until ~9 Nov 2026")
         #expect(s.limited == MuscleGroup.legs)
         #expect(s.regionLabel(.quads) == "Quads, 100% recovered, limited by your injury note")
     }
@@ -77,7 +76,6 @@ import Testing
         #expect(s.streak.goal == 3)
         #expect(s.streak.current == 1)
         #expect(s.streak.thisWeekDays == 1)
-        #expect(s.streakChipText == "1 wk")
         #expect(s.streakAccessibility == "Weekly streak: 1 week. 1 of 3 workouts this week.")
     }
 }

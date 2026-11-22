@@ -10,7 +10,7 @@ final class TodayFlexUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    private func summary(_ app: XCUIApplication) -> XCUIElement { app.staticTexts["today.summary"] }
+    private func summary(_ app: XCUIApplication) -> XCUIElement { app.descendants(matching: .any)["today.workout"] }
 
     private func waitForSummary(_ app: XCUIApplication, containing text: String,
                                 file: StaticString = #filePath, line: UInt = #line) {
@@ -21,7 +21,7 @@ final class TodayFlexUITests: XCTestCase {
     }
 
     func testRestDayOffersTheNextRoutineAndCanStart() {
-        let app = XCUIApplication.launchReady(fixedNow: restDay) { $0.staticTexts["today.summary"] }
+        let app = XCUIApplication.launchReady(fixedNow: restDay) { $0.descendants(matching: .any)["today.workout"] }
         waitForSummary(app, containing: "Rest day \u{00B7} optional")
         let start = app.buttons["today.start"]
         XCTAssertTrue(start.waitForExistence(timeout: 5))
@@ -31,7 +31,7 @@ final class TodayFlexUITests: XCTestCase {
 
     func testSwitchToAnEmptyWorkoutAndAddAnExercise() {
         let app = XCUIApplication.launchReady { $0.buttons["today.start"] }
-        app.buttons["today.switch"].tap()
+        app.buttons["today.workout"].tap()
         let empty = app.buttons["today.switch.empty"]
         XCTAssertTrue(empty.waitForExistence(timeout: 5))
         empty.tap()
@@ -57,7 +57,7 @@ final class TodayFlexUITests: XCTestCase {
     /// shows the scheduled routine again, not the previous run's switched workout.
     func testSwitchedPlanDoesNotLeakIntoAFreshLaunch() {
         var app = XCUIApplication.launchReady { $0.buttons["today.start"] }
-        app.buttons["today.switch"].tap()
+        app.buttons["today.workout"].tap()
         let empty = app.buttons["today.switch.empty"]
         XCTAssertTrue(empty.waitForExistence(timeout: 5))
         empty.tap()

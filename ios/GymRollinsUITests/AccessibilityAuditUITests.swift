@@ -57,20 +57,50 @@ final class AccessibilityAuditUITests: XCTestCase {
     /// (white on #0B0B10), flagged on every run since 7 Nov, on plan 24's commit too.
     static let measuredContrastLabels: Set<String> = ["How-To", "Until"]
 
-    /// Plan 32, Settings › AI agents: the switch labels (white on #0B0B10, ~17:1 as the Claude screen's note above
-    /// measured them) are flagged for contrast whichever row sits under the navigation bar's fade or beside the Add
-    /// workouts row's two lines, a different one on each run.
+    /// Plan 32, Settings › AI agents: the switch labels (white, 17:1 or more on the new greys) are flagged for contrast
+    /// whichever row sits under the navigation bar's fade or beside the Add workouts row's two lines, a different one
+    /// on each run. Plan 39's "Read activity from Apple Health" is the same plain `Toggle` (its omission was the
+    /// `testAgentsAudit` failure in plan 39's outcome).
     static let agentSwitchLabels: Set<String> = [
-        "Read workouts and sets", "Read bodyweight", "Read your plan and profile", "Gyms", "Add workouts",
-        "Propose plan changes", "Apply changes without asking",
+        "Read workouts and sets", "Read bodyweight", "Read your plan and profile", "Gyms",
+        "Read activity from Apple Health", "Add workouts", "Propose plan changes", "Apply changes without asking",
     ]
 
-    /// Plan 32's footers under those switches (and plan 33's auto-apply note, the same footer text): the system's
-    /// secondary label colour, measured from a simulator screenshot at 6.3:1 on #0B0B10 (peak glyph pixel
-    /// (145,145,153)), flagged only by the audit's sampling.
+    /// Plan 32's footers under those switches (plan 33's auto-apply note and plan 39's activity note are the same
+    /// footer text): the system's secondary label colour, measured from a simulator screenshot at 6.3:1, flagged only by
+    /// the audit's sampling.
     static let measuredContrastFooterIdentifiers: Set<String> = [
-        "claude.gymsNote", "agents.logWorkoutsNote", "agents.autoApplyNote",
+        "claude.gymsNote", "agents.readActivityNote", "agents.logWorkoutsNote", "agents.autoApplyNote",
     ]
+
+    /// Plan 25's Use with Claude rows on the same screen: the prompt (white) and "Show all" (the accent), flagged for
+    /// contrast mid-screen on some runs only (plan 30 "Show all", plan 37 the prompt, each passing when run again).
+    /// Plan 40 measured them from the audit's own screenshot (17 Nov): the prompt's glyphs #FFFFFF on the row's
+    /// #1C1C1E, 17.0:1; "Show all" then #B6F23A on it, 12.8:1. On plan 40's branch the audit flagged one of them on 3
+    /// runs of 9 (5 others timed out); on the branch's base, on neither of 2. With the red action colour back, "Show
+    /// all" is the coral #FF6B72 on #1C1C1E, 6.2:1, measured from a screenshot of the same screen (17 Nov).
+    static let measuredCoachIdentifiers: Set<String> = ["claude.coach.text", "claude.coach.showAll"]
+
+    /// Plan 40's measured workout detail at the end of its scroll ("Workout detail: charts"): the page-level section
+    /// titles "Post-Workout Heart Rate", "Strength" and "Exercises", white title3 bold on the page's #000000, are
+    /// flagged for contrast on about 3 runs of 5. Measured from the audit's own screenshot of a flagged run (17 Nov):
+    /// #FFFFFF glyphs on #000000 at each title's frame, 21:1, nothing over them. The trigger is the detail's hard top
+    /// scroll edge (`detailTopBar`), active once the page is scrolled: with 2.5 s more rest before the audit it still
+    /// failed 3 runs of 5, and with that rest and a soft edge it passed 5 of 5. The hard edge stays (the soft one left
+    /// ghost text under the clock and Back), so only these three titles, on this screen only, are excused.
+    static let measuredDetailTitleIdentifiers: Set<String> = [
+        "detail.postHeartRateChart.title", "detail.strength.title", "detail.exercises.title",
+    ]
+
+    /// Library's header pill (plan 40, 19 Nov): "Library" over "1,324 exercises", flagged as clipped on 5 runs of 5. The
+    /// audit's own screenshot shows both whole, centred in a pill far wider than either (56 pt and 93 pt of text), each
+    /// frame its font's full line height. Log's and Body's pills are the same `HeaderPill` without the second line and
+    /// aren't flagged.
+    static let libraryPillIdentifiers: Set<String> = ["library.title", "library.subtitle"]
+
+    /// Library's selected filter chip, "All" (plan 40, 19 Nov): the screen's black on the chip's white glass tint,
+    /// flagged for contrast on 5 runs of 5. Measured from the audit's own screenshot: #000000 glyphs on #F3F3F3, 18.9:1.
+    static let libraryAllChipIdentifier = "library.filter.all"
 
     /// Use with Claude's footer (plan 32): a plain `Text` in a text style that scales, flagged for clipping and Dynamic
     /// Type only while the longer AI agents screen leaves it under the tab bar's scroll-edge effect.
@@ -116,7 +146,14 @@ final class AccessibilityAuditUITests: XCTestCase {
             if measuredContrastLabels.contains(element.label) { return "measured on glass" }
             if agentSwitchLabel { return "measured switch label" }
             if measuredContrastFooterIdentifiers.contains(element.identifier) { return "measured footer" }
+            if isAgentsScreen(screen), measuredCoachIdentifiers.contains(element.identifier) {
+                return "measured prompt row"
+            }
             if measuredContrastIdentifiers.contains(element.identifier) { return "measured on glass" }
+            if screen == "Workout detail: charts", measuredDetailTitleIdentifiers.contains(element.identifier) {
+                return "measured section title"
+            }
+            if screen == "Library", element.identifier == libraryAllChipIdentifier { return "measured on glass" }
             // `.searchable`'s placeholder is system-styled.
             if type == .searchField { return "system search field" }
             return nil
@@ -132,6 +169,7 @@ final class AccessibilityAuditUITests: XCTestCase {
             // The glass capsule's label: identical SecondaryGlassButton "Skip for now" below it isn't flagged, and the
             // screenshot shows the whole label.
             if element.identifier == "onboarding.email" { return "glass button false positive" }
+            if screen == "Library", libraryPillIdentifiers.contains(element.identifier) { return "pill shown whole" }
             return nil
         case .hitRegion:
             // ProgressView is not interactive (no action), so it has no hit region to size.
@@ -215,13 +253,13 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Saved workouts")
     }
 
-    /// Waits for Today's title between the swipes: two quick swipes once stayed on Sunday.
+    /// Waits for the day shown (the workout pill's value) between the swipes: two quick swipes once stayed on Sunday.
     private func waitForTitle(_ app: XCUIApplication, _ text: String,
                               file: StaticString = #filePath, line: UInt = #line) {
-        let title = app.staticTexts["today.title"].firstMatch
-        let predicate = NSPredicate(format: "label == %@", text)
-        let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: title)], timeout: 5)
-        XCTAssertEqual(result, .completed, "title was '\(title.label)'", file: file, line: line)
+        let pill = app.descendants(matching: .any)["today.workout"].firstMatch
+        let predicate = NSPredicate(format: "value == %@", text)
+        let result = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: pill)], timeout: 5)
+        XCTAssertEqual(result, .completed, "day was '\(pill.value ?? "")'", file: file, line: line)
     }
 
     /// A later day on Today, changed for that date.
@@ -254,8 +292,9 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Logging (resting)")
     }
 
+    /// At a gym (`-seedGym`), so the summary also shows what the workout added to the gym's equipment.
     func testSummaryAudit() {
-        let app = launch()
+        let app = launch(["-seedHistory", "-seedGym"])
         app.startWorkout()
         app.openExercise("0025")
         app.buttons["logging.logAll"].tapCenter()
@@ -265,6 +304,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         XCTAssertTrue(app.buttons["finish.discardEmpty"].waitForExistence(timeout: 3))
         app.buttons["finish.discardEmpty"].tap()
         XCTAssertTrue(app.staticTexts["summary.title"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["summary.gymEquipment"].exists)
         audit(app, "Summary")
     }
 
@@ -286,7 +326,7 @@ final class AccessibilityAuditUITests: XCTestCase {
     func testLibraryAudit() {
         let app = launch()
         app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.searchButton"].waitForExistence(timeout: 5))
         audit(app, "Library")
     }
 
@@ -411,6 +451,92 @@ final class AccessibilityAuditUITests: XCTestCase {
         audit(app, "Workout added by an agent")
     }
 
+    /// Plan 40: the rebuilt workout detail with what Health measured (the watch's copy, both charts), and the Effort
+    /// sheet. Their first audit: every metric colour is meant to pass 4.5:1 on the new card (`ThemeContrastTests`).
+    func testWorkoutDetailMeasuredAudit() {
+        let app = launch(["-fakeHealth", "-seedHistory"])
+        turnOnHealth(app)
+        openFirstWorkout(app)
+        let total = app.descendants(matching: .any)["detail.totalKcal"]
+        XCTAssertTrue(total.waitForExistence(timeout: 5))
+        waitUntilSettled(total)
+        audit(app, "Workout detail: measured")
+        let post = app.descendants(matching: .any)["detail.postHeartRateChart"]
+        for _ in 0..<8 where !post.isHittable { app.swipeUp() }
+        // On to the end of the detail. Mid-scroll, the tab bar's scroll-edge effect reaches up to about y=680, and the
+        // audit flagged every row there for contrast (the white "Exercises" header, 21:1 on black in its own
+        // screenshot; the first set's row); at the end nothing runs under the bar and those rows pass.
+        var last = post.frame
+        for _ in 0..<4 {
+            app.swipeUp()
+            waitUntilSettled(post)
+            if post.frame == last { break }
+            last = post.frame
+        }
+        audit(app, "Workout detail: charts")
+        let add = app.buttons["detail.addEffort"]
+        for _ in 0..<8 where !add.isHittable { app.swipeDown() }
+        add.tap()
+        let chip = app.buttons["effort.score.6"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.tap()
+        growToLarge(app, sheetTop: app.buttons["effort.cancel"])
+        waitUntilSettled(app.buttons["effort.save"])
+        audit(app, "Effort sheet")
+    }
+
+    /// Plan 40: the detail with Health off: the estimate with its ⓘ, and Add Effort.
+    func testWorkoutDetailEstimateAudit() {
+        let app = launch()
+        openFirstWorkout(app)
+        let kcal = app.descendants(matching: .any)["detail.kcal"]
+        XCTAssertTrue(kcal.waitForExistence(timeout: 5))
+        waitUntilSettled(kcal)
+        audit(app, "Workout detail: estimate")
+    }
+
+    /// Drags a sheet up by its grabber, above `sheetTop` (its first row), to its large height. At medium, iOS 26 floats
+    /// the Effort sheet slightly scaled down (frames about 0.97 of the text's size), and the audit flagged every label
+    /// there as clipped and Cancel's contrast although its screenshot shows them whole and clear; at large nothing is.
+    private func growToLarge(_ app: XCUIApplication, sheetTop: XCUIElement) {
+        let window = app.windows.firstMatch
+        let third = window.frame.height / 3
+        guard sheetTop.waitForExistence(timeout: 5), sheetTop.frame.minY > third else { return }
+        waitUntilSettled(sheetTop)
+        let origin = window.coordinate(withNormalizedOffset: .zero)
+        origin.withOffset(CGVector(dx: window.frame.midX, dy: sheetTop.frame.minY - 14))
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: window.frame.midX, dy: 60)))
+        waitUntilSettled(sheetTop)
+        XCTAssertLessThan(sheetTop.frame.minY, third, "the sheet grew to large")
+    }
+
+    /// Log › Settings › Apple Health, turned on (as `testHealthActivityAudit` does).
+    private func turnOnHealth(_ app: XCUIApplication) {
+        app.tabBars.buttons["Log"].tap()
+        app.buttons["log.settings"].tapCenter()
+        let health = app.buttons["settings.health"]
+        let tabBar = app.tabBars.firstMatch
+        for _ in 0..<10 where !(health.isHittable && (!tabBar.exists || health.frame.maxY < tabBar.frame.minY)) {
+            app.swipeUp()
+        }
+        health.tapCenter()
+        let toggle = app.switches["health.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        let inner = toggle.switches.firstMatch
+        if inner.exists { inner.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
+        XCTAssertTrue(app.descendants(matching: .any)["health.status"].waitForExistence(timeout: 10))
+    }
+
+    /// The Log's newest GymRollins workout (`-seedHistory`'s Sat 19 Sep), opened.
+    private func openFirstWorkout(_ app: XCUIApplication) {
+        app.tabBars.buttons["Log"].tap()
+        if !app.buttons["log.settings"].waitForExistence(timeout: 2) { app.tabBars.buttons["Log"].tap() }
+        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'log.workout.'"))
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 10))
+        cards.firstMatch.tap()
+        XCTAssertTrue(app.buttons["detail.menu"].waitForExistence(timeout: 5))
+    }
+
     func testModerationAudit() {
         let app = launch(["-fakeGymCatalog", "-fakeSignedIn", "-fakeGymAdmin"])
         app.tabBars.buttons["Log"].tap()
@@ -484,10 +610,12 @@ final class AccessibilityAuditUITests: XCTestCase {
         XCTAssertTrue(app.buttons["gymPicker.close"].waitForExistence(timeout: 5))
     }
 
-    func testTodayWithSwappedRowsAudit() {
+    /// Today at a gym: the gym chip, and rows with the gym's loads.
+    func testTodayAtAGymAudit() {
         let app = launch(["-seedGym"])
-        XCTAssertTrue(app.descendants(matching: .any)["today.gymNote"].waitForExistence(timeout: 5))
-        audit(app, "Today (gym marks)")
+        XCTAssertTrue(app.buttons["today.gymChip"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["today.row.0025"].waitForExistence(timeout: 5))
+        audit(app, "Today (at a gym)")
     }
 
     func testGymPickerAudit() {
@@ -691,7 +819,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         XCTAssertEqual(first.label, "Warm-up set 1, 10 reps, 45 pounds, current set")
         XCTAssertEqual(app.descendants(matching: .any)["logging.set.2.summary"].label,
-                       "Set 1, 8 reps, 135 pounds, not done")
+                       "Set 1, 8 reps, 155 pounds, not done")
         app.buttons["logging.logSet"].tapCenter()
         let rest = app.descendants(matching: .any)["logging.rest"]
         XCTAssertTrue(rest.waitForExistence(timeout: 5))

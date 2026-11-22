@@ -151,6 +151,24 @@ export interface WorkoutSpanRow {
   ended_at: string
 }
 
+/** `workout_measurements` (plan 40): what Apple Health measured during one GymRollins workout. */
+export interface WorkoutMeasurementRow {
+  workout_id: string
+  /** GymRollins' own Apple Watch recording or an Apple Workout one; null when only heart rate or effort is known. */
+  recorded_by: 'watch' | 'apple_workout' | null
+  duration_s: number | null
+  active_kcal: number | null
+  total_kcal: number | null
+  avg_hr: number | null
+  max_hr: number | null
+  /** The heart rate closest to 2 minutes after the end. */
+  post_hr: number | null
+  /** 1–10. */
+  effort: number | null
+  /** The effort is the Apple Watch's estimate, not a rating. */
+  effort_estimated: boolean
+}
+
 /** The owner's read switches for agents (Settings › AI agents). */
 export interface ReadPermissions {
   plan: boolean
@@ -303,6 +321,11 @@ export interface Db {
    * mcp_read_workouts says: rule 6 only learns that a GymRollins session was there.
    */
   workoutSpans(since?: string): Promise<WorkoutSpanRow[]>
+  /**
+   * What Apple Health measured during these workouts (plan 40): their rows that aren't deleted, in no order; empty
+   * while mcp_read_workouts or mcp_read_activity is off.
+   */
+  workoutMeasurements(workoutIds: string[]): Promise<WorkoutMeasurementRow[]>
   /** The owner's stored weekly targets (groups without a row use the defaults). */
   muscleTargets(): Promise<MuscleTargetRow[]>
   /** Library + the owner's custom exercises; every word of `query` must appear in the name. */

@@ -96,7 +96,7 @@ weren't folded into the fixes above.
   caps plan 31 left open (section 5).
 - **Exercise media — decided 2026-09-28: stopgap photos now, own AI media later.** The app shows
   public-domain start/end photos from `yuhonas/free-exercise-db` (Unlicense, pinned commit, see
-  `docs/licenses/free-exercise-db.md`) for **300 / 1,324** library exercises (23 / 24 of the owner's
+  `docs/licenses/free-exercise-db.md`) for **300 / 1,324** library exercises (23 / 24 of the sample
   routine lifts), matched conservatively by name + equipment (`docs/import/exercise-photo-review.md`).
   Photos load on demand from jsDelivr (pinned to the commit) and are cached on the device (Caches,
   150 MB cap), so they show offline after the first view; everything else keeps the body-part
@@ -113,10 +113,14 @@ weren't folded into the fixes above.
   is stored in the cloud with the account, and that connected agents can read it while "Read activity from Apple
   Health" is on. The App Store privacy answers change the same way: Health & Fitness data, linked to the user, not
   used for tracking.
+  Since plan 40 it must also say that each GymRollins workout's numbers from Apple Health (workout time, active and
+  total calories, average, maximum and post-workout heart rate, and effort) are stored in the cloud with the account
+  and readable by connected agents while "Read activity from Apple Health" is on, and that an effort rated in
+  GymRollins is written to Apple Health. Heart-rate readings themselves stay on the iPhone.
 
 ## Device build
 
-**Result (2026-09-28): signs, builds and installs on the owner's iPhone 14 Pro Max.**
+**Result (2026-09-28): signs, builds and installs on a physical iPhone.**
 
 ```
 cd ios && xcodegen generate
@@ -139,7 +143,7 @@ Settings → General → VPN & Device Management → trust the developer certifi
 **Device sync caveat (documented, not tested on device):** `Base.xcconfig` defaults `API_URL` to
 `http://127.0.0.1:8787` (the Mac's local Worker), overridden only by `Local.xcconfig`. A build installed on a
 physical iPhone resolves `127.0.0.1` to the *phone itself*, so sync fails and the app works offline, as in airplane
-mode (SwiftData is the source of truth). Don't point the owner's phone at any server before the cutover
+mode (SwiftData is the source of truth). Don't point a phone that holds real data at any server before the cutover
 (`docs/cloudflare-checklist.md`): the first launch with a new `API_URL` runs the server move. For a test phone
 against the Mac, run the Worker on the LAN (`npx wrangler dev --local --ip 0.0.0.0 --var
 PUBLIC_BASE_URL:http://127.0.0.1:8787 --infer-origin-from-routes=false` in `server/`: `wrangler.jsonc` holds the

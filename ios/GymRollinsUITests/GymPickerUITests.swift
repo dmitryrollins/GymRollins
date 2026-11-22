@@ -49,6 +49,25 @@ final class GymPickerUITests: XCTestCase {
         XCTAssertEqual(app.buttons["today.gymChip"].label, "Gym: Garage")
     }
 
+    /// Picking a gym with nothing listed keeps today's plan as planned, and Today asks for nothing.
+    func testAnEmptyGymKeepsThePlan() {
+        let app = launch()
+        openPicker(app)
+        app.buttons["gymPicker.addPrivate"].tap()
+        let name = app.textFields["privateGym.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("Garage")
+        app.buttons["privateGym.save"].tap()
+        app.buttons["gymPicker.gym.Garage"].tap()
+        XCTAssertTrue(app.buttons["gymPicker.close"].waitForNonExistence(timeout: 5))
+
+        let any = app.descendants(matching: .any)
+        XCTAssertTrue(any["today.row.0025"].waitForExistence(timeout: 5), "the barbell bench press stays planned")
+        XCTAssertFalse(any["today.row.3294"].exists, "nothing was put in its place")
+        XCTAssertEqual(app.buttons["today.gymChip"].label, "Gym: Garage")
+    }
+
     func testPickAMapsGymWithFakePlaces() {
         let app = launch(["-fakeLocation", here, "-fakeGymPlaces"])
         openPicker(app)
@@ -106,7 +125,7 @@ final class GymPickerUITests: XCTestCase {
         app.buttons["gymPicker.none"].tap()
         XCTAssertTrue(app.buttons["gymPicker.close"].waitForNonExistence(timeout: 5))
         XCTAssertEqual(app.buttons["today.gymChip"].label, "Gym: none")
-        XCTAssertTrue(app.staticTexts["today.summary"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["today.workout"].exists)
     }
 
     func testDeletingAGymAsksFirstAndNamesTheItems() {

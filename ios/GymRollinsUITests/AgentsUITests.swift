@@ -178,7 +178,9 @@ final class AgentsUITests: XCTestCase {
         reps.clearAndType("9")
         app.dismissKeyboardIfPresent()
         app.buttons["detail.save"].tap()
-        let edited = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "1 9 \u{00D7}")).firstMatch
+        // The set's row, read as one element since plan 40 put its number in a column of its own.
+        let edited = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Set 1, 9 reps"))
+            .firstMatch
         XCTAssertTrue(edited.waitForExistence(timeout: 5))
 
         app.buttons["detail.back"].tap()

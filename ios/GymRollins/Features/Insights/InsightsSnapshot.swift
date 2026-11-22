@@ -111,8 +111,6 @@ struct InsightsSnapshot: Equatable {
 
     // MARK: Streak
 
-    var streakChipText: String { "\(streak.current) wk" }
-
     var streakAccessibility: String {
         let weeks = streak.current == 1 ? "1 week" : "\(streak.current) weeks"
         return "Weekly streak: \(weeks). \(streak.thisWeekDays) of \(streak.goal) workouts this week."

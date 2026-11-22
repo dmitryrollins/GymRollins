@@ -1,11 +1,13 @@
 import GymCore
 import SwiftUI
 
-/// Workout detail, pushed from a `WorkoutCard`: glass back + "•••" menu (Edit / Delete), stat
-/// tiles, a card per exercise with its set rows (warm-ups labelled "W"), an edit mode that turns
-/// each row into its exercise mode's fields (reps/weight, seconds/weight, or minutes/distance) plus the
-/// "Reps left?" rating for working reps sets,
-/// and a share sheet with a plain-text recap.
+/// A GymRollins workout, pushed from its Log card, in Apple Fitness' layout (plan 40, spec §4): glass Back, Share (the
+/// plain-text recap) and "•••" (Edit / Delete) circles pinned at the top; the header; "Workout Details" with what
+/// Apple Health measured, or the estimate; "Effort", rated in a glass sheet; the Heart Rate and Post-Workout Heart Rate
+/// charts when Health has readings; "Strength"; and a card per exercise. Edit mode turns each set into its exercise
+/// mode's fields and the "Reps left?" chips, as before, with the cards above the sets set aside until Save or Cancel.
+/// The app's own values draw at once and Health's fill in when its read finishes, and again when a hook (spec §5.5) or
+/// a rating changes them.
 struct WorkoutDetailView: View {
     let workoutId: UUID
     @Environment(AppEnvironment.self) private var env
@@ -14,15 +16,40 @@ struct WorkoutDetailView: View {
     @State private var recordCount = 0
     /// The agent that added this workout (plan 32), read with it; nil for the owner's own.
     @State private var addedBy: String?
-    /// What Apple Health measured during this workout (plan 39, rule 6), read with it; nil when nothing is attached.
-    @State private var measured: HealthActivity?
+    /// What Health measured, else the app's own values (plan 40); nil until the workout is read. Set with `show(_:for:)`.
+    @State private var summary: MeasuredSummary?
+    /// The two heart-rate charts' data, built from `summary` when it arrives rather than on every body pass.
+    @State private var heartRateCharts: WorkoutHeartRateCharts.Model?
     @State private var editing = false
     @State private var drafts: [SetField: String] = [:]
     /// Edited "Reps left?" ratings by set id (a nil value clears the rating), applied on Save.
     @State private var effortDrafts: [UUID: Double?] = [:]
     @State private var showMenu = false
+    @State private var showEffort = false
+    /// The effort when the sheet opened: it opens on that score and offers Clear Rating by it, so a read landing while
+    /// it's open doesn't change it under the owner's finger.
+    @State private var effortAtOpen: Effort?
+    /// Health is on and allowed but didn't take the last rating (spec §5.4): "Couldn't save to Apple Health".
+    @State private var effortNotInHealth = false
+    /// Bumped by each rating or clear: only the newest one's answer reaches the screen.
+    @State private var effortRound = 0
+    /// Ratings or clears still running: `load()` leaves the summary to them.
+    @State private var effortPending = 0
+
+    /// What the screen is read from: the workout, the app's data, its measured numbers, and Health on or off.
+    private struct LoadKey: Equatable {
+        let workoutId: UUID
+        let data: Int
+        let measured: Int
+        let healthOn: Bool
+    }
 
     private var unit: WeightUnit { env.profile.unit }
+
+    private var loadKey: LoadKey {
+        LoadKey(workoutId: workoutId, data: env.dataRevision, measured: env.measuredRevision,
+                healthOn: env.health.isEnabled)
+    }
 
     var body: some View {
         Group {
@@ -32,36 +59,51 @@ struct WorkoutDetailView: View {
                 Color.clear
             }
         }
+        // On the whole screen, so Back is there while the workout loads and if it's gone (deleted by a sync).
+        .detailTopBar(topBar)
         .background(Theme.background)
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showMenu) {
             WorkoutOptionsSheet(onEdit: startEditing, onDelete: delete)
         }
-        .task(id: workoutId) { load() }
+        .sheet(isPresented: $showEffort) {
+            EffortSheet(effort: effortAtOpen, canClear: effortAtOpen.map { !$0.estimated } ?? false,
+                        onSave: { score in Task { await rateEffort(score) } },
+                        onClear: { Task { await clearEffort() } })
+        }
+        .task(id: loadKey) { await load() }
     }
 
     // MARK: Top bar
 
-    private var topBar: some View {
-        HStack {
-            Button { dismiss() } label: { Image(systemName: "chevron.left") }
-                .glassCircle()
-                .accessibilityLabel("Back")
-                .accessibilityIdentifier("detail.back")
-            Spacer()
-            if editing {
-                Button("Cancel") { cancelEditing() }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("detail.cancel")
-                Button("Save", action: save)
-                    .buttonStyle(.glassProminent)
-                    .tint(Theme.primaryButtonFill)
-                    .accessibilityIdentifier("detail.save")
-            } else {
-                Button { showMenu = true } label: { Image(systemName: "ellipsis") }
+    /// Back always; once the workout is read, Share and "•••", or Cancel and Save while editing. Pinned above the
+    /// content.
+    private var topBar: DetailTopBar<some View> {
+        DetailTopBar(backIdentifier: "detail.back", onBack: { dismiss() }) {
+            if let workout {
+                if editing {
+                    // Capped at accessibility1, as Share is: past it "Cancel" wrapped onto two lines beside Back.
+                    Button("Cancel") { cancelEditing() }
+                        .buttonStyle(.glass)
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                        .accessibilityIdentifier("detail.cancel")
+                    Button("Save", action: save)
+                        .prominentGlass()
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                        .accessibilityIdentifier("detail.save")
+                } else {
+                    ShareLink(item: shareText(workout)) {
+                        // The tallest glyph of the three: past AX1 it outgrew its 44 pt circle.
+                        Image(systemName: "square.and.arrow.up").dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                    }
                     .glassCircle()
-                    .accessibilityLabel("Edit or delete workout")
-                    .accessibilityIdentifier("detail.menu")
+                    .accessibilityLabel("Share")
+                    .accessibilityIdentifier("detail.share")
+                    Button { showMenu = true } label: { Image(systemName: "ellipsis") }
+                        .glassCircle()
+                        .accessibilityLabel("Edit or delete workout")
+                        .accessibilityIdentifier("detail.menu")
+                }
             }
         }
     }
@@ -70,205 +112,123 @@ struct WorkoutDetailView: View {
 
     private func scrollContent(_ workout: Workout) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                topBar
-                titleBlock(workout)
-                statGrid(workout)
-                CalorieCard(estimate: env.calories.estimate(workout), healthStatus: env.health.exportStatus(for: workout),
-                            prefix: "detail")
-                if let measured { MeasuredActivityBlock(activity: measured) }
-                exerciseList(workout)
+            VStack(alignment: .leading, spacing: 24) {
+                WorkoutDetailHeader(workout: workout, summary: summary, addedBy: addedBy)
+                // While editing, the sets follow the header, under Cancel / Save as before: the cards pushed the
+                // first set's fields below the fold, and their numbers only change on Save.
+                if !editing {
+                    if let summary {
+                        WorkoutDetailsCard(summary: summary, estimate: env.calories.estimate(workout),
+                                           healthStatus: env.health.exportStatus(for: workout))
+                        EffortCard(effort: summary.effort, needsAsking: env.health.effortNeedsAsking,
+                                   notInHealth: effortNotInHealth, onOpen: { openEffort(summary.effort) },
+                                   onAllow: allowEffort)
+                        if let heartRateCharts { WorkoutHeartRateCharts(model: heartRateCharts) }
+                    }
+                    WorkoutStrengthCard(readings: MeasuredText.strength(workout, records: recordCount))
+                }
+                WorkoutExerciseList(workout: workout, editing: editing, drafts: $drafts, effortDrafts: $effortDrafts)
             }
             .padding(.horizontal, Theme.gutter)
-            .padding(.top, 8)
+            .padding(.top, 16)
             .padding(.bottom, 40)
         }
-        .safeAreaInset(edge: .bottom) {
-            if !editing { shareBar(workout) }
-        }
     }
 
-    private func titleBlock(_ workout: Workout) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(workout.startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
-                .font(.subheadline).foregroundStyle(Theme.textSecondary)
-            Text(workout.name).font(Theme.display(34)).foregroundStyle(Theme.textPrimary)
-            if let addedBy {
-                Text(AgentText.addedBy(addedBy)).font(.footnote).foregroundStyle(Theme.textSecondary)
-                    .accessibilityIdentifier("detail.addedBy")
-            }
-        }
+    // MARK: Effort
+
+    private func openEffort(_ effort: Effort?) {
+        effortAtOpen = effort
+        showEffort = true
     }
 
-    // MARK: Stats
-
-    private func statGrid(_ workout: Workout) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            stat(label: "Duration", value: DurationFormatter.clock(durationSeconds(workout)), identifier: "detail.duration")
-            stat(label: "Exercises", value: "\(workout.entries.count)", identifier: "detail.exercises")
-            stat(label: "Volume", value: volumeText(workout), identifier: "detail.volume")
-            stat(label: "Records", value: "\(recordCount)", identifier: "detail.records",
-                tint: recordCount > 0 ? Theme.record : Theme.textPrimary)
-        }
+    /// The Allow pill: asks for the effort types; a rating Health didn't take before is no longer the question.
+    private func allowEffort() {
+        effortNotInHealth = false
+        Task { await env.allowHealthEffort() }
     }
 
-    private func stat(label: String, value: String, identifier: String, tint: Color = Theme.textPrimary) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption).foregroundStyle(Theme.textSecondary)
-            Text(value).font(Theme.display(22)).foregroundStyle(tint).accessibilityIdentifier(identifier)
+    /// Kept in the app whatever Health does; the card says so when Health should have taken it and didn't. Started in
+    /// its own task, which the screen never cancels, so the Health write always finishes: `effortRound` is what keeps
+    /// an older answer off the screen.
+    private func rateEffort(_ score: Int) async {
+        guard let workout else { return }
+        let round = startEffort()
+        defer { effortPending -= 1 }
+        let saved = await env.rateEffort(score, for: workout)
+        let measured = await env.measuredSummary(for: workout)
+        // A newer rating or clear started meanwhile: its answer is the one to show.
+        guard round == effortRound else { return }
+        effortNotInHealth = saved == .savedInAppOnly
+        show(measured, for: workout)
+    }
+
+    private func clearEffort() async {
+        guard let workout else { return }
+        let round = startEffort()
+        defer { effortPending -= 1 }
+        await env.clearEffort(for: workout)
+        let measured = await env.measuredSummary(for: workout)
+        guard round == effortRound else { return }
+        effortNotInHealth = false
+        show(measured, for: workout)
+    }
+
+    /// A rating or clear begins: counted as running, and its round is the newest.
+    private func startEffort() -> Int {
+        effortPending += 1
+        effortRound += 1
+        return effortRound
+    }
+
+    // MARK: Share
+
+    /// The plain-text recap the Share circle sends: "Push + Biceps — Sat 19 Sep, 58 min", then a line per exercise.
+    private func shareText(_ workout: Workout) -> String {
+        let date = workout.startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+        let minutes = Int(durationSeconds(workout) / 60)
+        let exercises = workout.entries.compactMap { entry -> String? in
+            let sets = WorkoutText.setsSummary(entry, unit: unit,
+                                               mode: WorkoutExerciseList.mode(of: entry, library: env.library))
+            return sets.isEmpty ? nil : "\(WorkoutExerciseList.name(of: entry, library: env.library)) \(sets)"
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Theme.card, in: .rect(cornerRadius: 14))
+        return (["\(workout.name) \u{2014} \(date), \(minutes) min"] + exercises).joined(separator: "\n")
     }
 
     private func durationSeconds(_ workout: Workout) -> TimeInterval {
         max(0, (workout.endedAt ?? workout.startedAt).timeIntervalSince(workout.startedAt) - workout.pausedSeconds)
     }
 
-    private func volumeText(_ workout: Workout) -> String {
-        let kg = WorkoutMetrics.volumeKg(workout)
-        return kg >= 1_000 ? String(format: "%.1f t", kg / 1_000) : "\(WeightFormatter.number(kg)) kg"
-    }
-
-    // MARK: Exercises
-
-    private func exerciseList(_ workout: Workout) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(workout.entries.enumerated()), id: \.element.id) { entryIndex, entry in
-                exerciseCard(entry, entryIndex: entryIndex)
-            }
-        }
-    }
-
-    private func exerciseCard(_ entry: WorkoutEntry, entryIndex: Int) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(exerciseName(entry.exerciseId)).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
-            ForEach(Array(entry.sets.enumerated()), id: \.element.id) { setIndex, set in
-                setRow(set, entry: entry, entryIndex: entryIndex, setIndex: setIndex)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: .rect(cornerRadius: 14))
-    }
-
-    @ViewBuilder
-    private func setRow(_ set: WorkoutSet, entry: WorkoutEntry, entryIndex: Int, setIndex: Int) -> some View {
-        let label = setLabel(set, entry: entry)
-        let mode = entryMode(entry)
-        if editing {
-            editRow(set, mode: mode, label: label, entryIndex: entryIndex, setIndex: setIndex)
-            if SetEffort.canRate(set, mode: mode) {
-                SetEffortRow(rir: effortDrafts[set.id] ?? set.rir,
-                             identifierPrefix: "detail.set.\(entryIndex).\(setIndex).effort") { choice in
-                    effortDrafts[set.id] = SetEffort.toggled(effortDrafts[set.id] ?? set.rir, tapping: choice)
-                }
-                .padding(.leading, 24)
-            }
-        } else {
-            Text("\(label) \(setSummaryText(set, mode: mode))\(effortSuffix(set, mode: mode))")
-                .font(.footnote)
-                .foregroundStyle(Theme.textSecondary)
-        }
-    }
-
-    private func editRow(_ set: WorkoutSet, mode: ExerciseMode, label: String, entryIndex: Int, setIndex: Int) -> some View {
-        let fields = SetFieldFormat.fields(for: mode, setId: set.id)
-        return HStack(spacing: 8) {
-            Text(label).font(.caption.weight(.bold)).foregroundStyle(Theme.textTertiary).frame(width: 16)
-            fieldBox(fields[0], set: set, entryIndex: entryIndex, setIndex: setIndex)
-            Text(mode == .reps ? "\u{00D7}" : "\u{00B7}").font(.footnote).foregroundStyle(Theme.textSecondary)
-            fieldBox(fields[1], set: set, entryIndex: entryIndex, setIndex: setIndex)
-            Text(trailingUnit(mode)).font(.caption).foregroundStyle(Theme.textSecondary)
-        }
-    }
-
-    private func fieldBox(_ field: SetField, set: WorkoutSet, entryIndex: Int, setIndex: Int) -> some View {
-        TextField(SetFieldFormat.label(field, warmup: set.warmup, unit: unit), text: draftBinding(field, set: set))
-            .keyboardType(SetFieldFormat.isDecimal(field) ? .decimalPad : .numberPad)
-            .textFieldStyle(.roundedBorder)
-            .frame(width: field.identifierSuffix == "reps" ? 56 : 64)
-            .accessibilityIdentifier("detail.set.\(entryIndex).\(setIndex).\(field.identifierSuffix)")
-    }
-
-    private func trailingUnit(_ mode: ExerciseMode) -> String {
-        mode == .cardio ? SetFieldFormat.distanceUnit(unit) : unit.rawValue
-    }
-
-    /// Individual set's non-editing summary, formatted for `mode`.
-    private func setSummaryText(_ set: WorkoutSet, mode: ExerciseMode) -> String {
-        switch mode {
-        case .reps:
-            let load = WeightFormatter.format(kg: set.weightKg, lb: set.weightLb, unit: unit, includeSecondary: false)
-            return "\(set.reps) \u{00D7} \(load)"
-        case .time:
-            return DurationFormatter.clock(TimeInterval(set.sec ?? 0))
-        case .cardio:
-            let minutes = SetFieldFormat.display(.minutes(set.id), set: set, unit: unit)
-            let distance = SetFieldFormat.display(.distance(set.id), set: set, unit: unit)
-            guard !distance.isEmpty else { return "\(minutes) min" }
-            return "\(minutes) min \u{00B7} \(distance) \(SetFieldFormat.distanceUnit(unit))"
-        }
-    }
-
-    /// " · 2 left" for a rated working set.
-    private func effortSuffix(_ set: WorkoutSet, mode: ExerciseMode) -> String {
-        guard SetEffort.canRate(set, mode: mode), let choice = SetEffort.choice(for: set.rir) else { return "" }
-        return " \u{00B7} \(SetEffortText.title(choice)) left"
-    }
-
-    /// "W" for warm-ups; otherwise the 1-based position among working sets up to and including this one.
-    private func setLabel(_ set: WorkoutSet, entry: WorkoutEntry) -> String {
-        guard !set.warmup else { return "W" }
-        let position = entry.sets.prefix(while: { $0.id != set.id }).filter { !$0.warmup }.count + 1
-        return "\(position)"
-    }
-
-    private func entryMode(_ entry: WorkoutEntry) -> ExerciseMode {
-        SetFieldFormat.mode(exercise: env.library.exercise(entry.exerciseId), sets: entry.sets)
-    }
-
-    private func draftBinding(_ field: SetField, set: WorkoutSet) -> Binding<String> {
-        Binding(get: { drafts[field] ?? SetFieldFormat.display(field, set: set, unit: unit) },
-                set: { drafts[field] = $0 })
-    }
-
-    private func exerciseName(_ id: String) -> String {
-        DisplayName.of(env.library.exercise(id)?.name ?? id)
-    }
-
-    // MARK: Share
-
-    private func shareBar(_ workout: Workout) -> some View {
-        ShareLink(item: shareText(workout)) {
-            Label("Share", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.glass)
-        .accessibilityIdentifier("detail.share")
-        .padding(.horizontal, Theme.gutter)
-        .padding(.bottom, 8)
-    }
-
-    private func shareText(_ workout: Workout) -> String {
-        let date = workout.startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-        let minutes = Int(durationSeconds(workout) / 60)
-        var lines = ["\(workout.name) \u{2014} \(date), \(minutes) min"]
-        for entry in workout.entries {
-            let summary = WorkoutText.setsSummary(entry, unit: unit, mode: entryMode(entry))
-            guard !summary.isEmpty else { continue }
-            lines.append("\(exerciseName(entry.exerciseId)) \(summary)")
-        }
-        return lines.joined(separator: "\n")
-    }
-
     // MARK: Data
 
-    private func load() {
-        workout = try? env.workouts.workout(workoutId)
-        recordCount = (try? env.workouts.records(for: workoutId).count) ?? 0
-        addedBy = try? env.workouts.addedBy(workoutId)
-        measured = workout.flatMap { env.measuredActivity(for: $0) }
+    /// The workout, its records and its agent from the store; then the app's own values at once, and Health's when
+    /// read.
+    private func load() async {
+        do {
+            workout = try env.workouts.workout(workoutId)
+            recordCount = try env.workouts.records(for: workoutId).count
+            addedBy = try env.workouts.addedBy(workoutId)
+        } catch {
+            AppEnvironment.log.error("Load workout failed: \(error.localizedDescription, privacy: .public)")
+        }
+        guard let workout, workout.endedAt != nil else { return }
+        if summary == nil { show(env.immediateMeasuredSummary(for: workout), for: workout) }
+        let round = effortRound
+        let measured = await env.measuredSummary(for: workout)
+        // A newer load (the data, Health or a measured read changed meanwhile) replaced this one, or a rating or clear
+        // started meanwhile and shows its own answer: this one writes nothing.
+        guard !Task.isCancelled, round == effortRound, effortPending == 0 else { return }
+        // Rated or cleared elsewhere (in Fitness, on another device): the last rating's note no longer applies.
+        if measured.effort != summary?.effort { effortNotInHealth = false }
+        show(measured, for: workout)
+    }
+
+    /// The summary, and the charts' data built from it once here rather than on every body pass.
+    private func show(_ measured: MeasuredSummary, for workout: Workout) {
+        summary = measured
+        heartRateCharts = workout.endedAt.flatMap { end in
+            WorkoutHeartRateCharts.Model(summary: measured, start: workout.startedAt, end: end)
+        }
     }
 
     private func startEditing() {
@@ -284,7 +244,7 @@ struct WorkoutDetailView: View {
     private func save() {
         guard var updated = workout else { return }
         for entry in updated.entries {
-            let mode = entryMode(entry)
+            let mode = WorkoutExerciseList.mode(of: entry, library: env.library)
             for set in entry.sets {
                 if let rir = effortDrafts[set.id] {
                     updated = updated.updatingSet(entryId: entry.id, setId: set.id) { $0.with(rir: rir) }
@@ -316,48 +276,5 @@ struct WorkoutDetailView: View {
         } catch {
             AppEnvironment.log.error("Delete workout failed: \(error.localizedDescription, privacy: .public)")
         }
-    }
-}
-
-/// The "•••" glass menu's sheet: Edit / Delete workout (with its own delete confirmation).
-private struct WorkoutOptionsSheet: View {
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var showDeleteConfirm = false
-
-    var body: some View {
-        VStack(spacing: 14) {
-            Capsule().fill(Color.white.opacity(0.3)).frame(width: 40, height: 5)
-            row(title: "Edit", systemImage: "pencil", identifier: "detail.edit", destructive: false) {
-                dismiss()
-                onEdit()
-            }
-            row(title: "Delete workout", systemImage: "trash", identifier: "detail.delete", destructive: true) {
-                showDeleteConfirm = true
-            }
-        }
-        .padding(20)
-        .presentationDetents([.height(190)])
-        .confirmationDialog("Delete this workout? This can't be undone.", isPresented: $showDeleteConfirm,
-                            titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                dismiss()
-                onDelete()
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-    }
-
-    private func row(title: String, systemImage: String, identifier: String, destructive: Bool,
-                     action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .foregroundStyle(destructive ? Theme.destructive : Theme.textPrimary)
-        }
-        .padding(12)
-        .background(Theme.card, in: .rect(cornerRadius: 14))
-        .accessibilityIdentifier(identifier)
     }
 }

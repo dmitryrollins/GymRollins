@@ -4,7 +4,8 @@ import GymData
 import Testing
 @testable import GymRollins
 
-/// What Today's rows say about the current gym, and that the row shows what Start will really do.
+/// What Today's rows take from the current gym (loads and listing photos), and that the row shows what Start will
+/// really do. The gym never swaps or marks a row (owner, 2026-11-18).
 @Suite struct TodayModelGymTests {
     private static let exercises = [
         Exercise(id: "preacher", name: "preacher curl", bodyPart: "upper arms", equipment: "barbell", target: "biceps"),
@@ -37,54 +38,29 @@ import Testing
     }
 
     private func model(_ items: [RoutineExercise], history: [String: [SessionResult]] = [:],
-                       photos: [UUID: String] = [:], change: (TodayPlan) -> TodayPlan = { $0 }) -> TodayModel {
+                       photos: [UUID: String] = [:]) -> TodayModel {
         let routine = Routine(name: "Arms", exercises: items)
-        let adapter = GymAdapter(matcher: matcher, exercises: Self.exercises)
-        let plan = change(TodayPlan.make(scheduled: routine, routines: [routine], lastDone: [:], day: "d").adapted(by: adapter))
+        let plan = TodayPlan.make(scheduled: routine, routines: [routine], lastDone: [:], day: "d")
         let context = TodayGymContext(matcher: matcher, photo: { photos[$0] })
         return TodayModel.make(plan: plan, profile: Profile(), library: library, history: { history[$0] ?? [] },
                                gym: context, loads: context.loads(for:))
     }
 
-    @Test func swappedRowSaysWhatItReplacesAndWhy() throws {
-        let row = try #require(model([item("preacher")]).rows.first)
-        #expect(row.exerciseId == "kb-curl")
-        #expect(row.gymMark == .swapped(planned: DisplayName.of("preacher curl"), missingKind: "preacher bench"))
+    /// No preacher bench and no barbell here, and a kettlebell curl would do: the rows still show the plan.
+    @Test func rowsTheGymCantDoStayAsPlanned() throws {
+        let rows = model([item("preacher"), item("bb-row")], photos: [bells.id: "bells.jpg"]).rows
+        #expect(rows.map(\.exerciseId) == ["preacher", "bb-row"])
+        #expect(rows.allSatisfy { $0.photoFile == nil })
     }
 
-    @Test func noteCountsTheSwaps() {
-        #expect(model([item("preacher")]).gymNote == "1 exercise swapped for this gym. Your plan isn't changed.")
-        #expect(model([item("kb-curl")]).gymNote == nil)
-        let two = TodayModel.make(
-            plan: TodayPlan(day: "d", kind: .scheduled, base: nil, exercises: [item("kb-curl"), item("kb-press")], edited: false,
-                            gymSwaps: [UUID(): item("preacher"), UUID(): item("bb-row")]),
-            profile: Profile(), library: library, history: { _ in [] })
-        #expect(two.gymNote == "2 exercises swapped for this gym. Your plan isn't changed.")
-    }
-
-    @Test func rowWithNothingSimilarIsMarkedUnavailable() throws {
-        let row = try #require(model([item("bb-row")]).rows.first)
-        #expect(row.exerciseId == "bb-row")
-        #expect(row.gymMark == .unavailable(missingKind: "barbell"))
-    }
-
-    @Test func aPinnedRowIsNeverMarked() throws {
-        let planned = item("bb-row")
-        let row = try #require(model([planned]) { $0.replacing(planned.id, with: planned) }.rows.first)
-        #expect(row.exerciseId == "bb-row")
-        #expect(row.gymMark == nil)
-    }
-
-    @Test func anUnmappedRowIsUnmarked() throws {
+    @Test func anUnmappedRowHasNoPhoto() throws {
         let row = try #require(model([item("unknown")]).rows.first)
-        #expect(row.gymMark == nil)
         #expect(row.photoFile == nil)
     }
 
     @Test func keptRowShowsItsListingsPhotoLoadListingFirst() throws {
         let both = try #require(model([item("kb-press")], photos: [bells.id: "bells.jpg", bench.id: "bench.jpg"]).rows.first)
         #expect(both.photoFile == "bells.jpg")
-        #expect(both.gymMark == nil)
         let benchOnly = try #require(model([item("kb-press")], photos: [bench.id: "bench.jpg"]).rows.first)
         #expect(benchOnly.photoFile == "bench.jpg")
         let none = try #require(model([item("kb-press")]).rows.first)
@@ -95,8 +71,7 @@ import Testing
         let routine = Routine(name: "Arms", exercises: [item("preacher"), item("kb-curl")])
         let plain = TodayPlan.make(scheduled: routine, routines: [routine], lastDone: [:], day: "d")
         let model = TodayModel.make(plan: plain, profile: Profile(), library: library, history: { _ in [] })
-        #expect(model.gymNote == nil)
-        #expect(model.rows.allSatisfy { $0.gymMark == nil && $0.photoFile == nil })
+        #expect(model.rows.allSatisfy { $0.photoFile == nil })
         #expect(model.rows.map(\.exerciseId) == ["preacher", "kb-curl"])
     }
 

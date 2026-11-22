@@ -45,9 +45,9 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
     }
 
     @Test func goalDateUsesLocalCalendarDay() throws {
-        let day = try #require(Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 31)))
-        #expect(SyncDay.format(day) == "2026-12-31")
-        #expect(SyncDay.parse("2026-12-31") == day)
+        let day = try #require(Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 15)))
+        #expect(SyncDay.format(day) == "2026-12-15")
+        #expect(SyncDay.parse("2026-12-15") == day)
     }
 }
 
@@ -55,18 +55,18 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
     @Test func profileRoundTrip() throws {
         var p = ProfileSnapshot()
         p.unit = .kg
-        p.heightCm = 180
-        p.goalWeightKg = 85
-        p.goalDate = Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 31))
+        p.heightCm = 178
+        p.goalWeightKg = 80
+        p.goalDate = Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 15))
         p.platesKg = [20.411656, 11.339809]
         p.mcpAutoApply = true
         p.mcpReadPlan = false
         p.sex = .female
         p.birthYear = 1988
-        p.limitsUntil = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
+        p.limitsUntil = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 9))
         let row = SyncRow(value: p, clientUpdatedAt: t0)
         let dto = try wire(ProfileDTO(row))
-        #expect(dto.limitsUntil == "2026-10-26")
+        #expect(dto.limitsUntil == "2026-11-09")
         #expect(dto.toDomain() == row)
     }
 
@@ -106,11 +106,11 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
 
     @Test func profileWithoutLimitsUntilReadsAsNone() throws {
         var p = ProfileSnapshot()
-        p.limitsUntil = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
+        p.limitsUntil = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 9))
         var json = try #require(JSONSerialization.jsonObject(
             with: SyncJSON.encoder.encode(ProfileDTO(SyncRow(value: p, clientUpdatedAt: t0)))
         ) as? [String: Any])
-        #expect(json["limits_until"] as? String == "2026-10-26")
+        #expect(json["limits_until"] as? String == "2026-11-09")
         json.removeValue(forKey: "limits_until")
         let old = try SyncJSON.decoder.decode(ProfileDTO.self, from: JSONSerialization.data(withJSONObject: json))
         #expect(old.toDomain().value.limitsUntil == nil)
@@ -163,14 +163,14 @@ let t0 = SyncDate.parse("2026-09-26T18:00:00.123456+00:00")!
         #expect(try wire(WeekdayDTO(day)).toDomain() == day)
         let rest = SyncRow(value: WeekdayAssignment(weekday: 7, routineId: nil), clientUpdatedAt: t0)
         #expect(try wire(WeekdayDTO(rest)).toDomain() == rest)
-        let bw = SyncRow(value: BodyweightEntry(date: t0, weightKg: 81.2, bodyFatPct: 14.5, timeOfDay: "morning"),
+        let bw = SyncRow(value: BodyweightEntry(date: t0, weightKg: 76.2, bodyFatPct: 14.5, timeOfDay: "morning"),
                          clientUpdatedAt: t0)
         #expect(try wire(BodyweightDTO(bw)).toDomain() == bw)
     }
 
     /// Plan 15: weigh-ins read from Apple Health keep their source across devices; rows without one are app rows.
     @Test func bodyweightSourceRoundTripsAndDefaultsToApp() throws {
-        let health = SyncRow(value: BodyweightEntry(date: t0, weightKg: 81.2, bodyFatPct: 15, source: .appleHealth,
+        let health = SyncRow(value: BodyweightEntry(date: t0, weightKg: 76.2, bodyFatPct: 15, source: .appleHealth,
                                                     healthSampleId: UUID(), healthFatSampleId: UUID()),
                              clientUpdatedAt: t0)
         let dto = BodyweightDTO(health)

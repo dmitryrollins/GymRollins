@@ -3,10 +3,10 @@
 #   - tracked files still sit in its folder,
 #   - a tracked file outside the history docs names it,
 #   - a tracked script runs Docker (or colima).
-# Only tracked files are scanned: untracked leftovers on the owner's disk (the old folder, web/consent) don't count.
-# The history docs keep their mentions, because they record what was built and decided: docs/plans/, docs/specs/ and
-# docs/research/. Nothing else may name it: the old sign-in SDK's Keychain cleanup went once the owner's phone had
-# moved (2026-11-09). The patterns are spelled with brackets, so this file does not match itself. They are
+# Only tracked files are scanned: untracked leftovers on a developer's disk (the old folder, web/consent) don't count.
+# The history docs keep their mentions, because they record what was built and decided: docs/specs/ and
+# docs/research/ (plus the removed docs/plans/, still excluded below). Nothing else may name it: the old sign-in SDK's
+# Keychain cleanup went once the phones had moved (2026-11-09). The patterns are spelled with brackets, so this file does not match itself. They are
 # case-insensitive: a test name that spells Postgres followed by a capital T (a timestamps test) matches the second
 # one, so name tests differently.
 set -euo pipefail
@@ -48,6 +48,6 @@ if [[ -n "$docker_hits" ]]; then
 fi
 
 if [[ "$failed" == "0" ]]; then
-  echo "Old backend gone: no folder, no name outside docs/plans, docs/specs and docs/research, no script running Docker."
+  echo "Old backend gone: no folder, no name outside docs/specs and docs/research, no script running Docker."
 fi
 exit "$failed"

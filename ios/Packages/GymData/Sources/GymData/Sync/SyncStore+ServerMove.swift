@@ -155,6 +155,7 @@ extension SyncStore {
         records += try every(WorkoutRecord.self)
         records += try every(HealthActivityRecord.self)
         records += try every(ActivityDayRecord.self)
+        records += try every(MeasurementRecord.self)
         records += try context.fetch(FetchDescriptor<GymRecord>(predicate: #Predicate { $0.visibilityRaw == synced }))
             .map { $0 as any SyncTracked }
         records += try context.fetch(FetchDescriptor<GymListingRecord>(

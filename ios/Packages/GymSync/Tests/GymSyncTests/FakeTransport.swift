@@ -16,6 +16,7 @@ actor FakeTransport: SyncTransport {
     private(set) var workouts: [UUID: WorkoutDTO] = [:]
     private(set) var healthActivities: [UUID: HealthActivityDTO] = [:]
     private(set) var activityDays: [String: ActivityDayDTO] = [:]
+    private(set) var workoutMeasurements: [UUID: WorkoutMeasurementDTO] = [:]
     private(set) var proposals: [UUID: ProposalDTO] = [:]
     private var malformedProposals: [UUID: String] = [:]
     private(set) var grants: [UUID] = []
@@ -100,6 +101,9 @@ actor FakeTransport: SyncTransport {
         _ = try accept(dto, into: &healthActivities, key: dto.id)
     }
     func seed(activityDay dto: ActivityDayDTO) throws { _ = try accept(dto, into: &activityDays, key: dto.day) }
+    func seed(workoutMeasurement dto: WorkoutMeasurementDTO) throws {
+        _ = try accept(dto, into: &workoutMeasurements, key: dto.workoutId)
+    }
     /// Another device's accepted write (it saw the current version): stored whatever the base.
     func seed(profile dto: ProfileDTO) throws { profile = try stamp(dto) }
     func seed(workout: WorkoutDTO) throws {
@@ -199,6 +203,21 @@ actor FakeTransport: SyncTransport {
         try checkRejected(dtos.map(\.day))
         return try dtos.compactMap { dto in
             try accept(dto, into: &activityDays, key: dto.day).map { RowAck(id: $0.day, updatedAt: $0.updatedAt!) }
+        }
+    }
+
+    /// Like the server's `ownWorkouts` check (server/src/sync/entities.ts): a row for a workout this server doesn't
+    /// hold is refused, and with it the batch.
+    func push(workoutMeasurements dtos: [WorkoutMeasurementDTO]) throws -> [RowAck] {
+        try gate()
+        try checkRejected(dtos.map(\.workoutId.uuidString))
+        if let orphan = dtos.first(where: { workouts[$0.workoutId] == nil }) {
+            throw SyncRecordRejected(code: "row_rejected",
+                                     message: "workout_id \(orphan.workoutId) is not one of your workouts")
+        }
+        return try dtos.compactMap { dto in
+            try accept(dto, into: &workoutMeasurements, key: dto.workoutId)
+                .map { RowAck(id: $0.workoutId.uuidString.lowercased(), updatedAt: $0.updatedAt!) }
         }
     }
 
@@ -348,6 +367,11 @@ actor FakeTransport: SyncTransport {
         return try pull(Array(activityDays.values), since: since)
     }
 
+    func pullWorkoutMeasurements(since: Date?) async throws -> [WorkoutMeasurementDTO] {
+        await waitIfHeld()
+        return try pull(Array(workoutMeasurements.values), since: since)
+    }
+
     func fetchWorkout(id: UUID) throws -> WorkoutDTO? {
         try gate()
         return workouts[id]
@@ -448,6 +472,7 @@ extension GymDTO: ServerStampedDTO {}
 extension GymListingDTO: ServerStampedDTO {}
 extension HealthActivityDTO: ServerStampedDTO {}
 extension ActivityDayDTO: ServerStampedDTO {}
+extension WorkoutMeasurementDTO: ServerStampedDTO {}
 extension WorkoutDTO: ServerStampedDTO {
     /// A copy with another `client_updated_at` (the SQL function's `greatest(...)` for forced writes).
     static func restamped(_ dto: WorkoutDTO, clientUpdatedAt: Date) throws -> WorkoutDTO {

@@ -1,26 +1,6 @@
 import GymCore
 import SwiftUI
 
-/// Today header chip: "🔥 3 wk" style streak (SF Symbol, no emoji).
-struct StreakChip: View {
-    @Environment(AppEnvironment.self) private var env
-    @State private var snapshot = InsightsSnapshot.empty
-
-    var body: some View {
-        Label(snapshot.streakChipText, systemImage: "flame.fill")
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(snapshot.streak.current > 0 ? Theme.record : Theme.textSecondary)
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .glassCapsule(interactive: false)
-            .frame(minHeight: Theme.minTapSize) // audit: the element's frame is its hit region
-            .contentShape(.rect)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(snapshot.streakAccessibility)
-            .accessibilityIdentifier("today.streak")
-            .insightsRefresh { snapshot = env.insights() }
-    }
-}
-
 /// Log tab: current and longest streak, and this week's progress toward the goal.
 struct StreakCard: View {
     @Environment(AppEnvironment.self) private var env
@@ -51,7 +31,7 @@ struct StreakCard: View {
             Text(label.uppercased()).font(.caption2.weight(.bold)).kerning(0.8).foregroundStyle(Theme.textTertiary)
             HStack(spacing: 4) {
                 if label == "Current" { Image(systemName: "flame.fill").font(.subheadline).foregroundStyle(tint) }
-                Text(value).font(Theme.display(26)).foregroundStyle(tint)
+                Text(value).font(Theme.number(26)).foregroundStyle(tint)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

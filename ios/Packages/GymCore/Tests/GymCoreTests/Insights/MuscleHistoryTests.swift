@@ -23,7 +23,7 @@ struct MuscleHistoryTests {
     }
 
     @Test func limitedMusclesFromTheLimitsNote() {
-        #expect(LimitedMuscles.from(limits: "Knee: no leg loading until ~26 Oct 2026") == MuscleGroup.legs)
+        #expect(LimitedMuscles.from(limits: "Ankle sprain: no leg loading until ~9 Nov 2026") == MuscleGroup.legs)
         #expect(LimitedMuscles.from(limits: "left KNEES sore") == MuscleGroup.legs)
         #expect(LimitedMuscles.from(limits: "skip legs for a month") == MuscleGroup.legs)
         #expect(LimitedMuscles.from(limits: "").isEmpty)

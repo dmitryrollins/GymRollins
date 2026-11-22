@@ -10,9 +10,9 @@ struct WeeklySetsTests {
         let week = TrainingWeek.interval(containing: F.date("2026-09-27T23:30:00Z"), calendar: utc) // Sunday
         #expect(week.start == F.date("2026-09-21T00:00:00Z"))
         #expect(week.end == F.date("2026-09-28T00:00:00Z"))
-        // 23:30 UTC Sunday is already Monday 01:30 in Warsaw (CEST, UTC+2): next week there.
-        let warsaw = TrainingWeek.calendar(timeZone: TimeZone(identifier: "Europe/Warsaw")!)
-        let local = TrainingWeek.interval(containing: F.date("2026-09-27T23:30:00Z"), calendar: warsaw)
+        // 23:30 UTC Sunday is already Monday 01:30 in Berlin (CEST, UTC+2): next week there.
+        let berlin = TrainingWeek.calendar(timeZone: TimeZone(identifier: "Europe/Berlin")!)
+        let local = TrainingWeek.interval(containing: F.date("2026-09-27T23:30:00Z"), calendar: berlin)
         #expect(local.start == F.date("2026-09-27T22:00:00Z"))
         // Monday 00:00 in New York belongs to the new week even though UTC still says Monday 04:00.
         let ny = TrainingWeek.calendar(timeZone: TimeZone(identifier: "America/New_York")!)
@@ -21,9 +21,9 @@ struct WeeklySetsTests {
     }
 
     @Test func weekSpanningDSTChangeIsStillSevenCalendarDays() {
-        let warsaw = TrainingWeek.calendar(timeZone: TimeZone(identifier: "Europe/Warsaw")!)
+        let berlin = TrainingWeek.calendar(timeZone: TimeZone(identifier: "Europe/Berlin")!)
         // DST ends Sun 25 Oct 2026 in Europe: that week is 169 hours long.
-        let week = TrainingWeek.interval(containing: F.date("2026-10-24T12:00:00Z"), calendar: warsaw)
+        let week = TrainingWeek.interval(containing: F.date("2026-10-24T12:00:00Z"), calendar: berlin)
         #expect(week.start == F.date("2026-10-18T22:00:00Z"))
         #expect(week.end == F.date("2026-10-25T23:00:00Z"))
     }

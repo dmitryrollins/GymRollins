@@ -70,7 +70,7 @@ final class EmptyStatesUITests: XCTestCase {
 
     func testLibraryNoResultsOffersCreateCustomExercise() {
         app.tabBars.buttons["Library"].tap()
-        let search = app.searchFields.firstMatch
+        let search = app.librarySearch()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("Zzznotarealexercise")

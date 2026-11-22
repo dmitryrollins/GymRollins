@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Log tab: a solid week-activity strip (minutes per day, outside workouts' in a lighter shade), the week's calories,
 /// and the history: GymRollins workouts lazily paged 50 at a time, with the outside workouts from Apple Health between
-/// them (plan 39). Tapping a card pushes `WorkoutDetailView` or `OutsideWorkoutDetailView`; the gear button pushes the
-/// account screen (Settings in plan 07). Pull to refresh syncs.
+/// them (plan 39). Tapping a card pushes `WorkoutDetailView` or `OutsideWorkoutDetailView`; the header's "R" pushes
+/// Settings. Pull to refresh syncs.
 struct LogView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var workouts: [Workout] = []
@@ -32,17 +32,21 @@ struct LogView: View {
             .joined(separator: ", ")
     }
 
-    /// A day with a GymRollins workout is the solid accent; a day with only outside workouts a lighter shade of it.
+    /// The week strip's tiles, on its card: a day with a GymRollins workout is the near-solid accent under a dark label
+    /// (white on it measured below 4.5:1); a day with only outside workouts a lighter shade, dark enough for white.
+    /// `ThemeContrastTests` checks both on the card.
+    static let trainedTile = (fill: Theme.accent.opacity(0.85), label: Theme.background)
+    static let outsideTile = (fill: Theme.accent.opacity(0.35), label: Theme.textPrimary)
+
     private static func fill(_ day: WeekActivity.Day) -> Color {
-        if day.minutes > 0 { return Theme.accent.opacity(0.85) }
-        return day.outsideMinutes > 0 ? Theme.accent.opacity(0.35) : Theme.cardInner
+        if day.minutes > 0 { return trainedTile.fill }
+        return day.outsideMinutes > 0 ? outsideTile.fill : Theme.cardInner
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    header
                     SyncStatusBanner()
                     weekStrip
                     weekCalories
@@ -51,9 +55,9 @@ struct LogView: View {
                     pastWorkouts
                 }
                 .padding(.horizontal, Theme.gutter)
-                .padding(.top, 8)
                 .padding(.bottom, 130)
             }
+            .fixedHeader { TabHeader(title: "Log", prefix: "log") { showSettings = true } }
             .background(Theme.background)
             .refreshable { await env.sync.syncNow() }
             .navigationDestination(for: UUID.self) { WorkoutDetailView(workoutId: $0) }
@@ -69,18 +73,6 @@ struct LogView: View {
             }
             .task(id: env.dataRevision) { reload() }
         }
-    }
-
-    private var header: some View {
-        HStack {
-            DisplayTitle(text: "Log", size: 44)
-            Spacer()
-            Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                .glassCircle()
-                .accessibilityLabel("Settings")
-                .accessibilityIdentifier("log.settings")
-        }
-        .padding(.top, 8)
     }
 
     private var weekStrip: some View {
@@ -101,9 +93,7 @@ struct LogView: View {
                             if day.minutes + day.outsideMinutes > 0 {
                                 Text(DurationFormatter.minutes(TimeInterval((day.minutes + day.outsideMinutes) * 60)))
                                     .font(.caption2.weight(.bold))
-                                    // Dark on the solid accent: white on it measured below 4.5:1 (audit: contrast).
-                                    // The lighter shade is dark enough for the light text.
-                                    .foregroundStyle(day.minutes > 0 ? Theme.background : Theme.textPrimary)
+                                    .foregroundStyle(day.minutes > 0 ? Self.trainedTile.label : Self.outsideTile.label)
                                     .minimumScaleFactor(0.7)
                                     .lineLimit(1)
                             }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Compares two copies of the app's SwiftData store and prints every record that differs in anything but sync state.
-// scripts/server-move-check.sh runs it on the owner's store before and after the server move and the first upload, to
+// scripts/server-move-check.sh runs it on a phone's store before and after the server move and the first upload, to
 // show that nothing else changed (spec section 8). It never opens the files it is given: each store (with its -wal and
 // -shm) is copied to a temporary folder first.
 //

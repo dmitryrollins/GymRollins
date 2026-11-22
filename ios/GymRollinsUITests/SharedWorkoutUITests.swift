@@ -71,7 +71,7 @@ final class SharedWorkoutUITests: XCTestCase {
         XCTAssertTrue(element(app, "incoming.row.0025").label.contains("lb"), element(app, "incoming.row.0025").label)
         app.buttons["incoming.use"].tapCenter()
         XCTAssertTrue(app.buttons["incoming.use"].waitForNonExistence(timeout: 5))
-        let summary = app.staticTexts["today.summary"]
+        let summary = app.descendants(matching: .any)["today.workout"]
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         let shared = NSPredicate(format: "label CONTAINS 'Shared workout'")
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: shared, object: summary)], timeout: 5),
@@ -84,16 +84,16 @@ final class SharedWorkoutUITests: XCTestCase {
 
     func testNotNowLeavesTodayAlone() {
         let app = opened(benchAndCurl)
-        let before = app.staticTexts["today.summary"].label
+        let before = app.descendants(matching: .any)["today.workout"].label
         XCTAssertTrue(app.buttons["incoming.notNow"].waitForExistence(timeout: 10))
         app.buttons["incoming.notNow"].tapCenter()
         XCTAssertTrue(app.buttons["incoming.notNow"].waitForNonExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["today.summary"].label, before)
+        XCTAssertEqual(app.descendants(matching: .any)["today.workout"].label, before)
     }
 
     /// Spec criterion 2.
     func testANewExerciseSaysSetOnFirstSet() {
-        let app = XCUIApplication.launchReady(["-emptyStore", "-skipOnboarding"]) { $0.staticTexts["today.summary"] }
+        let app = XCUIApplication.launchReady(["-emptyStore", "-skipOnboarding"]) { $0.descendants(matching: .any)["today.workout"] }
         app.open(benchAndCurl)
         let row = element(app, "incoming.row.0025")
         XCTAssertTrue(row.waitForExistence(timeout: 10))
@@ -116,7 +116,7 @@ final class SharedWorkoutUITests: XCTestCase {
         XCTAssertFalse(app.buttons["incoming.use"].exists)
         app.buttons["incoming.close"].tapCenter()
         XCTAssertTrue(message.waitForNonExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["today.summary"].label.contains("Shared workout"))
+        XCTAssertFalse(app.descendants(matching: .any)["today.workout"].label.contains("Shared workout"))
     }
 
     func testANewerLinkAsksForAnUpdate() {
@@ -189,11 +189,11 @@ final class SharedWorkoutUITests: XCTestCase {
     func testUseForTodayClosesAPushedScreen() {
         let app = XCUIApplication.launchReady(["-seedHistory"]) { $0.buttons["today.start"] }
         app.buttons["today.settings"].tapCenter()
-        XCTAssertFalse(app.staticTexts["today.summary"].exists, "Settings didn't open")
+        XCTAssertFalse(app.descendants(matching: .any)["today.workout"].exists, "Settings didn't open")
         XCUIDevice.shared.system.open(benchAndCurl)
         XCTAssertTrue(app.buttons["incoming.use"].waitForExistence(timeout: 10))
         app.buttons["incoming.use"].tapCenter()
-        let summary = app.staticTexts["today.summary"]
+        let summary = app.descendants(matching: .any)["today.workout"]
         let shared = NSPredicate(format: "label CONTAINS 'Shared workout' AND isHittable == true")
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: shared, object: summary)], timeout: 10),
                        .completed, "Today didn't come back: \(summary.label)")
@@ -201,12 +201,12 @@ final class SharedWorkoutUITests: XCTestCase {
 
     /// A partner with no routine has no "No plan yet" over a shared workout, and a way out of it.
     func testASharedWorkoutWithNoRoutinesHasNoEmptyStateAndASwitch() {
-        let app = XCUIApplication.launchReady(["-emptyStore", "-skipOnboarding"]) { $0.staticTexts["today.summary"] }
+        let app = XCUIApplication.launchReady(["-emptyStore", "-skipOnboarding"]) { $0.descendants(matching: .any)["today.workout"] }
         XCTAssertTrue(app.staticTexts["today.empty.title"].exists)
         app.open(benchAndCurl)
         XCTAssertTrue(app.buttons["incoming.use"].waitForExistence(timeout: 10))
         app.buttons["incoming.use"].tapCenter()
-        XCTAssertTrue(app.buttons["today.switch"].waitForExistence(timeout: 10), "no way out of the shared workout")
+        XCTAssertTrue(app.buttons["today.workout"].waitForExistence(timeout: 10), "no way out of the shared workout")
         XCTAssertFalse(app.staticTexts["today.empty.title"].exists, "No plan yet is over the shared workout")
     }
 

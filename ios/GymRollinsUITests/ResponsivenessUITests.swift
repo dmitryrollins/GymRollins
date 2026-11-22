@@ -1,6 +1,6 @@
 import XCTest
 
-/// Taps on Today and Library with an owner-sized history (160 workouts): every tap must open its screen. Attaches a
+/// Taps on Today and Library with a large history (160 workouts): every tap must open its screen. Attaches a
 /// Library screenshot (the muscle badges, for comparing their look) and the tap-to-screen times it saw; the times
 /// include XCUITest's own polling, so they compare runs rather than measure the app, and nothing asserts on them.
 @MainActor

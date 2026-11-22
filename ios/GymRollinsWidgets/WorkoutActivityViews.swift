@@ -59,7 +59,7 @@ struct RestCountdown: View {
             if let rest = display.rest {
                 Text("RESTING").font(.caption2.weight(.bold)).kerning(0.8).foregroundStyle(Theme.textSecondary)
                 Text(timerInterval: rest, countsDown: true)
-                    .font(Theme.display(size))
+                    .font(Theme.number(size))
                     .monospacedDigit()
                     .multilineTextAlignment(.trailing)
                     .foregroundStyle(Theme.accent)
@@ -83,7 +83,7 @@ struct ActivityButtons: View {
         HStack(spacing: 8) {
             if display.state.canLogSet, let entryId = display.state.entryId, let setId = display.state.setId {
                 Button(intent: LogPlannedSetIntent(workoutId: workoutId, entryId: entryId, setId: setId)) {
-                    Label("Log set", systemImage: "checkmark").frame(maxWidth: .infinity)
+                    Label("Log set", systemImage: "checkmark").frame(maxWidth: .infinity).foregroundStyle(Theme.onAccent)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.primaryFill)

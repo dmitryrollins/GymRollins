@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Renders the bundled `CREDITS.md` (exercise data MIT notice, exercise photo credit, font OFL, data-model
+/// Renders the bundled `CREDITS.md` (exercise data MIT notice, exercise photo credit, data-model
 /// attribution) as plain text.
 struct CreditsView: View {
     private var text: String {

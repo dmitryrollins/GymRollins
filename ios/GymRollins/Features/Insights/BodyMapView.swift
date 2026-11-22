@@ -2,7 +2,7 @@ import GymCore
 import SwiftUI
 
 /// Recovery colours: fresh muscles are the figure's plain grey; recovering ones are tinted amber and fatigued ones
-/// accent red, more strongly the more fatigued. Limited (injury note) groups are dimmed towards the silhouette.
+/// red, more strongly the more fatigued. Limited (injury note) groups are dimmed towards the silhouette.
 enum RecoveryPalette {
     /// The silhouette (head, hands, feet and the rim around the muscles).
     static let body = Color(hex: 0x3F4255)
@@ -10,6 +10,9 @@ enum RecoveryPalette {
     static let muscle = Color(hex: 0x7F8299)
     /// A muscle held back by the injury note.
     static let limited = body.mix(with: muscle, by: 0.35)
+    /// Fatigue's red: the same coral as the accent, but a data colour of its own, so it doesn't follow a change of
+    /// the action colour. 6.2:1 on the card.
+    static let fatigued = Color(hex: 0xFF6B72)
 
     static func fill(_ recovery: MuscleRecovery, limited: Bool) -> Color {
         if limited { return Self.limited }
@@ -21,7 +24,7 @@ enum RecoveryPalette {
         switch status {
         case .fresh: muscle
         case .recovering: muscle.mix(with: Theme.record, by: 0.35 + 0.3 * fatigue)
-        case .fatigued: muscle.mix(with: Theme.accent, by: 0.5 + 0.4 * fatigue)
+        case .fatigued: muscle.mix(with: fatigued, by: 0.5 + 0.4 * fatigue)
         }
     }
 
@@ -29,7 +32,7 @@ enum RecoveryPalette {
         switch status {
         case .fresh: Theme.success
         case .recovering: Theme.record
-        case .fatigued: Theme.accent
+        case .fatigued: fatigued
         }
     }
 

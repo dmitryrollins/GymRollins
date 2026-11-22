@@ -52,6 +52,7 @@ extension SyncStore {
             || context.fetchCount(FetchDescriptor<WorkoutRecord>()) > 0
             || context.fetchCount(FetchDescriptor<HealthActivityRecord>()) > 0
             || context.fetchCount(FetchDescriptor<ActivityDayRecord>()) > 0
+            || context.fetchCount(FetchDescriptor<MeasurementRecord>()) > 0
             || hasSyncedGymData()
     }
 

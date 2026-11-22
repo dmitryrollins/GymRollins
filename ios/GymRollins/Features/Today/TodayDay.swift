@@ -63,7 +63,6 @@ enum DayPreview {
         }
         let count = model.rows.count == 1 ? "1 exercise" : "\(model.rows.count) exercises"
         return TodayModel(routineId: model.routineId, title: model.title,
-                          summary: changed ? "\(count) \u{00B7} changed for this day" : count, rows: model.rows,
-                          gymNote: model.gymNote)
+                          summary: changed ? "\(count) \u{00B7} changed for this day" : count, rows: model.rows)
     }
 }

@@ -51,7 +51,7 @@ final class ProposalSyncUITests: XCTestCase {
         let push = try XCTUnwrap(routines.first { $0["name"] as? String == "Push + Arms" }?["id"] as? String)
         let proposed = try await claude.callTool(tokens.access, "change_plan", [
             "summary": "Heavier bench",
-            "changes": [["id": "c1", "type": "weight", "routineId": push, "exerciseId": "0025", "weightKg": 65.77,
+            "changes": [["id": "c1", "type": "weight", "routineId": push, "exerciseId": "0025", "weightKg": 74.84,
                          "reason": "Top of range"]],
         ])
         XCTAssertFalse(proposed.isError, "\(proposed.json)")
@@ -70,7 +70,7 @@ final class ProposalSyncUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["proposal.from"].label, "From Claude Code (local)")
         app.buttons["proposal.apply"].tap()
         let bench = app.descendants(matching: .any)["today.row.0025"]
-        let heavier = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS '145 lb'"), object: bench)
+        let heavier = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS '165 lb'"), object: bench)
         XCTAssertEqual(XCTWaiter().wait(for: [heavier], timeout: 5), .completed)
 
         // 4. The resolution syncs; Claude sees it applied, and the server's plan has the new weight.
@@ -83,7 +83,7 @@ final class ProposalSyncUITests: XCTestCase {
         let plan = try await get("/v1/sync/routines?limit=500", token: session)["rows"] as? [[String: Any]] ?? []
         let exercises = plan.first { $0["id"] as? String == push }?["exercises"] as? [[String: Any]] ?? []
         let serverBench = exercises.first { $0["exercise_id"] as? String == "0025" }
-        XCTAssertEqual((serverBench?["weight_kg"] as? Double) ?? 0, 65.77, accuracy: 0.01)
+        XCTAssertEqual((serverBench?["weight_kg"] as? Double) ?? 0, 74.84, accuracy: 0.01)
     }
 
     /// Deny: the sheet says so, and Claude's callback gets `access_denied`.

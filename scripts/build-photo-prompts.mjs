@@ -14,7 +14,7 @@ const LIBRARY = resolve(ROOT, 'ios/GymRollins/Resources/exercises.json')
 const STOCK = resolve(ROOT, 'ios/GymRollins/Resources/exercise-photos.json')
 const OWN_DIRS = [resolve(ROOT, 'ios/GymRollins/Resources/OwnPhotos'), resolve(ROOT, 'media/photos')]
 const FITBOD_ALIASES = resolve(ROOT, 'ios/GymRollins/Resources/fitbod-aliases.json')
-const OWNER_SEED = resolve(ROOT, 'ios/Packages/GymData/Sources/GymData/Seed/OwnerSeed.swift')
+const OWNER_SEED = resolve(ROOT, 'ios/Packages/GymData/Sources/GymData/Seed/SampleSeed.swift')
 const OUT = resolve(ROOT, 'docs/media/photo-prompts.csv')
 
 const STUDIO = 'Professional fitness demonstration photo in a clean catalog style, landscape 3:2 format ' +

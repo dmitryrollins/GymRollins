@@ -11,7 +11,7 @@ GymRollins stops depending on Supabase. One Cloudflare Worker serves everything 
 - **Photos** in R2.
 - **Claude's MCP server and its OAuth login,** with Better Auth's plugins.
 
-Local development needs no Docker. The owner's phone moves its data to the new server in its first sync, without a wipe.
+Local development needs no Docker. A phone moves its data to the new server in its first sync, without a wipe.
 
 ### Acceptance criteria
 
@@ -39,7 +39,7 @@ Local development needs no Docker. The owner's phone moves its data to the new s
 7. **Server move.**
    - When the server changes, the app's next launch hands the local data to the next account that signs in and marks every record unsynced.
    - It deletes nothing.
-   - With a copy of the owner's phone data on the simulator, all 148 workouts, 836 entries and 2,685 sets reach the local Worker.
+   - With a copy of a phone's data on the simulator, all its workouts, entries and sets reach the local Worker.
 8. **Free plan.** Nothing needs a paid Cloudflare plan, KV or Durable Objects.
 9. **Local only.** No Cloudflare account, resource or deploy is created during this work.
    - Deploying, pointing the phone at it and connecting claude.ai are separate steps, each approved by the owner (section 9).
@@ -57,14 +57,14 @@ Local development needs no Docker. The owner's phone moves its data to the new s
 
 | Question | Decision |
 |---|---|
-| Why move | One platform (the owner's other projects run on Cloudflare), lower cost (free tier), simpler to run (no Docker). Cloudflare + Better Auth became the owner's default stack for new projects the same day. |
+| Why move | One platform, lower cost (free tier), simpler to run (no Docker). |
 | Auth library | **Better Auth** for both app sign-in and Claude's OAuth. The owner first named OpenAuth. The package was checked and rejected: `@openauthjs/openauth` 0.4.3 (last release March 2025, pre-1.0) takes only the `authorization_code`, `refresh_token` and `client_credentials` grants. So it can't take the native Apple token, and it has no client registration endpoint, which Claude's connectors need. Better Auth 1.7.18 (released 2026-11-05) verifies native Apple id tokens (`appBundleIdentifier`). It ships a D1 dialect, and its `oauth-provider` plugin serves dynamic registration, client metadata documents and protected-resource metadata. Cloudflare's `workers-oauth-provider` would also work, but it keeps grants in KV beside a second auth system. |
 | Build order | **All at once.** One spec, five plans built back to back on one branch, and a single cutover at the end. Each plan still ends with its own passing tests. |
 | Claude's sign-in page | **Approve in the app.** The page shows a code, and the owner types it into the signed-in app. This avoids Sign in with Apple on the web, which needs a Services ID and a secret renewed every 6 months, and email, which needs a mail service. |
 | Query layer | Plain SQL through D1 prepared statements, one module per area, no ORM. Better Auth uses its built-in D1 support for its own tables. |
 | Rules that were RLS | One rule in code: the user id comes only from the verified session or token, and every query filters by it. App and Claude requests go through separate handlers. |
 | Locks and limits | D1 runs writes one at a time, so each limit is one conditional statement ("insert only if the count is under the limit") or one batch. Batches run as a transaction. There are no locks and no Durable Objects. |
-| The phone's data | The phone's records are all marked synced to the old server: 148 of 148 workouts, with owner id and sync markers set. A one-time server move in the app makes them upload to the new one (section 4). |
+| The phone's data | The phone's records are all marked synced to the old server: every workout, with owner id and sync markers set. A one-time server move in the app makes them upload to the new one (section 4). |
 | Where it runs while building | `wrangler dev` with local D1 and R2. Deploying waits for the owner, as the Supabase cloud project did. |
 
 ## 3. Architecture
@@ -253,7 +253,7 @@ The exact request and response bodies are fixed in the plans. They carry the sam
 - **Approval codes:**
   - The code is shown only on the page that asked. Its browser secret is stored hashed. Codes expire, work once, and are limited per account.
   - The page never shows account data.
-- **The owner's personal data stays out of the repo.** Test data is synthetic, and the server-move test uses a copy of the phone's store kept in the scratchpad, never committed.
+- **Personal data stays out of the repo.** Test data is synthetic, and the server-move test uses a copy of the phone's store kept in the scratchpad, never committed.
 - **CORS** is open only on `/mcp` and the metadata routes, as now.
 
 ## 8. Testing
@@ -293,14 +293,14 @@ The exact request and response bodies are fixed in the plans. They carry the sam
   - New tests: `ApiClient` (with a URLProtocol stub), `AuthService` sign-in, restore and sign-out, and the server move.
 - **GymSyncIntegrationTests and the sync UI tests** run against `wrangler dev`, with the same suites.
 - **The server-move check:**
-  1. A copy of the owner's phone store goes into the simulator.
+  1. A copy of a phone's store goes into the simulator.
   2. The app signs in to the local Worker.
-  3. D1's counts must match (148 workouts, 836 entries, 2,685 sets, 6 routines, 24 body weights), and the phone's records must be unchanged apart from sync state.
+  3. D1's counts must match (workouts, entries, sets, routines, body weights), and the phone's records must be unchanged apart from sync state.
 - **Claude Code** connects to the local `/mcp` as a real client through the approval flow. claude.ai is checked only after the deploy (section 9).
 
 ## 9. Milestones
 
-Plans live in `docs/plans/`. They're built in order on branch `feat-cloudflare` (from `feat-claude-prompts`), and nothing is pushed.
+The plans are built in order on branch `feat-cloudflare` (from `feat-claude-prompts`), and nothing is pushed.
 
 | Plan | Delivers |
 |---|---|
@@ -326,7 +326,7 @@ Stopping this project's Supabase containers is a separate question for the owner
 | Better Auth's login step can't hand the browser to `/connect` and back as section 4 says | Plan 29 builds the connect flow first, behind a test of the whole flow. If the plugin's login hook isn't enough, `/connect` signs the browser in with Better Auth's server API and re-enters the authorize URL. |
 | OAuth access tokens are JWTs that can't be revoked at once | Configure opaque tokens checked in D1, or check each token's grant in D1 on every call. Verified in plan 29. |
 | D1 batch transaction semantics are documented ambiguously | Rules that must be atomic are single statements where possible. Batch rollback is covered by a test that forces a failing statement. |
-| D1 free-plan limits: 50 statements per request, 100 bound values, 100,000 rows written a day | Chunked statements, and a test that the full upload of the owner's data stays under them. The first upload is about 3,700 rows. |
-| The server move runs when it shouldn't, or misses records | It runs only on a host change. It's tested with a copy of the real store, and the phone is backed up before install. |
+| D1 free-plan limits: 50 statements per request, 100 bound values, 100,000 rows written a day | Chunked statements, and a test that the full upload of a large history stays under them. |
+| The server move runs when it shouldn't, or misses records | It runs only on a host change. It's tested with a copy of a real store, and the phone is backed up before install. |
 | `@cloudflare/vitest-pool-workers` and local D1/R2 behave differently from production | Keep the tests on public APIs. The deploy step (section 9) re-runs the connection and sync checks against the deployed Worker. |
 | Claude's connector needs differ from the docs | The 401 metadata, registration, PKCE and refresh rotation follow claude.com's connector docs (checked 2026-11-07). The claude.ai check after the deploy is the final test. |

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the Apple Watch app (plan 17, watchOS 10 for the owner's Series 5) for the watchOS simulator and for devices
+# Builds the Apple Watch app (plan 17, watchOS 10 for an Apple Watch Series 5) for the watchOS simulator and for devices
 # (unsigned), to prove it compiles. Uses SDK target builds: `-destination generic/platform=watchOS…` needs the watchOS
 # platform installed in Xcode (Settings > Components), which this doesn't.
 set -euo pipefail

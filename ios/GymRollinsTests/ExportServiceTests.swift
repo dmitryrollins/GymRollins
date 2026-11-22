@@ -67,7 +67,7 @@ import Testing
 
     @Test func jsonBackupKeepsTheNotesEndDate() throws {
         let until = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 26))
-        try profiles.save(Profile(limits: "Knee", limitsUntil: until))
+        try profiles.save(Profile(limits: "Ankle", limitsUntil: until))
         let decoded = try JSONDecoder.gymRollinsISO8601().decode(ExportBackup.self, from: service.backupData())
         #expect(decoded.profile.limitsUntil == until)
     }

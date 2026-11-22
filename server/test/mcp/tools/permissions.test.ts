@@ -104,6 +104,24 @@ describe('a tool that still answers in part', () => {
     expect(out.withheld).toEqual([withheld(['body'], 'Bodyweight')])
   })
 
+  it('get_workout and list_workouts give the workouts and say what Apple Health measured is withheld', async () => {
+    const data = await loadOwnerData()
+    data.profile = { ...data.profile!, mcp_read_activity: false }
+    data.measurements = [{
+      workout_id: 'b0b0b0b0-0000-4000-8000-000000000003', recorded_by: 'watch', duration_s: 3500, active_kcal: 412,
+      total_kcal: 489, avg_hr: 128, max_hr: 162, post_hr: 124, effort: 6, effort_estimated: false,
+    }]
+    const off = { db: new FakeDb(data), now: NOW }
+    const words = [withheld(['activity'], 'What Apple Health measured')]
+    const workout = json(await getWorkout(off, { id: 'b0b0b0b0-0000-4000-8000-000000000003' }))
+    expect(workout.entries.length).toBeGreaterThan(0)
+    expect(workout.measured).toBeUndefined()
+    expect(workout.withheld).toEqual(words)
+    const list = json(await listWorkouts(off, {}))
+    expect(list.workouts[0].active_kcal).toBeUndefined()
+    expect(list.withheld).toEqual(words)
+  })
+
   it("search_exercises gives the library and says the owner's custom exercises are withheld", async () => {
     const out = json(await searchExercises(await ctx('mcp_read_plan'), { query: 'bench' }))
     expect(out.results.length).toBeGreaterThan(0)

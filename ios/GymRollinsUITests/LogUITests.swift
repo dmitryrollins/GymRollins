@@ -57,7 +57,7 @@ final class LogUITests: XCTestCase {
         app.dismissKeyboardIfPresent()
 
         app.buttons["detail.save"].tap()
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS '11 \u{00D7} 130 lb'")).firstMatch
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS '11 \u{00D7} 150 lb'")).firstMatch
             .waitForExistence(timeout: 5))
     }
 

@@ -2,7 +2,7 @@ import Foundation
 @testable import GymCore
 
 /// A small library, its requirements and two gyms for the gym rules tests: Home (a flat bench and kettlebells of
-/// 20 and 24 kg, the owner's real setup) and Iron (a commercial gym).
+/// 20 and 24 kg) and Iron (a commercial gym).
 enum GymFixtures {
     static let kinds: [EquipmentKind] = [
         EquipmentKind(id: "dumbbells", name: "Dumbbells", category: .freeWeight, load: .fixedSet),

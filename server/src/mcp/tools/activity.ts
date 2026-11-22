@@ -61,7 +61,7 @@ export async function getActivity(
   try {
     assertTimeZone(tz)
   } catch {
-    throw new ToolError(`Unknown time zone "${tz}". Use an IANA name such as Europe/Warsaw.`)
+    throw new ToolError(`Unknown time zone "${tz}". Use an IANA name such as Europe/Berlin.`)
   }
   await requireReads(db, 'activity')
   const days = clamp(Math.trunc(args.days ?? ACTIVITY_DAYS.default), ACTIVITY_DAYS.min, ACTIVITY_DAYS.max)

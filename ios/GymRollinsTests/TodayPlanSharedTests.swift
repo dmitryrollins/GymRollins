@@ -5,22 +5,6 @@ import Testing
 
 @Suite struct TodayPlanSharedTests {
     private let day = "2026-11-01"
-    private static let kinds = ["barbell", "dumbbells"].map {
-        EquipmentKind(id: $0, name: $0, category: .freeWeight, load: .none)
-    }
-    private static let exercises = [
-        Exercise(id: "bb", name: "bb", bodyPart: "chest", equipment: "barbell", target: "pectorals", secondary: ["triceps"]),
-        Exercise(id: "db", name: "db", bodyPart: "chest", equipment: "dumbbell", target: "pectorals", secondary: ["triceps"]),
-    ]
-    private static let requirements = ExerciseRequirements(groups: ["bb": [["barbell"]], "db": [["dumbbells"]]])
-
-    /// A gym with dumbbells and no barbell: normally `bb` would be swapped for `db` here.
-    private var dumbbellGym: GymAdapter {
-        let listing = InventoryListing(id: UUID(), kindId: "dumbbells")
-        let matcher = InventoryMatcher(requirements: Self.requirements, kinds: Self.kinds,
-                                       inventory: GymInventory(gymName: "Gym", listings: [listing]))
-        return GymAdapter(matcher: matcher, exercises: Self.exercises)
-    }
 
     private let item = RoutineExercise(exerciseId: "bb", sets: 3, reps: 10, repsMin: 8)
 
@@ -33,23 +17,11 @@ import Testing
         #expect(plan.routineToStart?.name == "Shared workout")
     }
 
-    @Test func theGymCantSwapItsExercises() {
-        let plan = TodayPlan.shared(items: [item], day: day).adapted(by: dumbbellGym)
-        #expect(plan.exercises.map(\.exerciseId) == ["bb"])
-        #expect(plan.gymSwaps.isEmpty)
-    }
-
-    @Test func aWithoutPinsControl() {
-        let plan = TodayPlan.built(name: "Built", items: [item], day: day).adapted(by: dumbbellGym)
-        #expect(plan.exercises.map(\.exerciseId) == ["db"])
-    }
-
-    @Test func survivesAReloadWithItsPins() throws {
+    @Test func survivesAReload() throws {
         let plan = TodayPlan.shared(items: [item], day: day)
         let data = try JSONEncoder().encode(plan)
         let loaded = try JSONDecoder().decode(TodayPlan.self, from: data)
         #expect(loaded == plan)
-        #expect(loaded.gymPinned == [item.id])
     }
 
     @Test func shareSourcesFollowEditedSets() {
@@ -63,15 +35,14 @@ import Testing
         ])
     }
 
-    /// Through the store, as Today reads it: a stored shared plan at a gym that doesn't have its exercise is unchanged.
-    @Test func aStoredSharedPlanIsUnchangedAtAGymWithoutItsExercise() throws {
+    /// Through the store, as Today reads it: a stored shared plan comes back exactly as sent.
+    @Test func aStoredSharedPlanIsUnchanged() throws {
         let defaults = try #require(UserDefaults(suiteName: "TodayPlanSharedTests.\(UUID())"))
         let store = TodayPlanStore(defaults: defaults)
         let plan = TodayPlan.shared(items: [item.with(fixedWeightKg: 40)], day: day)
         store.save(plan)
         let loaded = try #require(store.load(day: day, routines: [], scheduled: nil))
         #expect(loaded == plan)
-        #expect(loaded.adapted(by: dumbbellGym) == loaded)
         #expect(loaded.exercises.first?.fixedWeightKg == 40)
     }
 }

@@ -24,7 +24,7 @@ import Testing
     }
 
     @Test func workoutRoundTrips() throws {
-        let set = WorkoutSet(weightKg: 58.967, reps: 10, done: true)
+        let set = WorkoutSet(weightKg: 68.039, reps: 10, done: true)
         let entry = WorkoutEntry(exerciseId: "0025", sets: [set])
         let workout = Workout(startedAt: Date(timeIntervalSince1970: 1_790_000_000), name: "Push + Biceps", entries: [entry])
         let data = try JSONEncoder().encode(workout)

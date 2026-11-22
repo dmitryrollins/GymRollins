@@ -5,6 +5,7 @@ import appSchema from '../migrations/0002_app_schema.sql?raw'
 import capsMigration from '../migrations/0005_gyms_photos.sql?raw'
 import accountCaps from '../migrations/0010_account_caps.sql?raw'
 import activityMigration from '../migrations/0013_health_activities.sql?raw'
+import measurementMigration from '../migrations/0014_workout_measurements.sql?raw'
 import { DomainLimits } from '../src/shared/domain-limits.ts'
 import { PlanChangeLimits } from '../src/shared/plan-validation.ts'
 
@@ -29,7 +30,19 @@ function swiftLimits(source: string): Record<string, Limit> {
   return out
 }
 
-const swift = swiftLimits(swiftSource)
+/**
+ * DomainLimits.swift's `enum MeasurementLimits` (plan 40), which migration 0014's CHECKs mirror. It is cut out before
+ * the file is read as DomainLimits: its members aren't DomainLimits'.
+ */
+const MEASUREMENT_LIMITS = /public enum MeasurementLimits \{([\s\S]*?)\n\}/
+
+function swiftMeasurementLimits(source: string): Record<string, Limit> {
+  const body = MEASUREMENT_LIMITS.exec(source)?.[1]
+  if (body === undefined) throw new Error("DomainLimits.swift has no 'enum MeasurementLimits'")
+  return swiftLimits(body)
+}
+
+const swift = swiftLimits(swiftSource.replace(MEASUREMENT_LIMITS, ''))
 const L = DomainLimits
 const between = (column: string, range: { readonly min: number; readonly max: number }) =>
   `${column} BETWEEN ${range.min} AND ${range.max}`
@@ -60,6 +73,12 @@ const ACTIVITY_CHECKS = [
   between('avg_cadence_rpm', L.activityCadenceRpm), between('total_kcal', L.activityKcal), between('steps', L.daySteps),
   between('move_kcal', L.activityKcal), between('exercise_min', L.dayExerciseMin), between('stand_h', L.dayStandH),
 ]
+
+/** Each column of 0014_workout_measurements.sql with a range, and the MeasurementLimits member its CHECK uses. */
+const MEASUREMENT_COLUMNS = [
+  ['duration_s', 'durationS'], ['active_kcal', 'kcal'], ['total_kcal', 'kcal'], ['avg_hr', 'heartRate'],
+  ['max_hr', 'heartRate'], ['post_hr', 'heartRate'], ['effort', 'effort'],
+] as const
 
 /**
  * PlanChange.swift's `enum PlanChangeLimits`, with `(DomainLimits.name - n)` worked out from the Swift
@@ -106,6 +125,15 @@ describe('domain limits', () => {
     for (const [table, max, code] of caps) {
       const trigger = `tbl = '${table}'), 0) >= ${max}\nBEGIN\n  SELECT RAISE(ABORT, '${code}');`
       expect(activityMigration.split(trigger).length - 1, code).toBe(1)
+    }
+  })
+
+  it("keeps migration 0014's CHECKs at GymCore's MeasurementLimits", () => {
+    const limits = swiftMeasurementLimits(swiftSource)
+    expect(Object.keys(limits).sort()).toEqual(['durationS', 'effort', 'heartRate', 'kcal'])
+    for (const [column, name] of MEASUREMENT_COLUMNS) {
+      const check = between(column, limits[name] as { min: number; max: number })
+      expect(measurementMigration, check).toContain(check)
     }
   })
 
